@@ -297,8 +297,10 @@ const perPage = 20;
 
 // Load on page ready
 document.addEventListener('DOMContentLoaded', () => {
+  const params = new URLSearchParams(window.location.search);
+  const page = parseInt(params.get('page')) || 1;
   loadStats();
-  loadArticles();
+  loadArticles(page);
 });
 
 // Load statistics
