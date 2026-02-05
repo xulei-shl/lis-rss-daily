@@ -409,7 +409,10 @@ function renderArticleCard(article, index) {
     'pending': '待处理'
   };
 
-  const hasContent = article.markdown_content || article.summary;
+  const content = article.summary || article.markdown_content || '';
+  const hasContent = content.length > 0;
+  const TRUNCATE_LENGTH = 400;
+  const needsTruncate = content.length > TRUNCATE_LENGTH;
 
   return \`
     <div class="article-card fade-in-up" style="animation-delay: \${index * 30}ms">
@@ -428,9 +431,11 @@ function renderArticleCard(article, index) {
       </div>
       \${hasContent ? \`
         <div class="article-summary">
-          \${truncate(article.summary || article.markdown_content?.substring(0, 500) || '', 200)}
-          <button class="summary-toggle" onclick="toggleSummary(this)">[展开]</button>
-          <span style="display: none;">\${escapeHtml(article.summary || article.markdown_content || '')}</span>
+          \${needsTruncate ? \`
+            <span class="summary-short">\${truncate(content, TRUNCATE_LENGTH)}</span>
+            <span class="summary-full" style="display: none;">\${escapeHtml(content)}</span>
+            <button class="summary-toggle" onclick="toggleSummary(this)">[展开]</button>
+          \` : escapeHtml(content)}
         </div>
       \` : ''}
       \${article.tags ? \`
@@ -493,16 +498,18 @@ function renderPagination() {
 // Toggle summary expansion
 function toggleSummary(btn) {
   const container = btn.parentElement;
-  const fullText = container.querySelector('span[style*="display: none"]');
-  const currentText = container.childNodes[0];
+  const shortText = container.querySelector('.summary-short');
+  const fullText = container.querySelector('.summary-full');
 
   if (fullText.style.display === 'none') {
-    currentText.textContent = '';
+    // 展开
+    shortText.style.display = 'none';
     fullText.style.display = 'inline';
     btn.textContent = '[收起]';
   } else {
+    // 收起
     fullText.style.display = 'none';
-    currentText.textContent = truncate(fullText.textContent, 200);
+    shortText.style.display = 'inline';
     btn.textContent = '[展开]';
   }
 }
