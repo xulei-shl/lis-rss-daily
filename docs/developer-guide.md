@@ -601,7 +601,9 @@ Stage 3: Export (导出 Markdown)
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  4. 语义搜索 (search.ts + qmd.ts)                               │
-│     └─ 支持自然语言查询相关文章                                  │
+│     ├─ QMD 语义搜索（向量搜索）                                   │
+│     ├─ 关键词搜索（SQLite LIKE，AND+OR 组合）                    │
+│     └─ 优雅降级：QMD 失败时自动回退到关键词搜索                    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -680,22 +682,43 @@ async function translateIfNeeded(
 **职责**: 文章搜索，支持 QMD 语义搜索
 
 ```typescript
-// 语义搜索
-async function searchArticlesWithQMD(
+// 历史文章搜索（SQLite LIKE）
+async function searchHistoricalArticles(
   query: string,
-  limit?: number
+  limit?: number,
+  userId?: number
 ): Promise<SearchResult[]>
 
-// 关键词搜索 (降级方案)
-async function searchArticlesWithKeyword(
+// QMD 语义搜索
+async function searchArticlesWithQMD(
   query: string,
-  limit?: number
+  limit?: number,
+  userId?: number
+): Promise<SearchResult[]>
+
+// 查找相关文章
+async function findRelatedArticles(
+  query: string,
+  limit?: number,
+  userId?: number
 ): Promise<SearchResult[]>
 ```
 
+**搜索逻辑**:
+
+关键词搜索采用 **AND + OR 组合**策略：
+- 将查询字符串按空格拆分为多个词
+- **每个词都必须出现**（AND 逻辑）
+- 每个词可以在标题、摘要或正文任一字段中出现（OR 逻辑）
+
+示例：查询 `"machine learning python"`
+- 拆分为：`["machine", "learning", "python"]`
+- 匹配条件：`machine` AND `learning` AND `python`
+- 每个词可在 `title`、`summary` 或 `markdown_content` 中出现
+
 **QMD 集成**:
 - `qmdVsearchWithRetry()`: 带重试的向量搜索
-- 优雅降级: QMD 失败时回退到 SQLite LIKE
+- 优雅降级: QMD 失败时回退到 SQLite LIKE 搜索
 
 ### 6. QMD 工具 (qmd.ts)
 
@@ -794,9 +817,16 @@ GET    /api/filter/stats         # 过滤统计
 ### 搜索
 
 ```
-GET    /api/search?q={query}&mode=semantic  # 语义搜索
-GET    /api/search?q={query}&mode=keyword   # 关键词搜索
+GET    /api/search?q={query}&mode=semantic  # QMD 语义搜索（优先）
+GET    /api/search?q={query}&mode=keyword   # 关键词搜索（SQLite LIKE）
 ```
+
+**搜索模式说明**:
+- `semantic`: 使用 QMD 向量搜索，支持自然语言查询
+- `keyword`: 使用 SQLite LIKE 搜索，采用 AND+OR 组合逻辑
+  - 查询按空格拆分为多个词
+  - 每个词都必须出现（AND 逻辑）
+  - 每个词可在标题、摘要或正文中出现（OR 逻辑）
 
 ### 调度器
 

@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "build:css": "node src/scripts/build-css.js",
     "db:migrate": "tsx scripts/migrate.ts",
-    "db:seed": "tsx scripts/seed.ts"
+    "db:seed": "tsx scripts/seed.ts",
+    "test:search": "tsx scripts/search-smoke.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

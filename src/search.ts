@@ -43,18 +43,26 @@ export async function searchHistoricalArticles(
     const startTime = Date.now();
     log.debug({ query, limit, userId }, '→ Searching historical articles');
 
-    const pattern = `%${query}%`;
+    const terms = query
+      .trim()
+      .split(/\s+/)
+      .filter((term) => term.length > 0);
 
     let queryBuilder = db
       .selectFrom('articles')
       .select(['id as articleId', 'title', 'url', 'summary', 'markdown_content'])
       .where((eb) =>
-        eb.or([
-          eb('title', 'like', pattern),
-          eb('summary', 'like', pattern),
-          // Only search markdown_content if it exists (avoid NULL issues)
-          eb('markdown_content', 'like', pattern),
-        ])
+        eb.and(
+          terms.map((term) => {
+            const pattern = `%${term}%`;
+            return eb.or([
+              eb('title', 'like', pattern),
+              eb('summary', 'like', pattern),
+              // 仅在存在时搜索 markdown_content（避免 NULL 问题）
+              eb('markdown_content', 'like', pattern),
+            ]);
+          })
+        )
       )
       .where('process_status', '=', 'completed')
       .orderBy('id', 'desc')
