@@ -1,0 +1,751 @@
+<%- include('layout', { body: `
+<style>
+  /* ============================================
+     ARTICLE DETAIL PAGE STYLES
+     ============================================ */
+
+  /* Back Navigation */
+  .back-nav {
+    margin-bottom: var(--space-5);
+  }
+
+  .back-link {
+    font-family: var(--font-meta);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .back-link:hover {
+    color: var(--accent-primary);
+  }
+
+  /* Main Layout */
+  .article-detail-layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: var(--space-6);
+  }
+
+  /* Article Content */
+  .article-content {
+    min-width: 0;
+  }
+
+  .article-header {
+    margin-bottom: var(--space-8);
+    padding-bottom: var(--space-5);
+    border-bottom: 3px solid var(--border);
+  }
+
+  .article-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-3xl);
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: var(--space-4);
+    color: var(--text-primary);
+  }
+
+  .article-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    font-family: var(--font-meta);
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+  }
+
+  .article-meta-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .article-meta-item a {
+    color: var(--text-tertiary);
+  }
+
+  .article-meta-item a:hover {
+    color: var(--accent-primary);
+  }
+
+  /* Section */
+  .article-section {
+    margin-bottom: var(--space-8);
+  }
+
+  .section-header {
+    font-family: var(--font-heading);
+    font-size: var(--text-xl);
+    font-weight: 700;
+    padding: var(--space-4) 0;
+    border-top: 3px solid var(--border);
+    border-bottom: 1px solid var(--divider);
+    margin-top: var(--space-6);
+    margin-bottom: var(--space-4);
+  }
+
+  .section-header:first-child {
+    border-top: none;
+    margin-top: 0;
+  }
+
+  /* AI Summary */
+  .ai-summary {
+    font-size: var(--text-base);
+    line-height: 1.8;
+    color: var(--text-primary);
+    background: var(--bg-elevated);
+    padding: var(--space-5);
+    border-left: 4px solid var(--accent-primary);
+  }
+
+  .ai-summary p {
+    margin-bottom: var(--space-3);
+  }
+
+  .ai-summary p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Research Insights */
+  .insights-list {
+    list-style: none;
+  }
+
+  .insight-item {
+    position: relative;
+    padding-left: var(--space-5);
+    margin-bottom: var(--space-4);
+    font-size: var(--text-base);
+    line-height: 1.7;
+    color: var(--text-primary);
+  }
+
+  .insight-item::before {
+    content: attr(data-index);
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-family: var(--font-heading);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    color: var(--accent-primary);
+  }
+
+  /* Full Content */
+  .article-full-content {
+    font-size: var(--text-base);
+    line-height: 1.8;
+    color: var(--text-primary);
+  }
+
+  .article-full-content h1,
+  .article-full-content h2,
+  .article-full-content h3,
+  .article-full-content h4 {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    margin-top: var(--space-5);
+    margin-bottom: var(--space-3);
+  }
+
+  .article-full-content h2 {
+    font-size: var(--text-2xl);
+    padding-bottom: var(--space-2);
+    border-bottom: 2px solid var(--border);
+  }
+
+  .article-full-content h3 {
+    font-size: var(--text-xl);
+  }
+
+  .article-full-content p {
+    margin-bottom: var(--space-4);
+  }
+
+  .article-full-content a {
+    color: var(--accent-primary);
+    text-decoration: underline;
+  }
+
+  .article-full-content code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--bg-elevated);
+    padding: 2px 6px;
+  }
+
+  .article-full-content pre {
+    background: var(--bg-elevated);
+    padding: var(--space-4);
+    overflow-x: auto;
+    margin-bottom: var(--space-4);
+  }
+
+  .article-full-content pre code {
+    background: none;
+    padding: 0;
+  }
+
+  .article-full-content ul,
+  .article-full-content ol {
+    margin-bottom: var(--space-4);
+    padding-left: var(--space-5);
+  }
+
+  .article-full-content li {
+    margin-bottom: var(--space-2);
+  }
+
+  /* Sidebar */
+  .article-sidebar {
+    min-width: 0;
+  }
+
+  .sidebar-card {
+    background: var(--bg-surface);
+    border: 2px solid var(--border);
+    padding: var(--space-4);
+    margin-bottom: var(--space-4);
+  }
+
+  .sidebar-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-base);
+    font-weight: 700;
+    margin-bottom: var(--space-3);
+    padding-bottom: var(--space-2);
+    border-bottom: 2px solid var(--divider);
+  }
+
+  /* Related Articles */
+  .related-articles-list {
+    list-style: none;
+  }
+
+  .related-article-item {
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--divider);
+  }
+
+  .related-article-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .related-article-link {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--text-primary);
+    display: block;
+  }
+
+  .related-article-link:hover {
+    color: var(--accent-primary);
+  }
+
+  .related-article-meta {
+    font-family: var(--font-meta);
+    font-size: var(--text-2xs);
+    color: var(--text-tertiary);
+    margin-top: var(--space-1);
+  }
+
+  /* Tags */
+  .tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .tag-item {
+    font-family: var(--font-meta);
+    font-size: var(--text-2xs);
+    font-weight: 500;
+    color: var(--accent-primary);
+  }
+
+  /* Action Buttons */
+  .action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .action-buttons .btn {
+    flex: 1;
+    min-width: 120px;
+  }
+
+  /* Loading */
+  .loading {
+    text-align: center;
+    padding: var(--space-10);
+    color: var(--text-tertiary);
+  }
+
+  /* Error State */
+  .error-state {
+    text-align: center;
+    padding: var(--space-10);
+  }
+
+  .error-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    margin-bottom: var(--space-3);
+  }
+
+  .error-message {
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-4);
+  }
+
+  /* Empty Section */
+  .empty-section {
+    color: var(--text-tertiary);
+    font-style: italic;
+    padding: var(--space-4);
+    text-align: center;
+  }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .article-detail-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar-card {
+      order: -1;
+    }
+
+    .action-buttons {
+      flex-direction: column;
+    }
+  }
+</style>
+
+<!-- Back Navigation -->
+<nav class="back-nav">
+  <a href="/articles" class="back-link">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M19 12H5M12 19l-7-7 7-7"/>
+    </svg>
+    返回文章列表
+  </a>
+</nav>
+
+<!-- Loading State -->
+<div id="loadingState" class="loading">加载中...</div>
+
+<!-- Error State (Hidden by default) -->
+<div id="errorState" class="error-state" style="display: none;">
+  <div class="error-title">文章未找到</div>
+  <div class="error-message">该文章可能已被删除或您没有访问权限</div>
+  <a href="/articles" class="btn btn-secondary">返回文章列表</a>
+</div>
+
+<!-- Article Detail (Hidden until loaded) -->
+<div id="articleDetail" style="display: none;">
+  <div class="article-detail-layout">
+    <!-- Main Content -->
+    <div class="article-content">
+      <!-- Article Header -->
+      <header class="article-header">
+        <h1 class="article-title" id="articleTitle"></h1>
+        <div class="article-meta-row" id="articleMeta">
+          <!-- Dynamic content -->
+        </div>
+      </header>
+
+      <!-- AI Summary Section -->
+      <section class="article-section" id="summarySection" style="display: none;">
+        <h2 class="section-header">AI 摘要</h2>
+        <div class="ai-summary" id="aiSummary"></div>
+      </section>
+
+      <!-- Research Insights Section -->
+      <section class="article-section" id="insightsSection" style="display: none;">
+        <h2 class="section-header">研究洞察</h2>
+        <ul class="insights-list" id="insightsList"></ul>
+      </section>
+
+      <!-- Full Content Section -->
+      <section class="article-section" id="contentSection" style="display: none;">
+        <h2 class="section-header">全文内容</h2>
+        <div class="article-full-content" id="fullContent"></div>
+      </section>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="article-sidebar">
+      <!-- Action Buttons -->
+      <div class="sidebar-card">
+        <h3 class="sidebar-title">操作</h3>
+        <div class="action-buttons">
+          <a id="originalLink" href="" target="_blank" rel="noopener" class="btn btn-secondary">查看原文</a>
+          <button id="exportBtn" class="btn btn-secondary" onclick="exportMarkdown()">导出 Markdown</button>
+          <button id="processBtn" class="btn btn-secondary" onclick="processArticle()">重新处理</button>
+          <button id="deleteBtn" class="btn btn-danger" onclick="deleteArticle()">删除文章</button>
+        </div>
+      </div>
+
+      <!-- Related Articles -->
+      <div class="sidebar-card" id="relatedCard" style="display: none;">
+        <h3 class="sidebar-title">相关文章</h3>
+        <ul class="related-articles-list" id="relatedList"></ul>
+      </div>
+
+      <!-- Tags -->
+      <div class="sidebar-card" id="tagsCard" style="display: none;">
+        <h3 class="sidebar-title">标签</h3>
+        <div class="tags-list" id="tagsList"></div>
+      </div>
+
+      <!-- Article Info -->
+      <div class="sidebar-card">
+        <h3 class="sidebar-title">文章信息</h3>
+        <div style="font-family: var(--font-meta); font-size: var(--text-xs); color: var(--text-tertiary);">
+          <div style="margin-bottom: var(--space-2);">
+            <span style="color: var(--text-secondary);">过滤状态:</span>
+            <span id="filterStatus"></span>
+          </div>
+          <div style="margin-bottom: var(--space-2);">
+            <span style="color: var(--text-secondary);">处理状态:</span>
+            <span id="processStatus"></span>
+          </div>
+          <div style="margin-bottom: var(--space-2);">
+            <span style="color: var(--text-secondary);">发布时间:</span>
+            <span id="publishedAt"></span>
+          </div>
+          <div>
+            <span style="color: var(--text-secondary);">抓取时间:</span>
+            <span id="createdAt"></span>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+// ============================================
+// ARTICLE DETAIL PAGE LOGIC
+// ============================================
+
+let articleData = null;
+
+// Load article on page ready
+document.addEventListener('DOMContentLoaded', () => {
+  const pathParts = window.location.pathname.split('/');
+  const articleId = parseInt(pathParts[pathParts.length - 1]);
+
+  if (articleId) {
+    loadArticle(articleId);
+  }
+});
+
+// Load article data
+async function loadArticle(id) {
+  try {
+    const res = await fetch(\`/api/articles/\${id}\`);
+
+    if (!res.ok) {
+      showError();
+      return;
+    }
+
+    const article = await res.json();
+    articleData = article;
+
+    renderArticle(article);
+    loadRelatedArticles(id);
+
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('articleDetail').style.display = 'block';
+  } catch (err) {
+    console.error('Failed to load article:', err);
+    showError();
+  }
+}
+
+// Show error state
+function showError() {
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('errorState').style.display = 'block';
+}
+
+// Render article
+function renderArticle(article) {
+  // Title
+  document.getElementById('articleTitle').textContent = article.title;
+
+  // Meta
+  const metaHtml = \`
+    <div class="article-meta-item">
+      <span>\${escapeHtml(article.rss_source_name || 'Unknown')}</span>
+    </div>
+    <div class="article-meta-item">
+      <span>·</span>
+    </div>
+    <div class="article-meta-item">
+      <a href="\${escapeHtml(article.url)}" target="_blank" rel="noopener">
+        \${escapeHtml(truncateUrl(article.url))}
+      </a>
+    </div>
+    <div class="article-meta-item">
+      <span>·</span>
+    </div>
+    <div class="article-meta-item">
+      <span>\${formatDateTime(article.published_at)}</span>
+    </div>
+  \`;
+  document.getElementById('articleMeta').innerHTML = metaHtml;
+
+  // Original link
+  document.getElementById('originalLink').href = article.url;
+
+  // Article info
+  const statusLabels = {
+    'passed': '通过',
+    'rejected': '拒绝',
+    'pending': '待处理'
+  };
+  const processLabels = {
+    'pending': '待处理',
+    'processing': '处理中',
+    'completed': '已完成',
+    'failed': '失败'
+  };
+
+  document.getElementById('filterStatus').textContent = statusLabels[article.filter_status] || article.filter_status;
+  document.getElementById('processStatus').textContent = processLabels[article.process_status] || article.process_status;
+  document.getElementById('publishedAt').textContent = formatDateTime(article.published_at);
+  document.getElementById('createdAt').textContent = formatDateTime(article.created_at);
+
+  // Process button visibility
+  const processBtn = document.getElementById('processBtn');
+  processBtn.style.display = (article.process_status === 'pending' || article.process_status === 'failed') ? 'inline-block' : 'none';
+
+  // AI Summary
+  const summarySection = document.getElementById('summarySection');
+  if (article.summary) {
+    summarySection.style.display = 'block';
+    document.getElementById('aiSummary').innerHTML = \`<p>\${escapeHtml(article.summary)}</p>\`;
+  }
+
+  // Research Insights (if available in the data)
+  const insightsSection = document.getElementById('insightsSection');
+  const insightsList = document.getElementById('insightsList');
+
+  if (article.insights) {
+    insightsSection.style.display = 'block';
+    const insights = article.insights.split('\\n').filter(s => s.trim());
+    insightsList.innerHTML = insights.map((insight, i) =>
+      \`<li class="insight-item" data-index="\${i + 1}">\${escapeHtml(insight)}</li>\`
+    ).join('');
+  }
+
+  // Full Content
+  const contentSection = document.getElementById('contentSection');
+  if (article.markdown_content) {
+    contentSection.style.display = 'block';
+    // For markdown content, we'd ideally use a markdown parser
+    // For now, just display as plain text with basic formatting
+    document.getElementById('fullContent').innerHTML = formatMarkdown(article.markdown_content);
+  } else if (article.content) {
+    contentSection.style.display = 'block';
+    document.getElementById('fullContent').innerHTML = \`<p>\${escapeHtml(article.content)}</p>\`;
+  }
+
+  // Tags
+  const tagsCard = document.getElementById('tagsCard');
+  if (article.tags) {
+    tagsCard.style.display = 'block';
+    const tags = article.tags.split(',').filter(t => t.trim());
+    document.getElementById('tagsList').innerHTML = tags.map(tag =>
+      \`<span class="tag-item">#\${escapeHtml(tag.trim())}</span>\`
+    ).join('');
+  }
+}
+
+// Load related articles
+async function loadRelatedArticles(id) {
+  try {
+    const res = await fetch(\`/api/articles/\${id}/related\`);
+
+    if (!res.ok) return;
+
+    const articles = await res.json();
+
+    if (articles.length > 0) {
+      document.getElementById('relatedCard').style.display = 'block';
+      document.getElementById('relatedList').innerHTML = articles.map(article => \`
+        <li class="related-article-item">
+          <a href="/articles/\${article.id}" class="related-article-link">
+            \${escapeHtml(article.title)}
+          </a>
+          <div class="related-article-meta">
+            \${formatTime(article.published_at)}
+          </div>
+        </li>
+      \`).join('');
+    }
+  } catch (err) {
+    console.error('Failed to load related articles:', err);
+  }
+}
+
+// Export markdown
+function exportMarkdown() {
+  if (!articleData) return;
+
+  // Create a simple markdown export
+  const md = \`# \${articleData.title}
+
+**来源:** \${articleData.rss_source_name || 'Unknown'}
+**URL:** \${articleData.url}
+**发布时间:** \${formatDateTime(articleData.published_at)}
+
+---
+
+\${articleData.summary || ''}
+
+---
+
+\${articleData.markdown_content || articleData.content || ''}
+\`;
+
+  // Download as file
+  const blob = new Blob([md], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = \`article-\${articleData.id}.md\`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Process article
+async function processArticle() {
+  if (!articleData) return;
+
+  try {
+    const res = await fetch(\`/api/articles/\${articleData.id}/process\`, { method: 'POST' });
+    const result = await res.json();
+
+    if (res.ok) {
+      alert('处理任务已加入队列');
+    } else {
+      alert(result.error || '操作失败');
+    }
+  } catch (err) {
+    alert('操作失败，请稍后重试');
+  }
+}
+
+// Delete article
+async function deleteArticle() {
+  if (!articleData) return;
+  if (!confirm('确定要删除这篇文章吗？此操作不可撤销。')) return;
+
+  try {
+    const res = await fetch(\`/api/articles/\${articleData.id}\`, { method: 'DELETE' });
+
+    if (res.ok) {
+      window.location.href = '/articles';
+    } else {
+      const result = await res.json();
+      alert(result.error || '删除失败');
+    }
+  } catch (err) {
+    alert('删除失败，请稍后重试');
+  }
+}
+
+// Simple markdown formatter (basic implementation)
+function formatMarkdown(text) {
+  if (!text) return '';
+
+  return text
+    // Headers
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Bold
+    .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\\*(.+?)\\*/g, '<em>$1</em>')
+    // Code
+    .replace(/\`(.+?)\`/g, '<code>$1</code>')
+    // Links
+    .replace(/\\[(.+?)\\]\\((.+?)\\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    // Paragraphs
+    .split('\\n\\n').map(para => \`<p>\${para}</p>\`).join('');
+}
+
+// Utility functions
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function truncate(str, len) {
+  if (!str) return '';
+  if (str.length <= len) return str;
+  return str.substring(0, len - 3) + '...';
+}
+
+function truncateUrl(url) {
+  if (!url) return '';
+  if (url.length <= 50) return url;
+
+  try {
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname;
+    const path = urlObj.pathname;
+    return hostname + path.length > 30 ? hostname + path.substring(0, 30) + '...' : url;
+  } catch {
+    return url.substring(0, 50) + '...';
+  }
+}
+
+function formatDateTime(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function formatTime(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diff = now - date;
+
+  if (diff < 60000) return '刚刚';
+  if (diff < 3600000) return \`\${Math.floor(diff / 60000)} 分钟前\`;
+  if (diff < 86400000) return \`\${Math.floor(diff / 3600000)} 小时前\`;
+
+  return date.toLocaleDateString('zh-CN', {
+    month: 'short',
+    day: 'numeric'
+  });
+}
+</script>
+` }) %>

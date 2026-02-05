@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "mcp__chrome-devtools__navigate_page"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "chrome-devtools"
+  ]
+}

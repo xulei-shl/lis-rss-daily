@@ -1,0 +1,682 @@
+<%- include('layout', { body: `
+<style>
+  .topics-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    max-width: 1400px;
+  }
+
+  .topics-panel {
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 20px;
+    border: 1px solid var(--border);
+  }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .data-table th,
+  .data-table td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+
+  .data-table th {
+    background: var(--bg);
+    font-weight: 600;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .data-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .data-table tr.domain-row {
+    cursor: pointer;
+  }
+
+  .data-table tr.domain-row:hover {
+    background: var(--bg);
+  }
+
+  .data-table tr.domain-row.selected {
+    background: rgba(32, 117, 176, 0.1);
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .status-badge.active {
+    background: rgba(42, 157, 110, 0.15);
+    color: var(--green);
+  }
+
+  .status-badge.inactive {
+    background: rgba(231, 76, 60, 0.15);
+    color: var(--red);
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: 4px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--dim);
+  }
+
+  .empty-state svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+  }
+
+  /* Modal styles */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.show {
+    display: flex;
+  }
+
+  .modal {
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 24px;
+    width: 100%;
+    max-width: 440px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .modal-header h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--dim);
+    padding: 4px;
+    line-height: 1;
+  }
+
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  .domain-description {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--dim);
+  }
+
+  .keyword-count {
+    text-align: center;
+    font-weight: 500;
+  }
+
+  .keyword-weight {
+    text-align: center;
+    color: var(--dim);
+    font-size: 0.8rem;
+  }
+
+  .keywords-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .keywords-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .no-selection {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: var(--dim);
+    text-align: center;
+  }
+
+  .no-selection svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+  }
+
+  .weight-input {
+    width: 80px;
+  }
+
+  textarea {
+    min-height: 80px;
+    resize: vertical;
+  }
+
+  @media (max-width: 900px) {
+    .topics-container {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="topics-container">
+  <!-- Domains Panel -->
+  <div class="topics-panel">
+    <div class="section-header">
+      <h2>主题领域</h2>
+      <button class="btn btn-primary" onclick="showDomainModal()">+ 添加领域</button>
+    </div>
+
+    <table class="data-table" id="domainsTable">
+      <thead>
+        <tr>
+          <th>名称</th>
+          <th>关键词数</th>
+          <th>状态</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="domainsBody">
+        <!-- Dynamic content -->
+      </tbody>
+    </table>
+
+    <div id="domainsEmpty" class="empty-state" style="display: none;">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+      </svg>
+      <p>暂无主题领域</p>
+    </div>
+  </div>
+
+  <!-- Keywords Panel -->
+  <div class="topics-panel">
+    <div class="keywords-header" id="keywordsHeader">
+      <h3 id="keywordsTitle">选择一个领域查看关键词</h3>
+      <button class="btn btn-primary" id="addKeywordBtn" onclick="showKeywordModal()" style="display: none;">+ 添加关键词</button>
+    </div>
+
+    <div id="keywordsContent">
+      <div class="no-selection">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+        </svg>
+        <p>点击左侧领域选择</p>
+      </div>
+    </div>
+
+    <table class="data-table" id="keywordsTable" style="display: none;">
+      <thead>
+        <tr>
+          <th>关键词</th>
+          <th>权重</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="keywordsBody">
+        <!-- Dynamic content -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Domain Modal -->
+<div class="modal-overlay" id="domainModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="domainModalTitle">添加主题领域</h3>
+      <button class="modal-close" onclick="closeDomainModal()">&times;</button>
+    </div>
+    <form id="domainForm">
+      <input type="hidden" id="domainId">
+      <div class="form-group">
+        <label for="domainName">名称 *</label>
+        <input type="text" id="domainName" required placeholder="例如: 机器学习">
+      </div>
+      <div class="form-group">
+        <label for="domainDescription">描述</label>
+        <textarea id="domainDescription" placeholder="简要描述这个研究领域..."></textarea>
+      </div>
+      <div class="form-group">
+        <label for="domainPriority">优先级</label>
+        <input type="number" id="domainPriority" value="0" min="0" max="100" style="width: 100px;">
+        <small style="color: var(--dim);">数值越大优先级越高</small>
+      </div>
+      <div class="form-group">
+        <label for="domainActive">状态</label>
+        <select id="domainActive">
+          <option value="true">启用</option>
+          <option value="false">禁用</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeDomainModal()">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Keyword Modal -->
+<div class="modal-overlay" id="keywordModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="keywordModalTitle">添加关键词</h3>
+      <button class="modal-close" onclick="closeKeywordModal()">&times;</button>
+    </div>
+    <form id="keywordForm">
+      <input type="hidden" id="keywordId">
+      <div class="form-group">
+        <label>领域</label>
+        <input type="text" id="keywordDomainName" disabled style="background: var(--bg);">
+      </div>
+      <div class="form-group">
+        <label for="keywordText">关键词 *</label>
+        <input type="text" id="keywordText" required placeholder="例如: 深度学习">
+      </div>
+      <div class="form-group">
+        <label for="keywordDescription">描述</label>
+        <textarea id="keywordDescription" placeholder="可选描述..."></textarea>
+      </div>
+      <div class="form-group">
+        <label for="keywordWeight">权重</label>
+        <input type="number" id="keywordWeight" value="1.0" min="0" max="10" step="0.1" class="weight-input">
+        <small style="color: var(--dim);">0-10，数值越大权重越高</small>
+      </div>
+      <div class="form-group">
+        <label for="keywordActive">状态</label>
+        <select id="keywordActive">
+          <option value="true">启用</option>
+          <option value="false">禁用</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeKeywordModal()">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+let domains = [];
+let selectedDomainId = null;
+
+// Load domains on page load
+loadDomains();
+
+async function loadDomains() {
+  try {
+    const res = await fetch('/api/topic-domains/with-keyword-count');
+    domains = await res.json();
+    renderDomains();
+  } catch (err) {
+    console.error('Failed to load domains:', err);
+  }
+}
+
+function renderDomains() {
+  const tbody = document.getElementById('domainsBody');
+  const emptyState = document.getElementById('domainsEmpty');
+  const table = document.getElementById('domainsTable');
+
+  if (domains.length === 0) {
+    table.style.display = 'none';
+    emptyState.style.display = 'block';
+    return;
+  }
+
+  table.style.display = 'table';
+  emptyState.style.display = 'none';
+
+  tbody.innerHTML = domains.map(domain => \`
+    <tr class="domain-row \${selectedDomainId === domain.id ? 'selected' : ''}" onclick="selectDomain(\${domain.id})">
+      <td>
+        <div style="font-weight: 500;">\${escapeHtml(domain.name)}</div>
+        \${domain.description ? \`<div class="domain-description">\${escapeHtml(domain.description)}</div>\` : ''}
+      </td>
+      <td class="keyword-count">\${domain.keyword_count || 0}</td>
+      <td>
+        <span class="status-badge \${domain.is_active ? 'active' : 'inactive'}">
+          \${domain.is_active ? '启用' : '禁用'}
+        </span>
+      </td>
+      <td>
+        <div class="action-buttons">
+          <button class="btn-icon" onclick="event.stopPropagation(); editDomain(\${domain.id})">编辑</button>
+          <button class="btn-icon" onclick="event.stopPropagation(); deleteDomain(\${domain.id})">删除</button>
+        </div>
+      </td>
+    </tr>
+  \`).join('');
+}
+
+function selectDomain(domainId) {
+  selectedDomainId = domainId;
+  renderDomains();
+  loadKeywords(domainId);
+
+  const domain = domains.find(d => d.id === domainId);
+  document.getElementById('keywordsTitle').textContent = domain?.name || '关键词';
+  document.getElementById('addKeywordBtn').style.display = 'block';
+}
+
+async function loadKeywords(domainId) {
+  try {
+    const res = await fetch(\`/api/topic-domains/\${domainId}/keywords\`);
+    const data = await res.json();
+    const keywords = data.keywords || [];
+
+    const noSelection = document.getElementById('keywordsContent');
+    const table = document.getElementById('keywordsTable');
+    const tbody = document.getElementById('keywordsBody');
+
+    if (keywords.length === 0) {
+      noSelection.innerHTML = \`
+        <div class="empty-state">
+          <p>暂无关键词</p>
+          <p style="font-size: 0.85rem; margin-top: 8px;">点击上方按钮添加关键词</p>
+        </div>
+      \`;
+      table.style.display = 'none';
+      return;
+    }
+
+    noSelection.style.display = 'none';
+    table.style.display = 'table';
+
+    tbody.innerHTML = keywords.map(kw => \`
+      <tr>
+        <td>
+          <div style="font-weight: 500;">\${escapeHtml(kw.keyword)}</div>
+          \${kw.description ? \`<div style="font-size: 0.8rem; color: var(--dim);">\${escapeHtml(kw.description)}</div>\` : ''}
+        </td>
+        <td class="keyword-weight">\${kw.weight.toFixed(1)}</td>
+        <td>
+          <div class="action-buttons">
+            <button class="btn-icon" onclick="editKeyword(\${kw.id})">编辑</button>
+            <button class="btn-icon" onclick="deleteKeyword(\${kw.id})">删除</button>
+          </div>
+        </td>
+      </tr>
+    \`).join('');
+  } catch (err) {
+    console.error('Failed to load keywords:', err);
+  }
+}
+
+// Domain modal functions
+function showDomainModal() {
+  document.getElementById('domainModalTitle').textContent = '添加主题领域';
+  document.getElementById('domainId').value = '';
+  document.getElementById('domainName').value = '';
+  document.getElementById('domainDescription').value = '';
+  document.getElementById('domainPriority').value = '0';
+  document.getElementById('domainActive').value = 'true';
+  document.getElementById('domainModal').classList.add('show');
+  document.getElementById('domainName').focus();
+}
+
+function editDomain(id) {
+  const domain = domains.find(d => d.id === id);
+  if (!domain) return;
+
+  document.getElementById('domainModalTitle').textContent = '编辑主题领域';
+  document.getElementById('domainId').value = domain.id;
+  document.getElementById('domainName').value = domain.name;
+  document.getElementById('domainDescription').value = domain.description || '';
+  document.getElementById('domainPriority').value = domain.priority;
+  document.getElementById('domainActive').value = domain.is_active ? 'true' : 'false';
+  document.getElementById('domainModal').classList.add('show');
+}
+
+function closeDomainModal() {
+  document.getElementById('domainModal').classList.remove('show');
+}
+
+document.getElementById('domainForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const id = document.getElementById('domainId').value;
+  const data = {
+    name: document.getElementById('domainName').value.trim(),
+    description: document.getElementById('domainDescription').value.trim() || null,
+    priority: parseInt(document.getElementById('domainPriority').value),
+    isActive: document.getElementById('domainActive').value === 'true'
+  };
+
+  try {
+    const url = id ? \`/api/topic-domains/\${id}\` : '/api/topic-domains';
+    const method = id ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (res.ok) {
+      closeDomainModal();
+      await loadDomains();
+      if (selectedDomainId) {
+        await loadKeywords(selectedDomainId);
+      }
+    } else {
+      const result = await res.json();
+      alert(result.error || '保存失败');
+    }
+  } catch (err) {
+    alert('保存失败，请稍后重试');
+  }
+});
+
+async function deleteDomain(id) {
+  const domain = domains.find(d => d.id === id);
+  const msg = domain ? \`确定要删除主题领域 "\${domain.name}" 吗？\\n\\n这将同时删除该领域下的所有关键词。\` : '确定要删除吗？';
+  if (!confirm(msg)) return;
+
+  try {
+    const res = await fetch(\`/api/topic-domains/\${id}\`, { method: 'DELETE' });
+    if (res.ok) {
+      if (selectedDomainId === id) {
+        selectedDomainId = null;
+        document.getElementById('keywordsTitle').textContent = '选择一个领域查看关键词';
+        document.getElementById('addKeywordBtn').style.display = 'none';
+        document.getElementById('keywordsContent').innerHTML = \`
+          <div class="no-selection">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+            </svg>
+            <p>点击左侧领域选择</p>
+          </div>
+        \`;
+        document.getElementById('keywordsTable').style.display = 'none';
+      }
+      await loadDomains();
+    } else {
+      const result = await res.json();
+      alert(result.error || '删除失败');
+    }
+  } catch (err) {
+    alert('删除失败，请稍后重试');
+  }
+}
+
+// Keyword modal functions
+function showKeywordModal() {
+  if (!selectedDomainId) return;
+
+  const domain = domains.find(d => d.id === selectedDomainId);
+  document.getElementById('keywordModalTitle').textContent = '添加关键词';
+  document.getElementById('keywordId').value = '';
+  document.getElementById('keywordDomainName').value = domain?.name || '';
+  document.getElementById('keywordText').value = '';
+  document.getElementById('keywordDescription').value = '';
+  document.getElementById('keywordWeight').value = '1.0';
+  document.getElementById('keywordActive').value = 'true';
+  document.getElementById('keywordModal').classList.add('show');
+  document.getElementById('keywordText').focus();
+}
+
+async function editKeyword(id) {
+  try {
+    const res = await fetch(\`/api/topic-keywords/\${id}\`);
+    const keyword = await res.json();
+
+    const domain = domains.find(d => d.id === keyword.domain_id);
+    document.getElementById('keywordModalTitle').textContent = '编辑关键词';
+    document.getElementById('keywordId').value = keyword.id;
+    document.getElementById('keywordDomainName').value = domain?.name || '';
+    document.getElementById('keywordText').value = keyword.keyword;
+    document.getElementById('keywordDescription').value = keyword.description || '';
+    document.getElementById('keywordWeight').value = keyword.weight;
+    document.getElementById('keywordActive').value = keyword.is_active ? 'true' : 'false';
+    document.getElementById('keywordModal').classList.add('show');
+  } catch (err) {
+    console.error('Failed to load keyword:', err);
+  }
+}
+
+function closeKeywordModal() {
+  document.getElementById('keywordModal').classList.remove('show');
+}
+
+document.getElementById('keywordForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const id = document.getElementById('keywordId').value;
+  const data = {
+    domainId: selectedDomainId,
+    keyword: document.getElementById('keywordText').value.trim(),
+    description: document.getElementById('keywordDescription').value.trim() || null,
+    weight: parseFloat(document.getElementById('keywordWeight').value),
+    isActive: document.getElementById('keywordActive').value === 'true'
+  };
+
+  try {
+    const url = id ? \`/api/topic-keywords/\${id}\` : '/api/topic-keywords';
+    const method = id ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (res.ok) {
+      closeKeywordModal();
+      await loadDomains();
+      await loadKeywords(selectedDomainId);
+    } else {
+      const result = await res.json();
+      alert(result.error || '保存失败');
+    }
+  } catch (err) {
+    alert('保存失败，请稍后重试');
+  }
+});
+
+async function deleteKeyword(id) {
+  if (!confirm('确定要删除这个关键词吗？')) return;
+
+  try {
+    const res = await fetch(\`/api/topic-keywords/\${id}\`, { method: 'DELETE' });
+    if (res.ok) {
+      await loadDomains();
+      await loadKeywords(selectedDomainId);
+    } else {
+      const result = await res.json();
+      alert(result.error || '删除失败');
+    }
+  } catch (err) {
+    alert('删除失败，请稍后重试');
+  }
+}
+
+// Utility functions
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// Close modals on overlay click
+document.getElementById('domainModal').addEventListener('click', function(e) {
+  if (e.target === this) closeDomainModal();
+});
+
+document.getElementById('keywordModal').addEventListener('click', function(e) {
+  if (e.target === this) closeKeywordModal();
+});
+
+// Close modals on Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeDomainModal();
+    closeKeywordModal();
+  }
+});
+</script>
+` }) %>

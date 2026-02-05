@@ -1,0 +1,237 @@
+<%
+  // Encode a text fragment value: only encode spaces and dashes (dash is special in text fragment syntax)
+  function encodeTextFragment(text) {
+    return text.replace(/-/g, '%2D').replace(/ /g, '%20');
+  }
+
+  // Extract a clean text fragment for scroll-to-text-fragment (#:~:text=...)
+  // Supports multi-line snippets via textStart,textEnd syntax
+  function textFragmentUrl(baseUrl, snippet) {
+    if (!baseUrl || !snippet) return baseUrl || '';
+    // Strip qmd diff-style headers like "@@ -74,4 @@ (73 before, 3 after)\n\n"
+    let clean = snippet.replace(/^@@[^@]*@@[^\n]*\n*/g, '').trim();
+    // Remove trailing ellipsis (…, ..., etc.)
+    clean = clean.replace(/[.…]{2,}$|…$/g, '').trim();
+    if (!clean) return baseUrl;
+
+    const lines = clean.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length === 0) return baseUrl;
+
+    if (lines.length === 1) {
+      // Single line: use textStart only, cap at 80 chars on word boundary
+      let text = lines[0];
+      if (text.length > 80) {
+        text = text.slice(0, 80).replace(/\s+\S*$/, '');
+      }
+      if (!text) return baseUrl;
+      return baseUrl + '#:~:text=' + encodeTextFragment(text);
+    }
+
+    // Multi-line: use textStart,textEnd to span across line breaks
+    let textStart = lines[0];
+    let textEnd = lines[lines.length - 1];
+    // Cap textStart at 80 chars (from start, break at word boundary)
+    if (textStart.length > 80) {
+      textStart = textStart.slice(0, 80).replace(/\s+\S*$/, '');
+    }
+    // Cap textEnd at 80 chars (from end, break at word boundary)
+    if (textEnd.length > 80) {
+      textEnd = textEnd.slice(-80).replace(/^\S*\s+/, '');
+    }
+    if (!textStart || !textEnd) return baseUrl;
+    return baseUrl + '#:~:text=' + encodeTextFragment(textStart) + ',' + encodeTextFragment(textEnd);
+  }
+
+  // Extract filename (without .md) from a qmd path like "qmd://notes/folder/my-note.md"
+  function noteFilename(path) {
+    if (!path) return 'Untitled';
+    return path.split('/').pop().replace(/\.md$/i, '') || 'Untitled';
+  }
+%>
+<style>
+  .detail-layout {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+  .detail-main {
+    flex: 1;
+    min-width: 0;
+  }
+  .detail-sidebar {
+    width: 280px;
+    flex-shrink: 0;
+  }
+  .detail-main h1 {
+    font-size: 1.5rem;
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+  .meta {
+    color: var(--dim);
+    font-size: 0.85rem;
+    margin-bottom: 24px;
+    word-break: break-all;
+  }
+  .meta a { color: var(--accent); }
+  .section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .section-title {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--dim);
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+  .insight {
+    border-left: 3px solid var(--green);
+    padding-left: 16px;
+  }
+  .content {
+    font-size: 0.95rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 600px;
+    overflow-y: auto;
+  }
+  /* Sidebar styles */
+  .og-image {
+    width: 100%;
+    border-radius: 6px;
+    margin-bottom: 16px;
+  }
+  .tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .tag {
+    background: var(--border);
+    color: var(--dim);
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+  }
+  .related-item {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+    overflow-wrap: break-word;
+    word-break: break-all;
+  }
+  .related-item:last-child { border-bottom: none; }
+  .related-item a { color: var(--accent); }
+  .related-heading {
+    color: var(--dim);
+    font-size: 0.8rem;
+    margin-left: 4px;
+  }
+  .related-snippet {
+    color: var(--dim);
+    font-size: 0.8rem;
+  }
+
+  @media (max-width: 768px) {
+    .detail-layout {
+      flex-direction: column;
+    }
+    .detail-sidebar {
+      width: 100%;
+    }
+  }
+</style>
+
+<div class="detail-layout">
+  <div class="detail-main">
+    <h1><%= link.og_title || 'Untitled' %></h1>
+    <div class="meta">
+      <a href="<%= link.url %>" target="_blank"><%= link.url %></a>
+      <% if (link.og_site_name) { %>· <%= link.og_site_name %><% } %>
+      · <%= link.created_at || '' %>
+    </div>
+
+    <% if (link.summary) { %>
+    <div class="section">
+      <div class="section-title">摘要</div>
+      <div><%= link.summary %></div>
+    </div>
+    <% } %>
+
+    <% if (link.insight) { %>
+    <div class="section">
+      <div class="section-title">Insight</div>
+      <div class="insight"><%= link.insight %></div>
+    </div>
+    <% } %>
+
+    <% if (link.markdown) { %>
+    <div class="section">
+      <div class="section-title">原文内容</div>
+      <div class="content"><%= link.markdown %></div>
+    </div>
+    <% } %>
+  </div>
+
+  <div class="detail-sidebar">
+    <% if (link.og_image) { %>
+    <img class="og-image" src="<%= link.og_image %>" alt="">
+    <% } %>
+
+    <% if (tags.length > 0) { %>
+    <div class="section">
+      <div class="section-title">标签</div>
+      <div class="tags">
+        <% for (const t of tags) { %>
+        <span class="tag"><%= t %></span>
+        <% } %>
+      </div>
+    </div>
+    <% } %>
+
+    <% if (relatedNotes.length > 0) { %>
+    <div class="section">
+      <div class="section-title">相关笔记</div>
+      <% for (const n of relatedNotes) { %>
+      <div class="related-item">
+        <%
+          const noteName = noteFilename(n.path);
+          // heading: prefer dedicated field, fall back to title if it differs from filename
+          const heading = n.heading || (n.title && n.title !== noteName ? n.title : '');
+        %>
+        <% if (n.noteUrl) { %>
+        📝 <a href="<%= textFragmentUrl(n.noteUrl, n.snippet) %>"><%= noteName %></a>
+        <% } else { %>
+        📝 <%= noteName %>
+        <% } %>
+        <% if (heading) { %>
+        <br><span class="related-heading">§ <%= heading %></span>
+        <% } %>
+        <% if (n.snippet) { %>
+        <br><span class="related-snippet"><%= n.snippet.slice(0, 150) %></span>
+        <% } %>
+      </div>
+      <% } %>
+    </div>
+    <% } %>
+
+    <% if (relatedLinks.length > 0) { %>
+    <div class="section">
+      <div class="section-title">相关链接</div>
+      <% for (const l of relatedLinks) { %>
+      <div class="related-item">
+        🔗 <a href="<%= textFragmentUrl(l.url, l.snippet) %>"><%= l.title || l.url || '' %></a>
+        <% if (l.snippet) { %>
+        <br><span class="related-snippet"><%= l.snippet.slice(0, 150) %></span>
+        <% } %>
+      </div>
+      <% } %>
+    </div>
+    <% } %>
+  </div>
+</div>

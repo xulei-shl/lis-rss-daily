@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+
+  <!-- Google Fonts Preload -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    /* ============================================
+       ACADEMIC BRUTALIST DESIGN SYSTEM
+       ============================================ */
+
+    /* Spacing Scale (Golden Ratio Approximation) */
+    :root {
+      --space-0: 0;
+      --space-1: 0.25rem;   /* 4px */
+      --space-2: 0.5rem;    /* 8px */
+      --space-3: 0.75rem;   /* 12px */
+      --space-4: 1rem;      /* 16px */
+      --space-5: 1.5rem;    /* 24px */
+      --space-6: 2rem;      /* 32px */
+      --space-8: 3rem;      /* 48px */
+      --space-10: 4rem;     /* 64px */
+      --space-12: 6rem;     /* 96px */
+    }
+
+    /* Typography Scale */
+    :root {
+      --text-2xs: 0.625rem;   /* 10px */
+      --text-xs: 0.75rem;     /* 12px */
+      --text-sm: 0.875rem;    /* 14px */
+      --text-base: 1rem;      /* 16px */
+      --text-xl: 1.25rem;     /* 20px */
+      --text-2xl: 1.5rem;     /* 24px */
+      --text-3xl: 1.75rem;    /* 28px */
+      --text-4xl: clamp(2rem, 4vw + 0.5rem, 3rem);
+      --text-5xl: clamp(2.5rem, 5vw + 1rem, 4rem);
+    }
+
+    /* Font Families */
+    :root {
+      --font-heading: 'Crimson Pro', 'Noto Serif SC', 'Songti SC', serif;
+      --font-body: 'IBM Plex Sans', 'Noto Sans SC', system-ui, sans-serif;
+      --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+      --font-meta: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    /* Light Mode - Academic Brutalist */
+    :root {
+      /* Backgrounds */
+      --bg-primary: #fafaf8;
+      --bg-surface: #ffffff;
+      --bg-elevated: #f5f5f0;
+
+      /* Text */
+      --text-primary: #0a0a0a;
+      --text-secondary: #404040;
+      --text-tertiary: #808080;
+
+      /* Accent - Academic Blue */
+      --accent-primary: #1a4d7a;
+      --accent-hover: #2d6da8;
+      --accent-subtle: rgba(26, 77, 122, 0.08);
+
+      /* Functional Colors */
+      --green: #1a5c3a;
+      --red: #b82a2a;
+      --amber: #b8712a;
+
+      /* Structure - Bold Borders */
+      --border: #d0d0d0;
+      --border-strong: #a0a0a0;
+      --divider: #e0e0e0;
+    }
+
+    /* Dark Mode - Inverted Contrast */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-primary: #0a0a0a;
+        --bg-surface: #141414;
+        --bg-elevated: #1a1a1a;
+
+        --text-primary: #f5f5f0;
+        --text-secondary: #b0b0b0;
+        --text-tertiary: #707070;
+
+        --accent-primary: #4a9fe0;
+        --accent-hover: #6bb3f0;
+        --accent-subtle: rgba(74, 159, 224, 0.15);
+
+        --green: #3dc891;
+        --red: #ff6b5b;
+        --amber: #ffb84d;
+
+        --border: #303030;
+        --border-strong: #404040;
+        --divider: #252525;
+      }
+    }
+
+    /* Reset & Base */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: var(--font-body);
+      font-size: var(--text-base);
+      font-weight: 400;
+      line-height: 1.6;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Links */
+    a {
+      color: var(--accent-primary);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    a:hover {
+      color: var(--accent-hover);
+    }
+
+    /* Form Elements */
+    input, button, select, textarea {
+      font-family: inherit;
+      font-size: inherit;
+    }
+
+    /* ============================================
+       HEADER
+       ============================================ */
+    .site-header {
+      background: var(--bg-surface);
+      border-bottom: 2px solid var(--border);
+      padding: var(--space-3) var(--space-5);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(10px);
+      background: rgba(255, 255, 255, 0.9);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .site-header {
+        background: rgba(20, 20, 20, 0.9);
+      }
+    }
+
+    .site-header a {
+      font-family: var(--font-heading);
+      font-size: var(--text-xl);
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .site-nav {
+      display: flex;
+      gap: var(--space-2);
+      align-items: center;
+    }
+
+    .site-nav a {
+      font-family: var(--font-meta);
+      font-size: var(--text-sm);
+      font-weight: 500;
+      color: var(--text-secondary);
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+
+    .site-nav a:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      border-color: var(--border);
+    }
+
+    /* ============================================
+       PAGE BODY
+       ============================================ */
+    .page-body {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: var(--space-6) var(--space-5);
+    }
+
+    /* ============================================
+       BUTTONS (Brutalist Style)
+       ============================================ */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-2);
+      padding: 12px 24px;
+      border: none;
+      border-radius: 0;
+      cursor: pointer;
+      font-family: var(--font-meta);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      transition: all 0.15s ease;
+    }
+
+    .btn-primary {
+      background: var(--accent-primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      transform: translate(-1px, -1px);
+      box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-primary:active {
+      transform: translate(0, 0);
+      box-shadow: none;
+    }
+
+    .btn-secondary {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      border: 2px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-elevated);
+      border-color: var(--border-strong);
+      transform: translate(-1px, -1px);
+      box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.1);
+    }
+
+    .btn-danger {
+      background: var(--red);
+      color: white;
+    }
+
+    .btn-danger:hover {
+      opacity: 0.9;
+      transform: translate(-1px, -1px);
+      box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-icon {
+      padding: var(--space-1) var(--space-3);
+      background: transparent;
+      border: 1px solid var(--border);
+      font-size: var(--text-xs);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+    }
+
+    .btn-icon:hover {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+    }
+
+    /* ============================================
+       FORM ELEMENTS
+       ============================================ */
+    input[type="text"],
+    input[type="password"],
+    input[type="url"],
+    input[type="number"],
+    input[type="email"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 10px 14px;
+      border: 2px solid var(--border);
+      border-radius: 0;
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: var(--text-base);
+      transition: all 0.15s ease;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      outline: none;
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 3px var(--accent-subtle);
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    .form-group {
+      margin-bottom: var(--space-4);
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: var(--space-2);
+      font-family: var(--font-meta);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+    }
+
+    .error {
+      color: var(--red);
+      font-size: var(--text-sm);
+      margin-top: var(--space-2);
+      padding: var(--space-2) var(--space-3);
+      background: rgba(184, 42, 42, 0.1);
+      border-left: 3px solid var(--red);
+    }
+
+    .success {
+      color: var(--green);
+      font-size: var(--text-sm);
+      margin-top: var(--space-2);
+      padding: var(--space-2) var(--space-3);
+      background: rgba(26, 92, 58, 0.1);
+      border-left: 3px solid var(--green);
+    }
+
+    /* ============================================
+       CARD COMPONENT
+       ============================================ */
+    .card {
+      background: var(--bg-surface);
+      border: 2px solid var(--border);
+      border-radius: 0;
+      padding: var(--space-5);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .card:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.08);
+    }
+
+    /* ============================================
+       BADGE COMPONENT
+       ============================================ */
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      font-family: var(--font-meta);
+      font-size: var(--text-2xs);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      border: 1px solid currentColor;
+      border-radius: 0;
+    }
+
+    .badge.passed {
+      color: var(--green);
+      background: transparent;
+    }
+
+    .badge.rejected {
+      color: var(--red);
+      background: transparent;
+    }
+
+    .badge.pending {
+      color: var(--amber);
+      background: transparent;
+    }
+
+    /* ============================================
+       DIVIDER
+       ============================================ */
+    .divider {
+      border: none;
+      border-top: 3px solid var(--border);
+      margin: var(--space-8) 0;
+    }
+
+    .divider-dotted {
+      border: none;
+      border-top: 2px dotted var(--border);
+      margin: var(--space-6) 0;
+    }
+
+    /* ============================================
+       ANIMATIONS
+       ============================================ */
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .fade-in-up {
+      animation: fadeInUp 0.4s ease-out backwards;
+    }
+
+    .fade-in {
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    /* ============================================
+       RESPONSIVE
+       ============================================ */
+    @media (max-width: 768px) {
+      .site-header {
+        flex-direction: column;
+        gap: var(--space-3);
+        padding: var(--space-3);
+      }
+
+      .site-nav {
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .page-body {
+        padding: var(--space-4) var(--space-3);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a href="/">📚 RSS Literature Tracker</a>
+    <nav class="site-nav">
+      <% if (user) { %>
+        <a href="/">首页</a>
+        <a href="/articles">文章</a>
+        <a href="/search">搜索</a>
+        <a href="/settings">设置</a>
+        <a href="/topics">主题</a>
+        <a href="/filter-logs">日志</a>
+        <form method="POST" action="/logout" style="display: inline;">
+          <button type="submit" class="btn-icon">登出</button>
+        </form>
+      <% } else { %>
+        <a href="/login">登录</a>
+      <% } %>
+    </nav>
+  </header>
+
+  <div class="page-body">
+    <%- body %>
+  </div>
+</body>
+</html>
