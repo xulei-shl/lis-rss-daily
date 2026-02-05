@@ -127,11 +127,13 @@ src/
 │   ├── crypto.ts         # 加密工具
 │   └── markdown.ts       # Markdown 工具
 ├── vector/               # 向量检索模块
+│   ├── chroma-client.ts      # Chroma 客户端单例
 │   ├── embedding-client.ts  # Embedding 客户端
 │   ├── vector-store.ts      # Chroma 向量存储
 │   ├── reranker.ts          # Rerank 重排序
 │   ├── indexer.ts           # 向量索引队列
-│   ├── search.ts            # 语义检索入口
+│   ├── search-service.ts    # 统一检索服务
+│   ├── search.ts            # 接口导出
 │   └── text-builder.ts      # 向量化文本构建
 ├── config.ts             # 配置管理
 ├── logger.ts             # 日志模块
@@ -757,7 +759,27 @@ async function findRelatedArticles(
 
 ## 向量检索模块
 
-### 1. embedding-client.ts
+### 1. chroma-client.ts
+
+**职责**: Chroma 客户端单例管理，自动管理连接避免连接问题
+
+```typescript
+// 获取用户对应的 Chroma 客户端实例（单例）
+async function getChromaClient(userId: number): Promise<Client>
+
+// 关闭客户端连接
+async function closeClient(userId: number): Promise<void>
+
+// 清空所有客户端缓存
+async function clearAllClients(): Promise<void>
+```
+
+**特点**:
+- 每个用户一个缓存的客户端实例
+- 自动管理连接生命周期
+- 避免重复创建连接导致的资源浪费
+
+### 2. embedding-client.ts
 
 **职责**: OpenAI 兼容 Embedding 调用（硅基流动）
 
@@ -777,7 +799,7 @@ async function getEmbeddingConfig(): Promise<EmbeddingConfig>
 - 通过 `llm_configs` 获取 `embedding` 配置
 - 硅基流动兼容 OpenAI API 格式
 
-### 2. vector-store.ts
+### 3. vector-store.ts
 
 **职责**: Chroma 本地存储管理
 
@@ -813,7 +835,7 @@ async function clear(): Promise<void>
 - `chroma_collection`: 默认 `articles`
 - `chroma_distance_metric`: 默认 `cosine`
 
-### 3. reranker.ts
+### 4. reranker.ts
 
 **职责**: 硅基流动 rerank 接口封装
 
@@ -833,7 +855,7 @@ async function isRerankEnabled(): Promise<boolean>
 - `rerank` 配置存在且 `enabled=true`
 - 仅对候选文档进行重排序，不改变候选集合
 
-### 4. indexer.ts
+### 5. indexer.ts
 
 **职责**: 向量索引队列，串行化写入避免并发冲突
 
@@ -856,50 +878,75 @@ async function clearUserIndex(userId: number): Promise<void>
 - 支持防抖和请求合并
 - 非阻塞索引
 
-### 5. search.ts
+### 6. search-service.ts
 
-**职责**: 统一语义检索入口
+**职责**: 统一检索入口，支持四种检索模式
 
 ```typescript
-// 语义搜索
-async function semanticSearch(
-  query: string,
-  limit: number,
-  userId: number
-): Promise<Array<{ articleId: number; score: number }>>
+import { search, SearchMode } from './search.js';
 
-// 相关文章
-async function relatedByArticle(
-  articleId: number,
-  limit: number,
-  userId: number
-): Promise<Array<{ articleId: number; score: number }>>
+// 统一检索入口
+async function search(request: SearchRequest): Promise<SearchResponse>
 
-// 关键词搜索
-async function keywordSearch(
-  query: string,
-  limit: number,
-  userId: number
-): Promise<Array<{ articleId: number; score: number }>>
-
-// 混合搜索
-async function mixedSearch(
-  query: string,
-  limit: number,
-  userId: number,
-  semanticWeight?: number
-): Promise<Array<{ articleId: number; score: number }>>
-```
-
-**输出格式**:
-```typescript
-interface VectorHit {
-  articleId: number;
-  score: number;
+// SearchMode 枚举
+enum SearchMode {
+  SEMANTIC = 'semantic',   // 纯语义检索（向量相似度）
+  KEYWORD = 'keyword',     // 纯关键词检索（SQL LIKE）
+  HYBRID = 'hybrid',       // 混合检索（语义 + 关键词）
+  RELATED = 'related',     // 相关文章检索
 }
 ```
 
-### 6. text-builder.ts
+**SearchRequest 接口**:
+```typescript
+interface SearchRequest {
+  mode: SearchMode;        // 检索模式
+  userId: number;          // 用户 ID
+  query?: string;          // 文本查询（SEMANTIC/KEYWORD/HYBRID）
+  articleId?: number;      // 文章 ID（RELATED）
+  limit?: number;          // 返回数量（默认 10）
+  offset?: number;         // 分页偏移（默认 0）
+  semanticWeight?: number; // 语义权重（默认 0.7）
+  keywordWeight?: number;  // 关键词权重（默认 0.3）
+  normalizeScores?: boolean; // 是否归一化语义分数（默认 true）
+  useCache?: boolean;      // 是否使用缓存（RELATED，默认 true）
+  refreshCache?: boolean;  // 强制刷新缓存（默认 false）
+  fallbackEnabled?: boolean; // 是否启用回退（HYBRID，默认 true）
+}
+```
+
+**SearchResponse 接口**:
+```typescript
+interface SearchResponse {
+  results: SearchResult[]; // 检索结果
+  mode: SearchMode;        // 实际使用的模式
+  query?: string;          // 查询文本
+  total: number;           // 结果总数
+  page?: number;           // 当前页码
+  limit?: number;          // 每页数量
+  cached: boolean;         // 是否来自缓存
+  fallback?: boolean;      // 是否使用了回退机制
+}
+```
+
+**SearchResult 接口**:
+```typescript
+interface SearchResult {
+  articleId: number;       // 文章 ID
+  score: number;           // 最终融合分数
+  semanticScore?: number;  // 语义分数（调试用）
+  keywordScore?: number;   // 关键词分数（调试用）
+  metadata?: {
+    title: string;
+    url: string;
+    summary: string | null;
+    published_at: string | null;
+    rss_source_name?: string;
+  };
+}
+```
+
+### 7. text-builder.ts
 
 **职责**: 向量化文本构建
 
@@ -1015,9 +1062,33 @@ GET    /api/filter/stats         # 过滤统计
 ### 搜索
 
 ```
-GET    /api/search?q={query}&mode=semantic  # 向量语义搜索
-GET    /api/search?q={query}&mode=keyword   # 关键词搜索（SQLite LIKE）
-GET    /api/search?q={query}&mode=mixed     # 混合搜索（向量 + 关键词融合）
+GET    /api/search?q={query}&mode={mode}  # 统一搜索接口
+```
+
+**搜索模式（mode 参数）**:
+| 模式 | 说明 | 适用场景 |
+|------|------|----------|
+| `semantic` | 纯语义检索（向量相似度） | 自然语言理解查询 |
+| `keyword` | 纯关键词检索（SQL LIKE） | 精确匹配，性能最好 |
+| `hybrid` | 混合检索（语义 + 关键词，默认） | 平衡准确性和召回率 |
+| `related` | 相关文章检索 | 文章推荐 |
+
+**URL 参数**:
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `q` | 是 | 搜索查询词（related 模式不需要） |
+| `mode` | 否 | 搜索模式，默认 `hybrid` |
+| `page` | 否 | 页码，默认 1 |
+| `limit` | 否 | 每页数量，默认 10 |
+
+**响应格式**:
+```json
+{
+  "results": [{"id": 1, "title": "...", "relevance": 0.85}],
+  "total": 100,
+  "page": 1,
+  "fallback": false
+}
 ```
 
 **搜索模式说明**:
@@ -1026,9 +1097,12 @@ GET    /api/search?q={query}&mode=mixed     # 混合搜索（向量 + 关键词�
   - 查询按空格拆分为多个词
   - 每个词都必须出现（AND 逻辑）
   - 每个词可在标题、摘要或正文中出现（OR 逻辑）
-- `mixed`: 向量检索与关键词搜索融合
+- `hybrid`: 向量检索与关键词搜索融合
   - 语义分数与关键词相关度线性融合
   - 默认权重：语义 0.7 / 关键词 0.3
+  - 支持回退机制：语义检索失败时自动回退到关键词检索
+- `related`: 基于文章 ID 推荐相关文章
+  - 支持缓存，首次计算后保存到数据库
 
 ### 调度器
 
