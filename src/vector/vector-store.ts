@@ -1,6 +1,6 @@
 import { logger } from '../logger.js';
-import { getChromaSettings } from '../api/settings.js';
-import { ChromaClient } from 'chromadb';
+import { getCollection } from './chroma-client.js';
+import { IncludeEnum } from 'chromadb';
 
 const log = logger.child({ module: 'vector-store' });
 
@@ -14,23 +14,6 @@ export interface VectorHit {
 
 export function buildVectorId(articleId: number, userId: number): string {
   return `${userId}:${articleId}`;
-}
-
-async function getCollection(userId: number) {
-  const settings = await getChromaSettings(userId);
-  const baseUrl = `http://${settings.host}:${settings.port}`;
-  const client = new ChromaClient({ path: baseUrl });
-
-  try {
-    const collection = await client.getCollection({ name: settings.collection });
-    return { collection, settings };
-  } catch {
-    const collection = await client.createCollection({
-      name: settings.collection,
-      metadata: { 'hnsw:space': settings.distanceMetric },
-    });
-    return { collection, settings };
-  }
 }
 
 export async function upsert(
@@ -62,7 +45,7 @@ export async function query(
     queryEmbeddings: [embedding],
     nResults: topK,
     where: filter,
-    include: ['distances', 'metadatas', 'documents', 'ids'],
+    include: [IncludeEnum.Distances, IncludeEnum.Metadatas, IncludeEnum.Documents],
   });
 
   const ids = result.ids?.[0] || [];
@@ -80,7 +63,7 @@ export async function query(
       id: String(ids[i]),
       articleId,
       score,
-      document: typeof documents[i] === 'string' ? documents[i] : '',
+      document: (documents[i] as string | null) || '',
       metadata,
     });
   }

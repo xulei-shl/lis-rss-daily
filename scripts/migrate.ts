@@ -14,6 +14,13 @@ import { config } from '../src/config.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+type TableInfo = { name: string };
+
+function hasColumn(db: Database.Database, table: string, column: string): boolean {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as TableInfo[];
+  return columns.some((item) => item.name === column);
+}
+
 async function runMigrations() {
   console.log('🔧 Starting database migration...\n');
 
@@ -40,8 +47,35 @@ async function runMigrations() {
     console.log('📜 Executing migration scripts...');
     for (const file of migrationFiles) {
       const fullPath = path.join(sqlDir, file);
-      const sql = fs.readFileSync(fullPath, 'utf-8');
       console.log(`   - ${file}`);
+
+      if (file === '002_vector_refactor.sql') {
+        const hasConfigType = hasColumn(db, 'llm_configs', 'config_type');
+        const hasEnabled = hasColumn(db, 'llm_configs', 'enabled');
+
+        if (!hasConfigType) {
+          db.exec("ALTER TABLE llm_configs ADD COLUMN config_type TEXT NOT NULL DEFAULT 'llm';");
+        }
+
+        if (!hasEnabled) {
+          db.exec('ALTER TABLE llm_configs ADD COLUMN enabled INTEGER DEFAULT 0;');
+        }
+
+        db.exec("UPDATE llm_configs SET config_type = 'llm' WHERE config_type IS NULL OR config_type = '';");
+
+        db.exec(`
+          INSERT OR IGNORE INTO settings (user_id, key, value)
+          VALUES
+            (1, 'chroma_host', '127.0.0.1'),
+            (1, 'chroma_port', '8000'),
+            (1, 'chroma_collection', 'articles'),
+            (1, 'chroma_distance_metric', 'cosine');
+        `);
+
+        continue;
+      }
+
+      const sql = fs.readFileSync(fullPath, 'utf-8');
       db.exec(sql);
     }
 
