@@ -326,6 +326,7 @@ export async function getActiveKeywordsForDomain(
 ): Promise<Array<{
   id: number;
   keyword: string;
+  description: string | null;
   weight: number;
 }>> {
   const db = getDb();
@@ -334,7 +335,7 @@ export async function getActiveKeywordsForDomain(
     .selectFrom('topic_keywords')
     .where('domain_id', '=', domainId)
     .where('is_active', '=', 1)
-    .select(['id', 'keyword', 'weight'])
+    .select(['id', 'keyword', 'description', 'weight'])
     .orderBy('weight', 'desc')
     .execute();
 

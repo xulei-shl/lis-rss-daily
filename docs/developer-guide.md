@@ -227,7 +227,7 @@ RSS 抓取 → 保存文章 → 自动触发过滤 → 更新 filter_status
 
 ### 2. 过滤引擎 (filter.ts)
 
-**职责**: 两阶段文章过滤，自动更新文章状态
+**职责**: 文章过滤（可选关键词预筛 + LLM 精确判断），自动更新文章状态
 
 ```typescript
 // 两阶段过滤
@@ -236,7 +236,7 @@ async function filterArticle(
   options?: FilterOptions
 ): Promise<FilterResult>
 
-// 阶段1: 关键词匹配
+// 阶段1: 关键词预筛（可选）
 function keywordPreFilter(
   input: FilterInput
 ): Promise<KeywordMatchResult>
@@ -256,10 +256,19 @@ async function updateArticleFilterStatus(
 ```
 
 **流程**:
-1. 关键词预筛选 (快速拒绝)
+1. 关键词预筛选（可选，默认关闭）
 2. LLM 精确判断 (JSON Mode)
 3. 记录过滤日志
 4. **自动更新** `filter_status` 到 `articles` 表
+
+**配置说明**:
+- `FilterOptions.useKeywordPrefilter` 控制是否启用关键词预筛（默认不启用）。
+- 预筛关闭时：LLM 会对所有活跃领域进行评估。
+
+**提示词要点**:
+- 系统提示词为中文，包含 Role / Context & Constraints / Input Data Structure / Workflow。
+- 关注领域配置包含主题词、权重与描述（含同义词），用于语义匹配。
+- 输出格式保持 JSON 结构（`evaluations` 数组），用于后续处理。
 
 ### 3. 文章处理流水线 (pipeline.ts)
 
@@ -317,7 +326,7 @@ Stage 3: Export (导出 Markdown)
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  2. 自动过滤 (filter.ts)                                        │
-│     ├─ 关键词预筛选                                             │
+│     ├─ 关键词预筛选（可选，默认关闭）                           │
 │     ├─ LLM 精确判断                                             │
 │     ├─ 记录过滤日志                                             │
 │     └─ 更新 filter_status (passed/rejected)                    │

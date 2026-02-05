@@ -58,9 +58,11 @@ export interface DomainMatchResult {
  * Filter options
  */
 export interface FilterOptions {
-  /** Force keyword-only mode (skip LLM) */
+  /** 强制仅关键词模式（跳过 LLM） */
   skipLLM?: boolean;
-  /** Minimum relevance score for passing (default: 0.5) */
+  /** 是否启用关键词预筛（默认 false） */
+  useKeywordPrefilter?: boolean;
+  /** 通过的最低相关度分数（默认 0.5） */
   minRelevanceScore?: number;
 }
 
@@ -84,7 +86,7 @@ interface LLMResponse {
 interface KeywordMatchData {
   domainId: number;
   domainName: string;
-  keywords: Array<{ keyword: string; weight: number }>;
+  keywords: Array<{ keyword: string; description: string | null; weight: number }>;
 }
 
 /* ── Stage 1: Keyword Pre-Filter ── */
@@ -110,11 +112,11 @@ async function keywordPreFilter(
 
   for (const domain of activeDomains) {
     const keywords = await getActiveKeywordsForDomain(domain.id);
-    const matchedKeywords: Array<{ keyword: string; weight: number }> = [];
+    const matchedKeywords: Array<{ keyword: string; description: string | null; weight: number }> = [];
 
     for (const kw of keywords) {
       if (searchText.includes(kw.keyword.toLowerCase())) {
-        matchedKeywords.push({ keyword: kw.keyword, weight: kw.weight });
+        matchedKeywords.push({ keyword: kw.keyword, description: kw.description, weight: kw.weight });
       }
     }
 
@@ -133,6 +135,34 @@ async function keywordPreFilter(
   };
 }
 
+/**
+ * 构建全部活跃领域的关键词数据（预筛关闭时使用）
+ */
+async function buildAllDomainsMatchData(
+  userId: number
+): Promise<Map<number, KeywordMatchData>> {
+  const matchedDomains = new Map<number, KeywordMatchData>();
+  const activeDomains = await getActiveTopicDomains(userId);
+
+  for (const domain of activeDomains) {
+    const keywords = await getActiveKeywordsForDomain(domain.id);
+    if (keywords.length === 0) {
+      continue;
+    }
+    matchedDomains.set(domain.id, {
+      domainId: domain.id,
+      domainName: domain.name,
+      keywords: keywords.map((k) => ({
+        keyword: k.keyword,
+        description: k.description,
+        weight: k.weight,
+      })),
+    });
+  }
+
+  return matchedDomains;
+}
+
 /* ── Stage 2: LLM Precise Filter ── */
 
 /**
@@ -140,7 +170,7 @@ async function keywordPreFilter(
  */
 async function buildFilterSystemPrompt(
   domains: Array<{ id: number; name: string; description: string | null; priority: number }>,
-  keywordsMap: Map<number, Array<{ keyword: string; weight: number }>>
+  keywordsMap: Map<number, Array<{ keyword: string; description: string | null; weight: number }>>
 ): Promise<string> {
   const domainsInfo = await Promise.all(
     domains.map(async (domain) => {
@@ -149,33 +179,57 @@ async function buildFilterSystemPrompt(
         id: domain.id,
         name: domain.name,
         description: domain.description || '',
-        keywords: keywords.map((k) => k.keyword),
+        keywords: keywords.map((k) => ({
+          keyword: k.keyword,
+          description: k.description || '',
+          weight: k.weight,
+        })),
       };
     })
   );
 
-  return `You are an academic literature filtering assistant. Your task is to evaluate whether a research article is relevant to given research domains.
+  return `# Role
+你是一个专业的文章内容筛选与评估助手。你的核心任务是根据用户提供的【关注领域配置】（包含主题领域、主题词、权重及描述），对输入的【文章信息】（题目、摘要）进行深度分析，判断该文章是否符合用户的阅读需求，并给出“通过”或“拒绝”的决策。
 
-# Research Domains
+# Context & Constraints
+1. **语义匹配**：不要仅进行简单的关键词匹配。必须结合【描述】字段中的解释或同义词，对文章进行语义层面的理解。
+2. **权重逻辑**：
+   - 【权重】字段为数字，数值越大代表越重要。
+   - 命中高权重的主题领域或主题词，应显著提高文章的通过率。
+   - 仅命中低权重词汇且与核心领域关联不强时，应倾向于拒绝。
+3. **综合评估**：文章必须在核心概念上与用户关注的领域高度重合，而非仅仅是提及。
+
+# Input Data Structure
+用户将提供两部分信息：
+1. **关注配置**：包含领域（Domain）、该领域下的主题词（Keywords）、权重（Weight）、描述（Description）。
+2. **文章信息**：包含题目（Title）、摘要（Abstract）。
+
+# Workflow
+1. **分析文章**：提取题目和摘要中的核心概念、研究对象、方法和结论。
+2. **映射匹配**：将提取的概念与用户的【关注配置】进行比对。利用【描述】字段扩展语义范围（例如：若描述中包含同义词，则视为命中）。
+3. **加权评估**：
+   - 识别命中了哪些领域和主题词。
+   - 根据命中的项目权重进行综合打分。
+   - *判定标准*：
+     - **通过**：文章核心内容强关联高权重领域/词汇，或关联多个中等权重词汇。
+     - **拒绝**：文章内容与关注领域无关，或仅边缘提及低权重词汇，或属于关注领域的反面案例。
+4. **生成结果**：输出最终决策及简短理由。
+
+# 关注领域配置
 ${domainsInfo.map((d) => `
-## Domain ID: ${d.id} - ${d.name}
-Description: ${d.description}
-Keywords: ${d.keywords.join(', ')}
+## 领域ID: ${d.id} - ${d.name}
+描述: ${d.description}
+主题词:
+${d.keywords
+  .map((k) => {
+    const descPart = k.description ? `，描述/同义词：${k.description}` : '';
+    return `- ${k.keyword}（权重：${k.weight}${descPart}）`;
+  })
+  .join('\n')}
 `).join('\n')}
 
-# Evaluation Criteria
-1. **Relevance**: Does the article meaningfully relate to the research domain?
-2. **Novelty**: Does the article contribute new knowledge or insights?
-3. **Specificity**: Is the content specific to the domain (not just tangentially related)?
-
-# Scoring Guidelines
-- **0.9-1.0**: Highly relevant, directly addresses core questions in the domain
-- **0.7-0.8**: Relevant, provides meaningful insights for the domain
-- **0.5-0.6**: Somewhat relevant, tangentially related or limited relevance
-- **0.0-0.4**: Not relevant, no meaningful connection to the domain
-
 # Response Format
-You must respond with a JSON object in the following format:
+请严格按照以下 JSON 格式输出结果（不要输出多余内容）：
 \`\`\`json
 {
   "evaluations": [
@@ -184,18 +238,18 @@ You must respond with a JSON object in the following format:
       "is_relevant": true,
       "relevance_score": 0.85,
       "matched_keywords": ["keyword1", "keyword2"],
-      "reasoning": "Brief explanation of the relevance assessment"
+      "reasoning": "简短说明相关性（1-2句）"
     }
   ]
 }
 \`\`\`
 
 # Important Notes
-- Evaluate each domain independently
-- An article can be relevant to multiple domains
-- Only mark as relevant if the article has meaningful academic value for that domain
-- Matched keywords should be from the provided keyword list for that domain
-- Keep reasoning concise (1-2 sentences)`;
+- 每个领域独立评估
+- 一篇文章可以与多个领域相关
+- 只有具有实质性关联时才标记为相关
+- matched_keywords 必须来自该领域的主题词列表
+- reasoning 保持简洁（1-2句）`;
 }
 
 /**
@@ -220,21 +274,21 @@ async function llmFilter(
   }
 
   // Build keywords map for LLM prompt
-  const keywordsMap = new Map<number, Array<{ keyword: string; weight: number }>>();
+  const keywordsMap = new Map<number, Array<{ keyword: string; description: string | null; weight: number }>>();
   for (const [domainId, data] of Array.from(matchedDomains.entries())) {
     keywordsMap.set(domainId, data.keywords);
   }
 
   // Build messages
   const systemPrompt = await buildFilterSystemPrompt(relevantDomains, keywordsMap);
-  const userPrompt = `Please evaluate the following article:
+  const userPrompt = `请评估以下文章：
 
-# Article
-Title: ${input.title}
-Description: ${input.description}
-${input.content ? `Content Preview: ${input.content.substring(0, 2000)}...` : ''}
+# 文章信息
+题目: ${input.title}
+摘要: ${input.description}
+${input.content ? `内容预览: ${input.content.substring(0, 2000)}...` : ''}
 
-Provide your evaluation in the specified JSON format.`;
+请严格按照指定的 JSON 格式返回评估结果。`;
 
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
@@ -395,31 +449,39 @@ export async function filterArticle(
   requestLog.debug({ title: input.title }, 'Starting article filter');
 
   // Stage 1: Keyword pre-filter
-  const keywordResult = await keywordPreFilter(input);
+  let keywordResult: Awaited<ReturnType<typeof keywordPreFilter>> | null = null;
 
-  if (!keywordResult.hasMatch) {
-    requestLog.info('Article rejected: no keyword matches');
-    await recordFilterLog(
-      input.articleId,
-      null,
-      false,
-      null,
-      null,
-      'No keyword matches'
-    );
-    // Auto-update filter_status to 'rejected'
-    await updateArticleFilterStatus(input.articleId, 'rejected', 0);
-    return {
-      passed: false,
-      domainMatches: [],
-      filterReason: 'No keyword matches',
-      usedFallback: false,
-    };
+  if (options.useKeywordPrefilter) {
+    keywordResult = await keywordPreFilter(input);
+
+    if (!keywordResult.hasMatch) {
+      requestLog.info('Article rejected: no keyword matches');
+      await recordFilterLog(
+        input.articleId,
+        null,
+        false,
+        null,
+        null,
+        'No keyword matches'
+      );
+      // Auto-update filter_status to 'rejected'
+      await updateArticleFilterStatus(input.articleId, 'rejected', 0);
+      return {
+        passed: false,
+        domainMatches: [],
+        filterReason: 'No keyword matches',
+        usedFallback: false,
+      };
+    }
   }
 
   // If skipLLM is set, use keyword-only matching
   if (options.skipLLM) {
     requestLog.debug('Using keyword-only filter (skipLLM=true)');
+    if (!keywordResult) {
+      requestLog.warn('skipLLM=true requires keyword prefilter; forcing prefilter');
+      keywordResult = await keywordPreFilter(input);
+    }
     const domainMatches = keywordOnlyFilter(keywordResult.matchedDomains, minScore);
 
     await recordFilterResults(input, domainMatches, null);
@@ -440,11 +502,17 @@ export async function filterArticle(
   }
 
   // Stage 2: LLM filter
-  const llmResult = await llmFilter(input, keywordResult.matchedDomains);
+  const llmMatchedDomains = keywordResult
+    ? keywordResult.matchedDomains
+    : await buildAllDomainsMatchData(input.userId);
+  const llmResult = await llmFilter(input, llmMatchedDomains);
 
   // If LLM failed, fall back to keyword-only
   if (llmResult.error || llmResult.results.size === 0) {
     requestLog.warn({ error: llmResult.error }, 'LLM filter failed, using keyword fallback');
+    if (!keywordResult) {
+      keywordResult = await keywordPreFilter(input);
+    }
     const domainMatches = keywordOnlyFilter(keywordResult.matchedDomains, minScore);
 
     await recordFilterResults(input, domainMatches, llmResult.rawResponse ?? null);
@@ -467,7 +535,7 @@ export async function filterArticle(
   // Process LLM results
   const domainMatches: DomainMatchResult[] = [];
   const domainNames = new Map(
-    Array.from(keywordResult.matchedDomains.entries()).map(([id, data]) => [id, data.domainName])
+    Array.from(llmMatchedDomains.entries()).map(([id, data]) => [id, data.domainName])
   );
 
   for (const [domainId, result] of Array.from(llmResult.results.entries())) {
