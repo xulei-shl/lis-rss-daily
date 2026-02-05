@@ -9,6 +9,7 @@
 - [架构概览](#架构概览)
 - [数据模型](#数据模型)
 - [核心模块](#核心模块)
+- [向量检索模块](#向量检索模块)
 - [API 接口](#api-接口)
 - [开发环境](#开发环境)
 - [代码规范](#代码规范)
@@ -71,7 +72,8 @@ src/
 │   │   ├── article-process.routes.ts
 │   │   ├── filter.routes.ts
 │   │   ├── search.routes.ts
-│   │   └── scheduler.routes.ts
+│   │   ├── scheduler.routes.ts
+│   │   └── settings.routes.ts
 │   ├── web.ts             # Web 服务器
 │   ├── rss-sources.ts     # RSS 源 CRUD
 │   ├── articles.ts        # 文章服务
@@ -124,6 +126,13 @@ src/
 ├── utils/                # 工具函数
 │   ├── crypto.ts         # 加密工具
 │   └── markdown.ts       # Markdown 工具
+├── vector/               # 向量检索模块
+│   ├── embedding-client.ts  # Embedding 客户端
+│   ├── vector-store.ts      # Chroma 向量存储
+│   ├── reranker.ts          # Rerank 重排序
+│   ├── indexer.ts           # 向量索引队列
+│   ├── search.ts            # 语义检索入口
+│   └── text-builder.ts      # 向量化文本构建
 ├── config.ts             # 配置管理
 ├── logger.ts             # 日志模块
 ├── llm.ts                # LLM 抽象层
@@ -135,7 +144,6 @@ src/
 ├── search.ts             # 搜索服务
 ├── export.ts             # 导出服务
 ├── pipeline.ts           # 文章处理流水线
-├── qmd.ts                # QMD 工具
 ├── db.ts                 # 数据库操作
 └── index.ts              # 应用入口
 ```
@@ -194,25 +202,25 @@ src/
                      │ keyword_id       │         │
                      │ ...              │         │
                      └──────────────────┘         │
-                                  ▲               │
-                                  │               │
-                            ┌──────────────────┐  │
-                            │ keywords         │  │
-                            ├──────────────────┤  │
-                            │ id               │  │
-                            │ keyword (UNIQUE) │  │
-                            │ ...              │  │
-                            └──────────────────┘  │
-                                                  │
-                            ┌───────────────────────┐
-                            │ article_translations  │
-                            ├───────────────────────┤
-                            │ article_id (PK)       │
-                            │ title_zh              │
-                            │ summary_zh            │
-                            │ source_lang           │
-                            │ ...                   │
-                            └───────────────────────┘
+                                ▲               │
+                                │               │
+                          ┌──────────────────┐  │
+                          │ keywords         │  │
+                          ├──────────────────┤  │
+                          │ id               │  │
+                          │ keyword (UNIQUE) │  │
+                          │ ...              │  │
+                          └──────────────────┘  │
+                                                │
+                          ┌───────────────────────┐
+                          │ article_translations  │
+                          ├───────────────────────┤
+                          │ article_id (PK)       │
+                          │ title_zh              │
+                          │ summary_zh            │
+                          │ source_lang           │
+                          │ ...                   │
+                          └───────────────────────┘
 
 ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
 │   llm_configs    │  │     settings     │  │  system_prompts   │
@@ -223,9 +231,11 @@ src/
 │ base_url         │  │ value            │  │ name             │
 │ api_key_encrypted│  │ updated_at       │  │ template         │
 │ model            │  │ ...              │  │ variables        │
-│ is_default       │  └──────────────────┘  │ is_active        │
-│ timeout          │                       │ ...              │
-│ max_retries      │                       └──────────────────┘
+│ config_type      │  └──────────────────┘  │ is_active        │
+│ enabled          │                       │ ...              │
+│ is_default       │                       └──────────────────┘
+│ timeout          │
+│ max_retries      │
 │ max_concurrent   │
 │ ...              │
 └──────────────────┘
@@ -345,11 +355,11 @@ CREATE TABLE keywords (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   keyword TEXT NOT NULL UNIQUE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  updated_at_TIMESTAMP
 );
 ```
 
-#### article_keywords (文章-关键词关联表)
+ DATETIME DEFAULT CURRENT#### article_keywords (文章-关键词关联表)
 
 ```sql
 CREATE TABLE article_keywords (
@@ -366,7 +376,7 @@ CREATE TABLE article_keywords (
 
 ```sql
 CREATE TABLE article_translations (
-  article_id INTEGER PRIMARY KEY,
+  article_id PRIMARY KEY,
   title_zh TEXT,
   summary_zh TEXT,
   source_lang TEXT,
@@ -386,6 +396,8 @@ CREATE TABLE llm_configs (
   base_url TEXT NOT NULL,
   api_key_encrypted TEXT NOT NULL,
   model TEXT NOT NULL,
+  config_type TEXT NOT NULL DEFAULT 'llm' CHECK(config_type IN ('llm', 'embedding', 'rerank')),
+  enabled INTEGER DEFAULT 0,
   is_default INTEGER DEFAULT 0,
   timeout INTEGER DEFAULT 30000,
   max_retries INTEGER DEFAULT 3,
@@ -395,6 +407,10 @@ CREATE TABLE llm_configs (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 ```
+
+**字段说明**:
+- `config_type`: 配置类型，取值为 `llm`（LLM 模型）、`embedding`（向量化模型）、`rerank`（重排序模型）
+- `enabled`: 是否启用（主要用于 rerank 配置）
 
 #### settings (设置表)
 
@@ -409,6 +425,12 @@ CREATE TABLE settings (
   UNIQUE(user_id, key)
 );
 ```
+
+**常用配置键**:
+- `chroma_host`: Chroma 服务器地址（默认 `127.0.0.1`）
+- `chroma_port`: Chroma 服务器端口（默认 `8000`）
+- `chroma_collection`: Chroma 集合名称（默认 `articles`）
+- `chroma_distance_metric`: 距离度量（默认 `cosine`）
 
 #### system_prompts (系统提示词表)
 
@@ -552,8 +574,7 @@ Stage 2: Analyze (LLM 关键词 + 翻译)
 Stage 3: Export (导出 Markdown)
   ↓ 使用 export.ts
   - 导出到 data/exports/
-  - 链接到 QMD 集合
-  - 触发 QMD 索引（qmd update + qmd embed）
+  - 触发向量索引（非阻塞）
 ```
 
 **处理条件**: 只处理 `filter_status='passed'` 的文章
@@ -571,8 +592,8 @@ Stage 3: Export (导出 Markdown)
 │     ├─ 解析 RSS Feed                                           │
 │     └─ 保存新文章 (filter_status='pending')                    │
 └─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
+                               │
+                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  2. 自动过滤 (filter.ts)                                        │
 │     ├─ 关键词预筛选（可选，默认关闭）                           │
@@ -580,13 +601,13 @@ Stage 3: Export (导出 Markdown)
 │     ├─ 记录过滤日志                                             │
 │     └─ 更新 filter_status (passed/rejected)                    │
 └─────────────────────────────────────────────────────────────────┘
-                              │
-                    ┌─────────┴─────────┐
-                    ▼                   ▼
-            filter_status=      filter_status=
-              'passed'            'rejected'
-                    │                   │
-                    ▼                   (停止)
+                               │
+                     ┌─────────┴─────────┐
+                     ▼                   ▼
+             filter_status=      filter_status=
+               'passed'            'rejected'
+                     │                   │
+                     ▼                   (停止)
 ┌─────────────────────────────────────────────────────────────────┐
 │  3. 文章处理 (pipeline.ts)                                      │
 │     ├─ Stage 1: 抓取全文 (scraper.ts)                          │
@@ -595,23 +616,24 @@ Stage 3: Export (导出 Markdown)
 │     │   └─ 英文翻译为中文                                       │
 │     └─ Stage 3: 导出 Markdown (export.ts)                      │
 │         ├─ 导出到 data/exports/                                 │
-│         └─ 链接到 QMD 集合                                       │
+│         └─ 触发向量索引（非阻塞）                                │
 └─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
+                               │
+                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  4. 语义搜索 (search.ts + qmd.ts)                               │
-│     ├─ QMD 语义搜索（向量搜索）                                  │
+│  4. 语义搜索 (vector/search.ts)                                 │
+│     ├─ 向量检索（Chroma + Embedding）                           │
 │     ├─ 关键词搜索（SQLite LIKE，AND+OR 组合）                     │
-│     └─ 优雅降级：QMD 失败时自动回退到关键词搜索                   │
+│     ├─ 混合检索（向量 + 关键词融合）                             │
+│     └─ Rerank 重排序（可选）                                    │
 └─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
+                               │
+                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  5. QMD 自动向量化 (index.ts + export.ts)                        │
-│     ├─ 监听 data/qmd/articles 目录变更                           │
-│     ├─ 30 秒防抖合并请求                                         │
-│     └─ 串行执行 qmd update + qmd embed                           │
+│  5. 向量索引 (vector/indexer.ts)                                │
+│     ├─ 文章导出后自动触发索引                                    │
+│     ├─ 串行化写入避免并发冲突                                    │
+│     └─ 按 user_id 分组写入                                      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -628,7 +650,7 @@ Stage 3: Export (导出 Markdown)
 ### 2. RSS 正文择优与 Markdown 化
 
 - 从 RSS 原始字段中择优选择正文来源：`content` → `description` → `contentSnippet`。
-- 选择策略采用“信息量评分”（正文长度 + 轻量权重），优先更丰富的内容。
+- 选择策略采用"信息量评分"（正文长度 + 轻量权重），优先更丰富的内容。
 - 入库时统一转换为 Markdown，写入 `content` 与 `markdown_content`（允许相同）。
 - `content` 始终代表 RSS 正文；`markdown_content` 可能在手动抓取后被覆盖。
 
@@ -646,17 +668,17 @@ Stage 3: Export (导出 Markdown)
 ### 5. 过滤与后续处理
 
 - 过滤阶段使用 RSS 的 `contentSnippet/description` 作为 `description` 输入，避免占用 `summary` 字段。
-- 通过过滤后自动触发后续流程，但默认跳过“抓取全文”，仅执行：
+- 通过过滤后自动触发后续流程，但默认跳过"抓取全文"，仅执行：
   - LLM 关键词
   - 英文翻译（题名/摘要）
 
 ### 6. 页面展示策略
 
 - 详情页始终显示 `content`（RSS 正文）。
-- 当 `markdown_content` 存在且与 `content` 不同时，额外显示“抓取全文”区块。
+- 当 `markdown_content` 存在且与 `content` 不同时，额外显示"抓取全文"区块。
 - 抓取内容包含验证码/反爬提示或明显过短时不会覆盖 `markdown_content`。
 
-### 4. LLM 分析引擎 (agent.ts)
+### 7. LLM 分析引擎 (agent.ts)
 
 **职责**: 关键词生成与英文翻译（不生成摘要）
 
@@ -685,9 +707,9 @@ async function translateIfNeeded(
 
 **提示词模板**: 存储在 `system_prompts` 表
 
-### 5. 搜索服务 (search.ts)
+### 8. 搜索服务 (search.ts)
 
-**职责**: 文章搜索，支持 QMD 语义搜索
+**职责**: 文章搜索，支持向量检索和关键词搜索
 
 ```typescript
 // 历史文章搜索（SQLite LIKE）
@@ -697,8 +719,15 @@ async function searchHistoricalArticles(
   userId?: number
 ): Promise<SearchResult[]>
 
-// QMD 语义搜索
-async function searchArticlesWithQMD(
+// 向量检索入口
+async function searchWithVector(
+  query: string,
+  limit?: number,
+  userId?: number
+): Promise<SearchResult[]>
+
+// 混合检索
+async function searchMixed(
   query: string,
   limit?: number,
   userId?: number
@@ -706,7 +735,7 @@ async function searchArticlesWithQMD(
 
 // 查找相关文章
 async function findRelatedArticles(
-  query: string,
+  articleId: number,
   limit?: number,
   userId?: number
 ): Promise<SearchResult[]>
@@ -724,36 +753,192 @@ async function findRelatedArticles(
 - 匹配条件：`machine` AND `learning` AND `python`
 - 每个词可在 `title`、`summary` 或 `markdown_content` 中出现
 
-**QMD 集成**:
-- `qmdVsearchWithRetry()`: 带重试的向量搜索
-- 优雅降级: QMD 失败时回退到 SQLite LIKE 搜索
+---
 
-**自动向量化**:
-- 启动时监听 `data/qmd/articles` 目录变更
-- 触发 `QmdIndexQueue` 执行 `qmd update + qmd embed`
-- 防抖时间可用 `QMD_AUTO_EMBED_DEBOUNCE_MS` 调整（默认 30000）
+## 向量检索模块
 
-### 6. QMD 工具 (qmd.ts)
+### 1. embedding-client.ts
 
-**职责**: QMD 集合管理与文件链接
+**职责**: OpenAI 兼容 Embedding 调用（硅基流动）
 
 ```typescript
-// 初始化 QMD 集合
-function initQmdCollection(): void
+// 获取单条文本的向量
+async function getEmbedding(text: string): Promise<number[]>
 
-// 链接文件到 QMD 集合
-function linkFileToQmdCollection(
-  exportFilename: string
-): string
+// 批量获取向量
+async function getEmbeddingsBatch(texts: string[]): Promise<number[][]>
 
-// 检查 QMD 是否可用
-async function isQmdAvailable(): Promise<boolean>
+// 配置获取
+async function getEmbeddingConfig(): Promise<EmbeddingConfig>
 ```
 
-**索引队列** (export.ts):
-- `QmdIndexQueue`: 请求合并 + 序列化
-- 防止并发索引冲突
- - 执行 `qmd update` + `qmd embed`
+**特点**:
+- 支持超时/重试/批量处理
+- 通过 `llm_configs` 获取 `embedding` 配置
+- 硅基流动兼容 OpenAI API 格式
+
+### 2. vector-store.ts
+
+**职责**: Chroma 本地存储管理
+
+```typescript
+// 获取或创建 collection
+async function getOrCreateCollection(): Promise<Collection>
+
+// 写入向量
+async function upsert(
+  ids: string[],
+  embeddings: number[][],
+  metadatas: object[],
+  documents: string[]
+): Promise<void>
+
+// 查询向量
+async function query(
+  embedding: number[],
+  topK: number,
+  filter?: object
+): Promise<VectorHit[]>
+
+// 删除向量
+async function delete(ids: string[]): Promise<void>
+
+// 清空 collection
+async function clear(): Promise<void>
+```
+
+**配置**:
+- `chroma_host`: 默认 `127.0.0.1`
+- `chroma_port`: 默认 `8000`
+- `chroma_collection`: 默认 `articles`
+- `chroma_distance_metric`: 默认 `cosine`
+
+### 3. reranker.ts
+
+**职责**: 硅基流动 rerank 接口封装
+
+```typescript
+// 重排序
+async function rerank(
+  query: string,
+  documents: string[],
+  topN?: number
+): Promise<Array<{ index: number; score: number }>>
+
+// 检查 rerank 是否启用
+async function isRerankEnabled(): Promise<boolean>
+```
+
+**触发条件**:
+- `rerank` 配置存在且 `enabled=true`
+- 仅对候选文档进行重排序，不改变候选集合
+
+### 4. indexer.ts
+
+**职责**: 向量索引队列，串行化写入避免并发冲突
+
+```typescript
+// 索引单篇文章
+async function indexArticle(articleId: number): Promise<void>
+
+// 批量索引
+async function indexArticles(articleIds: number[]): Promise<void>
+
+// 删除向量
+async function deleteArticle(articleId: number): Promise<void>
+
+// 清空用户索引
+async function clearUserIndex(userId: number): Promise<void>
+```
+
+**特点**:
+- 按 `user_id` 分组写入
+- 支持防抖和请求合并
+- 非阻塞索引
+
+### 5. search.ts
+
+**职责**: 统一语义检索入口
+
+```typescript
+// 语义搜索
+async function semanticSearch(
+  query: string,
+  limit: number,
+  userId: number
+): Promise<Array<{ articleId: number; score: number }>>
+
+// 相关文章
+async function relatedByArticle(
+  articleId: number,
+  limit: number,
+  userId: number
+): Promise<Array<{ articleId: number; score: number }>>
+
+// 关键词搜索
+async function keywordSearch(
+  query: string,
+  limit: number,
+  userId: number
+): Promise<Array<{ articleId: number; score: number }>>
+
+// 混合搜索
+async function mixedSearch(
+  query: string,
+  limit: number,
+  userId: number,
+  semanticWeight?: number
+): Promise<Array<{ articleId: number; score: number }>>
+```
+
+**输出格式**:
+```typescript
+interface VectorHit {
+  articleId: number;
+  score: number;
+}
+```
+
+### 6. text-builder.ts
+
+**职责**: 向量化文本构建
+
+```typescript
+// 构建单篇文章的向量文档
+async function buildDocument(articleId: number): Promise<{
+  id: string;
+  document: string;
+  metadata: {
+    articleId: number;
+    userId: number;
+    title: string;
+    publishedAt: string;
+  };
+}>
+
+// 批量构建
+async function buildBatch(
+  articleIds: number[]
+): Promise<Array<{
+  id: string;
+  document: string;
+  metadata: object;
+}>>
+
+// 构建向量化文本
+function buildVectorText(article: Article): string
+```
+
+**向量化内容格式**:
+```
+TITLE: {title}
+SUMMARY: {summary}
+CONTENT: {content}
+```
+
+**规则**:
+- `summary` 为空则忽略
+- 统一在索引时构建，避免重复逻辑
 
 ---
 
@@ -830,21 +1015,45 @@ GET    /api/filter/stats         # 过滤统计
 ### 搜索
 
 ```
-GET    /api/search?q={query}&mode=semantic  # QMD 语义搜索（优先）
+GET    /api/search?q={query}&mode=semantic  # 向量语义搜索
 GET    /api/search?q={query}&mode=keyword   # 关键词搜索（SQLite LIKE）
+GET    /api/search?q={query}&mode=mixed     # 混合搜索（向量 + 关键词融合）
 ```
 
 **搜索模式说明**:
-- `semantic`: 使用 QMD 向量搜索，支持自然语言查询
+- `semantic`: 使用向量检索（Chroma + Embedding），支持自然语言查询
 - `keyword`: 使用 SQLite LIKE 搜索，采用 AND+OR 组合逻辑
   - 查询按空格拆分为多个词
   - 每个词都必须出现（AND 逻辑）
   - 每个词可在标题、摘要或正文中出现（OR 逻辑）
+- `mixed`: 向量检索与关键词搜索融合
+  - 语义分数与关键词相关度线性融合
+  - 默认权重：语义 0.7 / 关键词 0.3
 
 ### 调度器
 
 ```
 GET    /api/scheduler/status    # 调度器状态
+```
+
+### 设置
+
+```
+GET    /api/settings            # 获取设置
+PUT    /api/settings            # 更新设置
+GET    /api/settings/chroma    # 获取 Chroma 配置
+PUT    /api/settings/chroma    # 更新 Chroma 配置
+```
+
+### LLM 配置
+
+```
+GET    /api/llm-configs              # 获取配置列表
+GET    /api/llm-configs/:id          # 获取单个配置
+POST   /api/llm-configs              # 创建配置
+PUT    /api/llm-configs/:id          # 更新配置
+DELETE /api/llm-configs/:id          # 删除配置
+GET    /api/llm-configs/type/:type   # 按类型获取配置
 ```
 
 ---
@@ -879,6 +1088,19 @@ pnpm run db:seed  # 可选
 
 # 启动开发服务器
 pnpm dev
+```
+
+### Chroma 向量数据库
+
+系统使用 Chroma 作为向量数据库，需要单独启动：
+
+```bash
+# 使用 Docker 启动 Chroma
+docker run -d -p 8000:8000 chromadb/chroma
+
+# 或使用本地安装
+pip install chromadb
+chromadb run --host 127.0.0.1 --port 8000
 ```
 
 ### 开发工具
@@ -1002,7 +1224,11 @@ pnpm test:coverage
 
 ### 添加新的搜索后端
 
-在 `search.ts` 中实现新的搜索函数，注册到 `searchArticles`。
+在 `vector/search.ts` 中实现新的搜索函数。
+
+### 添加新的 Embedding 提供商
+
+在 `vector/embedding-client.ts` 中实现新的 Provider。
 
 ---
 
@@ -1025,6 +1251,12 @@ pnpm test:coverage
 - 增量抓取避免重复
 - 指数退避处理失败
 
+### 向量检索
+
+- 批量 Embedding 提高效率
+- 合理设置 topK 参数
+- Rerank 可选，节省 API 调用
+
 ---
 
 ## 故障排查
@@ -1044,6 +1276,9 @@ DEBUG=rss-scheduler:* pnpm dev
 1. **数据库锁定**: 检查是否有其他进程占用
 2. **LLM 超时**: 调整 `LLM_TIMEOUT` 环境变量
 3. **Playwright 失败**: 运行 `npx playwright install chromium`
+4. **Chroma 连接失败**: 检查 Chroma 服务是否启动，默认端口 8000
+5. **向量检索无结果**: 检查 Embedding 配置是否正确
+6. **Rerank 不生效**: 检查 `rerank` 配置是否存在且 `enabled=1`
 
 ---
 

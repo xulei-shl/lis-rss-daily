@@ -9,7 +9,7 @@ import { getDb } from '../db.js';
 import { logger } from '../logger.js';
 import type { RSSFeedItem } from '../rss-parser.js';
 import { toSimpleMarkdown } from '../utils/markdown.js';
-import { searchArticlesWithQMD } from '../search.js';
+import { relatedByArticle } from '../vector/search.js';
 
 const log = logger.child({ module: 'articles-service' });
 
@@ -767,24 +767,18 @@ async function computeRelatedArticles(
   userId: number,
   limit: number
 ): Promise<RelatedArticle[]> {
-  const article = await getArticleById(articleId, userId);
-  if (!article) return [];
-
-  const query = buildRelatedQuery(article);
-  if (!query) return [];
-
-  const [qmdResults, keywordResults] = await Promise.all([
-    searchArticlesWithQMD(query, limit * 3, userId),
+  const [semanticResults, keywordResults] = await Promise.all([
+    relatedByArticle(articleId, limit * 3, userId),
     findRelatedByKeywordOverlap(articleId, userId, limit * 3),
   ]);
 
-  const scoreMap = new Map<number, { qmdScore: number; kwScore: number }>();
+  const scoreMap = new Map<number, { semanticScore: number; kwScore: number }>();
 
-  for (const item of qmdResults) {
+  for (const item of semanticResults) {
     if (!item.articleId || item.articleId === articleId) continue;
-    const qmdScore = typeof item.score === 'number' ? item.score : 0.5;
-    const current = scoreMap.get(item.articleId) || { qmdScore: 0, kwScore: 0 };
-    scoreMap.set(item.articleId, { qmdScore, kwScore: current.kwScore });
+    const semanticScore = typeof item.score === 'number' ? item.score : 0.5;
+    const current = scoreMap.get(item.articleId) || { semanticScore: 0, kwScore: 0 };
+    scoreMap.set(item.articleId, { semanticScore, kwScore: current.kwScore });
   }
 
   let maxMatchCount = 0;
@@ -797,14 +791,14 @@ async function computeRelatedArticles(
   for (const row of keywordResults) {
     if (row.articleId === articleId) continue;
     const kwScore = maxMatchCount > 0 ? row.matchCount / maxMatchCount : 0;
-    const current = scoreMap.get(row.articleId) || { qmdScore: 0, kwScore: 0 };
-    scoreMap.set(row.articleId, { qmdScore: current.qmdScore, kwScore });
+    const current = scoreMap.get(row.articleId) || { semanticScore: 0, kwScore: 0 };
+    scoreMap.set(row.articleId, { semanticScore: current.semanticScore, kwScore });
   }
 
   if (scoreMap.size === 0) return [];
 
   const mergedScores = Array.from(scoreMap.entries()).map(([id, scores]) => {
-    const finalScore = scores.qmdScore * 0.7 + scores.kwScore * 0.3;
+    const finalScore = scores.semanticScore * 0.7 + scores.kwScore * 0.3;
     return { id, finalScore };
   });
 
@@ -907,15 +901,4 @@ async function findRelatedByKeywordOverlap(
     articleId: row.articleId,
     matchCount: Number(row.match_count ?? 0),
   }));
-}
-
-function buildRelatedQuery(article: ArticleWithSource): string {
-  const title = article.title?.trim() || '';
-  const summary = article.summary?.trim() || '';
-  if (summary) return `${title}\n${summary}`.trim();
-
-  const markdown = article.markdown_content?.trim() || '';
-  if (markdown) return `${title}\n${markdown.slice(0, 400)}`.trim();
-
-  return title;
 }

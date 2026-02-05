@@ -31,12 +31,6 @@ export interface Config {
   geminiModel: string;
   llmEncryptionKey: string;
 
-  // QMD
-  qmdCollectionPath: string;
-  qmdArticlesCollection: string;
-  qmdNotesCollection: string;
-  qmdEnabled: boolean;
-
   // RSS
   rssFetchSchedule: string;
   rssFetchEnabled: boolean;
@@ -69,12 +63,6 @@ function getConfig(): Config {
     geminiApiKey: process.env.GEMINI_API_KEY,
     geminiModel: process.env.GEMINI_MODEL || 'gemini-1.5-flash',
     llmEncryptionKey: process.env.LLM_ENCRYPTION_KEY || '0000000000000000000000000000000000000000000000000000000000000000',
-
-    // QMD
-    qmdCollectionPath: process.env.QMD_COLLECTION_PATH || path.join(process.cwd(), 'data', 'qmd'),
-    qmdArticlesCollection: process.env.QMD_ARTICLES_COLLECTION || 'articles',
-    qmdNotesCollection: process.env.QMD_NOTES_COLLECTION || 'notes',
-    qmdEnabled: process.env.QMD_ENABLED !== 'false',
 
     // RSS
     rssFetchSchedule: process.env.RSS_FETCH_SCHEDULE || '0 9 * * *',

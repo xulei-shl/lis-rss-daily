@@ -54,7 +54,7 @@ COPY --from=builder /app/sql ./sql
 COPY --from=builder /app/scripts ./scripts
 
 # Create necessary directories
-RUN mkdir -p /app/data/exports /app/data/qmd /app/logs
+RUN mkdir -p /app/data/exports /app/logs
 
 # Set environment
 ENV NODE_ENV=production \

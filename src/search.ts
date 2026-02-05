@@ -2,7 +2,7 @@
  * Search: Historical article search module.
  *
  * Phase 6: Simplified SQLite LIKE search.
- * Phase 10: QMD semantic search integration (reserved).
+ * Phase 10: 预留语义搜索接口（已迁移到 vector 模块）。
  */
 
 import { getDb } from './db.js';
@@ -25,7 +25,7 @@ export interface SearchResult {
  * Search historical articles by title, summary, or content.
  * Uses SQLite LIKE for pattern matching.
  *
- * TODO: Phase 10 - Replace or enhance with QMD semantic search.
+ * TODO: Phase 10 - 语义检索已迁移到 vector 模块。
  *
  * @param query - Search query string
  * @param limit - Maximum number of results (default: 10)
@@ -113,119 +113,6 @@ export async function findRelatedArticles(
 }
 
 /**
- * Run a qmd vsearch command with retry on SQLITE_BUSY errors.
- * Uses exponential backoff strategy for retries.
- *
- * @param query - Search query string
- * @param limit - Maximum number of results (default: 10)
- * @param maxRetries - Maximum retry attempts (default: 3)
- * @returns Promise<string> - Raw QMD JSON output
- * @throws Error - If all retries fail or QMD command fails
- */
-export async function qmdVsearchWithRetry(
-  query: string,
-  limit: number = 10,
-  maxRetries: number = 3
-): Promise<string> {
-  const { exec } = await import('child_process');
-  const { promisify } = await import('util');
-  const execAsync = promisify(exec);
-
-  // Escape shell special characters
-  const escapeShell = (s: string): string => {
-    return s.replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`');
-  };
-
-  // Sleep helper for retry delays
-  const sleep = (ms: number): Promise<void> => {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  };
-
-  const cmd = `qmd vsearch "${escapeShell(query)}" --json -n ${limit * 3}`;
-  const baseDelayMs = 1000;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const { stdout } = await execAsync(cmd, { encoding: 'utf-8', timeout: 30000 });
-      return stdout;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      const isBusy = error.message.includes('SQLITE_BUSY');
-
-      if (!isBusy || attempt === maxRetries) {
-        throw error;
-      }
-
-      const delay = baseDelayMs * Math.pow(2, attempt);
-      log.debug({ attempt: attempt + 1, delay, query }, '[qmd-retry] SQLITE_BUSY, retrying...');
-      await sleep(delay);
-    }
-  }
-
-  throw new Error('QMD search failed after retries');
-}
-
-/**
- * Search articles using QMD semantic search.
- * Falls back to SQLite LIKE search if QMD is unavailable or fails.
- *
- * @param query - Search query string
- * @param limit - Maximum number of results (default: 10)
- * @param userId - Optional user ID for filtering (multi-tenant support)
- * @returns Array of search results
- */
-export async function searchArticlesWithQMD(
-  query: string,
-  limit: number = 10,
-  userId?: number
-): Promise<SearchResult[]> {
-  try {
-    const startTime = Date.now();
-    log.debug({ query, limit }, '→ QMD vsearch');
-
-    const stdout = await qmdVsearchWithRetry(query, limit);
-    const parsed = JSON.parse(stdout);
-
-    if (!Array.isArray(parsed)) {
-      throw new Error('Invalid QMD output format');
-    }
-
-    const { config } = await import('./config.js');
-    const collectionPrefix = `qmd://${config.qmdArticlesCollection}/`;
-
-    const results = parsed
-      .filter((item: any) => item.file?.startsWith(collectionPrefix))
-      .slice(0, limit)
-      .map((item: any) => {
-        // Extract article ID from filename (format: {id}-{slug}.md)
-        const filename = item.file?.replace(collectionPrefix, '') || '';
-        const idMatch = filename.match(/^(\d+)-/);
-        const articleId = idMatch ? parseInt(idMatch[1], 10) : 0;
-
-        return {
-          articleId,
-          title: item.title || filename,
-          url: item.url || '',
-          snippet: item.snippet || item.content?.slice(0, 200) || '',
-          score: item.score,
-        };
-      });
-
-    const elapsed = Date.now() - startTime;
-    log.info({ elapsed: `${elapsed}ms`, results: results.length, query }, '← QMD vsearch done');
-
-    return results;
-  } catch (err) {
-    log.warn(
-      { query, error: err instanceof Error ? err.message : String(err) },
-      'QMD search failed, falling back to SQLite LIKE'
-    );
-    // Fallback to existing SQLite LIKE search
-    return searchHistoricalArticles(query, limit, userId);
-  }
-}
-
-/**
  * Combined search - Reserved for Phase 10.
  *
  * This will search both local articles and (optionally) user notes.
@@ -244,7 +131,7 @@ export async function searchAll(
   // Phase 6: Only search articles
   const articles = await searchHistoricalArticles(query, limit, userId);
 
-  // Phase 10: Add notes search when QMD is integrated
+  // Phase 10: 预留扩展（可接入笔记向量检索）
   const notes: SearchResult[] = [];
 
   return { articles, notes };

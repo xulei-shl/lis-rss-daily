@@ -13,6 +13,7 @@ import { getDb } from './db.js';
 import { scrapeUrl } from './scraper.js';
 import { analyzeArticle } from './agent.js';
 import { exportArticleMarkdown, type ArticleForExport } from './export.js';
+import { indexArticle } from './vector/indexer.js';
 import {
   getArticleById,
   getArticleFilterMatchedKeywords,
@@ -404,7 +405,10 @@ async function runPipeline(
       filter_matches: filterMatches,
     };
 
-    const exportPath = exportArticleMarkdown(articleForExport);
+    const exportPath = await exportArticleMarkdown(articleForExport);
+    indexArticle(articleId, userId).catch((error) => {
+      log.warn({ articleId, error }, '[stage3] 向量索引失败');
+    });
 
     log.info({ articleId, path: exportPath }, '[stage3] Export OK');
   } catch (error) {

@@ -110,7 +110,7 @@ init_database() {
 # 创建必要的目录
 create_directories() {
     print_info "创建必要的目录..."
-    mkdir -p data/exports data/qmd logs
+    mkdir -p data/exports logs
     print_success "目录创建完成"
 }
 

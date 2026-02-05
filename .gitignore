@@ -1,6 +1,8 @@
 # Dependencies
 node_modules/
 
+向量化参考/
+
 # Build output
 dist/
 

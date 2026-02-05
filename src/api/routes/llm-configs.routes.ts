@@ -21,11 +21,13 @@ router.get('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const provider = req.query.provider as string | undefined;
+    const configType = req.query.configType as 'llm' | 'embedding' | 'rerank' | undefined;
 
     const result = await llmConfigService.getUserLLMConfigs(req.userId!, {
       page,
       limit,
       provider,
+      configType,
     });
 
     res.json(result);
@@ -104,6 +106,8 @@ router.post('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
       baseURL,
       apiKey,
       model,
+      configType,
+      enabled,
       isDefault,
       timeout,
       maxRetries,
@@ -137,6 +141,14 @@ router.post('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Model is required' });
     }
 
+    if (configType !== undefined && !['llm', 'embedding', 'rerank'].includes(configType)) {
+      return res.status(400).json({ error: 'configType must be llm, embedding, or rerank' });
+    }
+
+    if (enabled !== undefined && typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'enabled must be a boolean' });
+    }
+
     if (timeout !== undefined && (isNaN(parseInt(timeout)) || parseInt(timeout) < 1000)) {
       return res.status(400).json({ error: 'Timeout must be at least 1000ms' });
     }
@@ -154,6 +166,8 @@ router.post('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
       baseURL: baseURL.trim(),
       apiKey: apiKey.trim(),
       model: model.trim(),
+      configType: (configType as 'llm' | 'embedding' | 'rerank') || 'llm',
+      enabled: enabled === true,
       isDefault,
       timeout: timeout ? parseInt(timeout) : undefined,
       maxRetries: maxRetries ? parseInt(maxRetries) : undefined,
@@ -184,6 +198,8 @@ router.put('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
       baseURL,
       apiKey,
       model,
+      configType,
+      enabled,
       isDefault,
       timeout,
       maxRetries,
@@ -224,6 +240,20 @@ router.put('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: 'Model cannot be empty' });
       }
       updateData.model = model.trim();
+    }
+
+    if (configType !== undefined) {
+      if (typeof configType !== 'string' || !['llm', 'embedding', 'rerank'].includes(configType)) {
+        return res.status(400).json({ error: 'configType must be llm, embedding, or rerank' });
+      }
+      updateData.configType = configType as 'llm' | 'embedding' | 'rerank';
+    }
+
+    if (enabled !== undefined) {
+      if (typeof enabled !== 'boolean') {
+        return res.status(400).json({ error: 'enabled must be a boolean' });
+      }
+      updateData.enabled = enabled;
     }
 
     if (isDefault !== undefined) {

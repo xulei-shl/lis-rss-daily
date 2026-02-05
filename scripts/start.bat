@@ -88,9 +88,37 @@ REM 创建必要的目录
 :create_directories
 call :print_info "创建必要的目录..."
 if not exist data\exports mkdir data\exports
-if not exist data\qmd mkdir data\qmd
+if not exist data\vector\chroma mkdir data\vector\chroma
 if not exist logs mkdir logs
 call :print_success "目录创建完成"
+goto :eof
+
+REM 检查 Chroma CLI
+:check_chroma
+call :print_info "检查 Chroma 服务..."
+call :command_exists chroma
+if errorlevel 1 (
+    call :print_warning "未找到 chroma 命令，无法自动启动 Chroma"
+    call :print_info "请先安装: pip install chromadb"
+    goto :eof
+)
+goto :eof
+
+REM 启动 Chroma 服务
+:start_chroma
+set "CHROMA_HOST=127.0.0.1"
+set "CHROMA_PORT=8000"
+set "CHROMA_DATA_DIR=data\\vector\\chroma"
+
+for /f %%i in ('powershell -NoProfile -Command "(Test-NetConnection -ComputerName %CHROMA_HOST% -Port %CHROMA_PORT%).TcpTestSucceeded"') do set PORT_OPEN=%%i
+if /i "%PORT_OPEN%"=="True" (
+    call :print_success "Chroma 已在 %CHROMA_HOST%:%CHROMA_PORT% 运行"
+    goto :eof
+)
+
+call :print_info "启动 Chroma (%CHROMA_HOST%:%CHROMA_PORT%)..."
+start "" /b chroma run --host %CHROMA_HOST% --port %CHROMA_PORT% --path "%CHROMA_DATA_DIR%"
+timeout /t 2 /nobreak >nul
 goto :eof
 
 REM 安装依赖
@@ -157,6 +185,8 @@ call :check_env_file
 call :create_directories
 call :install_dependencies
 call :init_database
+call :check_chroma
+call :start_chroma
 
 REM 启动应用
 call :start_app

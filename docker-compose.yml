@@ -30,9 +30,6 @@ services:
       - ARTICLE_PROCESS_BATCH_SIZE=${ARTICLE_PROCESS_BATCH_SIZE:-10}
       - ARTICLE_PROCESS_MAX_CONCURRENT=${ARTICLE_PROCESS_MAX_CONCURRENT:-3}
 
-      # QMD 配置
-      - QMD_ENABLED=${QMD_ENABLED:-false}
-      - QMD_COLLECTION_PATH=${QMD_COLLECTION_PATH:-./data/qmd}
     volumes:
       # 持久化数据目录
       - ./data:/app/data

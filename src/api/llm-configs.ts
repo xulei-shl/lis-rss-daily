@@ -20,6 +20,8 @@ export interface CreateLLMConfigInput {
   baseURL: string;
   apiKey: string;
   model: string;
+  configType?: 'llm' | 'embedding' | 'rerank';
+  enabled?: boolean;
   isDefault?: boolean;
   timeout?: number;
   maxRetries?: number;
@@ -31,6 +33,8 @@ export interface UpdateLLMConfigInput {
   baseURL?: string;
   apiKey?: string;
   model?: string;
+  configType?: 'llm' | 'embedding' | 'rerank';
+  enabled?: boolean;
   isDefault?: boolean;
   timeout?: number;
   maxRetries?: number;
@@ -41,6 +45,7 @@ export interface QueryOptions {
   page?: number;
   limit?: number;
   provider?: string;
+  configType?: 'llm' | 'embedding' | 'rerank';
 }
 
 export interface PaginatedResult<T> {
@@ -91,6 +96,9 @@ export async function getUserLLMConfigs(
 
   if (options.provider) {
     query = query.where('provider', '=', options.provider);
+  }
+  if (options.configType) {
+    query = query.where('config_type', '=', options.configType);
   }
 
   // Get total count
@@ -154,11 +162,22 @@ export async function getSafeLLMConfigById(
 export async function getDefaultLLMConfig(
   userId: number
 ): Promise<LLMConfigRecord | undefined> {
+  return getDefaultConfigByType(userId, 'llm');
+}
+
+/**
+ * 获取指定类型的默认配置
+ */
+export async function getDefaultConfigByType(
+  userId: number,
+  configType: 'llm' | 'embedding' | 'rerank'
+): Promise<LLMConfigRecord | undefined> {
   const db = getDb();
 
   const config = await db
     .selectFrom('llm_configs')
     .where('user_id', '=', userId)
+    .where('config_type', '=', configType)
     .where('is_default', '=', 1)
     .selectAll()
     .executeTakeFirst();
@@ -174,6 +193,8 @@ export async function createLLMConfig(
   data: CreateLLMConfigInput
 ): Promise<CreateResult> {
   const db = getDb();
+  const configType = data.configType ?? 'llm';
+  const enabled = data.enabled ?? false;
 
   // Encrypt API key
   const encryptedKey = encryptAPIKey(data.apiKey, config.llmEncryptionKey);
@@ -184,6 +205,7 @@ export async function createLLMConfig(
       .updateTable('llm_configs')
       .set({ is_default: 0, updated_at: new Date().toISOString() })
       .where('user_id', '=', userId)
+      .where('config_type', '=', configType)
       .where('is_default', '=', 1)
       .execute();
   }
@@ -196,6 +218,8 @@ export async function createLLMConfig(
       base_url: data.baseURL,
       api_key_encrypted: encryptedKey,
       model: data.model,
+      config_type: configType,
+      enabled: enabled ? 1 : 0,
       is_default: data.isDefault ? 1 : 0,
       timeout: data.timeout ?? 30000,
       max_retries: data.maxRetries ?? 3,
@@ -228,6 +252,10 @@ export async function updateLLMConfig(
   const updateData: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
+  const existing = await getLLMConfigById(id, userId);
+  if (!existing) {
+    throw new Error('LLM config not found');
+  }
 
   if (data.provider !== undefined) {
     updateData.provider = data.provider;
@@ -245,6 +273,14 @@ export async function updateLLMConfig(
     updateData.model = data.model;
   }
 
+  if (data.configType !== undefined) {
+    updateData.config_type = data.configType;
+  }
+
+  if (data.enabled !== undefined) {
+    updateData.enabled = data.enabled ? 1 : 0;
+  }
+
   if (data.isDefault !== undefined) {
     // If setting as default, unset other defaults first
     if (data.isDefault) {
@@ -252,6 +288,7 @@ export async function updateLLMConfig(
         .updateTable('llm_configs')
         .set({ is_default: 0, updated_at: new Date().toISOString() })
         .where('user_id', '=', userId)
+        .where('config_type', '=', (data.configType ?? existing.config_type) as string)
         .where('id', '!=', id)
         .execute();
     }
@@ -320,6 +357,7 @@ export async function setDefaultLLMConfig(id: number, userId: number): Promise<v
     .updateTable('llm_configs')
     .set({ is_default: 0, updated_at: new Date().toISOString() })
     .where('user_id', '=', userId)
+    .where('config_type', '=', config.config_type)
     .where('id', '!=', id)
     .execute();
 
@@ -360,10 +398,53 @@ export async function testLLMConnection(
 
     const apiKey = decryptAPIKey(dbConfig.api_key_encrypted, config.llmEncryptionKey);
 
-    // Simple connection test based on provider
-    if (dbConfig.provider === 'openai' || dbConfig.provider === 'custom') {
-      // Test with OpenAI-compatible chat completions endpoint
-      // This is more universally supported than /models
+    const configType = (dbConfig.config_type || 'llm') as 'llm' | 'embedding' | 'rerank';
+
+    if (configType === 'embedding') {
+      const response = await fetch(`${dbConfig.base_url}/embeddings`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: dbConfig.model,
+          input: ['test'],
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        return {
+          success: false,
+          error: `HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText.slice(0, 100)}` : ''}`,
+        };
+      }
+    } else if (configType === 'rerank') {
+      const response = await fetch(`${dbConfig.base_url}/rerank`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: dbConfig.model,
+          query: 'test',
+          documents: ['a', 'b'],
+          top_n: 2,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        return {
+          success: false,
+          error: `HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText.slice(0, 100)}` : ''}`,
+        };
+      }
+    } else if (dbConfig.provider === 'openai' || dbConfig.provider === 'custom') {
       const response = await fetch(`${dbConfig.base_url}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -375,18 +456,17 @@ export async function testLLMConnection(
           messages: [{ role: 'user', content: 'Hi' }],
           max_tokens: 10,
         }),
-        signal: AbortSignal.timeout(15000), // 15 second timeout
+        signal: AbortSignal.timeout(15000),
       });
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
         return {
           success: false,
-          error: `HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText.slice(0, 100)}` : ''}`
+          error: `HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText.slice(0, 100)}` : ''}`,
         };
       }
     } else if (dbConfig.provider === 'gemini') {
-      // Test Gemini endpoint
       const url = `${dbConfig.base_url}/${dbConfig.model}:generateContent?key=${apiKey}`;
       const response = await fetch(url, {
         method: 'POST',
@@ -419,17 +499,24 @@ export async function testLLMConnection(
  * Get active LLM config for use (default or first available)
  */
 export async function getActiveLLMConfig(userId: number): Promise<LLMConfigRecord | null> {
-  // Try default first
-  const defaultConfig = await getDefaultLLMConfig(userId);
-  if (defaultConfig) {
-    return defaultConfig;
-  }
+  return getActiveConfigByType(userId, 'llm');
+}
 
-  // Fall back to first available config
+/**
+ * 获取指定类型的活跃配置（默认优先）
+ */
+export async function getActiveConfigByType(
+  userId: number,
+  configType: 'llm' | 'embedding' | 'rerank'
+): Promise<LLMConfigRecord | null> {
+  const defaultConfig = await getDefaultConfigByType(userId, configType);
+  if (defaultConfig) return defaultConfig;
+
   const db = getDb();
   const config = await db
     .selectFrom('llm_configs')
     .where('user_id', '=', userId)
+    .where('config_type', '=', configType)
     .selectAll()
     .orderBy('created_at', 'asc')
     .limit(1)

@@ -118,8 +118,14 @@
     justify-content: center;
   }
 
-  .modal-overlay.show {
+  .modal-overlay.active {
     display: flex;
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .modal-overlay.active .modal {
+    transform: scale(1);
   }
 
   .modal {
@@ -334,7 +340,7 @@ function showAddModal() {
   document.getElementById('sourceStatus').value = 'active';
   document.getElementById('validationResult').className = 'validation-result';
   document.getElementById('validationResult').textContent = '';
-  document.getElementById('sourceModal').classList.add('show');
+  document.getElementById('sourceModal').classList.add('active');
   document.getElementById('sourceName').focus();
 }
 
@@ -350,11 +356,11 @@ function editSource(id) {
   document.getElementById('sourceStatus').value = source.status;
   document.getElementById('validationResult').className = 'validation-result';
   document.getElementById('validationResult').textContent = '';
-  document.getElementById('sourceModal').classList.add('show');
+  document.getElementById('sourceModal').classList.add('active');
 }
 
 function closeModal() {
-  document.getElementById('sourceModal').classList.remove('show');
+  document.getElementById('sourceModal').classList.remove('active');
 }
 
 // URL validation
@@ -549,6 +555,17 @@ document.addEventListener('keydown', function(e) {
   font-weight: 500;
 }
 
+.type-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: rgba(26, 77, 122, 0.12);
+  color: var(--accent);
+}
+
 .provider-badge {
   display: inline-block;
   padding: 2px 8px;
@@ -620,6 +637,43 @@ document.addEventListener('keydown', function(e) {
   display: block;
   color: var(--dim);
 }
+
+.chroma-section {
+  max-width: 900px;
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.chroma-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.chroma-form .form-group {
+  margin-bottom: 0;
+}
+
+.chroma-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.chroma-status {
+  margin-top: 12px;
+  font-size: 0.85rem;
+  color: var(--dim);
+}
+
+@media (max-width: 768px) {
+  .chroma-form {
+    grid-template-columns: 1fr;
+  }
+}
 </style>
 
 <!-- LLM Configs Section -->
@@ -633,9 +687,11 @@ document.addEventListener('keydown', function(e) {
     <thead>
       <tr>
         <th>提供商</th>
+        <th>类型</th>
         <th>模型</th>
         <th>Base URL</th>
         <th>API 密钥</th>
+        <th>状态</th>
         <th>操作</th>
       </tr>
     </thead>
@@ -653,6 +709,39 @@ document.addEventListener('keydown', function(e) {
   </div>
 </div>
 
+<!-- Chroma Settings Section -->
+<div class="chroma-section">
+  <div class="section-header">
+    <h2>Chroma 设置</h2>
+  </div>
+  <form id="chromaForm" class="chroma-form">
+    <div class="form-group">
+      <label for="chromaHost">Host</label>
+      <input type="text" id="chromaHost" placeholder="127.0.0.1">
+    </div>
+    <div class="form-group">
+      <label for="chromaPort">Port</label>
+      <input type="number" id="chromaPort" min="1" max="65535" placeholder="8000">
+    </div>
+    <div class="form-group">
+      <label for="chromaCollection">Collection</label>
+      <input type="text" id="chromaCollection" placeholder="articles">
+    </div>
+    <div class="form-group">
+      <label for="chromaMetric">距离度量</label>
+      <select id="chromaMetric">
+        <option value="cosine">cosine</option>
+        <option value="l2">l2</option>
+        <option value="ip">ip</option>
+      </select>
+    </div>
+    <div class="chroma-actions">
+      <button type="submit" class="btn btn-primary">保存</button>
+    </div>
+  </form>
+  <div id="chromaStatus" class="chroma-status"></div>
+</div>
+
 <!-- Add/Edit LLM Config Modal -->
 <div class="modal-overlay" id="llmConfigModal">
   <div class="modal">
@@ -662,6 +751,14 @@ document.addEventListener('keydown', function(e) {
     </div>
     <form id="llmConfigForm">
       <input type="hidden" id="llmConfigId">
+      <div class="form-group">
+        <label for="llmConfigType">配置类型 *</label>
+        <select id="llmConfigType" required onchange="updateConfigTypeUI()">
+          <option value="llm">LLM</option>
+          <option value="embedding">Embedding</option>
+          <option value="rerank">Rerank</option>
+        </select>
+      </div>
       <div class="form-group">
         <label for="llmProvider">提供商 *</label>
         <select id="llmProvider" required onchange="updateProviderDefaults()">
@@ -693,6 +790,10 @@ document.addEventListener('keydown', function(e) {
       <div class="form-group">
         <label for="llmIsDefault">设为默认</label>
         <input type="checkbox" id="llmIsDefault">
+      </div>
+      <div class="form-group" id="rerankEnabledGroup" style="display: none;">
+        <label for="llmRerankEnabled">启用重排序</label>
+        <input type="checkbox" id="llmRerankEnabled">
       </div>
       <div id="llmTestResult" class="test-result"></div>
       <div class="modal-footer">
@@ -743,9 +844,11 @@ function renderLLMTable() {
           \${config.is_default ? '<span class="default-badge">默认</span>' : ''}
         </div>
       </td>
+      <td><span class="type-badge">\${config.config_type || 'llm'}</span></td>
       <td><span class="llm-model">\${escapeHtml(config.model)}</span></td>
       <td><span class="rss-url">\${escapeHtml(truncate(config.base_url, 35))}</span></td>
       <td><span class="api-key-masked">\${config.has_api_key ? '••••••••' : '未设置'}</span></td>
+      <td>\${config.config_type === 'rerank' ? (config.enabled ? '启用' : '禁用') : '-'}</td>
       <td>
         <div class="action-buttons">
           \${!config.is_default ? '<button class="btn-icon" onclick="setDefaultLLMConfig(' + config.id + ')">设为默认</button>' : ''}
@@ -760,6 +863,7 @@ function renderLLMTable() {
 function showLLMAddModal() {
   document.getElementById('llmModalTitle').textContent = '添加 LLM 配置';
   document.getElementById('llmConfigId').value = '';
+  document.getElementById('llmConfigType').value = 'llm';
   document.getElementById('llmProvider').value = 'openai';
   document.getElementById('llmBaseURL').value = 'https://api.openai.com/v1';
   document.getElementById('llmApiKey').value = '';
@@ -767,10 +871,12 @@ function showLLMAddModal() {
   document.getElementById('llmTimeout').value = '30000';
   document.getElementById('llmMaxRetries').value = '3';
   document.getElementById('llmIsDefault').checked = llmConfigs.length === 0;
+  document.getElementById('llmRerankEnabled').checked = false;
   document.getElementById('llmTestResult').className = 'test-result';
   document.getElementById('llmTestResult').textContent = '';
-  document.getElementById('llmConfigModal').classList.add('show');
-  document.getElementById('llmProvider').focus();
+  updateConfigTypeUI();
+  document.getElementById('llmConfigModal').classList.add('active');
+  document.getElementById('llmConfigType').focus();
 }
 
 function editLLMConfig(id) {
@@ -779,6 +885,7 @@ function editLLMConfig(id) {
 
   document.getElementById('llmModalTitle').textContent = '编辑 LLM 配置';
   document.getElementById('llmConfigId').value = config.id;
+  document.getElementById('llmConfigType').value = config.config_type || 'llm';
   document.getElementById('llmProvider').value = config.provider;
   document.getElementById('llmBaseURL').value = config.base_url;
   document.getElementById('llmApiKey').value = '';
@@ -786,16 +893,19 @@ function editLLMConfig(id) {
   document.getElementById('llmTimeout').value = config.timeout;
   document.getElementById('llmMaxRetries').value = config.max_retries;
   document.getElementById('llmIsDefault').checked = config.is_default === 1;
+  document.getElementById('llmRerankEnabled').checked = config.enabled === 1;
   document.getElementById('llmTestResult').className = 'test-result';
   document.getElementById('llmTestResult').textContent = '';
-  document.getElementById('llmConfigModal').classList.add('show');
+  updateConfigTypeUI();
+  document.getElementById('llmConfigModal').classList.add('active');
 }
 
 function closeLLMModal() {
-  document.getElementById('llmConfigModal').classList.remove('show');
+  document.getElementById('llmConfigModal').classList.remove('active');
 }
 
 function updateProviderDefaults() {
+  const configType = document.getElementById('llmConfigType').value;
   const provider = document.getElementById('llmProvider').value;
   const baseURLInput = document.getElementById('llmBaseURL');
   const modelInput = document.getElementById('llmModel');
@@ -803,16 +913,35 @@ function updateProviderDefaults() {
   switch (provider) {
     case 'openai':
       baseURLInput.value = 'https://api.openai.com/v1';
-      modelInput.value = 'gpt-4o-mini';
+      if (configType === 'llm') {
+        modelInput.value = 'gpt-4o-mini';
+      }
       break;
     case 'gemini':
       baseURLInput.value = 'https://generativelanguage.googleapis.com/v1beta';
-      modelInput.value = 'gemini-1.5-flash';
+      if (configType === 'llm') {
+        modelInput.value = 'gemini-1.5-flash';
+      }
       break;
     case 'custom':
       baseURLInput.value = '';
-      modelInput.value = '';
+      if (configType === 'llm') {
+        modelInput.value = '';
+      }
       break;
+  }
+}
+
+function updateConfigTypeUI() {
+  const configType = document.getElementById('llmConfigType').value;
+  const rerankGroup = document.getElementById('rerankEnabledGroup');
+  const rerankCheckbox = document.getElementById('llmRerankEnabled');
+
+  if (configType === 'rerank') {
+    rerankGroup.style.display = 'block';
+  } else {
+    rerankGroup.style.display = 'none';
+    rerankCheckbox.checked = false;
   }
 }
 
@@ -823,10 +952,12 @@ async function testLLMConnection() {
 
   const id = document.getElementById('llmConfigId').value;
   const data = {
+    configType: document.getElementById('llmConfigType').value,
     provider: document.getElementById('llmProvider').value,
     baseURL: document.getElementById('llmBaseURL').value,
     apiKey: document.getElementById('llmApiKey').value,
     model: document.getElementById('llmModel').value,
+    enabled: document.getElementById('llmRerankEnabled').checked,
   };
 
   try {
@@ -882,6 +1013,7 @@ document.getElementById('llmConfigForm').addEventListener('submit', async functi
 
   const id = document.getElementById('llmConfigId').value;
   const data = {
+    configType: document.getElementById('llmConfigType').value,
     provider: document.getElementById('llmProvider').value,
     baseURL: document.getElementById('llmBaseURL').value,
     apiKey: document.getElementById('llmApiKey').value,
@@ -889,6 +1021,7 @@ document.getElementById('llmConfigForm').addEventListener('submit', async functi
     timeout: parseInt(document.getElementById('llmTimeout').value),
     maxRetries: parseInt(document.getElementById('llmMaxRetries').value),
     isDefault: document.getElementById('llmIsDefault').checked,
+    enabled: document.getElementById('llmRerankEnabled').checked,
   };
 
   try {
@@ -946,6 +1079,55 @@ async function setDefaultLLMConfig(id) {
 document.getElementById('llmConfigModal').addEventListener('click', function(e) {
   if (e.target === this) {
     closeLLMModal();
+  }
+});
+
+// Chroma settings
+loadChromaSettings();
+
+async function loadChromaSettings() {
+  try {
+    const res = await fetch('/api/settings/chroma');
+    const data = await res.json();
+    document.getElementById('chromaHost').value = data.host || '127.0.0.1';
+    document.getElementById('chromaPort').value = data.port || 8000;
+    document.getElementById('chromaCollection').value = data.collection || 'articles';
+    document.getElementById('chromaMetric').value = data.distanceMetric || 'cosine';
+  } catch (err) {
+    setChromaStatus('加载失败，请稍后重试');
+  }
+}
+
+function setChromaStatus(message) {
+  const el = document.getElementById('chromaStatus');
+  el.textContent = message || '';
+}
+
+document.getElementById('chromaForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const payload = {
+    host: document.getElementById('chromaHost').value.trim(),
+    port: parseInt(document.getElementById('chromaPort').value),
+    collection: document.getElementById('chromaCollection').value.trim(),
+    distanceMetric: document.getElementById('chromaMetric').value,
+  };
+
+  try {
+    const res = await fetch('/api/settings/chroma', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
+      setChromaStatus('设置已保存');
+    } else {
+      const result = await res.json();
+      setChromaStatus(result.error || '保存失败');
+    }
+  } catch (err) {
+    setChromaStatus('保存失败，请稍后重试');
   }
 });
 </script>

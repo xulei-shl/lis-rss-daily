@@ -2,7 +2,7 @@
  * Export: Generate Markdown documents from article records.
  *
  * Phase 6: Basic Markdown export to data/exports/.
- * Phase 8: QMD indexing integration.
+ * Phase 8: 向量索引由 pipeline 统一触发。
  */
 
 import fs from 'fs';
@@ -173,21 +173,6 @@ export async function exportArticleMarkdown(article: ArticleForExport): Promise<
   fs.writeFileSync(filepath, content, 'utf-8');
   log.info({ path: filepath, articleId: article.id }, 'Article exported');
 
-  // Phase 8: Link to QMD collection and trigger index update
-  if (process.env.QMD_ENABLED !== 'false') {
-    try {
-      const { linkFileToQmdCollection } = await import('./qmd.js');
-      linkFileToQmdCollection(filename);
-
-      // Fire-and-forget: Request QMD index update (non-blocking)
-      qmdIndexQueue.requestUpdate().catch((err) => {
-        log.warn({ error: err }, 'QMD index update request failed');
-      });
-    } catch (error) {
-      log.debug({ error }, 'QMD integration skipped (not available)');
-    }
-  }
-
   return filepath;
 }
 
@@ -252,78 +237,3 @@ function safeParse<T>(json: string | undefined, fallback: T): T {
   }
 }
 
-/* ── QMD Integration (Phase 8) ── */
-
-/**
- * QMD Index Queue: Serializes `qmd update` + `qmd embed` calls.
- * Multiple concurrent requests are coalesced - if an update is already running,
- * pending requests merge into a single follow-up run.
- *
- * This prevents SQLITE_BUSY errors and reduces redundant indexing operations.
- */
-class QmdIndexQueue {
-  private running = false;
-  private pendingCount = 0;
-  private log = logger.child({ module: 'qmd-queue' });
-
-  /**
-   * Request a QMD index update. If one is already running, the request is
-   * queued and coalesced. Fire-and-forget safe - never rejects.
-   */
-  async requestUpdate(): Promise<void> {
-    if (this.running) {
-      this.pendingCount++;
-      this.log.debug({ pendingCount: this.pendingCount }, 'Queued (already running)');
-      return;
-    }
-
-    this.running = true;
-    try {
-      await this.runUpdate();
-
-      // Run again for coalesced requests
-      while (this.pendingCount > 0) {
-        this.pendingCount = 0;
-        this.log.info('Running again for coalesced requests');
-        await this.runUpdate();
-      }
-    } finally {
-      this.running = false;
-    }
-  }
-
-  /**
-   * Execute qmd update followed by qmd embed.
-   * Both commands are required for full indexing:
-   * - qmd update: Index new/modified files
-   * - qmd embed: Generate vector embeddings for semantic search
-   */
-  private async runUpdate(): Promise<void> {
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
-    const execAsync = promisify(exec);
-
-    try {
-      this.log.info('Running qmd update...');
-      const { stdout: updateOut } = await execAsync('qmd update', {
-        encoding: 'utf-8',
-        timeout: 60000,
-      });
-      this.log.info({ output: updateOut.trim() }, 'qmd update done');
-
-      this.log.info('Running qmd embed...');
-      const { stdout: embedOut } = await execAsync('qmd embed', {
-        encoding: 'utf-8',
-        timeout: 120000,
-      });
-      this.log.info({ output: embedOut.trim() }, 'qmd embed done');
-    } catch (err) {
-      this.log.error(
-        { err: err instanceof Error ? err.message : String(err) },
-        'QMD indexing failed'
-      );
-    }
-  }
-}
-
-export const qmdIndexQueue = new QmdIndexQueue();

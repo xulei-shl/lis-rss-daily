@@ -29,13 +29,21 @@ async function runMigrations() {
   console.log(`📦 Connected to database: ${config.databasePath}\n`);
 
   try {
-    // Read migration file
-    const migrationFile = path.join(__dirname, '..', 'sql', '001_init.sql');
-    const migrationSQL = fs.readFileSync(migrationFile, 'utf-8');
+    // Read all migration files
+    const sqlDir = path.join(__dirname, '..', 'sql');
+    const migrationFiles = fs
+      .readdirSync(sqlDir)
+      .filter((file) => /^\d+_.*\.sql$/.test(file))
+      .sort((a, b) => a.localeCompare(b, 'en'));
 
-    // Execute migration
-    console.log('📜 Executing migration script...');
-    db.exec(migrationSQL);
+    // Execute migrations
+    console.log('📜 Executing migration scripts...');
+    for (const file of migrationFiles) {
+      const fullPath = path.join(sqlDir, file);
+      const sql = fs.readFileSync(fullPath, 'utf-8');
+      console.log(`   - ${file}`);
+      db.exec(sql);
+    }
 
     console.log('\n✅ Migration completed successfully!\n');
 

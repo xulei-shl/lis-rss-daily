@@ -3,6 +3,7 @@ import type { AuthRequest } from '../../middleware/auth.js';
 import { requireAuth } from '../../middleware/auth.js';
 import * as articleService from '../articles.js';
 import { logger } from '../../logger.js';
+import { deleteArticle as deleteVectorArticle } from '../../vector/indexer.js';
 
 const log = logger.child({ module: 'api-routes/articles' });
 
@@ -180,6 +181,9 @@ router.delete('/articles/:id', requireAuth, async (req: AuthRequest, res) => {
     }
 
     await articleService.deleteArticle(id, req.userId!);
+    deleteVectorArticle(id, req.userId!).catch((error) => {
+      log.warn({ error, articleId: id }, '删除向量索引失败');
+    });
 
     res.json({ success: true });
   } catch (error) {

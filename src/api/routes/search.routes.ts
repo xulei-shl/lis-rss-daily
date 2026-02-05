@@ -3,6 +3,7 @@ import type { AuthRequest } from '../../middleware/auth.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { getDb } from '../../db.js';
 import { logger } from '../../logger.js';
+import { semanticSearch } from '../../vector/search.js';
 
 const log = logger.child({ module: 'api-routes/search' });
 
@@ -18,7 +19,7 @@ const router = express.Router();
  * - page: page number (default: 1)
  * - limit: results per page (default: 10)
  *
- * Phase 8: Added QMD semantic search support
+ * Phase 8: 向量语义搜索
  */
 router.get('/search', requireAuth, async (req: AuthRequest, res) => {
   try {
@@ -45,33 +46,64 @@ router.get('/search', requireAuth, async (req: AuthRequest, res) => {
 
       return Math.min(score, 1);
     };
-    const semanticWeight = 0.6;
-    const keywordWeight = 0.4;
+    const semanticWeight = 0.7;
+    const keywordWeight = 0.3;
 
-    // Phase 8: Use QMD semantic search when mode=semantic
+    const db = getDb();
+    const loadDetailsByIds = async (ids: number[]) => {
+      if (ids.length === 0) return [];
+      return await db
+        .selectFrom('articles')
+        .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+        .where('rss_sources.user_id', '=', req.userId!)
+        .where('articles.filter_status', '=', 'passed')
+        .where('articles.id', 'in', ids)
+        .select([
+          'articles.id',
+          'articles.title',
+          'articles.url',
+          'articles.summary',
+          'articles.published_at',
+          'rss_sources.name as rss_source_name',
+        ])
+        .execute();
+    };
+
+    // 语义搜索
     if (mode === 'semantic') {
-      try {
-        const { searchArticlesWithQMD } = await import('../../search.js');
-        const results = await searchArticlesWithQMD(normalizedQuery, limit, req.userId);
+      const semanticResults = await semanticSearch(normalizedQuery, limit, req.userId!);
+      const ids = semanticResults.map((item) => item.articleId).filter((id) => id > 0);
+      const details = await loadDetailsByIds(ids);
+      const detailMap = new Map(details.map((item) => [item.id, item]));
+      const scores = semanticResults.map((item) => item.score || 0);
+      const maxScore = scores.length > 0 ? Math.max(...scores, 0) : 0;
 
-        res.json({
-          results,
-          mode: 'semantic',
-          query: normalizedQuery,
-          total: results.length,
-          page: 1, // QMD doesn't support pagination
-          limit,
-          totalPages: 1,
-        });
-        return;
-      } catch (error) {
-        log.warn({ error, query }, 'QMD search failed, falling back to keyword search');
-        // Fall through to keyword search
-      }
+      const results = semanticResults
+        .map((item) => {
+          const detail = detailMap.get(item.articleId);
+          if (!detail) return null;
+          const normalized = maxScore > 0 ? item.score / maxScore : 0;
+          return {
+            ...detail,
+            relevance: normalized,
+            excerpt: detail.summary || '',
+          };
+        })
+        .filter(Boolean);
+
+      res.json({
+        results,
+        mode: 'semantic',
+        query: normalizedQuery,
+        total: results.length,
+        page: 1,
+        limit,
+        totalPages: 1,
+      });
+      return;
     }
 
     // Keyword search（现有实现）
-    const db = getDb();
     const offset = (page - 1) * limit;
     const terms = normalizedQuery
       .split(/\s+/)
@@ -123,6 +155,7 @@ router.get('/search', requireAuth, async (req: AuthRequest, res) => {
         'articles.title',
         'articles.url',
         'articles.summary',
+        'articles.markdown_content',
         'articles.published_at',
         'rss_sources.name as rss_source_name',
       ])
@@ -144,14 +177,12 @@ router.get('/search', requireAuth, async (req: AuthRequest, res) => {
     // 混合检索：关键词 + 语义
     if (mode === 'mixed') {
       try {
-        const { searchArticlesWithQMD } = await import('../../search.js');
-        const qmdResults = await searchArticlesWithQMD(normalizedQuery, limit, req.userId);
-
-        const qmdIds = qmdResults
+        const semanticResults = await semanticSearch(normalizedQuery, limit, req.userId!);
+        const semanticIds = semanticResults
           .map((item) => item.articleId)
           .filter((id) => Number.isFinite(id) && id > 0);
 
-        let qmdDetails: Array<{
+        let semanticDetails: Array<{
           id: number;
           title: string;
           url: string;
@@ -160,27 +191,13 @@ router.get('/search', requireAuth, async (req: AuthRequest, res) => {
           rss_source_name: string;
         }> = [];
 
-        if (qmdIds.length > 0) {
-          qmdDetails = await db
-            .selectFrom('articles')
-            .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-            .where('rss_sources.user_id', '=', req.userId!)
-            .where('articles.filter_status', '=', 'passed')
-            .where('articles.id', 'in', qmdIds)
-            .select([
-              'articles.id',
-              'articles.title',
-              'articles.url',
-              'articles.summary',
-              'articles.published_at',
-              'rss_sources.name as rss_source_name',
-            ])
-            .execute();
+        if (semanticIds.length > 0) {
+          semanticDetails = await loadDetailsByIds(semanticIds);
         }
 
-        const detailsById = new Map(qmdDetails.map((item) => [item.id, item]));
-        const qmdScores = qmdResults.map((item) => (typeof item.score === 'number' ? item.score : 0));
-        const maxQmdScore = qmdScores.length > 0 ? Math.max(...qmdScores, 0) : 0;
+        const detailsById = new Map(semanticDetails.map((item) => [item.id, item]));
+        const semanticScores = semanticResults.map((item) => (typeof item.score === 'number' ? item.score : 0));
+        const maxSemanticScore = semanticScores.length > 0 ? Math.max(...semanticScores, 0) : 0;
 
         const mergedById = new Map<number, any>();
 
@@ -191,7 +208,7 @@ router.get('/search', requireAuth, async (req: AuthRequest, res) => {
           });
         }
 
-        for (const item of qmdResults) {
+        for (const item of semanticResults) {
           const detail = detailsById.get(item.articleId);
           if (!detail) continue;
 
@@ -204,23 +221,24 @@ router.get('/search', requireAuth, async (req: AuthRequest, res) => {
             published_at: detail.published_at,
             rss_source_name: detail.rss_source_name,
             relevance: calcRelevance(detail.title, detail.summary),
-            excerpt: item.snippet || detail.summary || '',
+            excerpt: detail.summary || '',
           };
 
           mergedById.set(detail.id, {
             ...base,
             semanticScore: typeof item.score === 'number' ? item.score : 0,
-            excerpt: item.snippet || base.excerpt,
+            excerpt: base.excerpt,
           });
         }
 
         const merged = Array.from(mergedById.values()).map((item) => {
-          const normalizedSemantic = maxQmdScore > 0 ? item.semanticScore / maxQmdScore : 0;
+          const normalizedSemantic = maxSemanticScore > 0 ? item.semanticScore / maxSemanticScore : 0;
           const combinedScore = normalizedSemantic * semanticWeight + item.relevance * keywordWeight;
 
           return {
             ...item,
             combinedScore,
+            relevance: combinedScore,
           };
         });
 
@@ -231,7 +249,7 @@ router.get('/search', requireAuth, async (req: AuthRequest, res) => {
             query: normalizedQuery,
             mode: 'mixed',
             keywordCount: resultsWithScore.length,
-            semanticCount: qmdResults.length,
+            semanticCount: semanticResults.length,
             mergedCount: merged.length,
           },
           'Mixed search completed'

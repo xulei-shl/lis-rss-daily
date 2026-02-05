@@ -38,8 +38,8 @@ RSS Literature Tracker 是一个面向学术研究者的智能文献追踪系统
 - **智能过滤**: 两阶段过滤机制（关键词预筛选 + LLM 精确过滤），**新文章自动触发过滤**
 - **定时抓取**: 基于 Cron 的定时任务，支持并发控制和重试
 - **文章分析**: LLM 自动生成中文摘要、研究标签、核心洞察
-- **语义搜索**: 集成 QMD 向量搜索，支持语义相似度查询
-- **知识库集成**: 自动导出 Markdown，链接到 Obsidian/QMD 知识库
+- **语义搜索**: 在线向量模型 + 本地 Chroma 语义检索
+- **知识库集成**: 自动导出 Markdown，方便外部知识库使用
 
 ### 自动化工作流
 
@@ -71,7 +71,7 @@ RSS 抓取 → 自动过滤 → LLM 分析 → Markdown 导出
 | 定时任务 | node-cron |
 | 网页抓取 | Playwright + Defuddle |
 | LLM | OpenAI API (兼容 Gemini) |
-| 向量搜索 | QMD (可选) |
+| 向量搜索 | Chroma (本地) |
 | 日志 | Pino |
 
 ---
@@ -129,25 +129,17 @@ pnpm dev
 PORT=3000                    # 服务端口
 NODE_ENV=development          # 运行环境
 
-# LLM 配置 (必需)
-OPENAI_API_KEY=sk-xxx        # OpenAI API Key
-OPENAI_BASE_URL=             # (可选) 自定义 API 端点
-OPENAI_MODEL=gpt-4o-mini     # 使用的模型
-
-# RSS 抓取配置
-RSS_FETCH_SCHEDULE="0 9 * * *"   # Cron 表达式
-RSS_FETCH_ENABLED=true           # 是否启用定时抓取
-RSS_MAX_CONCURRENT=5             # 最大并发数
-RSS_FETCH_TIMEOUT=30000          # 抓取超时 (毫秒)
-
 # 文章处理配置
 ARTICLE_PROCESS_ENABLED=true
 ARTICLE_PROCESS_BATCH_SIZE=10
 ARTICLE_PROCESS_MAX_CONCURRENT=3
 
-# QMD 配置 (可选)
-QMD_ENABLED=true
-QMD_COLLECTION_PATH=./data/qmd
+# Chroma 配置（可选，默认值如下）
+# 建议通过设置页进行配置
+CHROMA_HOST=127.0.0.1
+CHROMA_PORT=8000
+CHROMA_COLLECTION=articles
+CHROMA_DISTANCE_METRIC=cosine
 ```
 
 完整配置请参考 [.env.example](.env.example)。
@@ -203,6 +195,13 @@ lis-rss-daily/
 │   ├── api/                  # API 服务层
 │   ├── middleware/           # 中间件
 │   ├── views/                # EJS 视图模板
+│   ├── vector/               # 向量检索模块
+│   │   ├── embedding-client.ts  # Embedding 客户端
+│   │   ├── vector-store.ts      # Chroma 向量存储
+│   │   ├── reranker.ts          # Rerank 重排序
+│   │   ├── indexer.ts           # 向量索引队列
+│   │   ├── search.ts            # 语义检索入口
+│   │   └── text-builder.ts      # 向量化文本构建
 │   ├── index.ts              # 应用入口
 │   ├── config.ts             # 配置管理
 │   ├── logger.ts             # 日志模块
@@ -215,12 +214,10 @@ lis-rss-daily/
 │   ├── search.ts             # 文章搜索
 │   ├── export.ts             # Markdown 导出
 │   ├── pipeline.ts           # 文章处理流水线
-│   └── qmd.ts                # QMD 工具模块
 ├── sql/                      # 数据库脚本
 ├── scripts/                  # 工具脚本
 ├── data/                     # 数据目录
 │   ├── exports/              # Markdown 导出
-│   └── qmd/                  # QMD 集合
 ├── docs/                     # 文档
 └── logs/                     # 日志文件
 ```
@@ -285,7 +282,7 @@ docker-compose up -d
 - [x] 阶段 5: RSS 调度器
 - [x] 阶段 6: 文章处理流程
 - [x] 阶段 7: 前端页面开发
-- [x] 阶段 8: QMD 集成与语义搜索
+- [x] 阶段 8: 向量检索与语义搜索
 - [ ] 阶段 9: 测试与优化
 - [ ] 阶段 10: 部署与文档
 
@@ -296,7 +293,7 @@ docker-compose up -d
 本项目参考了以下开源项目：
 
 - [linkmind](https://github.com/singular-gerald/linkmind) - 核心模块复用来源
-- [QMD](https://github.com/robinvarghese/qmd) - 向量搜索工具
+- [Chroma](https://github.com/chroma-core/chroma) - 向量数据库
 
 ---
 

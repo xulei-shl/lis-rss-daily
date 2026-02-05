@@ -137,6 +137,8 @@ export interface LlmConfigsTable {
   base_url: string;
   api_key_encrypted: string;
   model: string;
+  config_type: string;
+  enabled: number;
   is_default: number;
   timeout: number;
   max_retries: number;

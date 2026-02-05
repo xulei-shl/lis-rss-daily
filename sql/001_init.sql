@@ -195,6 +195,8 @@ CREATE TABLE IF NOT EXISTS llm_configs (
   base_url TEXT NOT NULL,
   api_key_encrypted TEXT NOT NULL,
   model TEXT NOT NULL,
+  config_type TEXT NOT NULL DEFAULT 'llm',
+  enabled INTEGER DEFAULT 0,
   is_default INTEGER DEFAULT 0,
   timeout INTEGER DEFAULT 30000,
   max_retries INTEGER DEFAULT 3,
@@ -259,7 +261,11 @@ VALUES
   (1, 'llm_filter_enabled', 'true'),
   (1, 'max_concurrent_fetch', '5'),
   (1, 'timezone', 'Asia/Shanghai'),
-  (1, 'language', 'zh-CN');
+  (1, 'language', 'zh-CN'),
+  (1, 'chroma_host', '127.0.0.1'),
+  (1, 'chroma_port', '8000'),
+  (1, 'chroma_collection', 'articles'),
+  (1, 'chroma_distance_metric', 'cosine');
 
 -- Default system prompt for article filtering
 INSERT OR IGNORE INTO system_prompts (user_id, type, name, template, variables, is_active)

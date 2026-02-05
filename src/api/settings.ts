@@ -229,3 +229,66 @@ export async function updateSchedulerSettings(
     log.info({ userId, settings: updates }, 'Scheduler settings updated');
   }
 }
+
+/**
+ * 获取 Chroma 设置
+ */
+export async function getChromaSettings(userId: number): Promise<{
+  host: string;
+  port: number;
+  collection: string;
+  distanceMetric: 'cosine' | 'l2' | 'ip';
+}> {
+  const settings = await getUserSettings(userId, [
+    'chroma_host',
+    'chroma_port',
+    'chroma_collection',
+    'chroma_distance_metric',
+  ]);
+
+  const rawMetric = (settings.chroma_distance_metric || 'cosine').toLowerCase();
+  const distanceMetric = (rawMetric === 'l2' || rawMetric === 'ip' ? rawMetric : 'cosine') as
+    | 'cosine'
+    | 'l2'
+    | 'ip';
+
+  return {
+    host: settings.chroma_host || '127.0.0.1',
+    port: parseInt(settings.chroma_port || '8000', 10),
+    collection: settings.chroma_collection || 'articles',
+    distanceMetric,
+  };
+}
+
+/**
+ * 更新 Chroma 设置
+ */
+export async function updateChromaSettings(
+  userId: number,
+  settings: {
+    host?: string;
+    port?: number;
+    collection?: string;
+    distanceMetric?: 'cosine' | 'l2' | 'ip';
+  }
+): Promise<void> {
+  const updates: Record<string, SettingValue> = {};
+
+  if (settings.host !== undefined) {
+    updates.chroma_host = settings.host;
+  }
+  if (settings.port !== undefined) {
+    updates.chroma_port = settings.port;
+  }
+  if (settings.collection !== undefined) {
+    updates.chroma_collection = settings.collection;
+  }
+  if (settings.distanceMetric !== undefined) {
+    updates.chroma_distance_metric = settings.distanceMetric;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await batchSetUserSettings(userId, updates);
+    log.info({ userId, settings: updates }, 'Chroma settings updated');
+  }
+}

@@ -9,6 +9,7 @@ import schedulerRoutes from './routes/scheduler.routes.js';
 import articleRoutes from './routes/articles.routes.js';
 import articleProcessRoutes from './routes/article-process.routes.js';
 import searchRoutes from './routes/search.routes.js';
+import settingsRoutes from './routes/settings.routes.js';
 
 const router = express.Router();
 
@@ -22,5 +23,6 @@ router.use(schedulerRoutes);
 router.use(articleRoutes);
 router.use(articleProcessRoutes);
 router.use(searchRoutes);
+router.use(settingsRoutes);
 
 export default router;

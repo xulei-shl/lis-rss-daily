@@ -549,7 +549,7 @@ export class RSSScheduler {
         if (result.passed) {
           passedCount++;
           filterLog.debug({ articleId: article.id }, 'Article passed filter');
-          // 通过过滤后自动执行后续流程（仅摘要 + QMD）
+            // 通过过滤后自动执行后续流程（仅摘要 + 向量索引）
           processArticle(article.id, userId, { skipScrape: true })
             .then((res) => {
               filterLog.debug({ articleId: article.id, status: res.status }, 'Auto process completed');
