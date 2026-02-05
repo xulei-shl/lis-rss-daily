@@ -785,7 +785,12 @@ function renderLLMTable() {
       <td><span class="llm-model">\${escapeHtml(config.model)}</span></td>
       <td><span class="rss-url">\${escapeHtml(truncate(config.base_url, 35))}</span></td>
       <td><span class="api-key-masked">\${config.has_api_key ? '••••••••' : '未设置'}</span></td>
-      <td>\${config.config_type === 'rerank' ? (config.enabled ? '启用' : '禁用') : '-'}</td>
+      <td>
+        \${config.config_type === 'rerank'
+          ? (config.enabled ? '<span class="status-badge active">已启用</span>' : '<span class="status-badge inactive">未启用</span>')
+          : '<span class="status-badge active">已启用</span>'
+        }
+      </td>
       <td>
         <div class="action-buttons">
           \${!config.is_default ? '<button class="btn-icon" onclick="setDefaultLLMConfig(' + config.id + ')">设为默认</button>' : ''}
