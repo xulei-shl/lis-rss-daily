@@ -75,6 +75,30 @@
   margin-top: 20px;
 }
 
+/* Custom scrollbar */
+.modal::-webkit-scrollbar {
+  width: 8px;
+}
+
+.modal::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.modal::-webkit-scrollbar-thumb:hover {
+  background: var(--dim);
+}
+
+/* Firefox scrollbar */
+.modal {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .modal {
