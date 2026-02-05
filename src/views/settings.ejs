@@ -366,15 +366,28 @@ document.getElementById('sourceForm').addEventListener('submit', async function(
       loadRSSSources();
     } else {
       const result = await res.json();
-      alert(result.error || '保存失败');
+      await showConfirm(result.error || '保存失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
-    alert('保存失败，请稍后重试');
+    await showConfirm('保存失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 });
 
 async function deleteSource(id) {
-  if (!confirm('确定要删除这个 RSS 订阅源吗？')) return;
+  const confirmed = await showConfirm('确定要删除这个 RSS 订阅源吗？', {
+    title: '删除订阅源',
+    okText: '删除',
+    cancelText: '取消'
+  });
+  if (!confirmed) return;
 
   try {
     const res = await fetch(\`/api/rss-sources/\${id}\`, { method: 'DELETE' });
@@ -382,10 +395,18 @@ async function deleteSource(id) {
       loadRSSSources();
     } else {
       const result = await res.json();
-      alert(result.error || '删除失败');
+      await showConfirm(result.error || '删除失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
-    alert('删除失败，请稍后重试');
+    await showConfirm('删除失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 }
 
@@ -393,9 +414,17 @@ async function fetchNow(id) {
   try {
     const res = await fetch(\`/api/rss-sources/\${id}/fetch\`, { method: 'POST' });
     const result = await res.json();
-    alert(result.message || '抓取任务已加入队列');
+    await showConfirm(result.message || '抓取任务已加入队列', {
+      title: '抓取 RSS',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   } catch (err) {
-    alert('操作失败，请稍后重试');
+    await showConfirm('操作失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 }
 
@@ -981,15 +1010,28 @@ document.getElementById('llmConfigForm').addEventListener('submit', async functi
       loadLLMConfigs();
     } else {
       const result = await res.json();
-      alert(result.error || '保存失败');
+      await showConfirm(result.error || '保存失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
-    alert('保存失败，请稍后重试');
+    await showConfirm('保存失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 });
 
 async function deleteLLMConfig(id) {
-  if (!confirm('确定要删除这个 LLM 配置吗？')) return;
+  const confirmed = await showConfirm('确定要删除这个 LLM 配置吗？', {
+    title: '删除 LLM 配置',
+    okText: '删除',
+    cancelText: '取消'
+  });
+  if (!confirmed) return;
 
   try {
     const res = await fetch(\`/api/llm-configs/\${id}\`, { method: 'DELETE' });
@@ -997,10 +1039,18 @@ async function deleteLLMConfig(id) {
       loadLLMConfigs();
     } else {
       const result = await res.json();
-      alert(result.error || '删除失败');
+      await showConfirm(result.error || '删除失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
-    alert('删除失败，请稍后重试');
+    await showConfirm('删除失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 }
 
@@ -1011,10 +1061,18 @@ async function setDefaultLLMConfig(id) {
       loadLLMConfigs();
     } else {
       const result = await res.json();
-      alert(result.error || '设置失败');
+      await showConfirm(result.error || '设置失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
-    alert('设置失败，请稍后重试');
+    await showConfirm('设置失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 }
 

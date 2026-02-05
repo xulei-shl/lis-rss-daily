@@ -470,17 +470,30 @@ document.getElementById('domainForm').addEventListener('submit', async function(
       }
     } else {
       const result = await res.json();
-      alert(result.error || '保存失败');
+      await showConfirm(result.error || '保存失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
-    alert('保存失败，请稍后重试');
+    await showConfirm('保存失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 });
 
 async function deleteDomain(id) {
   const domain = domains.find(d => d.id === id);
   const msg = domain ? \`确定要删除主题领域 "\${domain.name}" 吗？\\n\\n这将同时删除该领域下的所有关键词。\` : '确定要删除吗？';
-  if (!confirm(msg)) return;
+  const confirmed = await showConfirm(msg, {
+    title: '删除主题领域',
+    okText: '删除',
+    cancelText: '取消'
+  });
+  if (!confirmed) return;
 
   try {
     const res = await fetch(\`/api/topic-domains/\${id}\`, { method: 'DELETE' });
@@ -502,10 +515,18 @@ async function deleteDomain(id) {
       await loadDomains();
     } else {
       const result = await res.json();
-      alert(result.error || '删除失败');
+      await showConfirm(result.error || '删除失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
-    alert('删除失败，请稍后重试');
+    await showConfirm('删除失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 }
 
@@ -576,15 +597,28 @@ document.getElementById('keywordForm').addEventListener('submit', async function
       await loadKeywords(selectedDomainId);
     } else {
       const result = await res.json();
-      alert(result.error || '保存失败');
+      await showConfirm(result.error || '保存失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
-    alert('保存失败，请稍后重试');
+    await showConfirm('保存失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 });
 
 async function deleteKeyword(id) {
-  if (!confirm('确定要删除这个关键词吗？')) return;
+  const confirmed = await showConfirm('确定要删除这个关键词吗？', {
+    title: '删除关键词',
+    okText: '删除',
+    cancelText: '取消'
+  });
+  if (!confirmed) return;
 
   try {
     const res = await fetch(\`/api/topic-keywords/\${id}\`, { method: 'DELETE' });
@@ -593,10 +627,18 @@ async function deleteKeyword(id) {
       await loadKeywords(selectedDomainId);
     } else {
       const result = await res.json();
-      alert(result.error || '删除失败');
+      await showConfirm(result.error || '删除失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
-    alert('删除失败，请稍后重试');
+    await showConfirm('删除失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 }
 

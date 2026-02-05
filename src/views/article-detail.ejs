@@ -740,12 +740,24 @@ async function processArticle() {
     const result = await res.json();
 
     if (res.ok) {
-      alert('处理任务已加入队列');
+      await showConfirm('处理任务已加入队列', {
+        title: '重新处理',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     } else {
-      alert(result.error || '操作失败');
+      await showConfirm(result.error || '操作失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
-    alert('操作失败，请稍后重试');
+    await showConfirm('操作失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 }
 

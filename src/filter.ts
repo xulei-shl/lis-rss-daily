@@ -591,19 +591,23 @@ async function updateArticleFilterStatus(
   const db = getDb();
   const now = new Date().toISOString();
 
+  // Rejected articles don't need processing, mark as completed
+  const processStatus = status === 'rejected' ? 'completed' : undefined;
+
   await db
     .updateTable('articles')
     .set({
       filter_status: status,
       filter_score: score,
       filtered_at: now,
+      ...(processStatus && { process_status: processStatus }),
       updated_at: now,
     })
     .where('id', '=', articleId)
     .where('filter_status', '=', 'pending')  // Only update if still pending
     .execute();
 
-  log.debug({ articleId, status, score }, 'Article filter status updated');
+  log.debug({ articleId, status, score, processStatus }, 'Article filter status updated');
 }
 
 /**
