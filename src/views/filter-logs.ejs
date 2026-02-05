@@ -104,9 +104,23 @@
     color: var(--red);
   }
 
+  /* 结果列 - 防止换行 */
+  .logs-table td:nth-child(4) {
+    white-space: nowrap;
+  }
+
+  /* 领域列 - 文本省略 */
+  .domain-cell {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .relevance-score {
     text-align: center;
     font-weight: 500;
+    min-width: 80px;
   }
 
   .matched-keywords {
@@ -207,30 +221,34 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 8px;
-    margin-top: 20px;
+    gap: var(--space-3);
+    margin-top: var(--space-10);
+    padding-top: var(--space-6);
+    border-top: 2px solid var(--border);
   }
 
-  .pagination button {
-    padding: 6px 12px;
+  .pagination a,
+  .pagination span {
+    font-family: var(--font-meta);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    padding: var(--space-2) var(--space-3);
     border: 1px solid var(--border);
-    background: var(--surface);
-    border-radius: 4px;
-    cursor: pointer;
+    min-width: 40px;
+    text-align: center;
+    text-decoration: none;
+    color: var(--text);
   }
 
-  .pagination button:hover:not(:disabled) {
-    background: var(--border);
+  .pagination a:hover {
+    background: var(--bg-elevated);
+    border-color: var(--border-strong);
   }
 
-  .pagination button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .pagination .page-info {
-    color: var(--dim);
-    font-size: 0.9rem;
+  .pagination .current {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
   }
 </style>
 
@@ -260,7 +278,7 @@
         <th>文章标题</th>
         <th>领域</th>
         <th>结果</th>
-        <th>相关性分数</th>
+        <th>相关性</th>
         <th>匹配关键词</th>
         <th>原因</th>
         <th>时间</th>
@@ -279,22 +297,22 @@
   </div>
 
   <div class="pagination" id="pagination" style="display: none;">
-    <button id="prevBtn" onclick="prevPage()">上一页</button>
-    <span class="page-info">第 <span id="currentPage">1</span> 页，共 <span id="totalPages">1</span> 页</span>
-    <button id="nextBtn" onclick="nextPage()">下一页</button>
   </div>
 </div>
 
 <script>
-let allLogs = [];
-let filteredLogs = [];
 let currentPage = 1;
+let totalPages = 1;
 const pageSize = 20;
 let domains = [];
+let currentDomainFilter = '';
+let currentResultFilter = '';
 
 // Load data on page load
-loadDomains();
-loadLogs();
+document.addEventListener('DOMContentLoaded', () => {
+  loadDomains();
+  loadLogs(1);
+});
 
 async function loadDomains() {
   try {
@@ -314,14 +332,27 @@ async function loadDomains() {
   }
 }
 
-async function loadLogs() {
+async function loadLogs(page = 1) {
   try {
-    const res = await fetch('/api/filter/logs');
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: pageSize.toString()
+    });
+
+    if (currentDomainFilter) {
+      params.append('domainId', currentDomainFilter);
+    }
+    if (currentResultFilter) {
+      params.append('isPassed', currentResultFilter === 'passed' ? 'true' : 'false');
+    }
+
+    const res = await fetch(\`/api/filter/logs?\${params}\`);
     const data = await res.json();
-    allLogs = data.logs || [];
-    filteredLogs = [...allLogs];
-    currentPage = 1;
-    renderLogs();
+
+    currentPage = data.page || 1;
+    totalPages = data.totalPages || 1;
+
+    renderLogs(data.logs || [], data.total || 0);
   } catch (err) {
     console.error('Failed to load logs:', err);
     showEmptyState();
@@ -334,13 +365,13 @@ function showEmptyState() {
   document.getElementById('pagination').style.display = 'none';
 }
 
-function renderLogs() {
+function renderLogs(logs, total) {
   const tbody = document.getElementById('logsBody');
   const emptyState = document.getElementById('emptyState');
   const table = document.getElementById('logsTable');
   const pagination = document.getElementById('pagination');
 
-  if (filteredLogs.length === 0) {
+  if (logs.length === 0) {
     table.style.display = 'none';
     emptyState.style.display = 'block';
     pagination.style.display = 'none';
@@ -350,12 +381,7 @@ function renderLogs() {
   table.style.display = 'table';
   emptyState.style.display = 'none';
 
-  // Pagination
-  const totalPages = Math.ceil(filteredLogs.length / pageSize);
-  const startIdx = (currentPage - 1) * pageSize;
-  const pageLogs = filteredLogs.slice(startIdx, startIdx + pageSize);
-
-  tbody.innerHTML = pageLogs.map(log => {
+  tbody.innerHTML = logs.map(log => {
     const domain = domains.find(d => d.id === log.domain_id);
     const matchedKeywords = log.matched_keywords ? JSON.parse(log.matched_keywords) : [];
 
@@ -365,7 +391,7 @@ function renderLogs() {
         <td class="article-title">
           <a href="#" title="\${escapeHtml(log.article_title || 'N/A')}">\${escapeHtml(log.article_title || 'N/A')}</a>
         </td>
-        <td>\${domain ? escapeHtml(domain.name) : '-'}</td>
+        <td class="domain-cell" title="\${domain ? escapeHtml(domain.name) : '-'}">\${domain ? escapeHtml(domain.name) : '-'}</td>
         <td>
           <span class="status-badge \${log.is_passed ? 'passed' : 'rejected'}">
             \${log.is_passed ? '通过' : '拒绝'}
@@ -396,12 +422,8 @@ function renderLogs() {
     \`;
   }).join('');
 
-  // Update pagination
-  document.getElementById('currentPage').textContent = currentPage;
-  document.getElementById('totalPages').textContent = totalPages;
-  document.getElementById('prevBtn').disabled = currentPage === 1;
-  document.getElementById('nextBtn').disabled = currentPage === totalPages;
-  pagination.style.display = 'flex';
+  // Render pagination
+  renderPagination();
 
   // Add click handlers for expand
   document.querySelectorAll('.expand-row').forEach(row => {
@@ -413,34 +435,61 @@ function renderLogs() {
   });
 }
 
+function renderPagination() {
+  const pagination = document.getElementById('pagination');
+
+  if (totalPages <= 1) {
+    pagination.style.display = 'none';
+    return;
+  }
+
+  pagination.style.display = 'flex';
+
+  let html = '';
+
+  // Previous
+  html += currentPage > 1
+    ? \`<a href="#" onclick="goToPage(\${currentPage - 1}); return false;">← 上一页</a>\`
+    : '<span>← 上一页</span>';
+
+  // Page numbers
+  const startPage = Math.max(1, currentPage - 2);
+  const endPage = Math.min(totalPages, currentPage + 2);
+
+  if (startPage > 1) {
+    html += '<a href="#" onclick="goToPage(1); return false;">1</a>';
+    if (startPage > 2) html += '<span>...</span>';
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
+    if (i === currentPage) {
+      html += \`<span class="current">\${i}</span>\`;
+    } else {
+      html += \`<a href="#" onclick="goToPage(\${i}); return false;">\${i}</a>\`;
+    }
+  }
+
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) html += '<span>...</span>';
+    html += \`<a href="#" onclick="goToPage(\${totalPages}); return false;">\${totalPages}</a>\`;
+  }
+
+  // Next
+  html += currentPage < totalPages
+    ? \`<a href="#" onclick="goToPage(\${currentPage + 1}); return false;">下一页 →</a>\`
+    : '<span>下一页 →</span>';
+
+  pagination.innerHTML = html;
+}
+
+function goToPage(page) {
+  loadLogs(page);
+}
+
 function applyFilters() {
-  const domainFilter = document.getElementById('domainFilter').value;
-  const resultFilter = document.getElementById('resultFilter').value;
-
-  filteredLogs = allLogs.filter(log => {
-    if (domainFilter && log.domain_id !== parseInt(domainFilter)) return false;
-    if (resultFilter === 'passed' && !log.is_passed) return false;
-    if (resultFilter === 'rejected' && log.is_passed) return false;
-    return true;
-  });
-
-  currentPage = 1;
-  renderLogs();
-}
-
-function prevPage() {
-  if (currentPage > 1) {
-    currentPage--;
-    renderLogs();
-  }
-}
-
-function nextPage() {
-  const totalPages = Math.ceil(filteredLogs.length / pageSize);
-  if (currentPage < totalPages) {
-    currentPage++;
-    renderLogs();
-  }
+  currentDomainFilter = document.getElementById('domainFilter').value;
+  currentResultFilter = document.getElementById('resultFilter').value;
+  loadLogs(1);
 }
 
 // Utility functions
