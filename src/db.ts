@@ -21,6 +21,7 @@ export interface DatabaseTable {
   article_filter_logs: ArticleFilterLogsTable;
   keywords: KeywordsTable;
   article_keywords: ArticleKeywordsTable;
+  article_related: ArticleRelatedTable;
   article_translations: ArticleTranslationsTable;
   llm_configs: LlmConfigsTable;
   settings: SettingsTable;
@@ -110,6 +111,13 @@ export interface KeywordsTable {
 export interface ArticleKeywordsTable {
   article_id: number;
   keyword_id: number;
+  created_at: string;
+}
+
+export interface ArticleRelatedTable {
+  article_id: number;
+  related_article_id: number;
+  score: number;
   created_at: string;
 }
 

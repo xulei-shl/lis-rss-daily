@@ -2,7 +2,6 @@ import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
 import { requireAuth } from '../../middleware/auth.js';
 import * as articleService from '../articles.js';
-import { getDb } from '../../db.js';
 import { logger } from '../../logger.js';
 
 const log = logger.child({ module: 'api-routes/articles' });
@@ -194,7 +193,7 @@ router.delete('/articles/:id', requireAuth, async (req: AuthRequest, res) => {
 
 /**
  * GET /api/articles/:id/related
- * 基于关键词获取相关文章
+ * 获取相关文章（缓存优先）
  */
 router.get('/articles/:id/related', requireAuth, async (req: AuthRequest, res) => {
   try {
@@ -204,37 +203,7 @@ router.get('/articles/:id/related', requireAuth, async (req: AuthRequest, res) =
       return res.status(400).json({ error: 'Invalid article ID' });
     }
 
-    const db = getDb();
-
-    const keywords = await articleService.getArticleKeywordsById(id, req.userId!);
-    if (keywords.length === 0) {
-      return res.json([]);
-    }
-
-    const related = await db
-      .selectFrom('article_keywords as ak')
-      .innerJoin('article_keywords as ak2', 'ak.keyword_id', 'ak2.keyword_id')
-      .innerJoin('articles', 'articles.id', 'ak2.article_id')
-      .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-      .where('ak.article_id', '=', id)
-      .where('ak2.article_id', '!=', id)
-      .where('rss_sources.user_id', '=', req.userId!)
-      .where('articles.filter_status', '=', 'passed')
-      .select([
-        'articles.id',
-        'articles.title',
-        'articles.url',
-        'articles.summary',
-        'articles.published_at',
-        'rss_sources.name as rss_source_name',
-      ])
-      .select((eb) => eb.fn.count('ak2.keyword_id').as('match_count'))
-      .groupBy('articles.id')
-      .orderBy('match_count', 'desc')
-      .orderBy('articles.published_at', 'desc')
-      .limit(5)
-      .execute();
-
+    const related = await articleService.getRelatedArticles(id, req.userId!, 5);
     res.json(related);
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to get related articles');

@@ -553,7 +553,7 @@ Stage 3: Export (导出 Markdown)
   ↓ 使用 export.ts
   - 导出到 data/exports/
   - 链接到 QMD 集合
-  - 触发 QMD 索引
+  - 触发 QMD 索引（qmd update + qmd embed）
 ```
 
 **处理条件**: 只处理 `filter_status='passed'` 的文章
@@ -601,9 +601,17 @@ Stage 3: Export (导出 Markdown)
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  4. 语义搜索 (search.ts + qmd.ts)                               │
-│     ├─ QMD 语义搜索（向量搜索）                                   │
-│     ├─ 关键词搜索（SQLite LIKE，AND+OR 组合）                    │
-│     └─ 优雅降级：QMD 失败时自动回退到关键词搜索                    │
+│     ├─ QMD 语义搜索（向量搜索）                                  │
+│     ├─ 关键词搜索（SQLite LIKE，AND+OR 组合）                     │
+│     └─ 优雅降级：QMD 失败时自动回退到关键词搜索                   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  5. QMD 自动向量化 (index.ts + export.ts)                        │
+│     ├─ 监听 data/qmd/articles 目录变更                           │
+│     ├─ 30 秒防抖合并请求                                         │
+│     └─ 串行执行 qmd update + qmd embed                           │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -720,27 +728,32 @@ async function findRelatedArticles(
 - `qmdVsearchWithRetry()`: 带重试的向量搜索
 - 优雅降级: QMD 失败时回退到 SQLite LIKE 搜索
 
+**自动向量化**:
+- 启动时监听 `data/qmd/articles` 目录变更
+- 触发 `QmdIndexQueue` 执行 `qmd update + qmd embed`
+- 防抖时间可用 `QMD_AUTO_EMBED_DEBOUNCE_MS` 调整（默认 30000）
+
 ### 6. QMD 工具 (qmd.ts)
 
-**职责**: QMD 向量搜索集成
+**职责**: QMD 集合管理与文件链接
 
 ```typescript
 // 初始化 QMD 集合
-async function initQmdCollection(): Promise<void>
+function initQmdCollection(): void
 
 // 链接文件到 QMD 集合
-async function linkFileToQmdCollection(
-  srcPath: string,
-  destName: string
-): Promise<void>
+function linkFileToQmdCollection(
+  exportFilename: string
+): string
 
 // 检查 QMD 是否可用
-async function checkQmdAvailable(): Promise<boolean>
+async function isQmdAvailable(): Promise<boolean>
 ```
 
 **索引队列** (export.ts):
 - `QmdIndexQueue`: 请求合并 + 序列化
 - 防止并发索引冲突
+ - 执行 `qmd update` + `qmd embed`
 
 ---
 

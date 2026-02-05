@@ -20,6 +20,7 @@ import {
   upsertArticleKeywords,
   upsertArticleTranslation,
   updateArticleProcessStatus,
+  refreshRelatedArticles,
   type ArticleWithSource,
 } from './api/articles.js';
 import { logger } from './logger.js';
@@ -410,6 +411,15 @@ async function runPipeline(
     const errMsg = error instanceof Error ? error.message : String(error);
     log.warn({ articleId, error: errMsg }, '[stage3] Export failed (non-fatal)');
     // Export failure is not fatal - the article is still processed
+  }
+
+  // ── Stage 4: Related Articles (缓存计算，非致命) ──
+  try {
+    await refreshRelatedArticles(articleId, userId, 5);
+    log.debug({ articleId }, '[stage4] Related articles updated');
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    log.warn({ articleId, error: errMsg }, '[stage4] Related articles update failed (non-fatal)');
   }
 
   // ── Complete ──

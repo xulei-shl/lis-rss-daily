@@ -12,6 +12,8 @@ import { initRSSParser } from './rss-parser.js';
 import { initRSSScheduler } from './rss-scheduler.js';
 import { config } from './config.js';
 import { createApp, startServer } from './api/web.js';
+import { qmdIndexQueue } from './export.js';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -19,6 +21,35 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const log = logger.child({ module: 'main' });
+
+function startQmdAutoEmbedWatcher(): fs.FSWatcher | undefined {
+  const watchDir = path.join(config.qmdCollectionPath, config.qmdArticlesCollection);
+  const debounceMs = parseInt(process.env.QMD_AUTO_EMBED_DEBOUNCE_MS || '30000', 10);
+  let timer: NodeJS.Timeout | undefined;
+
+  try {
+    const watcher = fs.watch(watchDir, { persistent: true }, (_eventType, filename) => {
+      if (filename && !filename.endsWith('.md')) return;
+
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        qmdIndexQueue.requestUpdate().catch((error) => {
+          log.warn({ error }, 'QMD auto embed request failed');
+        });
+      }, debounceMs);
+    });
+
+    watcher.on('error', (error) => {
+      log.warn({ error }, 'QMD auto embed watcher error');
+    });
+
+    log.info({ path: watchDir, debounceMs }, 'QMD auto embed watcher started');
+    return watcher;
+  } catch (error) {
+    log.warn({ error, path: watchDir }, 'QMD auto embed watcher failed to start');
+    return undefined;
+  }
+}
 
 async function main() {
   // Initialize logger
@@ -46,11 +77,13 @@ async function main() {
   log.info('✅ RSS parser initialized');
 
   // Phase 8: Initialize QMD collection (if enabled)
+  let qmdWatcher: fs.FSWatcher | undefined;
   if (config.qmdEnabled) {
     try {
       const { initQmdCollection, initQmdCollectionConfig } = await import('./qmd.js');
       initQmdCollection();
       await initQmdCollectionConfig();
+      qmdWatcher = startQmdAutoEmbedWatcher();
       log.info('✅ QMD semantic search initialized');
     } catch (error) {
       log.warn({ error }, '⚠️  QMD initialization failed, semantic search will be disabled');
@@ -90,6 +123,11 @@ async function main() {
     // Stop scheduler
     await scheduler.stop();
     log.info('📅 RSS scheduler stopped');
+
+    if (qmdWatcher) {
+      qmdWatcher.close();
+      log.info('🔎 QMD watcher stopped');
+    }
 
     server.close(() => {
       log.info('🌐 Web server closed');

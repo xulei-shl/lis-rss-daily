@@ -9,6 +9,7 @@ import { getDb } from '../db.js';
 import { logger } from '../logger.js';
 import type { RSSFeedItem } from '../rss-parser.js';
 import { toSimpleMarkdown } from '../utils/markdown.js';
+import { searchArticlesWithQMD } from '../search.js';
 
 const log = logger.child({ module: 'articles-service' });
 
@@ -77,6 +78,19 @@ export interface ArticleTranslation {
   title_zh: string | null;
   summary_zh: string | null;
   source_lang: string | null;
+}
+
+/**
+ * 相关文章（用于展示）
+ */
+export interface RelatedArticle {
+  id: number;
+  title: string;
+  url: string;
+  summary: string | null;
+  published_at: string | null;
+  rss_source_name?: string;
+  score: number;
 }
 
 /**
@@ -652,6 +666,32 @@ export async function deleteArticle(id: number, userId: number): Promise<void> {
   log.info({ articleId: id, userId }, 'Article deleted');
 }
 
+/**
+ * 获取相关文章（优先缓存，不足时计算并写回）
+ */
+export async function getRelatedArticles(
+  articleId: number,
+  userId: number,
+  limit: number = 5
+): Promise<RelatedArticle[]> {
+  const cached = await getRelatedArticlesFromCache(articleId, userId, limit);
+  if (cached.length > 0) return cached;
+
+  const computed = await computeAndSaveRelatedArticles(articleId, userId, limit);
+  return computed;
+}
+
+/**
+ * 重新计算并写入相关文章缓存（用于流水线）
+ */
+export async function refreshRelatedArticles(
+  articleId: number,
+  userId: number,
+  limit: number = 5
+): Promise<RelatedArticle[]> {
+  return computeAndSaveRelatedArticles(articleId, userId, limit);
+}
+
 function normalizeKeywords(keywords: string[]): string[] {
   const unique = new Set<string>();
   for (const kw of keywords) {
@@ -670,4 +710,212 @@ function safeParseJsonArray(raw: string | null): string[] {
   } catch {
     return [];
   }
+}
+
+async function getRelatedArticlesFromCache(
+  articleId: number,
+  userId: number,
+  limit: number
+): Promise<RelatedArticle[]> {
+  const db = getDb();
+
+  const rows = await db
+    .selectFrom('article_related as ar')
+    .innerJoin('articles', 'articles.id', 'ar.related_article_id')
+    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .where('ar.article_id', '=', articleId)
+    .where('rss_sources.user_id', '=', userId)
+    .where('articles.filter_status', '=', 'passed')
+    .where('articles.process_status', '=', 'completed')
+    .select([
+      'articles.id',
+      'articles.title',
+      'articles.url',
+      'articles.summary',
+      'articles.published_at',
+      'rss_sources.name as rss_source_name',
+      'ar.score as score',
+    ])
+    .orderBy('ar.score', 'desc')
+    .orderBy('articles.published_at', 'desc')
+    .limit(limit)
+    .execute();
+
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    url: row.url,
+    summary: row.summary ?? null,
+    published_at: row.published_at ?? null,
+    rss_source_name: row.rss_source_name ?? undefined,
+    score: Number(row.score ?? 0),
+  }));
+}
+
+async function computeAndSaveRelatedArticles(
+  articleId: number,
+  userId: number,
+  limit: number
+): Promise<RelatedArticle[]> {
+  const related = await computeRelatedArticles(articleId, userId, limit);
+  await saveRelatedArticles(articleId, related);
+  return related;
+}
+
+async function computeRelatedArticles(
+  articleId: number,
+  userId: number,
+  limit: number
+): Promise<RelatedArticle[]> {
+  const article = await getArticleById(articleId, userId);
+  if (!article) return [];
+
+  const query = buildRelatedQuery(article);
+  if (!query) return [];
+
+  const [qmdResults, keywordResults] = await Promise.all([
+    searchArticlesWithQMD(query, limit * 3, userId),
+    findRelatedByKeywordOverlap(articleId, userId, limit * 3),
+  ]);
+
+  const scoreMap = new Map<number, { qmdScore: number; kwScore: number }>();
+
+  for (const item of qmdResults) {
+    if (!item.articleId || item.articleId === articleId) continue;
+    const qmdScore = typeof item.score === 'number' ? item.score : 0.5;
+    const current = scoreMap.get(item.articleId) || { qmdScore: 0, kwScore: 0 };
+    scoreMap.set(item.articleId, { qmdScore, kwScore: current.kwScore });
+  }
+
+  let maxMatchCount = 0;
+  for (const row of keywordResults) {
+    if (row.matchCount > maxMatchCount) {
+      maxMatchCount = row.matchCount;
+    }
+  }
+
+  for (const row of keywordResults) {
+    if (row.articleId === articleId) continue;
+    const kwScore = maxMatchCount > 0 ? row.matchCount / maxMatchCount : 0;
+    const current = scoreMap.get(row.articleId) || { qmdScore: 0, kwScore: 0 };
+    scoreMap.set(row.articleId, { qmdScore: current.qmdScore, kwScore });
+  }
+
+  if (scoreMap.size === 0) return [];
+
+  const mergedScores = Array.from(scoreMap.entries()).map(([id, scores]) => {
+    const finalScore = scores.qmdScore * 0.7 + scores.kwScore * 0.3;
+    return { id, finalScore };
+  });
+
+  mergedScores.sort((a, b) => b.finalScore - a.finalScore);
+
+  const topIds = mergedScores.slice(0, limit * 3).map((item) => item.id);
+  if (topIds.length === 0) return [];
+
+  const db = getDb();
+  const rows = await db
+    .selectFrom('articles')
+    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .where('rss_sources.user_id', '=', userId)
+    .where('articles.filter_status', '=', 'passed')
+    .where('articles.process_status', '=', 'completed')
+    .where('articles.id', 'in', topIds)
+    .select([
+      'articles.id',
+      'articles.title',
+      'articles.url',
+      'articles.summary',
+      'articles.published_at',
+      'rss_sources.name as rss_source_name',
+    ])
+    .execute();
+
+  const scoreLookup = new Map(mergedScores.map((item) => [item.id, item.finalScore]));
+
+  const sorted = rows
+    .map((row) => ({
+      id: row.id,
+      title: row.title,
+      url: row.url,
+      summary: row.summary ?? null,
+      published_at: row.published_at ?? null,
+      rss_source_name: row.rss_source_name ?? undefined,
+      score: Number(scoreLookup.get(row.id) ?? 0),
+    }))
+    .filter((row) => row.id !== articleId)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const aTime = a.published_at ? Date.parse(a.published_at) : 0;
+      const bTime = b.published_at ? Date.parse(b.published_at) : 0;
+      return bTime - aTime;
+    })
+    .slice(0, limit);
+
+  return sorted;
+}
+
+async function saveRelatedArticles(articleId: number, related: RelatedArticle[]): Promise<void> {
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  await db.transaction().execute(async (trx) => {
+    await trx.deleteFrom('article_related').where('article_id', '=', articleId).execute();
+
+    if (related.length === 0) return;
+
+    await trx
+      .insertInto('article_related')
+      .values(
+        related.map((item) => ({
+          article_id: articleId,
+          related_article_id: item.id,
+          score: item.score,
+          created_at: now,
+        }))
+      )
+      .execute();
+  });
+}
+
+async function findRelatedByKeywordOverlap(
+  articleId: number,
+  userId: number,
+  limit: number
+): Promise<Array<{ articleId: number; matchCount: number }>> {
+  const db = getDb();
+
+  const rows = await db
+    .selectFrom('article_keywords as ak')
+    .innerJoin('article_keywords as ak2', 'ak.keyword_id', 'ak2.keyword_id')
+    .innerJoin('articles', 'articles.id', 'ak2.article_id')
+    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .where('ak.article_id', '=', articleId)
+    .where('ak2.article_id', '!=', articleId)
+    .where('rss_sources.user_id', '=', userId)
+    .where('articles.filter_status', '=', 'passed')
+    .where('articles.process_status', '=', 'completed')
+    .select(['articles.id as articleId'])
+    .select((eb) => eb.fn.count('ak2.keyword_id').as('match_count'))
+    .groupBy('articles.id')
+    .orderBy('match_count', 'desc')
+    .orderBy('articles.published_at', 'desc')
+    .limit(limit)
+    .execute();
+
+  return rows.map((row: any) => ({
+    articleId: row.articleId,
+    matchCount: Number(row.match_count ?? 0),
+  }));
+}
+
+function buildRelatedQuery(article: ArticleWithSource): string {
+  const title = article.title?.trim() || '';
+  const summary = article.summary?.trim() || '';
+  if (summary) return `${title}\n${summary}`.trim();
+
+  const markdown = article.markdown_content?.trim() || '';
+  if (markdown) return `${title}\n${markdown.slice(0, 400)}`.trim();
+
+  return title;
 }
