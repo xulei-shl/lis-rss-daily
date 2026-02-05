@@ -625,36 +625,72 @@ async function processArticle(id) {
     const result = await res.json();
 
     if (res.ok) {
-      alert('处理任务已加入队列');
+      await showConfirm('处理任务已加入队列', {
+        title: '成功',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
       loadArticles();
     } else {
-      alert(result.error || '操作失败');
+      await showConfirm(result.error || '操作失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
-    alert('操作失败，请稍后重试');
+    await showConfirm('操作失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 }
 
 // Process batch articles
 async function processBatch() {
+  const confirmed = await showConfirm('确定要将所有待处理文章加入处理队列吗？', {
+    title: '批量处理',
+    okText: '确认处理',
+    cancelText: '取消'
+  });
+  if (!confirmed) return;
+
   try {
     const res = await fetch('/api/articles/process-batch', { method: 'POST' });
     const result = await res.json();
 
     if (res.ok) {
-      alert(\`已将 \${result.count || 0} 篇文章加入处理队列\`);
+      await showConfirm(\`已将 \${result.count || 0} 篇文章加入处理队列\`, {
+        title: '批量处理',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
       loadArticles();
     } else {
-      alert(result.error || '操作失败');
+      await showConfirm(result.error || '操作失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
-    alert('操作失败，请稍后重试');
+    await showConfirm('操作失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 }
 
 // Delete article
 async function deleteArticle(id) {
-  if (!confirm('确定要删除这篇文章吗？')) return;
+  const confirmed = await showConfirm('确定要删除这篇文章吗？', {
+    title: '删除文章',
+    okText: '删除',
+    cancelText: '取消'
+  });
+  if (!confirmed) return;
 
   try {
     const res = await fetch(\`/api/articles/\${id}\`, { method: 'DELETE' });
@@ -663,10 +699,18 @@ async function deleteArticle(id) {
       loadArticles();
     } else {
       const result = await res.json();
-      alert(result.error || '删除失败');
+      await showConfirm(result.error || '删除失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
-    alert('删除失败，请稍后重试');
+    await showConfirm('删除失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 }
 

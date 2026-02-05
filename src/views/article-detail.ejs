@@ -140,23 +140,53 @@
   /* 过滤匹配 */
   .filter-list {
     list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
   }
 
   .filter-item {
-    position: relative;
-    padding-left: var(--space-4);
-    margin-bottom: var(--space-3);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: var(--space-4);
+  }
+
+  .filter-domain {
+    font-family: var(--font-heading);
     font-size: var(--text-sm);
-    line-height: 1.7;
+    font-weight: 700;
+    color: var(--accent-primary);
+    margin-bottom: var(--space-2);
+  }
+
+  .filter-keywords {
+    font-size: var(--text-sm);
+    line-height: 1.6;
+    margin-bottom: var(--space-2);
+  }
+
+  .filter-keywords-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .filter-keywords-list {
     color: var(--text-primary);
   }
 
-  .filter-item::before {
-    content: '•';
-    position: absolute;
-    left: 0;
-    top: 0;
-    color: var(--accent-primary);
+  .filter-reason {
+    font-size: var(--text-sm);
+    line-height: 1.6;
+  }
+
+  .filter-reason-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .filter-reason-text {
+    color: var(--text-primary);
   }
 
   /* Full Content */
@@ -531,15 +561,15 @@ function renderArticle(article) {
       <span>·</span>
     </div>
     <div class="article-meta-item">
-      <a href="\${escapeHtml(article.url)}" target="_blank" rel="noopener">
-        \${escapeHtml(truncateUrl(article.url))}
-      </a>
+      <span>\${formatDateTime(article.published_at)}</span>
     </div>
     <div class="article-meta-item">
       <span>·</span>
     </div>
     <div class="article-meta-item">
-      <span>\${formatDateTime(article.published_at)}</span>
+      <a href="\${escapeHtml(article.url)}" target="_blank" rel="noopener">
+        原文链接
+      </a>
     </div>
   \`;
   document.getElementById('articleMeta').innerHTML = metaHtml;
@@ -596,12 +626,27 @@ function renderArticle(article) {
   if (Array.isArray(article.filter_matches) && article.filter_matches.length > 0) {
     filterSection.style.display = 'block';
     filterList.innerHTML = article.filter_matches.map((match) => {
-      const domain = match.domainName ? \`【\${escapeHtml(match.domainName)}】\` : '【未归类】';
-      const keywords = (match.matchedKeywords || []).length > 0
-        ? \`关键词：\${escapeHtml(match.matchedKeywords.join('、'))}\`
-        : '关键词：无';
-      const reason = match.filterReason ? \`；原因：\${escapeHtml(match.filterReason)}\` : '';
-      return \`<li class="filter-item">\${domain} \${keywords}\${reason}</li>\`;
+      const domain = match.domainName ? escapeHtml(match.domainName) : '未归类';
+      const hasKeywords = (match.matchedKeywords || []).length > 0;
+      const keywordsHtml = hasKeywords
+        ? \`<div class="filter-keywords">
+             <span class="filter-keywords-label">关键词：</span>
+             <span class="filter-keywords-list">\${escapeHtml(match.matchedKeywords.join('、'))}</span>
+           </div>\`
+        : '';
+      const reasonHtml = match.filterReason
+        ? \`<div class="filter-reason">
+             <span class="filter-reason-label">原因：</span>
+             <span class="filter-reason-text">\${escapeHtml(match.filterReason)}</span>
+           </div>\`
+        : '';
+      return \`
+        <li class="filter-item">
+          <div class="filter-domain">【\${domain}】</div>
+          \${keywordsHtml}
+          \${reasonHtml}
+        </li>
+      \`;
     }).join('');
   }
 
@@ -707,7 +752,12 @@ async function processArticle() {
 // Delete article
 async function deleteArticle() {
   if (!articleData) return;
-  if (!confirm('确定要删除这篇文章吗？此操作不可撤销。')) return;
+  const confirmed = await showConfirm('确定要删除这篇文章吗？此操作不可撤销。', {
+    title: '删除文章',
+    okText: '删除',
+    cancelText: '取消'
+  });
+  if (!confirmed) return;
 
   try {
     const res = await fetch(\`/api/articles/\${articleData.id}\`, { method: 'DELETE' });
@@ -716,10 +766,18 @@ async function deleteArticle() {
       window.location.href = '/articles';
     } else {
       const result = await res.json();
-      alert(result.error || '删除失败');
+      await showConfirm(result.error || '删除失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
-    alert('删除失败，请稍后重试');
+    await showConfirm('删除失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 }
 
