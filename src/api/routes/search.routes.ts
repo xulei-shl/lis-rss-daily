@@ -95,7 +95,6 @@ router.get('/search', requireAuth, async (req: AuthRequest, res) => {
         'articles.url',
         'articles.summary',
         'articles.published_at',
-        'articles.tags',
         'rss_sources.name as rss_source_name',
       ])
       .orderBy('articles.published_at', 'desc')

@@ -1,223 +1,192 @@
 /**
- * Agent: Analyze scraped article content, generate summary + tags + insight + find related articles.
- *
- * Adapted from linkmind-master for RSS literature tracking.
- * Notes search removed (multi-tenant limitation), only historical articles search.
+ * Agent: 生成关键词与翻译（不生成摘要）。
  */
 
-import { getUserLLMProvider, getLLM, type ChatMessage } from './llm.js';
-import { searchHistoricalArticles, type SearchResult } from './search.js';
+import { getUserLLMProvider, getLLM } from './llm.js';
 import { logger } from './logger.js';
 
 const log = logger.child({ module: 'agent' });
 
 /* ── Public Types ── */
 
-export interface SummaryInput {
+export interface KeywordInput {
   url: string;
   title?: string;
-  description?: string;
-  markdown: string;
+  summary?: string;
+  markdown?: string;
 }
 
-export interface SummaryResult {
-  summary: string;    // Chinese summary (200-300 characters)
-  tags: string[];     // Extracted keywords (3-5 tags)
+export interface KeywordResult {
+  keywords: string[];
+  usedFallback: boolean;
 }
 
-export interface InsightResult {
-  insight: string;    // Research insight (2-4 sentences)
-  relatedArticles: SearchResult[];  // Related historical articles
+export interface TranslationResult {
+  titleZh?: string;
+  summaryZh?: string;
+  sourceLang: 'zh' | 'en' | 'unknown';
+  usedFallback: boolean;
 }
 
 export interface AnalysisResult {
-  summary: string;
-  tags: string[];
-  insight: string;
-  relatedArticles: SearchResult[];
+  keywords: string[];
+  usedFallback: boolean;
+  translation?: TranslationResult | null;
 }
 
 /* ── Main Analysis Functions ── */
 
-/**
- * Complete article analysis: summary + tags + insight + related articles.
- *
- * @param input - Article data with URL, title, description, and markdown content
- * @param userId - Optional user ID for filtering related articles
- * @returns Complete analysis result
- */
 export async function analyzeArticle(
-  input: SummaryInput,
-  userId?: number
+  input: KeywordInput,
+  userId?: number,
+  fallbackKeywords: string[] = []
 ): Promise<AnalysisResult> {
-  // Step 1: Generate summary and extract tags
-  const summaryResult = await generateSummary(input, userId);
-
-  // Step 2+3: Find related articles and generate insight
-  const related = await findRelatedAndInsight(input, summaryResult.summary, userId);
+  const keywordResult = await generateKeywords(input, userId, fallbackKeywords);
+  const translation = await translateIfNeeded(input.title, input.summary, userId);
 
   return {
-    summary: summaryResult.summary,
-    tags: summaryResult.tags,
-    insight: related.insight,
-    relatedArticles: related.relatedArticles,
+    keywords: keywordResult.keywords,
+    usedFallback: keywordResult.usedFallback,
+    translation,
   };
 }
 
 /**
- * Generate Chinese summary and extract tags from article content.
- *
- * @param input - Article data with URL, title, description, and markdown content
- * @param userId - Optional user ID for using user's LLM configuration
- * @returns Summary result with summary text and tags
+ * Generate keywords from title/summary (LLM). Fallback to rule-based extraction.
  */
-export async function generateSummary(input: SummaryInput, userId?: number): Promise<SummaryResult> {
-  // Truncate markdown to avoid token limits (keep first 12000 chars)
-  const content = input.markdown.slice(0, 12000);
+export async function generateKeywords(
+  input: KeywordInput,
+  userId?: number,
+  fallbackKeywords: string[] = []
+): Promise<KeywordResult> {
+  const systemPrompt = `你是一个文献内容标签助手。请根据文章的标题与摘要，输出 3-8 个中文关键词（短语或术语）。如果内容不是中文，请保持术语准确并尽量转为中文表述。`;
 
-  const systemPrompt = `你是一个学术文献分析助手。用户会给你一篇文章的内容，请你：
-1. 用中文写一个简洁的摘要（3-5句话，200-300字），抓住文章的核心要点、研究方法和结论。无论原文是什么语言，摘要必须使用中文。
-2. 提取 3-5 个关键标签（用于后续搜索关联内容），标签应该是文章的核心概念、技术术语或研究方向
-
-以 JSON 格式输出：
-{"summary": "...", "tags": ["tag1", "tag2", ...]}
-
-注意：
-- summary 字段必须是中文，不要使用英文
-- tags 应该是简洁的术语，如：深度学习、Transformer、注意力机制、RAG、向量搜索
-- 如果文章是新闻或博客而非学术文献，摘要应重点关注其实用价值和创新点`;
-
-  const userMessage = `标题: ${input.title || '无'}
-来源: ${input.url}
-描述: ${input.description || '无'}
-
-正文:
-${content}`;
+  const userPrompt = `标题: ${input.title || '无'}
+摘要: ${input.summary || '无'}
+链接: ${input.url}
+${input.markdown ? `正文节选: ${input.markdown.slice(0, 1200)}` : ''}`;
 
   const llm = userId ? await getUserLLMProvider(userId) : getLLM();
-  const text = await llm.chat(
-    [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMessage },
-    ],
-    { maxTokens: 2048, jsonMode: true, label: 'summary' }
-  );
 
   try {
+    const text = await llm.chat(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      { maxTokens: 512, jsonMode: true, label: 'keywords' }
+    );
+
     const parsed = JSON.parse(text);
-    return {
-      summary: parsed.summary || '无法生成摘要',
-      tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 5) : [],
-    };
+    const keywords = Array.isArray(parsed.keywords)
+      ? normalizeKeywords(parsed.keywords).slice(0, 8)
+      : [];
+
+    if (keywords.length > 0) {
+      return { keywords, usedFallback: false };
+    }
   } catch (error) {
-    log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Failed to parse summary JSON, using raw text');
-    return { summary: text.slice(0, 500), tags: [] };
+    log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Keywords LLM failed');
   }
+
+  const fallback = buildFallbackKeywords(input, fallbackKeywords);
+  return { keywords: fallback, usedFallback: true };
 }
 
 /**
- * Find related articles and generate research insight.
- *
- * @param input - Article data with URL, title, and markdown
- * @param summary - Generated summary from generateSummary()
- * @param userId - Optional user ID for filtering related articles
- * @returns Insight result with insight text and related articles
+ * Translate title/summary to Chinese when English is detected.
  */
-export async function findRelatedAndInsight(
-  input: { url: string; title?: string; markdown: string; articleId?: number },
-  summary: string,
+export async function translateIfNeeded(
+  title?: string,
+  summary?: string,
   userId?: number
-): Promise<InsightResult> {
-  // Search for related articles: combine title + summary into one query
-  const query = [input.title, summary].filter(Boolean).join('\n');
-  let relatedArticles = await searchHistoricalArticles(query, 5, userId);
+): Promise<TranslationResult | null> {
+  const titleLang = detectLanguage(title);
+  const summaryLang = detectLanguage(summary);
+  const shouldTranslateTitle = titleLang === 'en';
+  const shouldTranslateSummary = summaryLang === 'en';
 
-  // Filter out the article itself from related results (by ID if provided)
-  if (input.articleId) {
-    relatedArticles = relatedArticles.filter((a) => a.articleId !== input.articleId);
+  if (!shouldTranslateTitle && !shouldTranslateSummary) {
+    return null;
   }
 
-  // Generate insight with context of related articles
-  const insight = await generateInsight(input, summary, relatedArticles, userId);
+  const systemPrompt = `你是专业中英翻译助手。请将英文翻译为中文，保持术语准确，不要添加解释。请严格输出 JSON：{"title_zh":"", "summary_zh":""}。`;
 
-  return {
-    insight,
-    relatedArticles: relatedArticles.slice(0, 5),
-  };
-}
-
-/**
- * Generate research insight with context of related articles.
- *
- * @param input - Article data with URL and title
- * @param summary - Generated summary
- * @param relatedArticles - Array of related historical articles
- * @param userId - Optional user ID for using user's LLM configuration
- * @returns Insight text (2-4 sentences in Chinese)
- */
-async function generateInsight(
-  input: { url: string; title?: string },
-  summary: string,
-  relatedArticles: SearchResult[],
-  userId?: number
-): Promise<string> {
-  const articlesContext =
-    relatedArticles.length > 0
-      ? relatedArticles
-          .map(
-            (a) =>
-              `- [${a.title}](${a.url})\n  ${a.snippet.slice(0, 100)}${
-                a.snippet.length >= 100 ? '...' : ''
-              }`
-          )
-          .join('\n')
-      : '（无相关历史文章）';
-
-  const systemPrompt = `你是用户的个人研究助手。用户关注学术文献和技术文章，特别关注 AI、机器学习、软件开发等领域。
-
-你的任务是从**用户的角度**思考这篇文章的研究价值和实用价值：
-- 这篇文章的核心贡献是什么？有什么值得关注的创新点？
-- 和用户过去阅读过的文章有什么关联？是否能形成知识网络？
-- 对用户的研究方向或项目有什么启发？
-- 是否值得深入研究或作为参考资料？
-
-语气要像朋友之间的分享，简洁有力，不要模板化的套话。2-4 句话即可，必须使用中文。`;
-
-  const userMessage = `文章: ${input.title || input.url}
-链接: ${input.url}
-
-摘要:
-${summary}
-
-用户阅读过的相关文章:
-${articlesContext}
-
-请给出你的研究洞察（Insight）：`;
+  const userPrompt = `标题: ${title || '无'}
+摘要: ${summary || '无'}
+只翻译英文部分，若原文为空则输出空字符串。`;
 
   const llm = userId ? await getUserLLMProvider(userId) : getLLM();
-  const text = await llm.chat(
-    [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMessage },
-    ],
-    { maxTokens: 1024, label: 'insight' }
-  );
 
-  return text || '无法生成洞察';
+  try {
+    const text = await llm.chat(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      { maxTokens: 1024, jsonMode: true, label: 'translation' }
+    );
+
+    const parsed = JSON.parse(text);
+    const titleZh = shouldTranslateTitle ? safeString(parsed.title_zh) : undefined;
+    const summaryZh = shouldTranslateSummary ? safeString(parsed.summary_zh) : undefined;
+
+    return {
+      titleZh,
+      summaryZh,
+      sourceLang: 'en',
+      usedFallback: false,
+    };
+  } catch (error) {
+    log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Translation LLM failed');
+    return {
+      titleZh: undefined,
+      summaryZh: undefined,
+      sourceLang: 'en',
+      usedFallback: true,
+    };
+  }
 }
 
 /* ── Utility Functions ── */
 
-/**
- * Deduplicate array by key function.
- * (Not currently used, kept for reference)
- */
-function dedup<T>(arr: T[], keyFn: (item: T) => string | undefined): T[] {
-  const seen = new Set<string>();
-  return arr.filter((item) => {
-    const key = keyFn(item);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+function buildFallbackKeywords(
+  input: KeywordInput,
+  matchedKeywords: string[]
+): string[] {
+  const extracted = extractKeywordsFromText([input.title, input.summary].filter(Boolean).join(' '));
+  return normalizeKeywords([...matchedKeywords, ...extracted]).slice(0, 8);
+}
+
+function extractKeywordsFromText(text: string): string[] {
+  if (!text) return [];
+  const zh = text.match(/[\u4e00-\u9fff]{2,8}/g) || [];
+  const en = text.match(/[A-Za-z][A-Za-z\-]{2,}/g) || [];
+  return [...zh, ...en].slice(0, 12);
+}
+
+function normalizeKeywords(keywords: string[]): string[] {
+  const unique = new Set<string>();
+  for (const kw of keywords) {
+    if (typeof kw !== 'string') continue;
+    const cleaned = kw.trim();
+    if (cleaned.length === 0) continue;
+    unique.add(cleaned);
+  }
+  return Array.from(unique);
+}
+
+function detectLanguage(text?: string): 'zh' | 'en' | 'unknown' {
+  if (!text || text.trim().length === 0) return 'unknown';
+  if (/[\u4e00-\u9fff]/.test(text)) return 'zh';
+  const letters = (text.match(/[A-Za-z]/g) || []).length;
+  const total = text.replace(/\s+/g, '').length;
+  if (letters >= 10 && letters / Math.max(total, 1) > 0.6) return 'en';
+  return 'unknown';
+}
+
+function safeString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }

@@ -150,7 +150,18 @@ router.get('/articles/:id', requireAuth, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Article not found' });
     }
 
-    res.json(article);
+    const [keywords, translation, filterMatches] = await Promise.all([
+      articleService.getArticleKeywordsById(id, req.userId!),
+      articleService.getArticleTranslation(id, req.userId!),
+      articleService.getArticleFilterMatches(id, req.userId!),
+    ]);
+
+    res.json({
+      ...article,
+      keywords,
+      translation,
+      filter_matches: filterMatches,
+    });
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to get article');
     res.status(500).json({ error: 'Failed to get article' });
@@ -183,7 +194,7 @@ router.delete('/articles/:id', requireAuth, async (req: AuthRequest, res) => {
 
 /**
  * GET /api/articles/:id/related
- * Get related articles based on tags and content
+ * 基于关键词获取相关文章
  */
 router.get('/articles/:id/related', requireAuth, async (req: AuthRequest, res) => {
   try {
@@ -195,27 +206,31 @@ router.get('/articles/:id/related', requireAuth, async (req: AuthRequest, res) =
 
     const db = getDb();
 
-    // Get the article's tags
-    const article = await db
-      .selectFrom('articles')
-      .where('articles.id', '=', id)
-      .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-      .where('rss_sources.user_id', '=', req.userId!)
-      .select(['articles.tags', 'articles.title'])
-      .executeTakeFirst();
-
-    if (!article) {
-      return res.status(404).json({ error: 'Article not found' });
+    const keywords = await articleService.getArticleKeywordsById(id, req.userId!);
+    if (keywords.length === 0) {
+      return res.json([]);
     }
 
-    // Get related articles by tags
     const related = await db
-      .selectFrom('articles')
+      .selectFrom('article_keywords as ak')
+      .innerJoin('article_keywords as ak2', 'ak.keyword_id', 'ak2.keyword_id')
+      .innerJoin('articles', 'articles.id', 'ak2.article_id')
       .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+      .where('ak.article_id', '=', id)
+      .where('ak2.article_id', '!=', id)
       .where('rss_sources.user_id', '=', req.userId!)
-      .where('articles.id', '!=', id)
       .where('articles.filter_status', '=', 'passed')
-      .selectAll()
+      .select([
+        'articles.id',
+        'articles.title',
+        'articles.url',
+        'articles.summary',
+        'articles.published_at',
+        'rss_sources.name as rss_source_name',
+      ])
+      .select((eb) => eb.fn.count('ak2.keyword_id').as('match_count'))
+      .groupBy('articles.id')
+      .orderBy('match_count', 'desc')
       .orderBy('articles.published_at', 'desc')
       .limit(5)
       .execute();

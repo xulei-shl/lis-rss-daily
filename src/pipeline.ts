@@ -3,7 +3,7 @@
  *
  * Three-stage pipeline for processing RSS articles:
  * 1. Scrape: Fetch full article content using Playwright + Defuddle
- * 2. Analyze: Generate summary, tags, insight, and find related articles using LLM
+ * 2. Analyze: 生成关键词与翻译（LLM）
  * 3. Export: Export to Markdown file (data/exports/)
  *
  * Includes retry mechanism with exponential backoff and batch processing.
@@ -11,10 +11,14 @@
 
 import { getDb } from './db.js';
 import { scrapeUrl } from './scraper.js';
-import { analyzeArticle, type SummaryInput } from './agent.js';
+import { analyzeArticle } from './agent.js';
 import { exportArticleMarkdown, type ArticleForExport } from './export.js';
 import {
   getArticleById,
+  getArticleFilterMatchedKeywords,
+  getArticleFilterMatches,
+  upsertArticleKeywords,
+  upsertArticleTranslation,
   updateArticleProcessStatus,
   type ArticleWithSource,
 } from './api/articles.js';
@@ -88,7 +92,7 @@ const SCRAPE_REJECT_KEYWORDS = [
  * 1. Check filter_status (only 'passed' articles are processed)
  * 2. Update process_status to 'processing'
  * 3. Stage 1: Scrape (if no markdown_content)
- * 4. Stage 2: Analyze (LLM summary + tags + insight + related articles)
+ * 4. Stage 2: Analyze (LLM 关键词 + 翻译)
  * 5. Stage 3: Export (Markdown file)
  * 6. Update process_status to 'completed' or 'failed'
  *
@@ -343,37 +347,39 @@ async function runPipeline(
   try {
     log.debug({ articleId }, '[stage2] Starting LLM analysis');
 
+    const filterMatchedKeywords = await getArticleFilterMatchedKeywords(articleId, userId);
+
     analysisResult = await executeWithRetry(
       () =>
         analyzeArticle(
           {
             url: updatedArticle.url,
             title: updatedArticle.title,
-            description: updatedArticle.summary ?? undefined,
-            markdown: updatedArticle.markdown_content!,
+            summary: updatedArticle.summary ?? undefined,
+            markdown: updatedArticle.markdown_content ?? undefined,
           },
-          userId
+          userId,
+          filterMatchedKeywords
         ),
       DEFAULT_RETRY_CONFIG,
       { articleId, stage: 'analyze' }
     );
 
-    // Save analysis results
-    // Note: We store summary in the summary field.
-    // tags, insight, related_articles need new fields or JSON storage.
-    // For now, we'll save summary and log the rest.
-    await db
-      .updateTable('articles')
-      .set({
-        summary: analysisResult.summary,
-        // TODO: Save tags, insight, related_articles (need schema extension)
-        // For phase 6, we'll use a JSON field or add new columns
-        updated_at: new Date().toISOString(),
-      })
-      .where('id', '=', articleId)
-      .execute();
+    // Save keywords + translation
+    await upsertArticleKeywords(articleId, userId, analysisResult.keywords);
 
-    log.info({ articleId, tags: analysisResult.tags.length, related: analysisResult.relatedArticles.length }, '[stage2] Analyze OK');
+    if (analysisResult.translation && (analysisResult.translation.titleZh || analysisResult.translation.summaryZh)) {
+      await upsertArticleTranslation(articleId, userId, {
+        title_zh: analysisResult.translation.titleZh ?? null,
+        summary_zh: analysisResult.translation.summaryZh ?? null,
+        source_lang: analysisResult.translation.sourceLang ?? null,
+      });
+    }
+
+    log.info(
+      { articleId, keywords: analysisResult.keywords.length, usedFallback: analysisResult.usedFallback },
+      '[stage2] Analyze OK'
+    );
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
     log.error({ articleId, error: errMsg }, '[stage2] Analyze failed');
@@ -387,12 +393,14 @@ async function runPipeline(
   try {
     log.debug({ articleId }, '[stage3] Starting export');
 
+    const filterMatches = await getArticleFilterMatches(articleId, userId);
+
     // Prepare article for export with analysis results
     const articleForExport: ArticleForExport = {
       ...updatedArticle,
-      tags: analysisResult?.tags,
-      insight: analysisResult?.insight,
-      related_articles: JSON.stringify(analysisResult?.relatedArticles || []),
+      keywords: analysisResult?.keywords,
+      translation: analysisResult?.translation ?? undefined,
+      filter_matches: filterMatches,
     };
 
     const exportPath = exportArticleMarkdown(articleForExport);

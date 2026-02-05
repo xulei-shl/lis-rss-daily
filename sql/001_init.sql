@@ -128,7 +128,49 @@ CREATE INDEX IF NOT EXISTS idx_article_filter_logs_domain_id ON article_filter_l
 CREATE INDEX IF NOT EXISTS idx_article_filter_logs_is_passed ON article_filter_logs(is_passed);
 
 -- ===========================================
--- 7. LLM Configs Table
+-- 7. Keywords Table
+-- ===========================================
+CREATE TABLE IF NOT EXISTS keywords (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  keyword TEXT NOT NULL UNIQUE,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_keywords_keyword ON keywords(keyword);
+
+-- ===========================================
+-- 8. Article Keywords Table
+-- ===========================================
+CREATE TABLE IF NOT EXISTS article_keywords (
+  article_id INTEGER NOT NULL,
+  keyword_id INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (article_id, keyword_id),
+  FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE,
+  FOREIGN KEY (keyword_id) REFERENCES keywords(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_article_keywords_article_id ON article_keywords(article_id);
+CREATE INDEX IF NOT EXISTS idx_article_keywords_keyword_id ON article_keywords(keyword_id);
+
+-- ===========================================
+-- 9. Article Translations Table
+-- ===========================================
+CREATE TABLE IF NOT EXISTS article_translations (
+  article_id INTEGER PRIMARY KEY,
+  title_zh TEXT,
+  summary_zh TEXT,
+  source_lang TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_article_translations_article_id ON article_translations(article_id);
+
+-- ===========================================
+-- 10. LLM Configs Table
 -- ===========================================
 CREATE TABLE IF NOT EXISTS llm_configs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -94,7 +94,7 @@
     margin-top: 0;
   }
 
-  /* AI Summary */
+  /* RSS 摘要 */
   .ai-summary {
     font-size: var(--text-base);
     line-height: 1.8;
@@ -112,7 +112,7 @@
     margin-bottom: 0;
   }
 
-  /* Research Insights */
+  /* 过滤匹配 */
   .insights-list {
     list-style: none;
   }
@@ -134,6 +134,28 @@
     font-family: var(--font-heading);
     font-size: var(--text-sm);
     font-weight: 700;
+    color: var(--accent-primary);
+  }
+
+  /* 过滤匹配 */
+  .filter-list {
+    list-style: none;
+  }
+
+  .filter-item {
+    position: relative;
+    padding-left: var(--space-4);
+    margin-bottom: var(--space-3);
+    font-size: var(--text-sm);
+    line-height: 1.7;
+    color: var(--text-primary);
+  }
+
+  .filter-item::before {
+    content: '•';
+    position: absolute;
+    left: 0;
+    top: 0;
     color: var(--accent-primary);
   }
 
@@ -258,7 +280,7 @@
     margin-top: var(--space-1);
   }
 
-  /* Tags */
+  /* 关键词 */
   .tags-list {
     display: flex;
     flex-wrap: wrap;
@@ -366,16 +388,22 @@
         </div>
       </header>
 
-      <!-- AI Summary Section -->
+      <!-- RSS 摘要 -->
       <section class="article-section" id="summarySection" style="display: none;">
-        <h2 class="section-header">AI 摘要</h2>
-        <div class="ai-summary" id="aiSummary"></div>
+        <h2 class="section-header">RSS 摘要</h2>
+        <div class="ai-summary" id="rssSummary"></div>
       </section>
 
-      <!-- Research Insights Section -->
-      <section class="article-section" id="insightsSection" style="display: none;">
-        <h2 class="section-header">研究洞察</h2>
-        <ul class="insights-list" id="insightsList"></ul>
+      <!-- 中文翻译 -->
+      <section class="article-section" id="translationSection" style="display: none;">
+        <h2 class="section-header">中文翻译</h2>
+        <div class="ai-summary" id="translationContent"></div>
+      </section>
+
+      <!-- 过滤匹配 -->
+      <section class="article-section" id="filterSection" style="display: none;">
+        <h2 class="section-header">过滤匹配</h2>
+        <ul class="filter-list" id="filterList"></ul>
       </section>
 
       <!-- RSS Content Section -->
@@ -410,10 +438,10 @@
         <ul class="related-articles-list" id="relatedList"></ul>
       </div>
 
-      <!-- Tags -->
-      <div class="sidebar-card" id="tagsCard" style="display: none;">
-        <h3 class="sidebar-title">标签</h3>
-        <div class="tags-list" id="tagsList"></div>
+      <!-- 关键词 -->
+      <div class="sidebar-card" id="keywordsCard" style="display: none;">
+        <h3 class="sidebar-title">关键词</h3>
+        <div class="tags-list" id="keywordsList"></div>
       </div>
 
       <!-- Article Info -->
@@ -541,23 +569,40 @@ function renderArticle(article) {
   const processBtn = document.getElementById('processBtn');
   processBtn.style.display = (article.process_status === 'pending' || article.process_status === 'failed') ? 'inline-block' : 'none';
 
-  // AI Summary
+  // RSS 摘要
   const summarySection = document.getElementById('summarySection');
   if (article.summary) {
     summarySection.style.display = 'block';
-    document.getElementById('aiSummary').innerHTML = \`<p>\${escapeHtml(article.summary)}</p>\`;
+    document.getElementById('rssSummary').innerHTML = \`<p>\${escapeHtml(article.summary)}</p>\`;
   }
 
-  // Research Insights (if available in the data)
-  const insightsSection = document.getElementById('insightsSection');
-  const insightsList = document.getElementById('insightsList');
+  // 中文翻译
+  const translationSection = document.getElementById('translationSection');
+  if (article.translation && (article.translation.title_zh || article.translation.summary_zh)) {
+    translationSection.style.display = 'block';
+    const parts = [];
+    if (article.translation.title_zh) {
+      parts.push(\`<p><strong>标题译文:</strong> \${escapeHtml(article.translation.title_zh)}</p>\`);
+    }
+    if (article.translation.summary_zh) {
+      parts.push(\`<p><strong>摘要译文:</strong> \${escapeHtml(article.translation.summary_zh)}</p>\`);
+    }
+    document.getElementById('translationContent').innerHTML = parts.join('');
+  }
 
-  if (article.insights) {
-    insightsSection.style.display = 'block';
-    const insights = article.insights.split('\\n').filter(s => s.trim());
-    insightsList.innerHTML = insights.map((insight, i) =>
-      \`<li class="insight-item" data-index="\${i + 1}">\${escapeHtml(insight)}</li>\`
-    ).join('');
+  // 过滤匹配
+  const filterSection = document.getElementById('filterSection');
+  const filterList = document.getElementById('filterList');
+  if (Array.isArray(article.filter_matches) && article.filter_matches.length > 0) {
+    filterSection.style.display = 'block';
+    filterList.innerHTML = article.filter_matches.map((match) => {
+      const domain = match.domainName ? \`【\${escapeHtml(match.domainName)}】\` : '【未归类】';
+      const keywords = (match.matchedKeywords || []).length > 0
+        ? \`关键词：\${escapeHtml(match.matchedKeywords.join('、'))}\`
+        : '关键词：无';
+      const reason = match.filterReason ? \`；原因：\${escapeHtml(match.filterReason)}\` : '';
+      return \`<li class="filter-item">\${domain} \${keywords}\${reason}</li>\`;
+    }).join('');
   }
 
   // RSS 正文：始终优先显示 content
@@ -574,12 +619,11 @@ function renderArticle(article) {
     document.getElementById('scrapeContent').innerHTML = formatMarkdown(article.markdown_content);
   }
 
-  // Tags
-  const tagsCard = document.getElementById('tagsCard');
-  if (article.tags) {
-    tagsCard.style.display = 'block';
-    const tags = article.tags.split(',').filter(t => t.trim());
-    document.getElementById('tagsList').innerHTML = tags.map(tag =>
+  // 关键词
+  const keywordsCard = document.getElementById('keywordsCard');
+  if (Array.isArray(article.keywords) && article.keywords.length > 0) {
+    keywordsCard.style.display = 'block';
+    document.getElementById('keywordsList').innerHTML = article.keywords.map(tag =>
       \`<span class="tag-item">#\${escapeHtml(tag.trim())}</span>\`
     ).join('');
   }

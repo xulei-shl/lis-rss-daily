@@ -19,6 +19,9 @@ export interface DatabaseTable {
   topic_domains: TopicDomainsTable;
   topic_keywords: TopicKeywordsTable;
   article_filter_logs: ArticleFilterLogsTable;
+  keywords: KeywordsTable;
+  article_keywords: ArticleKeywordsTable;
+  article_translations: ArticleTranslationsTable;
   llm_configs: LlmConfigsTable;
   settings: SettingsTable;
   system_prompts: SystemPromptsTable;
@@ -95,6 +98,28 @@ export interface ArticleFilterLogsTable {
   filter_reason: string | null;
   llm_response: string | null;
   created_at: string;
+}
+
+export interface KeywordsTable {
+  id: number;
+  keyword: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ArticleKeywordsTable {
+  article_id: number;
+  keyword_id: number;
+  created_at: string;
+}
+
+export interface ArticleTranslationsTable {
+  article_id: number;
+  title_zh: string | null;
+  summary_zh: string | null;
+  source_lang: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface LlmConfigsTable {

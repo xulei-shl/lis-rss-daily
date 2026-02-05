@@ -78,6 +78,8 @@ src/
 │   ├── article-process.ts # 文章处理服务
 │   ├── topic-domains.ts   # 主题领域服务
 │   ├── topic-keywords.ts  # 主题词服务
+│   ├── keywords.ts        # 文章关键词服务
+│   ├── translations.ts    # 文章翻译服务
 │   └── settings.ts        # 设置服务
 ├── middleware/            # 中间件
 │   └── auth.ts           # JWT 认证
@@ -125,18 +127,15 @@ src/
                    │ ...         │     │ filter_status    │
                    └─────────────┘     │ process_status   │
                                         │ summary          │
-┌──────────────────┐                  │ tags             │
-│ topic_domains    │                  │ insights         │
-├──────────────────┤                  │ rss_source_id    │
-│ id               │                  │ ...              │
-│ name             │                  └──────────────────┘
-│ ...              │                          │
-└──────────────────┘                          │
-         │                                    ▼
-         │                          ┌──────────────────┐
-         │                          │article_filter_   │
-         │                          │    logs          │
-         ▼                          ├──────────────────┤
+┌──────────────────┐                  │ rss_source_id    │
+│ topic_domains    │                  │ ...              │
+├──────────────────┤                  └──────────────────┘
+│ id               │                          │
+│ name             │                          ▼
+│ ...              │                  ┌──────────────────┐
+└──────────────────┘                  │article_filter_   │
+         │                            │    logs          │
+         ▼                            ├──────────────────┤
 ┌──────────────────┐                  │ id               │
 │ topic_keywords   │                  │ article_id       │
 ├──────────────────┤                  │ domain_id        │
@@ -145,6 +144,33 @@ src/
 │ keyword          │                  │ ...              │
 │ ...              │                  └──────────────────┘
 └──────────────────┘
+         │
+         │          ┌──────────────────┐
+         └─────────►│ article_keywords │◄────────┐
+                    ├──────────────────┤         │
+                    │ article_id       │         │
+                    │ keyword_id       │         │
+                    │ ...              │         │
+                    └──────────────────┘         │
+                                 ▲               │
+                                 │               │
+                           ┌──────────────────┐  │
+                           │ keywords         │  │
+                           ├──────────────────┤  │
+                           │ id               │  │
+                           │ keyword (UNIQUE) │  │
+                           │ ...              │  │
+                           └──────────────────┘  │
+                                                 │
+                           ┌───────────────────────┐
+                           │ article_translations  │
+                           ├───────────────────────┤
+                           │ article_id (PK)       │
+                           │ title_zh              │
+                           │ summary_zh            │
+                           │ source_lang           │
+                           │ ...                   │
+                           └───────────────────────┘
 ```
 
 ### 核心表结构
@@ -157,22 +183,57 @@ CREATE TABLE articles (
   rss_source_id INTEGER NOT NULL,
   title TEXT NOT NULL,
   url TEXT UNIQUE NOT NULL,
-  author TEXT,
   published_at TEXT,
   content TEXT,
-  raw_content TEXT,
-  summary TEXT,           -- AI 生成的中文摘要
-  tags TEXT,              -- JSON 数组，AI 提取的标签
-  insights TEXT,          -- JSON 数组，研究洞察
+  markdown_content TEXT,
+  summary TEXT,           -- RSS 摘要（非 AI）
   filter_status TEXT,     -- 'passed' | 'rejected' | 'pending'
-  filter_reason TEXT,
-  filter_domain_id INTEGER,
+  filter_score REAL,
+  filtered_at DATETIME,
   process_status TEXT,    -- 'pending' | 'processing' | 'completed' | 'failed'
-  process_retry_count INTEGER DEFAULT 0,
-  last_error TEXT,
+  processed_at DATETIME,
+  error_message TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (rss_source_id) REFERENCES rss_sources(id)
+);
+```
+
+#### keywords (关键词表)
+
+```sql
+CREATE TABLE keywords (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  keyword TEXT NOT NULL UNIQUE,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### article_keywords (文章-关键词关联表)
+
+```sql
+CREATE TABLE article_keywords (
+  article_id INTEGER NOT NULL,
+  keyword_id INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (article_id, keyword_id),
+  FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE,
+  FOREIGN KEY (keyword_id) REFERENCES keywords(id) ON DELETE CASCADE
+);
+```
+
+#### article_translations (文章翻译表)
+
+```sql
+CREATE TABLE article_translations (
+  article_id INTEGER PRIMARY KEY,
+  title_zh TEXT,
+  summary_zh TEXT,
+  source_lang TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
 ```
 
@@ -294,12 +355,10 @@ Stage 1: Scrape (抓取全文)
   ↓ 使用 scraper.ts
   ↓ 当前自动流程已暂停此阶段（skipScrape=true），仅保留手动触发时的抓取
   ↓ 抓取结果写入 markdown_content 前会进行质量保护（反爬/验证码/过短内容会被拒绝）
-Stage 2: Analyze (LLM 分析)
+Stage 2: Analyze (LLM 关键词 + 翻译)
   ↓ 使用 agent.ts
-  - 生成中文摘要 (200-300字)
-  - 提取标签 (3-5个)
-  - 生成研究洞察 (2-4条)
-  - 查找相关文章
+  - 生成关键词（3-8 个）
+  - 英文内容翻译为中文（题名/摘要）
 Stage 3: Export (导出 Markdown)
   ↓ 使用 export.ts
   - 导出到 data/exports/
@@ -341,11 +400,9 @@ Stage 3: Export (导出 Markdown)
 ┌─────────────────────────────────────────────────────────────────┐
 │  3. 文章处理 (pipeline.ts)                                      │
 │     ├─ Stage 1: 抓取全文 (scraper.ts)                          │
-│     ├─ Stage 2: LLM 分析 (agent.ts)                            │
-│     │   ├─ 生成中文摘要                                         │
-│     │   ├─ 提取研究标签                                         │
-│     │   ├─ 生成核心洞察                                         │
-│     │   └─ 查找相关文章                                         │
+│     ├─ Stage 2: LLM 关键词 + 翻译 (agent.ts)                   │
+│     │   ├─ 生成关键词                                           │
+│     │   └─ 英文翻译为中文                                       │
 │     └─ Stage 3: 导出 Markdown (export.ts)                      │
 │         ├─ 导出到 data/exports/                                 │
 │         └─ 链接到 QMD 集合                                       │
@@ -366,8 +423,7 @@ Stage 3: Export (导出 Markdown)
 
 ### 1. 摘要字段策略
 
-- `summary` 不再在入库阶段写入 RSS 片段。
-- `summary` 仅在 LLM 处理成功后写入；过滤拒绝或处理失败保持为空。
+- `summary` 保存 RSS 原始摘要（description/contentSnippet），不再由 LLM 写入。
 
 ### 2. RSS 正文择优与 Markdown 化
 
@@ -391,8 +447,8 @@ Stage 3: Export (导出 Markdown)
 
 - 过滤阶段使用 RSS 的 `contentSnippet/description` 作为 `description` 输入，避免占用 `summary` 字段。
 - 通过过滤后自动触发后续流程，但默认跳过“抓取全文”，仅执行：
-  - LLM 摘要
-  - QMD 关联
+  - LLM 关键词
+  - 英文翻译（题名/摘要）
 
 ### 6. 页面展示策略
 
@@ -402,26 +458,29 @@ Stage 3: Export (导出 Markdown)
 
 ### 4. LLM 分析引擎 (agent.ts)
 
-**职责**: 文章智能分析
+**职责**: 关键词生成与英文翻译（不生成摘要）
 
 ```typescript
 // 分析文章
 async function analyzeArticle(
-  article: Article,
-  searchFn: (query: string) => Promise<Article[]>
-): Promise<ArticleAnalysis>
+  input: KeywordInput,
+  userId?: number,
+  fallbackKeywords?: string[]
+): Promise<AnalysisResult>
 
-// 生成摘要
-async function generateSummary(content: string): Promise<string>
+// 生成关键词
+async function generateKeywords(
+  input: KeywordInput,
+  userId?: number,
+  fallbackKeywords?: string[]
+): Promise<KeywordResult>
 
-// 提取标签
-async function extractTags(content: string): Promise<string[]>
-
-// 生成洞察
-async function generateInsights(
-  content: string,
-  summary: string
-): Promise<string[]>
+// 英文翻译为中文（题名/摘要）
+async function translateIfNeeded(
+  title?: string,
+  summary?: string,
+  userId?: number
+): Promise<TranslationResult | null>
 ```
 
 **提示词模板**: 存储在 `system_prompts` 表

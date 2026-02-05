@@ -20,9 +20,17 @@ const EXPORT_DIR = process.env.ARTICLE_EXPORT_DIR || path.join(process.cwd(), 'd
  */
 export interface ArticleForExport extends ArticlesTable {
   rss_source_name?: string;
-  tags?: string[];
-  insight?: string;
-  related_articles?: string;
+  keywords?: string[];
+  translation?: {
+    title_zh?: string;
+    summary_zh?: string;
+    source_lang?: string;
+  };
+  filter_matches?: Array<{
+    domainName: string | null;
+    matchedKeywords: string[];
+    filterReason: string | null;
+  }>;
 }
 
 /* ── Utility Functions ── */
@@ -73,10 +81,9 @@ function buildFilename(article: ArticleForExport): string {
 function renderMarkdown(article: ArticleForExport): string {
   const lines: string[] = [];
 
-  // Parse tags from JSON if available
-  const tags = Array.isArray(article.tags)
-    ? article.tags
-    : safeParse<string[]>(article.tags as any, []);
+  const keywords = Array.isArray(article.keywords)
+    ? article.keywords
+    : safeParse<string[]>(article.keywords as any, []);
 
   // YAML front matter
   lines.push('---');
@@ -86,43 +93,55 @@ function renderMarkdown(article: ArticleForExport): string {
   if (article.rss_source_name) lines.push(`source: "${escapeFm(article.rss_source_name)}"`);
   if (article.published_at) lines.push(`published: "${article.published_at}"`);
   if (article.created_at) lines.push(`created: "${article.created_at}"`);
-  if (tags.length > 0) lines.push(`tags: [${tags.map((t) => `"${t}"`).join(', ')}]`);
+  if (keywords.length > 0) lines.push(`tags: [${keywords.map((t) => `"${t}"`).join(', ')}]`);
   lines.push('---');
   lines.push('');
 
   // Title
   lines.push(`# ${article.title || article.url}`);
   lines.push('');
-  lines.push(`> ${article.url}`);
-  lines.push('');
 
-  // Source info
-  if (article.rss_source_name) {
-    lines.push(`**来源:** ${article.rss_source_name}`);
-    lines.push('');
-  }
-
-  // Published date
-  if (article.published_at) {
-    const date = new Date(article.published_at).toLocaleString('zh-CN');
-    lines.push(`**发布时间:** ${date}`);
-    lines.push('');
-  }
-
-  // Summary (AI-generated)
+  // RSS Summary
   if (article.summary) {
-    lines.push('## 摘要');
+    lines.push('## RSS 摘要');
     lines.push('');
     lines.push(article.summary);
     lines.push('');
   }
 
-  // Insight (if available)
-  const insight = (article as any).insight;
-  if (insight) {
-    lines.push('## 研究洞察');
+  // 中文翻译
+  const translation = article.translation;
+  if (translation && (translation.title_zh || translation.summary_zh)) {
+    lines.push('## 中文翻译');
     lines.push('');
-    lines.push(insight);
+    if (translation.title_zh) {
+      lines.push(`**标题译文:** ${translation.title_zh}`);
+    }
+    if (translation.summary_zh) {
+      if (translation.title_zh) lines.push('');
+      lines.push(`**摘要译文:** ${translation.summary_zh}`);
+    }
+    lines.push('');
+  }
+
+  // 关键词
+  if (keywords.length > 0) {
+    lines.push('## 关键词');
+    lines.push('');
+    lines.push(keywords.map((k) => `- ${k}`).join('\n'));
+    lines.push('');
+  }
+
+  // 过滤匹配
+  if (article.filter_matches && article.filter_matches.length > 0) {
+    lines.push('## 过滤匹配');
+    lines.push('');
+    for (const match of article.filter_matches) {
+      const name = match.domainName ? `【${match.domainName}】` : '【未归类】';
+      const kw = match.matchedKeywords.length > 0 ? `关键词：${match.matchedKeywords.join('、')}` : '关键词：无';
+      const reason = match.filterReason ? `原因：${match.filterReason}` : '';
+      lines.push(`- ${name} ${kw}${reason ? `；${reason}` : ''}`);
+    }
     lines.push('');
   }
 

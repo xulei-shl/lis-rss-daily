@@ -59,6 +59,27 @@ export interface PaginatedArticlesResult {
 }
 
 /**
+ * 过滤匹配结果（用于导出与详情展示）
+ */
+export interface ArticleFilterMatch {
+  domainId: number | null;
+  domainName: string | null;
+  isPassed: boolean;
+  relevanceScore: number | null;
+  matchedKeywords: string[];
+  filterReason: string | null;
+}
+
+/**
+ * 翻译结果
+ */
+export interface ArticleTranslation {
+  title_zh: string | null;
+  summary_zh: string | null;
+  source_lang: string | null;
+}
+
+/**
  * Batch save articles
  * @param rssSourceId - RSS source ID
  * @param items - RSS feed items
@@ -92,6 +113,7 @@ export async function saveArticles(
         item.description,
         item.contentSnippet,
       ]);
+      const rssSummary = pickRssSummary([item.description, item.contentSnippet]);
       const markdown = toSimpleMarkdown(rawContent);
 
       const result = await db
@@ -100,8 +122,8 @@ export async function saveArticles(
           rss_source_id: rssSourceId,
           title: item.title,
           url: item.link,
-          // 初始摘要保持为空，后续由 LLM 生成
-          summary: null,
+          // RSS 自带摘要
+          summary: rssSummary,
           // content 与 markdown_content 都存 Markdown
           content: markdown || null,
           markdown_content: markdown || null,
@@ -166,6 +188,18 @@ function chooseBestContent(candidates: Array<string | undefined | null>): string
   }
 
   return best;
+}
+
+/**
+ * 选择 RSS 摘要（优先 description，其次 contentSnippet）
+ */
+function pickRssSummary(candidates: Array<string | undefined | null>): string | null {
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim().length > 0) {
+      return c.trim();
+    }
+  }
+  return null;
 }
 
 /**
@@ -263,6 +297,189 @@ export async function getArticleById(
     .executeTakeFirst();
 
   return article as ArticleWithSource | undefined;
+}
+
+/**
+ * 获取文章关联关键词（LLM 关键词）
+ */
+export async function getArticleKeywordsById(
+  articleId: number,
+  userId: number
+): Promise<string[]> {
+  const db = getDb();
+
+  const rows = await db
+    .selectFrom('article_keywords')
+    .innerJoin('keywords', 'keywords.id', 'article_keywords.keyword_id')
+    .innerJoin('articles', 'articles.id', 'article_keywords.article_id')
+    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .where('article_keywords.article_id', '=', articleId)
+    .where('rss_sources.user_id', '=', userId)
+    .select(['keywords.keyword'])
+    .orderBy('keywords.keyword', 'asc')
+    .execute();
+
+  return rows.map((r) => r.keyword);
+}
+
+/**
+ * 写入文章关键词（去重）
+ */
+export async function upsertArticleKeywords(
+  articleId: number,
+  userId: number,
+  keywords: string[]
+): Promise<void> {
+  const db = getDb();
+  const article = await getArticleById(articleId, userId);
+  if (!article) {
+    throw new Error('Article not found');
+  }
+
+  const uniqueKeywords = normalizeKeywords(keywords);
+  if (uniqueKeywords.length === 0) return;
+
+  await db.transaction().execute(async (trx) => {
+    for (const keyword of uniqueKeywords) {
+      await trx
+        .insertInto('keywords')
+        .values({
+          keyword,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .onConflict((oc) => oc.column('keyword').doNothing())
+        .execute();
+
+      const keywordRow = await trx
+        .selectFrom('keywords')
+        .select(['id'])
+        .where('keyword', '=', keyword)
+        .executeTakeFirstOrThrow();
+
+      await trx
+        .insertInto('article_keywords')
+        .values({
+          article_id: articleId,
+          keyword_id: keywordRow.id,
+          created_at: new Date().toISOString(),
+        })
+        .onConflict((oc) => oc.columns(['article_id', 'keyword_id']).doNothing())
+        .execute();
+    }
+  });
+}
+
+/**
+ * 获取过滤匹配结果（含原因）
+ */
+export async function getArticleFilterMatches(
+  articleId: number,
+  userId: number
+): Promise<ArticleFilterMatch[]> {
+  const db = getDb();
+
+  const rows = await db
+    .selectFrom('article_filter_logs')
+    .innerJoin('articles', 'articles.id', 'article_filter_logs.article_id')
+    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('topic_domains', 'topic_domains.id', 'article_filter_logs.domain_id')
+    .where('article_filter_logs.article_id', '=', articleId)
+    .where('rss_sources.user_id', '=', userId)
+    .where('article_filter_logs.is_passed', '=', 1)
+    .select([
+      'article_filter_logs.domain_id as domainId',
+      'topic_domains.name as domainName',
+      'article_filter_logs.is_passed as isPassed',
+      'article_filter_logs.relevance_score as relevanceScore',
+      'article_filter_logs.matched_keywords as matchedKeywords',
+      'article_filter_logs.filter_reason as filterReason',
+    ])
+    .orderBy('article_filter_logs.id', 'asc')
+    .execute();
+
+  return rows.map((row) => ({
+    domainId: row.domainId ?? null,
+    domainName: row.domainName ?? null,
+    isPassed: Number(row.isPassed) === 1,
+    relevanceScore: row.relevanceScore ?? null,
+    matchedKeywords: safeParseJsonArray(row.matchedKeywords),
+    filterReason: row.filterReason ?? null,
+  }));
+}
+
+/**
+ * 获取过滤匹配关键词（用于 LLM 关键词兜底）
+ */
+export async function getArticleFilterMatchedKeywords(
+  articleId: number,
+  userId: number
+): Promise<string[]> {
+  const matches = await getArticleFilterMatches(articleId, userId);
+  const keywords = matches.flatMap((m) => m.matchedKeywords || []);
+  return normalizeKeywords(keywords);
+}
+
+/**
+ * 获取翻译结果
+ */
+export async function getArticleTranslation(
+  articleId: number,
+  userId: number
+): Promise<ArticleTranslation | null> {
+  const db = getDb();
+  const article = await getArticleById(articleId, userId);
+  if (!article) return null;
+
+  const row = await db
+    .selectFrom('article_translations')
+    .select(['title_zh', 'summary_zh', 'source_lang'])
+    .where('article_id', '=', articleId)
+    .executeTakeFirst();
+
+  if (!row) return null;
+  return {
+    title_zh: row.title_zh ?? null,
+    summary_zh: row.summary_zh ?? null,
+    source_lang: row.source_lang ?? null,
+  };
+}
+
+/**
+ * 写入翻译结果（覆盖更新）
+ */
+export async function upsertArticleTranslation(
+  articleId: number,
+  userId: number,
+  translation: ArticleTranslation
+): Promise<void> {
+  const db = getDb();
+  const article = await getArticleById(articleId, userId);
+  if (!article) {
+    throw new Error('Article not found');
+  }
+
+  const now = new Date().toISOString();
+
+  await db
+    .insertInto('article_translations')
+    .values({
+      article_id: articleId,
+      title_zh: translation.title_zh ?? null,
+      summary_zh: translation.summary_zh ?? null,
+      source_lang: translation.source_lang ?? null,
+      created_at: now,
+      updated_at: now,
+    })
+    .onConflict((oc) =>
+      oc.column('article_id').doUpdateSet({
+        title_zh: translation.title_zh ?? null,
+        summary_zh: translation.summary_zh ?? null,
+        source_lang: translation.source_lang ?? null,
+        updated_at: now,
+      })
+    )
+    .execute();
 }
 
 /**
@@ -433,4 +650,24 @@ export async function deleteArticle(id: number, userId: number): Promise<void> {
   }
 
   log.info({ articleId: id, userId }, 'Article deleted');
+}
+
+function normalizeKeywords(keywords: string[]): string[] {
+  const unique = new Set<string>();
+  for (const kw of keywords) {
+    const cleaned = kw.trim();
+    if (cleaned.length === 0) continue;
+    unique.add(cleaned);
+  }
+  return Array.from(unique);
+}
+
+function safeParseJsonArray(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v) => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
 }
