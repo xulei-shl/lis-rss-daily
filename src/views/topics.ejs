@@ -102,58 +102,9 @@
     opacity: 0.5;
   }
 
-  /* Modal styles */
-  .modal-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(2px);
-    z-index: 1000;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .modal-overlay.show {
-    display: flex;
-  }
-
+  /* Modal styles override - using global modal.css */
   .modal {
-    background: var(--surface);
-    border-radius: 8px;
-    padding: 24px;
-    width: 100%;
     max-width: 440px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  }
-
-  .modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-  }
-
-  .modal-header h3 {
-    font-size: 1.15rem;
-    font-weight: 600;
-  }
-
-  .modal-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    color: var(--dim);
-    padding: 4px;
-    line-height: 1;
-  }
-
-  .modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    margin-top: 20px;
   }
 
   .domain-description {
@@ -474,7 +425,7 @@ function showDomainModal() {
   document.getElementById('domainDescription').value = '';
   document.getElementById('domainPriority').value = '0';
   document.getElementById('domainActive').value = 'true';
-  document.getElementById('domainModal').classList.add('show');
+  document.getElementById('domainModal').classList.add('active');
   document.getElementById('domainName').focus();
 }
 
@@ -488,11 +439,11 @@ function editDomain(id) {
   document.getElementById('domainDescription').value = domain.description || '';
   document.getElementById('domainPriority').value = domain.priority;
   document.getElementById('domainActive').value = domain.is_active ? 'true' : 'false';
-  document.getElementById('domainModal').classList.add('show');
+  document.getElementById('domainModal').classList.add('active');
 }
 
 function closeDomainModal() {
-  document.getElementById('domainModal').classList.remove('show');
+  document.getElementById('domainModal').classList.remove('active');
 }
 
 document.getElementById('domainForm').addEventListener('submit', async function(e) {
@@ -575,7 +526,7 @@ function showKeywordModal() {
   document.getElementById('keywordDescription').value = '';
   document.getElementById('keywordWeight').value = '1.0';
   document.getElementById('keywordActive').value = 'true';
-  document.getElementById('keywordModal').classList.add('show');
+  document.getElementById('keywordModal').classList.add('active');
   document.getElementById('keywordText').focus();
 }
 
@@ -592,14 +543,14 @@ async function editKeyword(id) {
     document.getElementById('keywordDescription').value = keyword.description || '';
     document.getElementById('keywordWeight').value = keyword.weight;
     document.getElementById('keywordActive').value = keyword.is_active ? 'true' : 'false';
-    document.getElementById('keywordModal').classList.add('show');
+    document.getElementById('keywordModal').classList.add('active');
   } catch (err) {
     console.error('Failed to load keyword:', err);
   }
 }
 
 function closeKeywordModal() {
-  document.getElementById('keywordModal').classList.remove('show');
+  document.getElementById('keywordModal').classList.remove('active');
 }
 
 document.getElementById('keywordForm').addEventListener('submit', async function(e) {
