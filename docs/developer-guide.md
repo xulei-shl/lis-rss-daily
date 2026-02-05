@@ -283,6 +283,8 @@ class ArticlePipeline {
 ```
 Stage 1: Scrape (抓取全文)
   ↓ 使用 scraper.ts
+  ↓ 当前自动流程已暂停此阶段（skipScrape=true），仅保留手动触发时的抓取
+  ↓ 抓取结果写入 markdown_content 前会进行质量保护（反爬/验证码/过短内容会被拒绝）
 Stage 2: Analyze (LLM 分析)
   ↓ 使用 agent.ts
   - 生成中文摘要 (200-300字)
@@ -346,6 +348,48 @@ Stage 3: Export (导出 Markdown)
 │     └─ 支持自然语言查询相关文章                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## RSS 内容处理增强（最新）
+
+为保证 `content` 与 `summary` 的语义正确并提升可用性，近期对 RSS 入库与处理流程做了以下增强：
+
+### 1. 摘要字段策略
+
+- `summary` 不再在入库阶段写入 RSS 片段。
+- `summary` 仅在 LLM 处理成功后写入；过滤拒绝或处理失败保持为空。
+
+### 2. RSS 正文择优与 Markdown 化
+
+- 从 RSS 原始字段中择优选择正文来源：`content` → `description` → `contentSnippet`。
+- 选择策略采用“信息量评分”（正文长度 + 轻量权重），优先更丰富的内容。
+- 入库时统一转换为 Markdown，写入 `content` 与 `markdown_content`（允许相同）。
+- `content` 始终代表 RSS 正文；`markdown_content` 可能在手动抓取后被覆盖。
+
+### 3. HTML 清洗与去噪
+
+- 轻量清洗 HTML，移除 `script/style/nav/footer/aside/form` 等常见噪声区块。
+- 删除常见广告/订阅/分享等页面块（基于 class/id 关键字）。
+- 清理多余空行、短行与常见噪声文本。
+
+### 4. 图片链接处理
+
+- 转换过程中不保留图片链接，`<img>` 直接移除。
+- Markdown 中的 `![](...)` 语法会被统一清除。
+
+### 5. 过滤与后续处理
+
+- 过滤阶段使用 RSS 的 `contentSnippet/description` 作为 `description` 输入，避免占用 `summary` 字段。
+- 通过过滤后自动触发后续流程，但默认跳过“抓取全文”，仅执行：
+  - LLM 摘要
+  - QMD 关联
+
+### 6. 页面展示策略
+
+- 详情页始终显示 `content`（RSS 正文）。
+- 当 `markdown_content` 存在且与 `content` 不同时，额外显示“抓取全文”区块。
+- 抓取内容包含验证码/反爬提示或明显过短时不会覆盖 `markdown_content`。
 
 ### 4. LLM 分析引擎 (agent.ts)
 

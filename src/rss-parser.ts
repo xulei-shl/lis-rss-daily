@@ -19,6 +19,7 @@ export interface RSSFeedItem {
   pubDate?: string;
   content?: string;
   contentSnippet?: string;
+  description?: string;
   guid?: string;
   author?: string;
   categories?: string[];
@@ -109,6 +110,7 @@ export class RSSParserImpl {
             pubDate: item.pubDate,
             content: item.content || item['content:encoded'],
             contentSnippet: item.contentSnippet,
+            description: (item as any).description || (item as any).summary,
             guid: item.guid,
             author: item.creator || item.author,
             categories: item.categories || [],
@@ -195,6 +197,7 @@ export class RSSParserImpl {
             pubDate: item.pubDate,
             content: item.content || item['content:encoded'],
             contentSnippet: item.contentSnippet,
+            description: (item as any).description || (item as any).summary,
             guid: item.guid,
           })),
         },

@@ -40,6 +40,11 @@ export interface ProcessOptions {
   onProgress?: (articleId: number, stage: string) => void | Promise<void>;
 }
 
+export interface ProcessArticleOptions {
+  /** 跳过抓取全文阶段，仅使用已有内容进行摘要 */
+  skipScrape?: boolean;
+}
+
 export interface RetryConfig {
   maxRetries: number;
   baseDelay: number;
@@ -58,6 +63,22 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
 
 const MAX_CONCURRENT = parseInt(process.env.ARTICLE_PROCESS_MAX_CONCURRENT || '3', 10);
 
+const SCRAPE_REJECT_KEYWORDS = [
+  '安全验证',
+  '验证码',
+  '请完成安全验证',
+  '请依次点击',
+  'robot',
+  'captcha',
+  'access denied',
+  'forbidden',
+  '验证后继续',
+  '需要启用 javascript',
+  'enable javascript',
+  'are you human',
+  '拒绝访问',
+] as const;
+
 /* ── Main Processing Functions ── */
 
 /**
@@ -75,7 +96,11 @@ const MAX_CONCURRENT = parseInt(process.env.ARTICLE_PROCESS_MAX_CONCURRENT || '3
  * @param userId - User ID (for permission check)
  * @returns Process result with status and details
  */
-export async function processArticle(articleId: number, userId: number): Promise<ProcessResult> {
+export async function processArticle(
+  articleId: number,
+  userId: number,
+  options: ProcessArticleOptions = {}
+): Promise<ProcessResult> {
   const startTime = Date.now();
 
   // Get article and check filter status
@@ -112,7 +137,7 @@ export async function processArticle(articleId: number, userId: number): Promise
 
   try {
     // Run the three-stage pipeline
-    const result = await runPipeline(articleId, article, userId);
+    const result = await runPipeline(articleId, article, userId, options);
     const duration = Date.now() - startTime;
 
     log.info({ articleId, title: article.title, duration, status: result.status }, '[done] Processing complete');
@@ -241,12 +266,32 @@ export async function retryFailedArticle(articleId: number, userId: number): Pro
 async function runPipeline(
   articleId: number,
   article: ArticleWithSource,
-  userId: number
+  userId: number,
+  options: ProcessArticleOptions
 ): Promise<Omit<ProcessResult, 'articleId' | 'title' | 'url' | 'duration'>> {
   const db = getDb();
 
   // ── Stage 1: Scrape (if needed) ──
-  if (!article.markdown_content) {
+  if (options.skipScrape) {
+    // 跳过抓取阶段：使用已有内容作为 Markdown（保持 content 原样）
+    if (!article.markdown_content) {
+      if (article.content) {
+        await db
+          .updateTable('articles')
+          .set({
+            markdown_content: article.content,
+            updated_at: new Date().toISOString(),
+          })
+          .where('id', '=', articleId)
+          .execute();
+      } else {
+        const errMsg = 'Skip scrape enabled but no content available';
+        await updateArticleProcessStatus(articleId, 'failed', errMsg);
+        return { status: 'failed', stage: 'scrape', error: errMsg };
+      }
+    }
+    log.debug({ articleId }, '[stage1] Scrape skipped (skipScrape=true)');
+  } else if (!article.markdown_content) {
     try {
       log.debug({ articleId, url: article.url }, '[stage1] Starting scrape');
 
@@ -256,17 +301,23 @@ async function runPipeline(
         { articleId, stage: 'scrape' }
       );
 
-      // Save markdown content
-      await db
-        .updateTable('articles')
-        .set({
-          markdown_content: scrapeResult.markdown,
-          updated_at: new Date().toISOString(),
-        })
-        .where('id', '=', articleId)
-        .execute();
+      const scrapeMarkdown = (scrapeResult.markdown || '').trim();
 
-      log.info({ articleId, chars: scrapeResult.markdown.length }, '[stage1] Scrape OK');
+      if (isScrapeContentUsable(scrapeMarkdown, article.content || undefined)) {
+        // 保存抓取内容（仅在质量合格时覆盖）
+        await db
+          .updateTable('articles')
+          .set({
+            markdown_content: scrapeMarkdown,
+            updated_at: new Date().toISOString(),
+          })
+          .where('id', '=', articleId)
+          .execute();
+
+        log.info({ articleId, chars: scrapeMarkdown.length }, '[stage1] Scrape OK');
+      } else {
+        log.warn({ articleId, chars: scrapeMarkdown.length }, '[stage1] Scrape rejected by quality guard');
+      }
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       log.error({ articleId, error: errMsg }, '[stage1] Scrape failed');
@@ -417,6 +468,30 @@ async function executeWithRetry<T>(
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 判断抓取内容是否可用（避免反爬/验证码页覆盖 RSS 正文）
+ */
+function isScrapeContentUsable(scrapeMarkdown: string, rssContent?: string): boolean {
+  if (!scrapeMarkdown) return false;
+
+  const lower = scrapeMarkdown.toLowerCase();
+  for (const keyword of SCRAPE_REJECT_KEYWORDS) {
+    if (lower.includes(keyword.toLowerCase())) return false;
+  }
+
+  // 太短的内容通常无效
+  const minLen = 200;
+  if (scrapeMarkdown.length < minLen) return false;
+
+  if (rssContent) {
+    // 抓取内容明显短于 RSS 内容时不覆盖
+    const ratio = scrapeMarkdown.length / Math.max(rssContent.length, 1);
+    if (ratio < 0.6) return false;
+  }
+
+  return true;
 }
 
 /* ── Utility Functions ── */

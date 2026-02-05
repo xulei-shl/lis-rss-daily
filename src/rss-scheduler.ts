@@ -17,6 +17,7 @@ import { logger } from './logger.js';
 import { getActiveRSSSourcesForFetch } from './api/rss-sources.js';
 import { saveArticles, checkArticlesExistByTitle } from './api/articles.js';
 import { filterArticle, type FilterInput } from './filter.js';
+import { processArticle } from './pipeline.js';
 
 const log = logger.child({ module: 'rss-scheduler' });
 
@@ -528,16 +529,18 @@ export class RSSScheduler {
     const articles = await db
       .selectFrom('articles')
       .where('id', 'in', articleIds)
-      .select(['id', 'title', 'summary', 'content'])
+      .select(['id', 'title', 'summary', 'content', 'url'])
       .execute();
 
     for (const article of articles) {
       try {
+        const item = itemMap.get(article.url || '');
         const input: FilterInput = {
           articleId: article.id,
           userId: userId,
           title: article.title,
-          description: article.summary || '',
+          // 过滤阶段使用 RSS 的摘要片段作为描述，避免占用 summary 字段
+          description: item?.contentSnippet || item?.description || '',
           content: article.content || undefined,
         };
 
@@ -546,6 +549,14 @@ export class RSSScheduler {
         if (result.passed) {
           passedCount++;
           filterLog.debug({ articleId: article.id }, 'Article passed filter');
+          // 通过过滤后自动执行后续流程（仅摘要 + QMD）
+          processArticle(article.id, userId, { skipScrape: true })
+            .then((res) => {
+              filterLog.debug({ articleId: article.id, status: res.status }, 'Auto process completed');
+            })
+            .catch((err) => {
+              filterLog.warn({ articleId: article.id, error: err?.message || String(err) }, 'Auto process failed');
+            });
         } else {
           rejectedCount++;
           filterLog.debug({ articleId: article.id, reason: result.filterReason }, 'Article rejected by filter');

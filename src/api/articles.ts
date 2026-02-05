@@ -8,6 +8,7 @@
 import { getDb } from '../db.js';
 import { logger } from '../logger.js';
 import type { RSSFeedItem } from '../rss-parser.js';
+import { toSimpleMarkdown } from '../utils/markdown.js';
 
 const log = logger.child({ module: 'articles-service' });
 
@@ -86,14 +87,24 @@ export async function saveArticles(
       }
 
       // Insert new article and return the inserted ID
+      const rawContent = chooseBestContent([
+        item.content,
+        item.description,
+        item.contentSnippet,
+      ]);
+      const markdown = toSimpleMarkdown(rawContent);
+
       const result = await db
         .insertInto('articles')
         .values({
           rss_source_id: rssSourceId,
           title: item.title,
           url: item.link,
-          summary: item.contentSnippet || null,
-          content: item.content || null,
+          // 初始摘要保持为空，后续由 LLM 生成
+          summary: null,
+          // content 与 markdown_content 都存 Markdown
+          content: markdown || null,
+          markdown_content: markdown || null,
           filter_status: 'pending',
           process_status: 'pending',
           published_at: item.pubDate ? new Date(item.pubDate).toISOString() : null,
@@ -131,6 +142,40 @@ export async function saveArticles(
   }
 
   return { count: savedArticleIds.length, articleIds: savedArticleIds };
+}
+
+/**
+ * 选择最有价值的内容来源（优先更长且更丰富的文本）
+ */
+function chooseBestContent(candidates: Array<string | undefined | null>): string {
+  const cleaned = candidates
+    .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+    .map((c) => c.trim());
+
+  if (cleaned.length === 0) return '';
+
+  let best = cleaned[0];
+  let bestScore = scoreContent(best);
+
+  for (const content of cleaned.slice(1)) {
+    const score = scoreContent(content);
+    if (score > bestScore) {
+      best = content;
+      bestScore = score;
+    }
+  }
+
+  return best;
+}
+
+/**
+ * 简单评分：正文长度 + 去标签长度
+ */
+function scoreContent(content: string): number {
+  const textOnly = content.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  const lengthScore = textOnly.length;
+  const rawScore = content.length * 0.1;
+  return lengthScore + rawScore;
 }
 
 /**

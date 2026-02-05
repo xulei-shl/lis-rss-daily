@@ -378,10 +378,16 @@
         <ul class="insights-list" id="insightsList"></ul>
       </section>
 
-      <!-- Full Content Section -->
-      <section class="article-section" id="contentSection" style="display: none;">
-        <h2 class="section-header">全文内容</h2>
-        <div class="article-full-content" id="fullContent"></div>
+      <!-- RSS Content Section -->
+      <section class="article-section" id="rssContentSection" style="display: none;">
+        <h2 class="section-header">RSS 正文</h2>
+        <div class="article-full-content" id="rssContent"></div>
+      </section>
+
+      <!-- Scraped Content Section -->
+      <section class="article-section" id="scrapeContentSection" style="display: none;">
+        <h2 class="section-header">抓取全文</h2>
+        <div class="article-full-content" id="scrapeContent"></div>
       </section>
     </div>
 
@@ -554,16 +560,18 @@ function renderArticle(article) {
     ).join('');
   }
 
-  // Full Content
-  const contentSection = document.getElementById('contentSection');
-  if (article.markdown_content) {
-    contentSection.style.display = 'block';
-    // For markdown content, we'd ideally use a markdown parser
-    // For now, just display as plain text with basic formatting
-    document.getElementById('fullContent').innerHTML = formatMarkdown(article.markdown_content);
-  } else if (article.content) {
-    contentSection.style.display = 'block';
-    document.getElementById('fullContent').innerHTML = \`<p>\${escapeHtml(article.content)}</p>\`;
+  // RSS 正文：始终优先显示 content
+  const rssSection = document.getElementById('rssContentSection');
+  if (article.content) {
+    rssSection.style.display = 'block';
+    document.getElementById('rssContent').innerHTML = formatMarkdown(article.content);
+  }
+
+  // 抓取全文：存在且与 RSS 正文不同才显示
+  const scrapeSection = document.getElementById('scrapeContentSection');
+  if (article.markdown_content && article.markdown_content !== article.content) {
+    scrapeSection.style.display = 'block';
+    document.getElementById('scrapeContent').innerHTML = formatMarkdown(article.markdown_content);
   }
 
   // Tags
