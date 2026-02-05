@@ -1,6 +1,7 @@
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
 import { requireAuth } from '../../middleware/auth.js';
+import { getDb } from '../../db.js';
 import * as articleService from '../articles.js';
 import { logger } from '../../logger.js';
 import { deleteArticle as deleteVectorArticle } from '../../vector/indexer.js';
@@ -138,7 +139,11 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
  */
 router.get('/articles/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (typeof idParam !== 'string') {
+      return res.status(400).json({ error: 'Invalid article ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid article ID' });
@@ -174,7 +179,11 @@ router.get('/articles/:id', requireAuth, async (req: AuthRequest, res) => {
  */
 router.delete('/articles/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (typeof idParam !== 'string') {
+      return res.status(400).json({ error: 'Invalid article ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid article ID' });
@@ -201,7 +210,11 @@ router.delete('/articles/:id', requireAuth, async (req: AuthRequest, res) => {
  */
 router.get('/articles/:id/related', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (typeof idParam !== 'string') {
+      return res.status(400).json({ error: 'Invalid article ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid article ID' });
