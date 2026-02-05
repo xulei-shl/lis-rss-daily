@@ -1,0 +1,16 @@
+/* ============================================
+   CARD COMPONENT
+   ============================================ */
+
+.card {
+  background: var(--bg-surface);
+  border: 2px solid var(--border);
+  border-radius: 0;
+  padding: var(--space-5);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.08);
+}

@@ -51,6 +51,9 @@ export function createApp(): express.Express {
     next();
   });
 
+  // Static files (CSS, JS, images, etc.)
+  app.use(express.static(path.join(__dirname, '../public')));
+
   // API routes
   app.use('/api', apiRoutes);
 

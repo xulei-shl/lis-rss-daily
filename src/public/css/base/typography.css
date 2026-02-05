@@ -1,0 +1,15 @@
+/* ============================================
+   DIVIDER
+   ============================================ */
+
+.divider {
+  border: none;
+  border-top: 3px solid var(--border);
+  margin: var(--space-8) 0;
+}
+
+.divider-dotted {
+  border: none;
+  border-top: 2px dotted var(--border);
+  margin: var(--space-6) 0;
+}

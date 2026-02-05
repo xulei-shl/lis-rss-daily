@@ -1,0 +1,91 @@
+/* ============================================
+   DESIGN TOKENS
+   ============================================ */
+
+/* Spacing Scale (Golden Ratio Approximation) */
+:root {
+  --space-0: 0;
+  --space-1: 0.25rem;   /* 4px */
+  --space-2: 0.5rem;    /* 8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.5rem;    /* 24px */
+  --space-6: 2rem;      /* 32px */
+  --space-8: 3rem;      /* 48px */
+  --space-10: 4rem;     /* 64px */
+  --space-12: 6rem;     /* 96px */
+}
+
+/* Typography Scale */
+:root {
+  --text-2xs: 0.625rem;   /* 10px */
+  --text-xs: 0.75rem;     /* 12px */
+  --text-sm: 0.875rem;    /* 14px */
+  --text-base: 1rem;      /* 16px */
+  --text-xl: 1.25rem;     /* 20px */
+  --text-2xl: 1.5rem;     /* 24px */
+  --text-3xl: 1.75rem;    /* 28px */
+  --text-4xl: clamp(2rem, 4vw + 0.5rem, 3rem);
+  --text-5xl: clamp(2.5rem, 5vw + 1rem, 4rem);
+}
+
+/* Font Families */
+:root {
+  --font-heading: 'Crimson Pro', 'Noto Serif SC', 'Songti SC', serif;
+  --font-body: 'IBM Plex Sans', 'Noto Sans SC', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+  --font-meta: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Light Mode - Academic Brutalist */
+:root {
+  /* Backgrounds */
+  --bg-primary: #fafaf8;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f5f5f0;
+
+  /* Text */
+  --text-primary: #0a0a0a;
+  --text-secondary: #404040;
+  --text-tertiary: #808080;
+
+  /* Accent - Academic Blue */
+  --accent-primary: #1a4d7a;
+  --accent-hover: #2d6da8;
+  --accent-subtle: rgba(26, 77, 122, 0.08);
+
+  /* Functional Colors */
+  --green: #1a5c3a;
+  --red: #b82a2a;
+  --amber: #b8712a;
+
+  /* Structure - Bold Borders */
+  --border: #d0d0d0;
+  --border-strong: #a0a0a0;
+  --divider: #e0e0e0;
+}
+
+/* Dark Mode - Inverted Contrast */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #0a0a0a;
+    --bg-surface: #141414;
+    --bg-elevated: #1a1a1a;
+
+    --text-primary: #f5f5f0;
+    --text-secondary: #b0b0b0;
+    --text-tertiary: #707070;
+
+    --accent-primary: #4a9fe0;
+    --accent-hover: #6bb3f0;
+    --accent-subtle: rgba(74, 159, 224, 0.15);
+
+    --green: #3dc891;
+    --red: #ff6b5b;
+    --amber: #ffb84d;
+
+    --border: #303030;
+    --border-strong: #404040;
+    --divider: #252525;
+  }
+}

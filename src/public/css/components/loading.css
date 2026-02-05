@@ -1,0 +1,44 @@
+/* ============================================
+   LOADING COMPONENT
+   ============================================ */
+
+.loading {
+  text-align: center;
+  padding: var(--space-10);
+  color: var(--text-tertiary);
+  font-family: var(--font-meta);
+  font-size: var(--text-sm);
+}
+
+/* Inline variant */
+.loading--inline {
+  padding: var(--space-4);
+  display: inline-block;
+}
+
+/* Overlay variant */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

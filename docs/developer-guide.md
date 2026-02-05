@@ -80,7 +80,8 @@ src/
 │   ├── topic-keywords.ts  # 主题词服务
 │   ├── keywords.ts        # 文章关键词服务
 │   ├── translations.ts    # 文章翻译服务
-│   └── settings.ts        # 设置服务
+│   ├── settings.ts        # 设置服务
+│   └── filter.ts          # 过滤服务
 ├── middleware/            # 中间件
 │   └── auth.ts           # JWT 认证
 ├── views/                # EJS 模板
@@ -93,7 +94,36 @@ src/
 │   ├── topics.ejs        # 主题管理
 │   ├── filter-logs.ejs   # 过滤日志
 │   ├── filter-stats.ejs  # 过滤统计
+│   ├── error.ejs         # 错误页面
 │   └── login.ejs         # 登录页面
+├── public/               # 静态资源
+│   └── css/              # 样式文件
+│       ├── base/         # 基础样式
+│       │   ├── reset.css
+│       │   └── typography.css
+│       ├── design-system/# 设计系统
+│       │   ├── tokens.css
+│       │   ├── buttons.css
+│       │   ├── forms.css
+│       │   ├── cards.css
+│       │   ├── badges.css
+│       │   └── animations.css
+│       ├── components/   # 组件样式
+│       │   ├── page-header.css
+│       │   ├── empty-state.css
+│       │   ├── pagination.css
+│       │   ├── loading.css
+│       │   ├── filters.css
+│       │   ├── tables.css
+│       │   ├── status-badge.css
+│       │   └── modal.css
+│       ├── pages/        # 页面样式
+│       └── main.css      # 主样式入口
+├── scripts/              # 构建脚本
+│   └── build-css.js      # CSS 构建脚本
+├── utils/                # 工具函数
+│   ├── crypto.ts         # 加密工具
+│   └── markdown.ts       # Markdown 工具
 ├── config.ts             # 配置管理
 ├── logger.ts             # 日志模块
 ├── llm.ts                # LLM 抽象层
@@ -121,59 +151,116 @@ src/
 │   users     │     │ rss_sources │     │     articles     │
 ├─────────────┤     ├─────────────┤     ├──────────────────┤
 │ id          │     │ id          │◄────│ id               │
-│ username    │     │ name        │     │ title            │
-│ password    │     │ url         │     │ url (UNIQUE)     │
-│ └───────────┘     │ enabled     │     │ content          │
-                   │ ...         │     │ filter_status    │
-                   └─────────────┘     │ process_status   │
-                                        │ summary          │
-┌──────────────────┐                  │ rss_source_id    │
-│ topic_domains    │                  │ ...              │
-├──────────────────┤                  └──────────────────┘
-│ id               │                          │
-│ name             │                          ▼
-│ ...              │                  ┌──────────────────┐
-└──────────────────┘                  │article_filter_   │
-         │                            │    logs          │
-         ▼                            ├──────────────────┤
-┌──────────────────┐                  │ id               │
-│ topic_keywords   │                  │ article_id       │
-├──────────────────┤                  │ domain_id        │
-│ id               │                  │ result           │
-│ domain_id        │                  │ reason           │
-│ keyword          │                  │ ...              │
-│ ...              │                  └──────────────────┘
+│ username    │     │ user_id     │     │ title            │
+│ password_hash│    │ name        │     │ url (UNIQUE)     │
+│ created_at  │     │ url (UNIQUE)│     │ summary          │
+│ updated_at  │     │ status      │     │ content          │
+└─────────────┘     │ last_fetched│     │ markdown_content │
+                    │ fetch_interval│    │ filter_status    │
+                    │ ...         │     │ process_status   │
+                    └─────────────┘     │ ...              │
+                                         └──────────────────┘
+                                               │
+                                               ▼
+┌──────────────────┐                  ┌──────────────────┐
+│ topic_domains    │                  │article_filter_   │
+├──────────────────┤                  │    logs          │
+│ id               │                  ├──────────────────┤
+│ user_id          │                  │ id               │
+│ name             │                  │ article_id       │
+│ description      │                  │ domain_id        │
+│ is_active        │                  │ is_passed        │
+│ priority         │                  │ relevance_score  │
+│ ...              │                  │ matched_keywords │
+└──────────────────┘                  │ filter_reason    │
+          │                            │ llm_response     │
+          ▼                            │ ...              │
+┌──────────────────┐                  └──────────────────┘
+│ topic_keywords   │
+├──────────────────┤
+│ id               │
+│ domain_id        │
+│ keyword          │
+│ description      │
+│ weight           │
+│ is_active        │
+│ ...              │
 └──────────────────┘
-         │
-         │          ┌──────────────────┐
-         └─────────►│ article_keywords │◄────────┐
-                    ├──────────────────┤         │
-                    │ article_id       │         │
-                    │ keyword_id       │         │
-                    │ ...              │         │
-                    └──────────────────┘         │
-                                 ▲               │
-                                 │               │
-                           ┌──────────────────┐  │
-                           │ keywords         │  │
-                           ├──────────────────┤  │
-                           │ id               │  │
-                           │ keyword (UNIQUE) │  │
-                           │ ...              │  │
-                           └──────────────────┘  │
-                                                 │
-                           ┌───────────────────────┐
-                           │ article_translations  │
-                           ├───────────────────────┤
-                           │ article_id (PK)       │
-                           │ title_zh              │
-                           │ summary_zh            │
-                           │ source_lang           │
-                           │ ...                   │
-                           └───────────────────────┘
+          │
+          │          ┌──────────────────┐
+          └─────────►│ article_keywords │◄────────┐
+                     ├──────────────────┤         │
+                     │ article_id       │         │
+                     │ keyword_id       │         │
+                     │ ...              │         │
+                     └──────────────────┘         │
+                                  ▲               │
+                                  │               │
+                            ┌──────────────────┐  │
+                            │ keywords         │  │
+                            ├──────────────────┤  │
+                            │ id               │  │
+                            │ keyword (UNIQUE) │  │
+                            │ ...              │  │
+                            └──────────────────┘  │
+                                                  │
+                            ┌───────────────────────┐
+                            │ article_translations  │
+                            ├───────────────────────┤
+                            │ article_id (PK)       │
+                            │ title_zh              │
+                            │ summary_zh            │
+                            │ source_lang           │
+                            │ ...                   │
+                            └───────────────────────┘
+
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│   llm_configs    │  │     settings     │  │  system_prompts   │
+├──────────────────┤  ├──────────────────┤  ├──────────────────┤
+│ id               │  │ id               │  │ id               │
+│ user_id          │  │ user_id          │  │ user_id          │
+│ provider         │  │ key              │  │ type             │
+│ base_url         │  │ value            │  │ name             │
+│ api_key_encrypted│  │ updated_at       │  │ template         │
+│ model            │  │ ...              │  │ variables        │
+│ is_default       │  └──────────────────┘  │ is_active        │
+│ timeout          │                       │ ...              │
+│ max_retries      │                       └──────────────────┘
+│ max_concurrent   │
+│ ...              │
+└──────────────────┘
 ```
 
 ### 核心表结构
+
+#### users (用户表)
+
+```sql
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### rss_sources (RSS 源表)
+
+```sql
+CREATE TABLE rss_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL UNIQUE,
+  last_fetched_at DATETIME,
+  fetch_interval INTEGER DEFAULT 3600,
+  status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+```
 
 #### articles (文章表)
 
@@ -182,20 +269,72 @@ CREATE TABLE articles (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   rss_source_id INTEGER NOT NULL,
   title TEXT NOT NULL,
-  url TEXT UNIQUE NOT NULL,
-  published_at TEXT,
+  url TEXT NOT NULL UNIQUE,
+  summary TEXT,
   content TEXT,
   markdown_content TEXT,
-  summary TEXT,           -- RSS 摘要（非 AI）
-  filter_status TEXT,     -- 'passed' | 'rejected' | 'pending'
+  filter_status TEXT DEFAULT 'pending' CHECK(filter_status IN ('pending', 'passed', 'rejected')),
   filter_score REAL,
   filtered_at DATETIME,
-  process_status TEXT,    -- 'pending' | 'processing' | 'completed' | 'failed'
+  process_status TEXT DEFAULT 'pending' CHECK(process_status IN ('pending', 'processing', 'completed', 'failed')),
   processed_at DATETIME,
+  published_at DATETIME,
   error_message TEXT,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (rss_source_id) REFERENCES rss_sources(id)
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (rss_source_id) REFERENCES rss_sources(id) ON DELETE CASCADE
+);
+```
+
+#### topic_domains (主题领域表)
+
+```sql
+CREATE TABLE topic_domains (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  is_active INTEGER DEFAULT 1,
+  priority INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(user_id, name)
+);
+```
+
+#### topic_keywords (主题关键词表)
+
+```sql
+CREATE TABLE topic_keywords (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  domain_id INTEGER NOT NULL,
+  keyword TEXT NOT NULL,
+  description TEXT,
+  weight REAL DEFAULT 1.0,
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (domain_id) REFERENCES topic_domains(id) ON DELETE CASCADE,
+  UNIQUE(domain_id, keyword)
+);
+```
+
+#### article_filter_logs (文章过滤日志表)
+
+```sql
+CREATE TABLE article_filter_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  article_id INTEGER NOT NULL,
+  domain_id INTEGER,
+  is_passed INTEGER NOT NULL,
+  relevance_score REAL,
+  matched_keywords TEXT,
+  filter_reason TEXT,
+  llm_response TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE,
+  FOREIGN KEY (domain_id) REFERENCES topic_domains(id) ON DELETE SET NULL
 );
 ```
 
@@ -234,6 +373,57 @@ CREATE TABLE article_translations (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
+);
+```
+
+#### llm_configs (LLM 配置表)
+
+```sql
+CREATE TABLE llm_configs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  provider TEXT NOT NULL,
+  base_url TEXT NOT NULL,
+  api_key_encrypted TEXT NOT NULL,
+  model TEXT NOT NULL,
+  is_default INTEGER DEFAULT 0,
+  timeout INTEGER DEFAULT 30000,
+  max_retries INTEGER DEFAULT 3,
+  max_concurrent INTEGER DEFAULT 5,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+```
+
+#### settings (设置表)
+
+```sql
+CREATE TABLE settings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(user_id, key)
+);
+```
+
+#### system_prompts (系统提示词表)
+
+```sql
+CREATE TABLE system_prompts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  name TEXT NOT NULL,
+  template TEXT NOT NULL,
+  variables TEXT,
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 ```
 

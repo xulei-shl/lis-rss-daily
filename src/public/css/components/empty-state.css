@@ -1,0 +1,43 @@
+/* ============================================
+   EMPTY STATE COMPONENT
+   ============================================ */
+
+.empty-state {
+  text-align: center;
+  padding: var(--space-12) var(--space-5);
+  color: var(--text-tertiary);
+}
+
+.empty-state-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto var(--space-4);
+  opacity: 0.3;
+}
+
+.empty-state-title {
+  font-family: var(--font-heading);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+
+.empty-state-desc {
+  font-size: var(--text-sm);
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+/* Compact variant */
+.empty-state--compact {
+  padding: var(--space-8) var(--space-5);
+}
+
+.empty-state--compact .empty-state-icon {
+  width: 48px;
+  height: 48px;
+}
+
+.empty-state--compact .empty-state-title {
+  font-size: var(--text-xl);
+}

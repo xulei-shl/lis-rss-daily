@@ -1,0 +1,30 @@
+/* ============================================
+   BADGE COMPONENT
+   ============================================ */
+
+.badge {
+  display: inline-block;
+  padding: 4px 10px;
+  font-family: var(--font-meta);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid currentColor;
+  border-radius: 0;
+}
+
+.badge.passed {
+  color: var(--green);
+  background: transparent;
+}
+
+.badge.rejected {
+  color: var(--red);
+  background: transparent;
+}
+
+.badge.pending {
+  color: var(--amber);
+  background: transparent;
+}
