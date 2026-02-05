@@ -60,7 +60,18 @@
 ```
 src/
 ├── api/                    # API 服务层
-│   ├── routes.ts          # 路由定义
+│   ├── routes.ts          # 路由聚合入口
+│   ├── routes/            # 路由模块拆分
+│   │   ├── auth.routes.ts
+│   │   ├── rss-sources.routes.ts
+│   │   ├── topic-domains.routes.ts
+│   │   ├── topic-keywords.routes.ts
+│   │   ├── llm-configs.routes.ts
+│   │   ├── articles.routes.ts
+│   │   ├── article-process.routes.ts
+│   │   ├── filter.routes.ts
+│   │   ├── search.routes.ts
+│   │   └── scheduler.routes.ts
 │   ├── web.ts             # Web 服务器
 │   ├── rss-sources.ts     # RSS 源 CRUD
 │   ├── articles.ts        # 文章服务
