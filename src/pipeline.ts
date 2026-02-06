@@ -1,16 +1,14 @@
 /**
- * Pipeline: Article processing workflow (scrape → analyze → export).
+ * 处理流水线：分析 → 导出。
  *
- * Three-stage pipeline for processing RSS articles:
- * 1. Scrape: Fetch full article content using Playwright + Defuddle
- * 2. Analyze: 生成关键词与翻译（LLM）
- * 3. Export: Export to Markdown file (data/exports/)
+ * 两阶段流程：
+ * 1. 分析：生成摘要、关键词与翻译（LLM）
+ * 2. 导出：导出 Markdown 文件（data/exports/）
  *
- * Includes retry mechanism with exponential backoff and batch processing.
+ * 包含重试与批处理机制。
  */
 
 import { getDb } from './db.js';
-import { scrapeUrl } from './scraper.js';
 import { analyzeArticle } from './agent.js';
 import { exportArticleMarkdown, type ArticleForExport } from './export.js';
 import { indexArticle } from './vector/indexer.js';
@@ -25,6 +23,7 @@ import {
   type ArticleWithSource,
 } from './api/articles.js';
 import { logger } from './logger.js';
+import { toSimpleMarkdown } from './utils/markdown.js';
 
 const log = logger.child({ module: 'pipeline' });
 
@@ -35,7 +34,7 @@ export interface ProcessResult {
   title: string;
   url: string;
   status: 'completed' | 'failed' | 'skipped';
-  stage?: 'scrape' | 'analyze' | 'export';
+  stage?: 'prepare' | 'analyze' | 'export';
   error?: string;
   duration?: number;
   reason?: string; // For skipped status
@@ -47,8 +46,8 @@ export interface ProcessOptions {
 }
 
 export interface ProcessArticleOptions {
-  /** 跳过抓取全文阶段，仅使用已有内容进行摘要 */
-  skipScrape?: boolean;
+  /** 预留扩展 */
+  reserved?: boolean;
 }
 
 export interface RetryConfig {
@@ -69,38 +68,22 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
 
 const MAX_CONCURRENT = parseInt(process.env.ARTICLE_PROCESS_MAX_CONCURRENT || '3', 10);
 
-const SCRAPE_REJECT_KEYWORDS = [
-  '安全验证',
-  '验证码',
-  '请完成安全验证',
-  '请依次点击',
-  'robot',
-  'captcha',
-  'access denied',
-  'forbidden',
-  '验证后继续',
-  '需要启用 javascript',
-  'enable javascript',
-  'are you human',
-  '拒绝访问',
-] as const;
-
 /* ── Main Processing Functions ── */
 
 /**
- * Process a single article through the full pipeline.
+ * 单篇文章处理流程。
  *
- * Flow:
- * 1. Check filter_status (only 'passed' articles are processed)
- * 2. Update process_status to 'processing'
- * 3. Stage 1: Scrape (if no markdown_content)
- * 4. Stage 2: Analyze (LLM 关键词 + 翻译)
- * 5. Stage 3: Export (Markdown file)
- * 6. Update process_status to 'completed' or 'failed'
+ * 流程：
+ * 1. 检查 filter_status（只处理 passed）
+ * 2. 更新 process_status 为 processing
+ * 3. 阶段1：准备 markdown_content
+ * 4. 阶段2：分析（LLM 摘要 + 关键词 + 翻译）
+ * 5. 阶段3：导出
+ * 6. 更新 process_status 为 completed 或 failed
  *
- * @param articleId - Article ID to process
- * @param userId - User ID (for permission check)
- * @returns Process result with status and details
+ * @param articleId - 文章 ID
+ * @param userId - 用户 ID
+ * @returns 处理结果
  */
 export async function processArticle(
   articleId: number,
@@ -142,7 +125,7 @@ export async function processArticle(
   log.info({ articleId, title: article.title }, '[start] Processing article');
 
   try {
-    // Run the three-stage pipeline
+    // 执行两阶段流程
     const result = await runPipeline(articleId, article, userId, options);
     const duration = Date.now() - startTime;
 
@@ -267,7 +250,7 @@ export async function retryFailedArticle(articleId: number, userId: number): Pro
 /* ── Internal Pipeline Logic ── */
 
 /**
- * Core pipeline logic with three stages.
+ * 核心处理逻辑（两阶段）。
  */
 async function runPipeline(
   articleId: number,
@@ -277,71 +260,34 @@ async function runPipeline(
 ): Promise<Omit<ProcessResult, 'articleId' | 'title' | 'url' | 'duration'>> {
   const db = getDb();
 
-  // ── Stage 1: Scrape (if needed) ──
-  if (options.skipScrape) {
-    // 跳过抓取阶段：使用已有内容作为 Markdown（保持 content 原样）
-    if (!article.markdown_content) {
-      if (article.content) {
-        await db
-          .updateTable('articles')
-          .set({
-            markdown_content: article.content,
-            updated_at: new Date().toISOString(),
-          })
-          .where('id', '=', articleId)
-          .execute();
-      } else {
-        const errMsg = 'Skip scrape enabled but no content available';
-        await updateArticleProcessStatus(articleId, 'failed', errMsg);
-        return { status: 'failed', stage: 'scrape', error: errMsg };
-      }
-    }
-    log.debug({ articleId }, '[stage1] Scrape skipped (skipScrape=true)');
-  } else if (!article.markdown_content) {
-    try {
-      log.debug({ articleId, url: article.url }, '[stage1] Starting scrape');
-
-      const scrapeResult = await executeWithRetry(
-        () => scrapeUrl(article.url),
-        DEFAULT_RETRY_CONFIG,
-        { articleId, stage: 'scrape' }
-      );
-
-      const scrapeMarkdown = (scrapeResult.markdown || '').trim();
-
-      if (isScrapeContentUsable(scrapeMarkdown, article.content || undefined)) {
-        // 保存抓取内容（仅在质量合格时覆盖）
-        await db
-          .updateTable('articles')
-          .set({
-            markdown_content: scrapeMarkdown,
-            updated_at: new Date().toISOString(),
-          })
-          .where('id', '=', articleId)
-          .execute();
-
-        log.info({ articleId, chars: scrapeMarkdown.length }, '[stage1] Scrape OK');
-      } else {
-        log.warn({ articleId, chars: scrapeMarkdown.length }, '[stage1] Scrape rejected by quality guard');
-      }
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      log.error({ articleId, error: errMsg }, '[stage1] Scrape failed');
-
-      await updateArticleProcessStatus(articleId, 'failed', `[scrape] ${errMsg}`);
-
-      return { status: 'failed', stage: 'scrape', error: errMsg };
+  // ── Stage 1: Prepare markdown_content ──
+  if (!article.markdown_content) {
+    if (article.content) {
+      const markdown = toSimpleMarkdown(article.content);
+      await db
+        .updateTable('articles')
+        .set({
+          markdown_content: markdown || null,
+          updated_at: new Date().toISOString(),
+        })
+        .where('id', '=', articleId)
+        .execute();
+      log.debug({ articleId }, '[stage1] Markdown generated from content');
+    } else {
+      const errMsg = 'No content available for analysis';
+      await updateArticleProcessStatus(articleId, 'failed', errMsg);
+      return { status: 'failed', stage: 'prepare', error: errMsg };
     }
   } else {
-    log.debug({ articleId }, '[stage1] Scrape skipped (already have content)');
+    log.debug({ articleId }, '[stage1] Markdown already exists');
   }
 
   // Re-fetch article to get markdown_content
   const updatedArticle = await getArticleById(articleId, userId);
   if (!updatedArticle?.markdown_content) {
-    const errMsg = 'Failed to load markdown content after scrape';
+    const errMsg = 'Failed to load markdown content';
     await updateArticleProcessStatus(articleId, 'failed', errMsg);
-    return { status: 'failed', stage: 'scrape', error: errMsg };
+    return { status: 'failed', stage: 'prepare', error: errMsg };
   }
 
   // ── Stage 2: Analyze (LLM) ──
@@ -366,6 +312,18 @@ async function runPipeline(
       DEFAULT_RETRY_CONFIG,
       { articleId, stage: 'analyze' }
     );
+
+    // 保存摘要
+    if (analysisResult.summary) {
+      await db
+        .updateTable('articles')
+        .set({
+          summary: analysisResult.summary,
+          updated_at: new Date().toISOString(),
+        })
+        .where('id', '=', articleId)
+        .execute();
+    }
 
     // Save keywords + translation
     await upsertArticleKeywords(articleId, userId, analysisResult.keywords);
@@ -490,30 +448,6 @@ async function executeWithRetry<T>(
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * 判断抓取内容是否可用（避免反爬/验证码页覆盖 RSS 正文）
- */
-function isScrapeContentUsable(scrapeMarkdown: string, rssContent?: string): boolean {
-  if (!scrapeMarkdown) return false;
-
-  const lower = scrapeMarkdown.toLowerCase();
-  for (const keyword of SCRAPE_REJECT_KEYWORDS) {
-    if (lower.includes(keyword.toLowerCase())) return false;
-  }
-
-  // 太短的内容通常无效
-  const minLen = 200;
-  if (scrapeMarkdown.length < minLen) return false;
-
-  if (rssContent) {
-    // 抓取内容明显短于 RSS 内容时不覆盖
-    const ratio = scrapeMarkdown.length / Math.max(rssContent.length, 1);
-    if (ratio < 0.6) return false;
-  }
-
-  return true;
 }
 
 /* ── Utility Functions ── */

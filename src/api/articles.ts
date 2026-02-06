@@ -127,7 +127,6 @@ export async function saveArticles(
         item.description,
         item.contentSnippet,
       ]);
-      const rssSummary = pickRssSummary([item.description, item.contentSnippet]);
       const markdown = toSimpleMarkdown(rawContent);
 
       const result = await db
@@ -136,10 +135,10 @@ export async function saveArticles(
           rss_source_id: rssSourceId,
           title: item.title,
           url: item.link,
-          // RSS 自带摘要
-          summary: rssSummary,
-          // content 与 markdown_content 都存 Markdown
-          content: markdown || null,
+          // RSS 入库阶段不生成摘要（由后续 AI 分析生成）
+          summary: null,
+          // content 保存原始 RSS 文本，markdown_content 保存清洗后的 Markdown
+          content: rawContent || null,
           markdown_content: markdown || null,
           filter_status: 'pending',
           process_status: 'pending',
@@ -202,18 +201,6 @@ function chooseBestContent(candidates: Array<string | undefined | null>): string
   }
 
   return best;
-}
-
-/**
- * 选择 RSS 摘要（优先 description，其次 contentSnippet）
- */
-function pickRssSummary(candidates: Array<string | undefined | null>): string | null {
-  for (const c of candidates) {
-    if (typeof c === 'string' && c.trim().length > 0) {
-      return c.trim();
-    }
-  }
-  return null;
 }
 
 /**

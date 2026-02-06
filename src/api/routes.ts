@@ -10,6 +10,7 @@ import articleRoutes from './routes/articles.routes.js';
 import articleProcessRoutes from './routes/article-process.routes.js';
 import searchRoutes from './routes/search.routes.js';
 import settingsRoutes from './routes/settings.routes.js';
+import systemPromptRoutes from './routes/system-prompts.routes.js';
 
 const router = express.Router();
 
@@ -24,5 +25,6 @@ router.use(articleRoutes);
 router.use(articleProcessRoutes);
 router.use(searchRoutes);
 router.use(settingsRoutes);
+router.use(systemPromptRoutes);
 
 export default router;

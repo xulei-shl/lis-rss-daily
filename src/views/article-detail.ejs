@@ -94,7 +94,7 @@
     margin-top: 0;
   }
 
-  /* RSS 摘要 */
+  /* AI 摘要 */
   .ai-summary {
     font-size: var(--text-base);
     line-height: 1.8;
@@ -418,9 +418,9 @@
         </div>
       </header>
 
-      <!-- RSS 摘要 -->
+      <!-- AI 摘要 -->
       <section class="article-section" id="summarySection" style="display: none;">
-        <h2 class="section-header">RSS 摘要</h2>
+        <h2 class="section-header">AI 摘要</h2>
         <div class="ai-summary" id="rssSummary"></div>
       </section>
 
@@ -436,16 +436,10 @@
         <ul class="filter-list" id="filterList"></ul>
       </section>
 
-      <!-- RSS Content Section -->
+      <!-- 正文 -->
       <section class="article-section" id="rssContentSection" style="display: none;">
-        <h2 class="section-header">RSS 正文</h2>
+        <h2 class="section-header">正文</h2>
         <div class="article-full-content" id="rssContent"></div>
-      </section>
-
-      <!-- Scraped Content Section -->
-      <section class="article-section" id="scrapeContentSection" style="display: none;">
-        <h2 class="section-header">抓取全文</h2>
-        <div class="article-full-content" id="scrapeContent"></div>
       </section>
     </div>
 
@@ -599,7 +593,7 @@ function renderArticle(article) {
   const processBtn = document.getElementById('processBtn');
   processBtn.style.display = (article.process_status === 'pending' || article.process_status === 'failed') ? 'inline-block' : 'none';
 
-  // RSS 摘要
+  // AI 摘要
   const summarySection = document.getElementById('summarySection');
   if (article.summary) {
     summarySection.style.display = 'block';
@@ -650,18 +644,12 @@ function renderArticle(article) {
     }).join('');
   }
 
-  // RSS 正文：始终优先显示 content
+  // 正文：优先使用 markdown_content
   const rssSection = document.getElementById('rssContentSection');
-  if (article.content) {
+  const mainContent = article.markdown_content || article.content;
+  if (mainContent) {
     rssSection.style.display = 'block';
-    document.getElementById('rssContent').innerHTML = formatMarkdown(article.content);
-  }
-
-  // 抓取全文：存在且与 RSS 正文不同才显示
-  const scrapeSection = document.getElementById('scrapeContentSection');
-  if (article.markdown_content && article.markdown_content !== article.content) {
-    scrapeSection.style.display = 'block';
-    document.getElementById('scrapeContent').innerHTML = formatMarkdown(article.markdown_content);
+    document.getElementById('rssContent').innerHTML = formatMarkdown(mainContent);
   }
 
   // 关键词

@@ -1,5 +1,37 @@
 <%- include('layout', { pageTitle: pageTitle, pageStyles: '', body: `
 <style>
+  .settings-tabs {
+    max-width: 1200px;
+    margin: 16px auto 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .settings-tab {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--dim);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .settings-tab.active {
+    color: var(--text);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px rgba(26, 77, 122, 0.2);
+  }
+
+  .settings-panel {
+    display: none;
+  }
+
+  .settings-panel.active {
+    display: block;
+  }
+
   .settings-container {
     max-width: 1200px;
     margin: 0 auto;
@@ -138,6 +170,14 @@
   }
 </style>
 
+<div class="settings-tabs">
+  <button class="settings-tab active" data-tab="rss">RSS 订阅源</button>
+  <button class="settings-tab" data-tab="llm">LLM 配置</button>
+  <button class="settings-tab" data-tab="chroma">Chroma 设置</button>
+  <button class="settings-tab" data-tab="prompts">系统提示词</button>
+</div>
+
+<section class="settings-panel active" data-tab="rss">
 <div class="settings-container">
   <div class="section-header">
     <h2>RSS 订阅源</h2>
@@ -168,6 +208,7 @@
     <p style="font-size: 0.9rem; margin-top: 8px;">点击上方按钮添加您的第一个订阅源</p>
   </div>
 </div>
+</section>
 
 <!-- Add/Edit Modal -->
 <div class="modal-overlay" id="sourceModal">
@@ -214,6 +255,28 @@
 </div>
 
 <script>
+const tabButtons = Array.from(document.querySelectorAll('.settings-tab'));
+const tabPanels = Array.from(document.querySelectorAll('.settings-panel'));
+
+function setActiveTab(tabName) {
+  tabButtons.forEach((btn) => {
+    const isActive = btn.dataset.tab === tabName;
+    btn.classList.toggle('active', isActive);
+  });
+  tabPanels.forEach((panel) => {
+    const isActive = panel.dataset.tab === tabName;
+    panel.classList.toggle('active', isActive);
+  });
+}
+
+tabButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    setActiveTab(btn.dataset.tab);
+  });
+});
+
+setActiveTab('rss');
+
 let rssSources = [];
 
 // Load RSS sources on page load
@@ -478,6 +541,7 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     closeModal();
     closeLLMModal();
+    closePromptModal();
   }
 });
 </script>
@@ -485,9 +549,9 @@ document.addEventListener('keydown', function(e) {
 <style>
 .llm-section {
   max-width: 1200px;
-  margin: 40px auto 0;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
+  margin: 0 auto;
+  padding-top: 0;
+  border-top: none;
 }
 
 .llm-table {
@@ -606,9 +670,9 @@ document.addEventListener('keydown', function(e) {
 
 .chroma-section {
   max-width: 1200px;
-  margin: 40px auto 0;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
+  margin: 0 auto;
+  padding-top: 0;
+  border-top: none;
 }
 
 .chroma-form {
@@ -640,8 +704,44 @@ document.addEventListener('keydown', function(e) {
     grid-template-columns: 1fr;
   }
 }
+
+.system-prompts-section {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.prompts-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.prompts-table th,
+.prompts-table td {
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.prompts-table th {
+  background: var(--bg);
+  font-weight: 600;
+  color: var(--dim);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.prompt-variable-hint {
+  margin-top: 8px;
+  color: var(--dim);
+  font-size: 0.85rem;
+}
 </style>
 
+<section class="settings-panel" data-tab="llm">
 <!-- LLM Configs Section -->
 <div class="llm-section">
   <div class="section-header">
@@ -674,8 +774,10 @@ document.addEventListener('keydown', function(e) {
     <p style="font-size: 0.9rem; margin-top: 8px;">点击上方按钮添加您的第一个 LLM 配置</p>
   </div>
 </div>
+</section>
 
 <!-- Chroma Settings Section -->
+<section class="settings-panel" data-tab="chroma">
 <div class="chroma-section">
   <div class="section-header">
     <h2>Chroma 设置</h2>
@@ -706,6 +808,83 @@ document.addEventListener('keydown', function(e) {
     </div>
   </form>
   <div id="chromaStatus" class="chroma-status"></div>
+</div>
+</section>
+
+<section class="settings-panel" data-tab="prompts">
+  <div class="system-prompts-section">
+    <div class="section-header">
+      <h2>系统提示词</h2>
+      <button class="btn btn-primary" onclick="showPromptAddModal()">+ 添加提示词</button>
+    </div>
+
+    <table class="prompts-table" id="systemPromptsTable">
+      <thead>
+        <tr>
+          <th>名称</th>
+          <th>类型</th>
+          <th>启用</th>
+          <th>更新时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="systemPromptsBody">
+        <!-- 动态加载 -->
+      </tbody>
+    </table>
+
+    <div id="systemPromptsEmpty" class="empty-state" style="display: none;">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9h8M8 13h6M9 17h6M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" />
+      </svg>
+      <p>暂无系统提示词</p>
+      <p style="font-size: 0.9rem; margin-top: 8px;">点击上方按钮添加您的第一条提示词</p>
+    </div>
+  </div>
+</section>
+
+<!-- Add/Edit System Prompt Modal -->
+<div class="modal-overlay" id="systemPromptModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="promptModalTitle">添加系统提示词</h3>
+      <button class="modal-close" onclick="closePromptModal()">&times;</button>
+    </div>
+    <form id="systemPromptForm">
+      <input type="hidden" id="systemPromptId">
+      <div class="form-group">
+        <label for="promptName">名称 *</label>
+        <input type="text" id="promptName" required placeholder="例如: 文章过滤提示词">
+      </div>
+      <div class="form-group">
+        <label for="promptType">类型 *</label>
+        <select id="promptType" required onchange="updatePromptVariableHint()">
+          <option value="filter">filter</option>
+          <option value="analysis">analysis</option>
+          <option value="summary">summary</option>
+          <option value="keywords">keywords</option>
+          <option value="translation">translation</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="promptTemplate">模板 *</label>
+        <textarea id="promptTemplate" rows="10" required placeholder="请在此输入提示词模板..."></textarea>
+        <div class="prompt-variable-hint" id="promptVariableHint"></div>
+      </div>
+      <div class="form-group">
+        <label for="promptVariables">变量 (JSON)</label>
+        <textarea id="promptVariables" rows="4" placeholder='{"ARTICLE_TITLE":"文章标题","ARTICLE_CONTENT":"正文"}'></textarea>
+      </div>
+      <div class="form-group">
+        <label for="promptActive">启用</label>
+        <input type="checkbox" id="promptActive">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closePromptModal()">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <!-- Add/Edit LLM Config Modal -->
@@ -773,9 +952,19 @@ document.addEventListener('keydown', function(e) {
 
 <script>
 let llmConfigs = [];
+let systemPrompts = [];
+
+const promptVariableHints = {
+  filter: ['TOPIC_DOMAINS', 'ARTICLE_TITLE', 'ARTICLE_URL', 'ARTICLE_DESCRIPTION'],
+  analysis: ['ARTICLE_TITLE', 'ARTICLE_SOURCE', 'ARTICLE_AUTHOR', 'PUBLISHED_DATE', 'ARTICLE_CONTENT'],
+  summary: ['ARTICLE_TITLE', 'ARTICLE_CONTENT', 'ARTICLE_SUMMARY'],
+  keywords: ['ARTICLE_TITLE', 'ARTICLE_SUMMARY', 'ARTICLE_URL', 'ARTICLE_CONTENT'],
+  translation: ['ARTICLE_TITLE', 'ARTICLE_SUMMARY'],
+};
 
 // Load LLM configs on page load
 loadLLMConfigs();
+loadSystemPrompts();
 
 async function loadLLMConfigs() {
   try {
@@ -874,6 +1063,226 @@ function editLLMConfig(id) {
 function closeLLMModal() {
   document.getElementById('llmConfigModal').classList.remove('active');
 }
+
+function showPromptAddModal() {
+  document.getElementById('promptModalTitle').textContent = '添加系统提示词';
+  document.getElementById('systemPromptId').value = '';
+  document.getElementById('promptName').value = '';
+  document.getElementById('promptType').value = 'filter';
+  document.getElementById('promptTemplate').value = '';
+  document.getElementById('promptVariables').value = '';
+  document.getElementById('promptActive').checked = true;
+  updatePromptVariableHint();
+  document.getElementById('systemPromptModal').classList.add('active');
+  document.getElementById('promptName').focus();
+}
+
+function editPrompt(id) {
+  const prompt = systemPrompts.find((p) => p.id === id);
+  if (!prompt) return;
+
+  document.getElementById('promptModalTitle').textContent = '编辑系统提示词';
+  document.getElementById('systemPromptId').value = prompt.id;
+  document.getElementById('promptName').value = prompt.name || '';
+  document.getElementById('promptType').value = prompt.type || 'filter';
+  document.getElementById('promptTemplate').value = prompt.template || '';
+  document.getElementById('promptActive').checked = prompt.is_active === 1;
+
+  if (prompt.variables) {
+    try {
+      const parsed = JSON.parse(prompt.variables);
+      document.getElementById('promptVariables').value = JSON.stringify(parsed, null, 2);
+    } catch (err) {
+      document.getElementById('promptVariables').value = prompt.variables;
+    }
+  } else {
+    document.getElementById('promptVariables').value = '';
+  }
+
+  updatePromptVariableHint();
+  document.getElementById('systemPromptModal').classList.add('active');
+}
+
+function closePromptModal() {
+  document.getElementById('systemPromptModal').classList.remove('active');
+}
+
+function updatePromptVariableHint() {
+  const type = document.getElementById('promptType').value;
+  const hintEl = document.getElementById('promptVariableHint');
+  const vars = promptVariableHints[type] || [];
+  if (vars.length === 0) {
+    hintEl.textContent = '可用变量：无固定变量';
+  } else {
+    const formatted = vars.map((v) => '{{' + v + '}}').join('、');
+    hintEl.textContent = '可用变量：' + formatted;
+  }
+}
+
+async function loadSystemPrompts() {
+  try {
+    const res = await fetch('/api/system-prompts');
+    const data = await res.json();
+    systemPrompts = data.prompts || [];
+    renderSystemPromptsTable();
+  } catch (err) {
+    console.error('Failed to load system prompts:', err);
+  }
+}
+
+function renderSystemPromptsTable() {
+  const tbody = document.getElementById('systemPromptsBody');
+  const emptyState = document.getElementById('systemPromptsEmpty');
+  const table = document.getElementById('systemPromptsTable');
+
+  if (systemPrompts.length === 0) {
+    table.style.display = 'none';
+    emptyState.style.display = 'block';
+    return;
+  }
+
+  table.style.display = 'table';
+  emptyState.style.display = 'none';
+
+  tbody.innerHTML = systemPrompts.map((prompt) => \`
+    <tr>
+      <td>\${escapeHtml(prompt.name || '')}</td>
+      <td><span class="type-badge">\${escapeHtml(prompt.type || '')}</span></td>
+      <td>
+        <span class="status-badge \${prompt.is_active === 1 ? 'active' : 'inactive'}">
+          \${prompt.is_active === 1 ? '启用' : '禁用'}
+        </span>
+      </td>
+      <td>\${formatDate(prompt.updated_at)}</td>
+      <td>
+        <div class="action-buttons">
+          <button class="btn-icon" onclick="toggleSystemPromptActive(\${prompt.id}, \${prompt.is_active === 1 ? 'false' : 'true'})">
+            \${prompt.is_active === 1 ? '禁用' : '启用'}
+          </button>
+          <button class="btn-icon" onclick="editPrompt(\${prompt.id})">编辑</button>
+          <button class="btn-icon" onclick="deleteSystemPrompt(\${prompt.id})">删除</button>
+        </div>
+      </td>
+    </tr>
+  \`).join('');
+}
+
+document.getElementById('systemPromptForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const id = document.getElementById('systemPromptId').value;
+  const variablesInput = document.getElementById('promptVariables').value.trim();
+  if (variablesInput) {
+    try {
+      JSON.parse(variablesInput);
+    } catch (err) {
+      await showConfirm('变量必须是合法的 JSON', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
+      return;
+    }
+  }
+
+  const payload = {
+    name: document.getElementById('promptName').value.trim(),
+    type: document.getElementById('promptType').value.trim(),
+    template: document.getElementById('promptTemplate').value,
+    variables: variablesInput || null,
+    isActive: document.getElementById('promptActive').checked,
+  };
+
+  try {
+    const url = id ? '/api/system-prompts/' + id : '/api/system-prompts';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
+      closePromptModal();
+      loadSystemPrompts();
+    } else {
+      const result = await res.json();
+      await showConfirm(result.error || '保存失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
+    }
+  } catch (err) {
+    await showConfirm('保存失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
+  }
+});
+
+async function toggleSystemPromptActive(id, isActive) {
+  try {
+    const res = await fetch('/api/system-prompts/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isActive }),
+    });
+
+    if (res.ok) {
+      loadSystemPrompts();
+    } else {
+      const result = await res.json();
+      await showConfirm(result.error || '更新失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
+    }
+  } catch (err) {
+    await showConfirm('更新失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
+  }
+}
+
+async function deleteSystemPrompt(id) {
+  const confirmed = await showConfirm('确定要删除这个系统提示词吗？', {
+    title: '删除系统提示词',
+    okText: '删除',
+    cancelText: '取消'
+  });
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/system-prompts/' + id, { method: 'DELETE' });
+    if (res.ok) {
+      loadSystemPrompts();
+    } else {
+      const result = await res.json();
+      await showConfirm(result.error || '删除失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
+    }
+  } catch (err) {
+    await showConfirm('删除失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
+  }
+}
+
+document.getElementById('systemPromptModal').addEventListener('click', function(e) {
+  if (e.target === this) {
+    closePromptModal();
+  }
+});
 
 function updateProviderDefaults() {
   const configType = document.getElementById('llmConfigType').value;

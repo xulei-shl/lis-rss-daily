@@ -1,5 +1,5 @@
 /**
- * Agent: 生成关键词与翻译（不生成摘要）。
+ * Agent: 生成摘要、关键词与翻译。
  */
 
 import { getUserLLMProvider, getLLM } from './llm.js';
@@ -29,6 +29,7 @@ export interface TranslationResult {
 }
 
 export interface AnalysisResult {
+  summary?: string;
   keywords: string[];
   usedFallback: boolean;
   translation?: TranslationResult | null;
@@ -41,14 +42,52 @@ export async function analyzeArticle(
   userId?: number,
   fallbackKeywords: string[] = []
 ): Promise<AnalysisResult> {
-  const keywordResult = await generateKeywords(input, userId, fallbackKeywords);
-  const translation = await translateIfNeeded(input.title, input.summary, userId);
+  const summary = await generateSummary(input, userId);
+  const keywordInput: KeywordInput = {
+    ...input,
+    summary: summary || input.summary,
+  };
+  const keywordResult = await generateKeywords(keywordInput, userId, fallbackKeywords);
+  const translation = await translateIfNeeded(input.title, summary || input.summary, userId);
 
   return {
+    summary,
     keywords: keywordResult.keywords,
     usedFallback: keywordResult.usedFallback,
     translation,
   };
+}
+
+/**
+ * 生成摘要（LLM）。
+ */
+export async function generateSummary(
+  input: KeywordInput,
+  userId?: number
+): Promise<string | undefined> {
+  const content = (input.markdown || input.summary || '').trim();
+  if (!content) return undefined;
+
+  const systemPrompt = '你是文章摘要助手，请用中文生成 200-300 字摘要，信息准确，不要添加编造内容。';
+  const userPrompt = `标题: ${input.title || '无'}
+正文: ${content.slice(0, 3000)}`;
+
+  const llm = userId ? await getUserLLMProvider(userId) : getLLM();
+
+  try {
+    const text = await llm.chat(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      { maxTokens: 512, label: 'summary' }
+    );
+
+    return safeString(text);
+  } catch (error) {
+    log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Summary LLM failed');
+    return undefined;
+  }
 }
 
 /**
