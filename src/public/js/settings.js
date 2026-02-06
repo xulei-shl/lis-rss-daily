@@ -296,9 +296,7 @@ const DEFAULT_PROMPT_VARIABLES = {
   TOPIC_DOMAINS: '主题领域列表（从 topic_domains 和 topic_keywords 表动态构建）',
   ARTICLE_TITLE: '文章标题',
   ARTICLE_URL: '文章链接',
-  ARTICLE_DESCRIPTION: '文章摘要',
   ARTICLE_CONTENT: '正文内容',
-  ARTICLE_SUMMARY: '已有摘要',
   ARTICLE_SOURCE: '文章来源',
   ARTICLE_AUTHOR: '文章作者',
   PUBLISHED_DATE: '发布日期'

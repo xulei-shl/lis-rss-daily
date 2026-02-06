@@ -130,8 +130,6 @@
   | 变量 | 数据来源 | 涉及表 |
   |------|---------|-------|
   | `{{TOPIC_DOMAINS}}` | 运行时从数据库查询 + 格式化 | `topic_domains` + `topic_keywords` |
-  | `{{ARTICLE_TITLE}}` | 运行时参数 | `articles.title` |
-  | `{{ARTICLE_URL}}` | 运行时参数 | `articles.url` |
-  | `{{ARTICLE_DESCRIPTION}}` | 运行时参数 | `articles.description` |
-  | `{{ARTICLE_CONTENT}}` | 运行时参数 | `articles.content` |
-  | `{{ARTICLE_SUMMARY}}` | 运行时参数 | `articles.summary` |
+  | `{{ARTICLE_TITLE}}` | 直接读取 | `articles.title` |
+  | `{{ARTICLE_URL}}` | 直接读取 | `articles.url` |
+  | `{{ARTICLE_CONTENT}}` | 优先 Markdown，回退原始内容 | `articles.markdown_content \|\| articles.content` |

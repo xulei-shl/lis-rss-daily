@@ -282,7 +282,6 @@ VALUES (
 ## 待分析文章：
 标题：{{ARTICLE_TITLE}}
 链接：{{ARTICLE_URL}}
-摘要：{{ARTICLE_DESCRIPTION}}
 
 ## 输出要求：
 请以 JSON 格式输出，包含以下字段：
@@ -298,7 +297,7 @@ VALUES (
 - 0.6-0.8：中度相关，与主题领域有关联
 - 0.3-0.5：低度相关，可能仅提及
 - 0.0-0.2：不相关',
-  '{"TOPIC_DOMAINS": "主题领域列表", "ARTICLE_TITLE": "文章标题", "ARTICLE_URL": "文章链接", "ARTICLE_DESCRIPTION": "文章摘要"}',
+  '{"TOPIC_DOMAINS": "主题领域列表", "ARTICLE_TITLE": "文章标题", "ARTICLE_URL": "文章链接"}',
   1
 );
 

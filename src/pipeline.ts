@@ -1,22 +1,20 @@
 /**
- * 处理流水线：分析 → 导出。
+ * 处理流水线：翻译 → 导出。
  *
  * 两阶段流程：
- * 1. 分析：生成摘要、关键词与翻译（LLM）
+ * 1. 翻译：英文内容翻译（LLM）
  * 2. 导出：导出 Markdown 文件（data/exports/）
  *
  * 包含重试与批处理机制。
  */
 
 import { getDb } from './db.js';
-import { analyzeArticle } from './agent.js';
+import { translateArticleIfNeeded } from './agent.js';
 import { exportArticleMarkdown, type ArticleForExport } from './export.js';
 import { indexArticle } from './vector/indexer.js';
 import {
   getArticleById,
-  getArticleFilterMatchedKeywords,
   getArticleFilterMatches,
-  upsertArticleKeywords,
   upsertArticleTranslation,
   updateArticleProcessStatus,
   refreshRelatedArticles,
@@ -77,7 +75,7 @@ const MAX_CONCURRENT = parseInt(process.env.ARTICLE_PROCESS_MAX_CONCURRENT || '3
  * 1. 检查 filter_status（只处理 passed）
  * 2. 更新 process_status 为 processing
  * 3. 阶段1：准备 markdown_content
- * 4. 阶段2：分析（LLM 摘要 + 关键词 + 翻译）
+ * 4. 阶段2：翻译（英文才翻译）
  * 5. 阶段3：导出
  * 6. 更新 process_status 为 completed 或 failed
  *
@@ -290,63 +288,41 @@ async function runPipeline(
     return { status: 'failed', stage: 'prepare', error: errMsg };
   }
 
-  // ── Stage 2: Analyze (LLM) ──
-  let analysisResult;
+  // ── Stage 2: Translate (LLM) ──
+  let translationResult;
   try {
-    log.debug({ articleId }, '[stage2] Starting LLM analysis');
+    log.debug({ articleId }, '[stage2] Starting LLM translation');
 
-    const filterMatchedKeywords = await getArticleFilterMatchedKeywords(articleId, userId);
-
-    analysisResult = await executeWithRetry(
+    translationResult = await executeWithRetry(
       () =>
-        analyzeArticle(
-          {
-            url: updatedArticle.url,
-            title: updatedArticle.title,
-            summary: updatedArticle.summary ?? undefined,
-            markdown: updatedArticle.markdown_content ?? undefined,
-          },
-          userId,
-          filterMatchedKeywords
+        translateArticleIfNeeded(
+          updatedArticle.title,
+          updatedArticle.markdown_content ?? updatedArticle.content ?? undefined,
+          userId
         ),
       DEFAULT_RETRY_CONFIG,
-      { articleId, stage: 'analyze' }
+      { articleId, stage: 'translate' }
     );
 
-    // 保存摘要
-    if (analysisResult.summary) {
-      await db
-        .updateTable('articles')
-        .set({
-          summary: analysisResult.summary,
-          updated_at: new Date().toISOString(),
-        })
-        .where('id', '=', articleId)
-        .execute();
-    }
-
-    // Save keywords + translation
-    await upsertArticleKeywords(articleId, userId, analysisResult.keywords);
-
-    if (analysisResult.translation && (analysisResult.translation.titleZh || analysisResult.translation.summaryZh)) {
+    if (translationResult && (translationResult.titleZh || translationResult.summaryZh)) {
       await upsertArticleTranslation(articleId, userId, {
-        title_zh: analysisResult.translation.titleZh ?? null,
-        summary_zh: analysisResult.translation.summaryZh ?? null,
-        source_lang: analysisResult.translation.sourceLang ?? null,
+        title_zh: translationResult.titleZh ?? null,
+        summary_zh: translationResult.summaryZh ?? null,
+        source_lang: translationResult.sourceLang ?? null,
       });
     }
 
     log.info(
-      { articleId, keywords: analysisResult.keywords.length, usedFallback: analysisResult.usedFallback },
-      '[stage2] Analyze OK'
+      { articleId, translated: Boolean(translationResult), usedFallback: translationResult?.usedFallback },
+      '[stage2] Translate OK'
     );
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
-    log.error({ articleId, error: errMsg }, '[stage2] Analyze failed');
+    log.error({ articleId, error: errMsg }, '[stage2] Translate failed');
 
-    await updateArticleProcessStatus(articleId, 'failed', `[analyze] ${errMsg}`);
+    await updateArticleProcessStatus(articleId, 'failed', `[translate] ${errMsg}`);
 
-    return { status: 'failed', stage: 'analyze', error: errMsg };
+    return { status: 'failed', stage: 'translate', error: errMsg };
   }
 
   // ── Stage 3: Export ──
@@ -358,22 +334,21 @@ async function runPipeline(
     // Prepare article for export with analysis results
     const articleForExport: ArticleForExport = {
       ...updatedArticle,
-      keywords: analysisResult?.keywords,
-      translation: analysisResult?.translation ?? undefined,
+      translation: translationResult ?? undefined,
       filter_matches: filterMatches,
     };
 
     const exportPath = await exportArticleMarkdown(articleForExport);
-    indexArticle(articleId, userId).catch((error) => {
-      log.warn({ articleId, error }, '[stage3] 向量索引失败');
-    });
-
     log.info({ articleId, path: exportPath }, '[stage3] Export OK');
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
     log.warn({ articleId, error: errMsg }, '[stage3] Export failed (non-fatal)');
     // Export failure is not fatal - the article is still processed
   }
+
+  indexArticle(articleId, userId).catch((error) => {
+    log.warn({ articleId, error }, '[stage3] 向量索引失败');
+  });
 
   // ── Stage 4: Related Articles (缓存计算，非致命) ──
   try {

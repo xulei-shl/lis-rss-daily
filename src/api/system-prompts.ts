@@ -49,7 +49,6 @@ const DEFAULT_SYSTEM_PROMPTS: Array<{
 ## 待分析文章：
 标题：{{ARTICLE_TITLE}}
 链接：{{ARTICLE_URL}}
-摘要：{{ARTICLE_DESCRIPTION}}
 
 ## 输出要求：
 请以 JSON 格式输出，包含以下字段：

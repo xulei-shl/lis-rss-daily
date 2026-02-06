@@ -529,7 +529,7 @@ export class RSSScheduler {
     const articles = await db
       .selectFrom('articles')
       .where('id', 'in', articleIds)
-      .select(['id', 'title', 'summary', 'content', 'url'])
+      .select(['id', 'title', 'summary', 'content', 'markdown_content', 'url'])
       .execute();
 
     for (const article of articles) {
@@ -542,7 +542,8 @@ export class RSSScheduler {
           title: article.title,
           // 过滤阶段使用 RSS 的摘要片段作为描述，避免占用 summary 字段
           description: item?.contentSnippet || item?.description || '',
-          content: article.content || undefined,
+          // 优先使用清洗后的 Markdown，回退到原始 content
+          content: article.markdown_content || article.content || undefined,
         };
 
         const result = await filterArticle(input);
@@ -550,7 +551,7 @@ export class RSSScheduler {
         if (result.passed) {
           passedCount++;
           filterLog.debug({ articleId: article.id }, 'Article passed filter');
-            // 通过过滤后自动执行后续流程（仅摘要 + 向量索引）
+            // 通过过滤后自动执行后续流程（按需翻译 + 向量索引）
           processArticle(article.id, userId)
             .then((res) => {
               filterLog.debug({ articleId: article.id, status: res.status }, 'Auto process completed');

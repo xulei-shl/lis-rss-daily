@@ -47,14 +47,9 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
       source: 'articles.url',
       required: false,
     },
-    ARTICLE_DESCRIPTION: {
-      description: '文章摘要',
-      source: 'articles.description',
-      required: true,
-    },
     ARTICLE_CONTENT: {
       description: '正文内容（截取前 2000 字符）',
-      source: 'articles.content',
+      source: 'articles.markdown_content || articles.content',
       required: false,
     },
   },
@@ -65,18 +60,13 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
   summary: {
     ARTICLE_TITLE: {
       description: '文章标题',
-      source: '运行时输入',
+      source: 'articles.title',
       required: true,
     },
     ARTICLE_CONTENT: {
       description: '正文内容（截取前 3000 字符）',
-      source: '运行时输入',
+      source: 'articles.markdown_content || articles.summary',
       required: true,
-    },
-    ARTICLE_SUMMARY: {
-      description: '已有摘要',
-      source: '运行时输入',
-      required: false,
     },
   },
 
@@ -86,22 +76,17 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
   keywords: {
     ARTICLE_TITLE: {
       description: '文章标题',
-      source: '运行时输入',
+      source: 'articles.title',
       required: true,
     },
-    ARTICLE_SUMMARY: {
-      description: '文章摘要',
-      source: '运行时输入',
+    ARTICLE_CONTENT: {
+      description: '正文内容（截取前 1200 字符）',
+      source: 'articles.markdown_content',
       required: true,
     },
     ARTICLE_URL: {
       description: '文章链接',
-      source: '运行时输入',
-      required: false,
-    },
-    ARTICLE_CONTENT: {
-      description: '正文内容（截取前 1200 字符）',
-      source: '运行时输入',
+      source: 'articles.url',
       required: false,
     },
   },
@@ -112,12 +97,12 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
   translation: {
     ARTICLE_TITLE: {
       description: '文章标题',
-      source: '运行时输入',
+      source: 'articles.title',
       required: false,
     },
-    ARTICLE_SUMMARY: {
-      description: '文章摘要',
-      source: '运行时输入',
+    ARTICLE_CONTENT: {
+      description: '正文内容（截取前 3000 字符）',
+      source: 'articles.markdown_content || articles.content',
       required: false,
     },
   },

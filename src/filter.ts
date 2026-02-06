@@ -317,7 +317,6 @@ async function llmFilter(
     TOPIC_DOMAINS: domainsText,
     ARTICLE_TITLE: input.title || '无',
     ARTICLE_URL: input.url || '无',
-    ARTICLE_DESCRIPTION: input.description || '无',
     ARTICLE_CONTENT: input.content ? input.content.substring(0, 2000) : '',
   });
   const userPrompt = `请评估以下文章：
@@ -439,10 +438,12 @@ async function recordFilterLog(
 async function recordFilterResults(
   input: FilterInput,
   domainMatches: DomainMatchResult[],
-  llmResponse: string | null
+  options: {
+    llmResponse?: string | null;
+    overallPassed: boolean;
+    fallbackReason?: string;
+  }
 ): Promise<void> {
-  const db = getDb();
-
   // Record each domain evaluation
   for (const match of domainMatches) {
     await recordFilterLog(
@@ -456,15 +457,19 @@ async function recordFilterResults(
     );
   }
 
-  // If no domains matched, record a general rejection log
-  if (domainMatches.length === 0) {
+  const hasDomainLog = domainMatches.length > 0;
+  const llmResponse = options.llmResponse ?? null;
+  const reason = options.fallbackReason
+    || (hasDomainLog ? 'LLM 原始响应' : 'No keyword matches found');
+
+  if (!hasDomainLog || llmResponse) {
     await recordFilterLog(
       input.articleId,
       null,
-      false,
+      options.overallPassed,
       null,
       null,
-      'No keyword matches found',
+      reason,
       llmResponse
     );
   }
@@ -523,12 +528,15 @@ export async function filterArticle(
     }
     const domainMatches = keywordOnlyFilter(keywordResult.matchedDomains, minScore);
 
-    await recordFilterResults(input, domainMatches, null);
-
     // Auto-update filter_status
     const passed = domainMatches.length > 0;
     const relevanceScore = passed ? Math.max(...domainMatches.map((d) => d.relevanceScore ?? 0)) : 0;
     await updateArticleFilterStatus(input.articleId, passed ? 'passed' : 'rejected', relevanceScore);
+
+    await recordFilterResults(input, domainMatches, {
+      overallPassed: passed,
+      fallbackReason: passed ? 'Passed via keyword matching' : 'Failed keyword relevance threshold',
+    });
 
     return {
       passed,
@@ -554,12 +562,18 @@ export async function filterArticle(
     }
     const domainMatches = keywordOnlyFilter(keywordResult.matchedDomains, minScore);
 
-    await recordFilterResults(input, domainMatches, llmResult.rawResponse ?? null);
-
     // Auto-update filter_status
     const passed = domainMatches.length > 0;
     const relevanceScore = passed ? Math.max(...domainMatches.map((d) => d.relevanceScore ?? 0)) : 0;
     await updateArticleFilterStatus(input.articleId, passed ? 'passed' : 'rejected', relevanceScore);
+
+    await recordFilterResults(input, domainMatches, {
+      llmResponse: llmResult.rawResponse ?? null,
+      overallPassed: passed,
+      fallbackReason: llmResult.error
+        ? `LLM failed: ${llmResult.error}`
+        : 'Passed via keyword matching (LLM unavailable)',
+    });
 
     return {
       passed,
@@ -586,8 +600,6 @@ export async function filterArticle(
     domainMatches.push(matchResult);
   }
 
-  await recordFilterResults(input, domainMatches, llmResult.rawResponse ?? null);
-
   // Determine overall pass/fail
   const passedMatches = domainMatches.filter((m) => m.passed && (m.relevanceScore ?? 0) >= minScore);
   const passed = passedMatches.length > 0;
@@ -595,6 +607,12 @@ export async function filterArticle(
 
   // Auto-update filter_status
   await updateArticleFilterStatus(input.articleId, passed ? 'passed' : 'rejected', relevanceScore);
+
+  await recordFilterResults(input, domainMatches, {
+    llmResponse: llmResult.rawResponse ?? null,
+    overallPassed: passed,
+    fallbackReason: passed ? 'Passed LLM evaluation' : 'Failed LLM relevance threshold',
+  });
 
   requestLog.info(
     {
