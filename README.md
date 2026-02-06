@@ -124,15 +124,47 @@ pnpm dev
 
 ## 环境变量配置
 
-```bash
-# 基础配置
-PORT=3000                    # 服务端口
-NODE_ENV=development          # 运行环境
+### 配置体系
 
-# 文章处理配置
-ARTICLE_PROCESS_ENABLED=true
-ARTICLE_PROCESS_BATCH_SIZE=10
-ARTICLE_PROCESS_MAX_CONCURRENT=3
+本项目采用**分层兜底配置**设计：
+
+| 优先级 | 配置来源 | 说明 |
+|--------|----------|------|
+| 1 | 数据库配置 (`llm_configs` 表) | 用户业务配置，动态可修改，支持多配置故障转移 |
+| 2 | 环境变量 (`.env` 文件) | 系统基础设施配置，兜底备用 |
+
+### LLM 配置
+
+**数据库配置优先**：通过设置页配置的 LLM 参数会优先使用。
+
+**环境变量兜底**：当数据库中无配置时，自动使用环境变量。
+
+```bash
+# LLM 相关（兜底配置）
+LLM_PROVIDER=openai                    # LLM 提供商 (openai/gemini)
+OPENAI_API_KEY=sk-xxx                  # OpenAI API Key
+GEMINI_API_KEY=xxx                     # Gemini API Key
+OPENAI_BASE_URL=https://api.openai.com/v1  # OpenAI 兼容接口
+OPENAI_DEFAULT_MODEL=gpt-4o           # 默认模型
+GEMINI_MODEL=gemini-1.5-pro           # Gemini 模型
+
+# 系统基础配置
+PORT=3000                              # 服务端口
+BASE_URL=http://localhost:3000         # 基础 URL
+DATABASE_PATH=data/database.sqlite     # 数据库路径
+JWT_SECRET=your-secret-key              # JWT 密钥
+JWT_EXPIRES_IN=7d                      # JWT 过期时间
+
+# 安全配置
+LLM_ENCRYPTION_KEY=xxx                 # API Key 加密密钥（64 字符十六进制）
+
+# 行为配置
+RSS_FETCH_SCHEDULE="0 9 * * *"         # RSS 定时任务 cron（每天 9 点）
+RSS_FETCH_ENABLED=true                 # 是否启用 RSS 定时抓取
+RSS_MAX_CONCURRENT=5                   # RSS 最大并发数
+RSS_FETCH_TIMEOUT=30000                # RSS 请求超时时间（ms）
+LOG_LEVEL=info                         # 日志级别
+LOG_FILE=logs/app.log                 # 日志文件路径
 
 # Chroma 配置（可选，默认值如下）
 # 建议通过设置页进行配置
@@ -140,9 +172,35 @@ CHROMA_HOST=127.0.0.1
 CHROMA_PORT=8000
 CHROMA_COLLECTION=articles
 CHROMA_DISTANCE_METRIC=cosine
+
+# 文章处理配置
+ARTICLE_PROCESS_ENABLED=true
+ARTICLE_PROCESS_BATCH_SIZE=10
+ARTICLE_PROCESS_MAX_CONCURRENT=3
 ```
 
 完整配置请参考 [.env.example](.env.example)。
+
+### LLM 多配置故障转移
+
+系统支持在数据库中配置多条 LLM 配置，实现故障转移：
+
+1. **默认优先**: `is_default = 1` 的配置优先尝试
+2. **优先级排序**: 按 `priority` 升序（数字越小越优先）
+3. **自动切换**: 调用异常或返回空响应时自动切换到下一条配置
+
+### 系统提示词
+
+系统提示词用于控制 LLM 行为，支持通过设置页动态管理：
+
+| 类型 | 用途 |
+|------|------|
+| `filter` | 文章过滤判断 |
+| `summary` | 生成中文摘要 |
+| `keywords` | 提取研究标签 |
+| `translation` | 翻译处理 |
+
+**兜底策略**：模板缺失时自动回退内置提示词或动态拼装。
 
 ---
 
@@ -193,8 +251,18 @@ https://dl.acm.org/rss/dl.xml    # ACM Digital Library
 lis-rss-daily/
 ├── src/                      # 源代码
 │   ├── api/                  # API 服务层
+│   │   ├── llm-configs.ts       # LLM 配置管理
+│   │   ├── system-prompts.ts    # 系统提示词管理
+│   │   └── routes/             # API 路由
+│   │       ├── llm-configs.routes.ts
+│   │       └── system-prompts.routes.ts
 │   ├── middleware/           # 中间件
 │   ├── views/                # EJS 视图模板
+│   │   └── settings/          # 设置页子模板
+│   │       ├── panel-rss.ejs      # RSS 源配置
+│   │       ├── panel-llm.ejs     # LLM 配置
+│   │       ├── panel-chroma.ejs  # Chroma 配置
+│   │       └── panel-prompts.ejs # 系统提示词
 │   ├── vector/               # 向量检索模块
 │   │   ├── embedding-client.ts  # Embedding 客户端
 │   │   ├── vector-store.ts      # Chroma 向量存储
@@ -215,6 +283,9 @@ lis-rss-daily/
 │   ├── export.ts             # Markdown 导出
 │   ├── pipeline.ts           # 文章处理流水线
 ├── sql/                      # 数据库脚本
+│   ├── 001_init.sql          # 初始化（含默认模板）
+│   ├── 002_vector_refactor.sql
+│   └── 003_llm_config_priority.sql
 ├── scripts/                  # 工具脚本
 ├── data/                     # 数据目录
 │   ├── exports/              # Markdown 导出
