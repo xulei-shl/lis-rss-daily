@@ -6,6 +6,7 @@
 
 import { getDb, type SystemPromptsTable } from '../db.js';
 import { logger } from '../logger.js';
+import { variablesToJSON, getVariableDefinitions, PROMPT_VARIABLES } from '../config/system-prompt-variables.js';
 
 const log = logger.child({ module: 'system-prompts-service' });
 
@@ -36,7 +37,6 @@ const DEFAULT_SYSTEM_PROMPTS: Array<{
   type: string;
   name: string;
   template: string;
-  variables: string;
 }> = [
   {
     type: 'filter',
@@ -65,45 +65,23 @@ const DEFAULT_SYSTEM_PROMPTS: Array<{
 - 0.6-0.8：中度相关，与主题领域有关联
 - 0.3-0.5：低度相关，可能仅提及
 - 0.0-0.2：不相关`,
-    variables: JSON.stringify({
-      TOPIC_DOMAINS: '主题领域列表',
-      ARTICLE_TITLE: '文章标题',
-      ARTICLE_URL: '文章链接',
-      ARTICLE_DESCRIPTION: '文章摘要',
-      ARTICLE_CONTENT: '正文内容',
-    }),
   },
   {
     type: 'summary',
     name: '默认摘要提示词',
     template: '你是文章摘要助手，请用中文生成 200-300 字摘要，信息准确，不要添加编造内容。',
-    variables: JSON.stringify({
-      ARTICLE_TITLE: '文章标题',
-      ARTICLE_CONTENT: '正文内容',
-      ARTICLE_SUMMARY: '已有摘要',
-    }),
   },
   {
     type: 'keywords',
     name: '默认关键词提示词',
     template:
       '你是一个文献内容标签助手。请根据文章的标题与摘要，输出 3-8 个中文关键词（短语或术语）。如果内容不是中文，请保持术语准确并尽量转为中文表述。',
-    variables: JSON.stringify({
-      ARTICLE_TITLE: '文章标题',
-      ARTICLE_SUMMARY: '文章摘要',
-      ARTICLE_URL: '文章链接',
-      ARTICLE_CONTENT: '正文内容',
-    }),
   },
   {
     type: 'translation',
     name: '默认翻译提示词',
     template:
       '你是专业中英翻译助手。请将英文翻译为中文，保持术语准确，不要添加解释。请严格输出 JSON：{"title_zh":"", "summary_zh":""}。',
-    variables: JSON.stringify({
-      ARTICLE_TITLE: '文章标题',
-      ARTICLE_SUMMARY: '文章摘要',
-    }),
   },
 ];
 
@@ -195,7 +173,7 @@ export async function ensureDefaultSystemPrompts(
         type: prompt.type,
         name: prompt.name,
         template: prompt.template,
-        variables: prompt.variables,
+        variables: variablesToJSON(prompt.type),  // ← 使用统一的变量定义
         is_active: 1,
         updated_at: new Date().toISOString(),
       })

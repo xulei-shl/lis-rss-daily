@@ -292,17 +292,28 @@ document.addEventListener('keydown', function(e) {
 let llmConfigs = [];
 let systemPrompts = [];
 
-const promptVariableHints = {
-  filter: ['TOPIC_DOMAINS', 'ARTICLE_TITLE', 'ARTICLE_URL', 'ARTICLE_DESCRIPTION'],
-  analysis: ['ARTICLE_TITLE', 'ARTICLE_SOURCE', 'ARTICLE_AUTHOR', 'PUBLISHED_DATE', 'ARTICLE_CONTENT'],
-  summary: ['ARTICLE_TITLE', 'ARTICLE_CONTENT', 'ARTICLE_SUMMARY'],
-  keywords: ['ARTICLE_TITLE', 'ARTICLE_SUMMARY', 'ARTICLE_URL', 'ARTICLE_CONTENT'],
-  translation: ['ARTICLE_TITLE', 'ARTICLE_SUMMARY'],
+const DEFAULT_PROMPT_VARIABLES = {
+  TOPIC_DOMAINS: '主题领域列表（从 topic_domains 和 topic_keywords 表动态构建）',
+  ARTICLE_TITLE: '文章标题',
+  ARTICLE_URL: '文章链接',
+  ARTICLE_DESCRIPTION: '文章摘要',
+  ARTICLE_CONTENT: '正文内容',
+  ARTICLE_SUMMARY: '已有摘要',
+  ARTICLE_SOURCE: '文章来源',
+  ARTICLE_AUTHOR: '文章作者',
+  PUBLISHED_DATE: '发布日期'
 };
 
-// Load LLM configs on page load
-loadLLMConfigs();
-loadSystemPrompts();
+function getDefaultPromptVariablesJSON() {
+  return JSON.stringify(DEFAULT_PROMPT_VARIABLES, null, 2);
+}
+
+// Wait for DOM to be ready
+document.addEventListener('DOMContentLoaded', function() {
+  // Load data on page load
+  loadLLMConfigs();
+  loadSystemPrompts();
+});
 
 async function loadLLMConfigs() {
   try {
@@ -416,15 +427,14 @@ function closeLLMModal() {
   document.getElementById('llmConfigModal').classList.remove('active');
 }
 
-function showPromptAddModal() {
+async function showPromptAddModal() {
   document.getElementById('promptModalTitle').textContent = '添加系统提示词';
   document.getElementById('systemPromptId').value = '';
   document.getElementById('promptName').value = '';
   document.getElementById('promptType').value = 'filter';
   document.getElementById('promptTemplate').value = '';
-  document.getElementById('promptVariables').value = '';
+  document.getElementById('promptVariables').value = getDefaultPromptVariablesJSON();
   document.getElementById('promptActive').checked = true;
-  updatePromptVariableHint();
   document.getElementById('systemPromptModal').classList.add('active');
   document.getElementById('promptName').focus();
 }
@@ -448,10 +458,9 @@ function editPrompt(id) {
       document.getElementById('promptVariables').value = prompt.variables;
     }
   } else {
-    document.getElementById('promptVariables').value = '';
+    document.getElementById('promptVariables').value = getDefaultPromptVariablesJSON();
   }
 
-  updatePromptVariableHint();
   document.getElementById('systemPromptModal').classList.add('active');
 }
 
@@ -459,17 +468,6 @@ function closePromptModal() {
   document.getElementById('systemPromptModal').classList.remove('active');
 }
 
-function updatePromptVariableHint() {
-  const type = document.getElementById('promptType').value;
-  const hintEl = document.getElementById('promptVariableHint');
-  const vars = promptVariableHints[type] || [];
-  if (vars.length === 0) {
-    hintEl.textContent = '可用变量：无固定变量';
-  } else {
-    const formatted = vars.map((v) => '{{' + v + '}}').join('、');
-    hintEl.textContent = '可用变量：' + formatted;
-  }
-}
 
 async function bootstrapSystemPrompts() {
   const confirmed = await showConfirm('将为当前用户初始化默认提示词（缺失的类型会自动补全）。继续？', {

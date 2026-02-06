@@ -94,6 +94,44 @@
   - 动态变量提示：按类型展示 `{{VAR}}` 占位符提示  
   - 新增按钮：初始化默认模板（仅补齐缺失类型，不覆盖已有模板）  
 
-- **当前接入状态**：  
-  - 已完成系统提示词管理、持久化与运行时接入  
+- **当前接入状态**：
+  - 已完成系统提示词管理、持久化与运行时接入
   - 运行时按类型优先读取模板，缺失则回退硬编码/动态拼装
+
+---
+
+**5) 系统提示词变量定义统一管理（2025-02 优化）**
+
+为了解决变量定义在多处硬编码、需手动同步维护的问题，引入了单一数据源（Single Source of Truth）机制：
+
+- **统一变量定义文件**：
+  - 位置：`src/config/system-prompt-variables.ts`
+  - 定义了 `PROMPT_VARIABLES` 常量，按类型（filter/summary/keywords/translation）分组
+  - 每个变量包含：
+    - `description`：变量说明（中文）
+    - `source`：数据来源说明（如 "articles.title" 或 "从 topic_domains 表动态构建"）
+    - `required`：是否必需（布尔值）
+
+- **后端改进**：
+  - `src/api/system-prompts.ts`：默认模板初始化时使用 `variablesToJSON(type)` 从统一定义生成
+  - `src/api/routes/system-prompts.routes.ts`：新增 `GET /api/system-prompts/variables` 接口返回变量定义
+
+- **前端改进**：
+  - `src/public/js/settings.js`：删除硬编码的 `promptVariableHints`，改为从 API 获取
+  - UI 提示升级：不仅显示变量名，还显示说明和数据来源
+  - 必需变量标注：带 `*必需` 标记
+
+- **新增变量流程**：
+  1. 在 `src/config/system-prompt-variables.ts` 添加变量定义
+  2. 在 `src/filter.ts` 或 `src/agent.ts` 的 `resolveSystemPrompt()` 调用中传入变量值
+  3. 前端自动显示新变量，无需修改前端代码
+
+- **变量来源汇总**：
+  | 变量 | 数据来源 | 涉及表 |
+  |------|---------|-------|
+  | `{{TOPIC_DOMAINS}}` | 运行时从数据库查询 + 格式化 | `topic_domains` + `topic_keywords` |
+  | `{{ARTICLE_TITLE}}` | 运行时参数 | `articles.title` |
+  | `{{ARTICLE_URL}}` | 运行时参数 | `articles.url` |
+  | `{{ARTICLE_DESCRIPTION}}` | 运行时参数 | `articles.description` |
+  | `{{ARTICLE_CONTENT}}` | 运行时参数 | `articles.content` |
+  | `{{ARTICLE_SUMMARY}}` | 运行时参数 | `articles.summary` |

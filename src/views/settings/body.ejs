@@ -357,14 +357,119 @@
     letter-spacing: 0.5px;
   }
 
-  .prompt-variable-hint {
-    margin-top: 8px;
-    color: var(--dim);
+  /* 变量说明面板样式 */
+  .variables-info-panel {
+    margin-bottom: 20px;
+  }
+
+  .variables-info-panel details {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+  }
+
+  .variables-info-panel summary {
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--accent-primary);
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .variables-info-panel summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .variables-info-panel summary::before {
+    content: '▶';
+    font-size: 0.7em;
+    transition: transform 0.2s;
+  }
+
+  .variables-info-panel details[open] summary::before {
+    transform: rotate(90deg);
+  }
+
+  .variables-info-content {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .variables-info-content h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+  }
+
+  .variables-info-content .info-desc {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .variables-info-content .info-desc code {
+    background: rgba(0, 0, 0, 0.05);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.85em;
+  }
+
+  .variable-group {
+    margin-bottom: 16px;
+  }
+
+  .variable-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .variable-group h5 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+  }
+
+  .variables-table {
+    width: 100%;
+    border-collapse: collapse;
     font-size: 0.85rem;
   }
 
+  .variables-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .variables-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .variables-table td:first-child {
+    width: 30%;
+    font-family: var(--font-mono, monospace);
+    color: var(--accent-primary);
+  }
+
+  .variables-table td:last-child {
+    color: var(--text-secondary);
+  }
+
+  .variables-table code {
+    background: rgba(74, 144, 217, 0.08);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+
   .muted-text {
-    color: var(--dim);
+    color: var(--text-secondary);
     font-size: 0.9rem;
   }
 </style>

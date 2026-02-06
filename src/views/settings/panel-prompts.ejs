@@ -7,6 +7,56 @@
         <button class="btn btn-primary" onclick="showPromptAddModal()">+ 添加提示词</button>
       </div>
     </div>
+
+    <!-- 变量说明面板 -->
+    <div class="variables-info-panel">
+      <details>
+        <summary>📖 查看可用变量说明</summary>
+        <div class="variables-info-content">
+          <h4>系统提示词变量说明</h4>
+          <p class="info-desc">在提示词模板中使用 <code>{{变量名}}</code> 格式引用变量，运行时会被实际值替换，变量不受类型限制，以模板为准。</p>
+
+          <div class="variable-group">
+            <h5>filter（文章过滤）</h5>
+            <table class="variables-table">
+              <tr><td><code>{{TOPIC_DOMAINS}}</code></td><td>主题领域列表（从 topic_domains 和 topic_keywords 表动态构建）</td></tr>
+              <tr><td><code>{{ARTICLE_TITLE}}</code></td><td>文章标题（来自 articles.title）</td></tr>
+              <tr><td><code>{{ARTICLE_URL}}</code></td><td>文章链接（来自 articles.url）</td></tr>
+              <tr><td><code>{{ARTICLE_DESCRIPTION}}</code></td><td>文章摘要（来自 articles.description）</td></tr>
+              <tr><td><code>{{ARTICLE_CONTENT}}</code></td><td>正文内容截取前 2000 字符（来自 articles.content）</td></tr>
+            </table>
+          </div>
+
+          <div class="variable-group">
+            <h5>summary（文章摘要）</h5>
+            <table class="variables-table">
+              <tr><td><code>{{ARTICLE_TITLE}}</code></td><td>文章标题</td></tr>
+              <tr><td><code>{{ARTICLE_CONTENT}}</code></td><td>正文内容截取前 3000 字符</td></tr>
+              <tr><td><code>{{ARTICLE_SUMMARY}}</code></td><td>已有摘要</td></tr>
+            </table>
+          </div>
+
+          <div class="variable-group">
+            <h5>keywords（关键词提取）</h5>
+            <table class="variables-table">
+              <tr><td><code>{{ARTICLE_TITLE}}</code></td><td>文章标题</td></tr>
+              <tr><td><code>{{ARTICLE_SUMMARY}}</code></td><td>文章摘要</td></tr>
+              <tr><td><code>{{ARTICLE_URL}}</code></td><td>文章链接</td></tr>
+              <tr><td><code>{{ARTICLE_CONTENT}}</code></td><td>正文内容截取前 1200 字符</td></tr>
+            </table>
+          </div>
+
+          <div class="variable-group">
+            <h5>translation（中英翻译）</h5>
+            <table class="variables-table">
+              <tr><td><code>{{ARTICLE_TITLE}}</code></td><td>文章标题</td></tr>
+              <tr><td><code>{{ARTICLE_SUMMARY}}</code></td><td>文章摘要</td></tr>
+            </table>
+          </div>
+        </div>
+      </details>
+    </div>
+
     <p class="muted-text" style="margin: -12px 0 16px;">
       建议先初始化默认模板，再按需调整各类型提示词。
     </p>

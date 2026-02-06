@@ -10,6 +10,7 @@ import {
   updateSystemPrompt,
   deleteSystemPrompt,
 } from '../system-prompts.js';
+import { PROMPT_VARIABLES } from '../../config/system-prompt-variables.js';
 
 const log = logger.child({ module: 'api-routes/system-prompts' });
 const router = express.Router();
@@ -45,6 +46,19 @@ router.post('/system-prompts/bootstrap', requireAuth, async (req: AuthRequest, r
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to bootstrap system prompts');
     res.status(500).json({ error: 'Failed to bootstrap system prompts' });
+  }
+});
+
+/**
+ * GET /api/system-prompts/variables
+ * 获取系统提示词变量定义（用于前端 UI 提示）
+ */
+router.get('/system-prompts/variables', requireAuth, async (_req: AuthRequest, res) => {
+  try {
+    res.json({ variables: PROMPT_VARIABLES });
+  } catch (error) {
+    log.error({ error }, 'Failed to get variable definitions');
+    res.status(500).json({ error: 'Failed to get variable definitions' });
   }
 });
 
