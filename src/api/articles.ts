@@ -570,7 +570,7 @@ export async function getUserArticles(
       'articles.updated_at',
       'rss_sources.name as rss_source_name',
     ])
-    .orderBy('articles.published_at', 'desc')
+    .orderBy('articles.created_at', 'desc')
     .limit(limit)
     .offset(offset)
     .execute();
