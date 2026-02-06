@@ -18,7 +18,7 @@ const router = express.Router();
  */
 router.post('/filter/article', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const { articleId, title, description, content } = req.body;
+    const { articleId, title, description, content, url } = req.body;
 
     if (!articleId || isNaN(parseInt(articleId))) {
       return res.status(400).json({ error: 'Article ID is required' });
@@ -34,6 +34,7 @@ router.post('/filter/article', requireAuth, async (req: AuthRequest, res) => {
     const result = await filterArticle({
       articleId: parseInt(articleId),
       userId: req.userId!,
+      url,
       title,
       description: description || '',
       content,

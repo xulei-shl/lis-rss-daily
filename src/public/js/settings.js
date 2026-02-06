@@ -469,6 +469,40 @@ function updatePromptVariableHint() {
   }
 }
 
+async function bootstrapSystemPrompts() {
+  const confirmed = await showConfirm('将为当前用户初始化默认提示词（缺失的类型会自动补全）。继续？', {
+    title: '初始化默认模板',
+    okText: '初始化',
+    cancelText: '取消'
+  });
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/system-prompts/bootstrap', { method: 'POST' });
+    if (res.ok) {
+      const result = await res.json();
+      await showConfirm(
+        '初始化完成：新增 ' + (result.created || 0) + ' 条，跳过 ' + (result.skipped || 0) + ' 条。',
+        { title: '完成', okText: '知道了', okButtonType: 'btn-secondary' }
+      );
+      loadSystemPrompts();
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      await showConfirm(errData.error || '初始化失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
+    }
+  } catch (err) {
+    await showConfirm('初始化失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
+  }
+}
+
 async function loadSystemPrompts() {
   try {
     const res = await fetch('/api/system-prompts', { cache: 'no-store' });

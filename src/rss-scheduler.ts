@@ -538,6 +538,7 @@ export class RSSScheduler {
         const input: FilterInput = {
           articleId: article.id,
           userId: userId,
+          url: article.url,
           title: article.title,
           // 过滤阶段使用 RSS 的摘要片段作为描述，避免占用 summary 字段
           description: item?.contentSnippet || item?.description || '',

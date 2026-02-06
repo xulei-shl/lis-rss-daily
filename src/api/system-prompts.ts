@@ -32,6 +32,99 @@ export interface QueryOptions {
   isActive?: boolean;
 }
 
+const DEFAULT_SYSTEM_PROMPTS: Array<{
+  type: string;
+  name: string;
+  template: string;
+  variables: string;
+}> = [
+  {
+    type: 'filter',
+    name: '默认文章过滤提示词',
+    template: `你是一个专业的文献内容分析助手。
+
+## 用户关注的主题领域和主题词：
+{{TOPIC_DOMAINS}}
+
+## 待分析文章：
+标题：{{ARTICLE_TITLE}}
+链接：{{ARTICLE_URL}}
+摘要：{{ARTICLE_DESCRIPTION}}
+
+## 输出要求：
+请以 JSON 格式输出，包含以下字段：
+{
+  "is_relevant": true/false,
+  "relevance_score": 0.0-1.0,
+  "matched_keywords": ["关键词1", "关键词2"],
+  "reason": "判断理由（中文）"
+}
+
+## 评分标准：
+- 0.9-1.0：高度相关，直接涉及核心主题
+- 0.6-0.8：中度相关，与主题领域有关联
+- 0.3-0.5：低度相关，可能仅提及
+- 0.0-0.2：不相关`,
+    variables: JSON.stringify({
+      TOPIC_DOMAINS: '主题领域列表',
+      ARTICLE_TITLE: '文章标题',
+      ARTICLE_URL: '文章链接',
+      ARTICLE_DESCRIPTION: '文章摘要',
+      ARTICLE_CONTENT: '正文内容',
+    }),
+  },
+  {
+    type: 'summary',
+    name: '默认摘要提示词',
+    template: '你是文章摘要助手，请用中文生成 200-300 字摘要，信息准确，不要添加编造内容。',
+    variables: JSON.stringify({
+      ARTICLE_TITLE: '文章标题',
+      ARTICLE_CONTENT: '正文内容',
+      ARTICLE_SUMMARY: '已有摘要',
+    }),
+  },
+  {
+    type: 'keywords',
+    name: '默认关键词提示词',
+    template:
+      '你是一个文献内容标签助手。请根据文章的标题与摘要，输出 3-8 个中文关键词（短语或术语）。如果内容不是中文，请保持术语准确并尽量转为中文表述。',
+    variables: JSON.stringify({
+      ARTICLE_TITLE: '文章标题',
+      ARTICLE_SUMMARY: '文章摘要',
+      ARTICLE_URL: '文章链接',
+      ARTICLE_CONTENT: '正文内容',
+    }),
+  },
+  {
+    type: 'translation',
+    name: '默认翻译提示词',
+    template:
+      '你是专业中英翻译助手。请将英文翻译为中文，保持术语准确，不要添加解释。请严格输出 JSON：{"title_zh":"", "summary_zh":""}。',
+    variables: JSON.stringify({
+      ARTICLE_TITLE: '文章标题',
+      ARTICLE_SUMMARY: '文章摘要',
+    }),
+  },
+];
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function renderSystemPrompt(
+  template: string,
+  variables: Record<string, string>
+): string {
+  if (!template) return template;
+  let output = template;
+  for (const [key, value] of Object.entries(variables)) {
+    if (value === undefined || value === null) continue;
+    const pattern = new RegExp(`{{\\s*${escapeRegExp(key)}\\s*}}`, 'g');
+    output = output.replace(pattern, String(value));
+  }
+  return output;
+}
+
 function normalizeVariables(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value === 'string') {
@@ -44,6 +137,74 @@ function normalizeVariables(value: unknown): string | null {
     return JSON.stringify(value);
   }
   throw new Error('variables 必须是 JSON 字符串或对象');
+}
+
+export async function getActiveSystemPromptByType(
+  userId: number,
+  type: string
+): Promise<SystemPromptRecord | undefined> {
+  const db = getDb();
+  return db
+    .selectFrom('system_prompts')
+    .where('user_id', '=', userId)
+    .where('type', '=', type)
+    .where('is_active', '=', 1)
+    .selectAll()
+    .orderBy('updated_at', 'desc')
+    .executeTakeFirst();
+}
+
+export async function resolveSystemPrompt(
+  userId: number | undefined,
+  type: string,
+  fallback: string,
+  variables: Record<string, string>
+): Promise<string> {
+  if (!userId) return fallback;
+  const record = await getActiveSystemPromptByType(userId, type);
+  if (!record || !record.template || record.template.trim().length === 0) {
+    return fallback;
+  }
+  return renderSystemPrompt(record.template, variables);
+}
+
+export async function ensureDefaultSystemPrompts(
+  userId: number
+): Promise<{ created: number; skipped: number }> {
+  const db = getDb();
+  let created = 0;
+  let skipped = 0;
+
+  for (const prompt of DEFAULT_SYSTEM_PROMPTS) {
+    const existing = await db
+      .selectFrom('system_prompts')
+      .where('user_id', '=', userId)
+      .where('type', '=', prompt.type)
+      .select(['id'])
+      .executeTakeFirst();
+
+    if (existing) {
+      skipped += 1;
+      continue;
+    }
+
+    await db
+      .insertInto('system_prompts')
+      .values({
+        user_id: userId,
+        type: prompt.type,
+        name: prompt.name,
+        template: prompt.template,
+        variables: prompt.variables,
+        is_active: 1,
+        updated_at: new Date().toISOString(),
+      })
+      .executeTakeFirst();
+
+    created += 1;
+  }
+
+  return { created, skipped };
 }
 
 export async function listSystemPrompts(

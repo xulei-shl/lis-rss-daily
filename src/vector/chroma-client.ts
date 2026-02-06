@@ -60,10 +60,13 @@ export async function getCollection(userId: number): Promise<{
   const settings = await getChromaSettings(userId);
   const cache = clientCache.get(userId)!;
 
+  // Cache key includes both collection name and distance metric
+  const cacheKey = `${settings.collection}:${settings.distanceMetric}`;
+
   // Reuse existing collection
-  if (cache.collections.has(settings.collection)) {
+  if (cache.collections.has(cacheKey)) {
     return {
-      collection: cache.collections.get(settings.collection)!,
+      collection: cache.collections.get(cacheKey)!,
       settings,
     };
   }
@@ -74,7 +77,7 @@ export async function getCollection(userId: number): Promise<{
     metadata: { 'hnsw:space': settings.distanceMetric },
   });
 
-  cache.collections.set(settings.collection, collection);
+  cache.collections.set(cacheKey, collection);
   return { collection, settings };
 }
 

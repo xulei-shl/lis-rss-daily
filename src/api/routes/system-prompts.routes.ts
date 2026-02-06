@@ -4,6 +4,7 @@ import { requireAuth } from '../../middleware/auth.js';
 import { logger } from '../../logger.js';
 import {
   listSystemPrompts,
+  ensureDefaultSystemPrompts,
   getSystemPromptById,
   createSystemPrompt,
   updateSystemPrompt,
@@ -30,6 +31,20 @@ router.get('/system-prompts', requireAuth, async (req: AuthRequest, res) => {
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to list system prompts');
     res.status(500).json({ error: 'Failed to list system prompts' });
+  }
+});
+
+/**
+ * POST /api/system-prompts/bootstrap
+ * 初始化默认系统提示词（若缺失）
+ */
+router.post('/system-prompts/bootstrap', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const result = await ensureDefaultSystemPrompts(req.userId!);
+    res.json(result);
+  } catch (error) {
+    log.error({ error, userId: req.userId }, 'Failed to bootstrap system prompts');
+    res.status(500).json({ error: 'Failed to bootstrap system prompts' });
   }
 });
 

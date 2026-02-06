@@ -2,8 +2,14 @@
   <div class="system-prompts-section">
     <div class="section-header">
       <h2>系统提示词</h2>
-      <button class="btn btn-primary" onclick="showPromptAddModal()">+ 添加提示词</button>
+      <div class="action-buttons">
+        <button class="btn btn-secondary" onclick="bootstrapSystemPrompts()">初始化默认模板</button>
+        <button class="btn btn-primary" onclick="showPromptAddModal()">+ 添加提示词</button>
+      </div>
     </div>
+    <p class="muted-text" style="margin: -12px 0 16px;">
+      建议先初始化默认模板，再按需调整各类型提示词。
+    </p>
 
     <table class="prompts-table" id="systemPromptsTable">
       <thead>

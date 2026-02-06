@@ -4,6 +4,7 @@
 
 import { getUserLLMProvider, getLLM } from './llm.js';
 import { logger } from './logger.js';
+import { resolveSystemPrompt } from './api/system-prompts.js';
 
 const log = logger.child({ module: 'agent' });
 
@@ -68,7 +69,12 @@ export async function generateSummary(
   const content = (input.markdown || input.summary || '').trim();
   if (!content) return undefined;
 
-  const systemPrompt = '你是文章摘要助手，请用中文生成 200-300 字摘要，信息准确，不要添加编造内容。';
+  const fallbackPrompt = '你是文章摘要助手，请用中文生成 200-300 字摘要，信息准确，不要添加编造内容。';
+  const systemPrompt = await resolveSystemPrompt(userId, 'summary', fallbackPrompt, {
+    ARTICLE_TITLE: input.title || '无',
+    ARTICLE_CONTENT: content.slice(0, 3000),
+    ARTICLE_SUMMARY: input.summary || '',
+  });
   const userPrompt = `标题: ${input.title || '无'}
 正文: ${content.slice(0, 3000)}`;
 
@@ -98,7 +104,13 @@ export async function generateKeywords(
   userId?: number,
   fallbackKeywords: string[] = []
 ): Promise<KeywordResult> {
-  const systemPrompt = `你是一个文献内容标签助手。请根据文章的标题与摘要，输出 3-8 个中文关键词（短语或术语）。如果内容不是中文，请保持术语准确并尽量转为中文表述。`;
+  const fallbackPrompt = `你是一个文献内容标签助手。请根据文章的标题与摘要，输出 3-8 个中文关键词（短语或术语）。如果内容不是中文，请保持术语准确并尽量转为中文表述。`;
+  const systemPrompt = await resolveSystemPrompt(userId, 'keywords', fallbackPrompt, {
+    ARTICLE_TITLE: input.title || '无',
+    ARTICLE_SUMMARY: input.summary || '无',
+    ARTICLE_URL: input.url || '无',
+    ARTICLE_CONTENT: input.markdown ? input.markdown.slice(0, 1200) : '',
+  });
 
   const userPrompt = `标题: ${input.title || '无'}
 摘要: ${input.summary || '无'}
@@ -149,7 +161,11 @@ export async function translateIfNeeded(
     return null;
   }
 
-  const systemPrompt = `你是专业中英翻译助手。请将英文翻译为中文，保持术语准确，不要添加解释。请严格输出 JSON：{"title_zh":"", "summary_zh":""}。`;
+  const fallbackPrompt = `你是专业中英翻译助手。请将英文翻译为中文，保持术语准确，不要添加解释。请严格输出 JSON：{"title_zh":"", "summary_zh":""}。`;
+  const systemPrompt = await resolveSystemPrompt(userId, 'translation', fallbackPrompt, {
+    ARTICLE_TITLE: title || '无',
+    ARTICLE_SUMMARY: summary || '无',
+  });
 
   const userPrompt = `标题: ${title || '无'}
 摘要: ${summary || '无'}

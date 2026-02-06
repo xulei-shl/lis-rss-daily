@@ -10,10 +10,11 @@
  */
 
 import { getDb } from './db.js';
-import { getUserLLMProvider, getLLM, type ChatMessage } from './llm.js';
+import { getUserLLMProvider, type ChatMessage } from './llm.js';
 import { logger } from './logger.js';
 import { getActiveTopicDomains } from './api/topic-domains.js';
 import { getActiveKeywordsForDomain } from './api/topic-keywords.js';
+import { resolveSystemPrompt } from './api/system-prompts.js';
 
 const log = logger.child({ module: 'article-filter' });
 
@@ -26,6 +27,7 @@ export interface FilterInput {
   articleId: number;
   userId: number;
   title: string;
+  url?: string;
   description: string;
   content?: string;
 }
@@ -168,26 +170,15 @@ async function buildAllDomainsMatchData(
 /**
  * Build system prompt for LLM filtering
  */
-async function buildFilterSystemPrompt(
-  domains: Array<{ id: number; name: string; description: string | null; priority: number }>,
-  keywordsMap: Map<number, Array<{ keyword: string; description: string | null; weight: number }>>
-): Promise<string> {
-  const domainsInfo = await Promise.all(
-    domains.map(async (domain) => {
-      const keywords = keywordsMap.get(domain.id) || [];
-      return {
-        id: domain.id,
-        name: domain.name,
-        description: domain.description || '',
-        keywords: keywords.map((k) => ({
-          keyword: k.keyword,
-          description: k.description || '',
-          weight: k.weight,
-        })),
-      };
-    })
-  );
-
+function buildFilterSystemPromptFromDomainsInfo(
+  domainsInfo: Array<{
+    id: number;
+    name: string;
+    description: string;
+    keywords: Array<{ keyword: string; description: string; weight: number }>;
+  }>
+): string {
+  const domainsText = formatDomainsInfo(domainsInfo);
   return `# Role
 你是一个专业的文章内容筛选与评估助手。你的核心任务是根据用户提供的【关注领域配置】（包含主题领域、主题词、权重及描述），对输入的【文章信息】（题目、摘要）进行深度分析，判断该文章是否符合用户的阅读需求，并给出“通过”或“拒绝”的决策。
 
@@ -216,17 +207,7 @@ async function buildFilterSystemPrompt(
 4. **生成结果**：输出最终决策及简短理由。
 
 # 关注领域配置
-${domainsInfo.map((d) => `
-## 领域ID: ${d.id} - ${d.name}
-描述: ${d.description}
-主题词:
-${d.keywords
-  .map((k) => {
-    const descPart = k.description ? `，描述/同义词：${k.description}` : '';
-    return `- ${k.keyword}（权重：${k.weight}${descPart}）`;
-  })
-  .join('\n')}
-`).join('\n')}
+${domainsText}
 
 # Response Format
 请严格按照以下 JSON 格式输出结果（不要输出多余内容）：
@@ -250,6 +231,55 @@ ${d.keywords
 - 只有具有实质性关联时才标记为相关
 - matched_keywords 必须来自该领域的主题词列表
 - reasoning 保持简洁（1-2句）`;
+}
+
+async function buildDomainInfo(
+  domains: Array<{ id: number; name: string; description: string | null; priority: number }>,
+  keywordsMap: Map<number, Array<{ keyword: string; description: string | null; weight: number }>>
+): Promise<Array<{
+  id: number;
+  name: string;
+  description: string;
+  keywords: Array<{ keyword: string; description: string; weight: number }>;
+}>> {
+  return Promise.all(
+    domains.map(async (domain) => {
+      const keywords = keywordsMap.get(domain.id) || [];
+      return {
+        id: domain.id,
+        name: domain.name,
+        description: domain.description || '',
+        keywords: keywords.map((k) => ({
+          keyword: k.keyword,
+          description: k.description || '',
+          weight: k.weight,
+        })),
+      };
+    })
+  );
+}
+
+function formatDomainsInfo(
+  domainsInfo: Array<{
+    id: number;
+    name: string;
+    description: string;
+    keywords: Array<{ keyword: string; description: string; weight: number }>;
+  }>
+): string {
+  return domainsInfo
+    .map((d) => `
+## 领域ID: ${d.id} - ${d.name}
+描述: ${d.description}
+主题词:
+${d.keywords
+  .map((k) => {
+    const descPart = k.description ? `，描述/同义词：${k.description}` : '';
+    return `- ${k.keyword}（权重：${k.weight}${descPart}）`;
+  })
+  .join('\n')}
+`)
+    .join('\n');
 }
 
 /**
@@ -280,7 +310,16 @@ async function llmFilter(
   }
 
   // Build messages
-  const systemPrompt = await buildFilterSystemPrompt(relevantDomains, keywordsMap);
+  const domainsInfo = await buildDomainInfo(relevantDomains, keywordsMap);
+  const domainsText = formatDomainsInfo(domainsInfo);
+  const fallbackSystemPrompt = buildFilterSystemPromptFromDomainsInfo(domainsInfo);
+  const systemPrompt = await resolveSystemPrompt(input.userId, 'filter', fallbackSystemPrompt, {
+    TOPIC_DOMAINS: domainsText,
+    ARTICLE_TITLE: input.title || '无',
+    ARTICLE_URL: input.url || '无',
+    ARTICLE_DESCRIPTION: input.description || '无',
+    ARTICLE_CONTENT: input.content ? input.content.substring(0, 2000) : '',
+  });
   const userPrompt = `请评估以下文章：
 
 # 文章信息
