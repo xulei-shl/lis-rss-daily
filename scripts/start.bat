@@ -1,22 +1,21 @@
 @echo off
-REM RSS Literature Tracker - Windows 启动脚本
+REM RSS Literature Tracker - Windows Startup Script
 
 setlocal enabledelayedexpansion
 
-REM 切换到脚本所在目录的父目录
+REM Switch to parent directory of the script
 cd /d "%~dp0.."
 
 echo.
 echo ===============================================
-echo   RSS Literature Tracker - 启动脚本
-
-echo   ===============================================
+echo   RSS Literature Tracker - Startup Script
+echo ===============================================
 echo.
 
-REM 先启动 Chroma（失败不阻断应用启动）
+REM Start Chroma first (non-blocking)
 call "%~dp0start-chroma.bat"
 
-REM 启动应用
+REM Start the application
 call "%~dp0start-app.bat"
 
 endlocal
