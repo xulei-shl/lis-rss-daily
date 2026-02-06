@@ -57,6 +57,7 @@ router.get('/llm-configs/default', requireAuth, async (req: AuthRequest, res) =>
       base_url: dbConfig.base_url,
       model: dbConfig.model,
       is_default: dbConfig.is_default,
+      priority: dbConfig.priority,
       timeout: dbConfig.timeout,
       max_retries: dbConfig.max_retries,
       max_concurrent: dbConfig.max_concurrent,
@@ -109,6 +110,7 @@ router.post('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
       configType,
       enabled,
       isDefault,
+      priority,
       timeout,
       maxRetries,
       maxConcurrent,
@@ -149,6 +151,10 @@ router.post('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'enabled must be a boolean' });
     }
 
+    if (priority !== undefined && (isNaN(parseInt(priority)) || parseInt(priority) < 0)) {
+      return res.status(400).json({ error: 'Priority must be a non-negative number' });
+    }
+
     if (timeout !== undefined && (isNaN(parseInt(timeout)) || parseInt(timeout) < 1000)) {
       return res.status(400).json({ error: 'Timeout must be at least 1000ms' });
     }
@@ -169,6 +175,7 @@ router.post('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
       configType: (configType as 'llm' | 'embedding' | 'rerank') || 'llm',
       enabled: enabled === true,
       isDefault,
+      priority: priority !== undefined ? parseInt(priority) : undefined,
       timeout: timeout ? parseInt(timeout) : undefined,
       maxRetries: maxRetries ? parseInt(maxRetries) : undefined,
       maxConcurrent: maxConcurrent ? parseInt(maxConcurrent) : undefined,
@@ -201,6 +208,7 @@ router.put('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
       configType,
       enabled,
       isDefault,
+      priority,
       timeout,
       maxRetries,
       maxConcurrent,
@@ -261,6 +269,14 @@ router.put('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: 'isDefault must be a boolean' });
       }
       updateData.isDefault = isDefault;
+    }
+
+    if (priority !== undefined) {
+      const priorityNum = parseInt(priority);
+      if (isNaN(priorityNum) || priorityNum < 0) {
+        return res.status(400).json({ error: 'Priority must be a non-negative number' });
+      }
+      updateData.priority = priorityNum;
     }
 
     if (timeout !== undefined) {

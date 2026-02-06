@@ -23,6 +23,7 @@ export interface CreateLLMConfigInput {
   configType?: 'llm' | 'embedding' | 'rerank';
   enabled?: boolean;
   isDefault?: boolean;
+  priority?: number;
   timeout?: number;
   maxRetries?: number;
   maxConcurrent?: number;
@@ -36,6 +37,7 @@ export interface UpdateLLMConfigInput {
   configType?: 'llm' | 'embedding' | 'rerank';
   enabled?: boolean;
   isDefault?: boolean;
+  priority?: number;
   timeout?: number;
   maxRetries?: number;
   maxConcurrent?: number;
@@ -112,7 +114,8 @@ export async function getUserLLMConfigs(
   const configs = await query
     .selectAll()
     .orderBy('is_default', 'desc')
-    .orderBy('created_at', 'desc')
+    .orderBy('priority', 'asc')
+    .orderBy('created_at', 'asc')
     .limit(limit)
     .offset(offset)
     .execute();
@@ -221,6 +224,7 @@ export async function createLLMConfig(
       config_type: configType,
       enabled: enabled ? 1 : 0,
       is_default: data.isDefault ? 1 : 0,
+      priority: data.priority ?? 100,
       timeout: data.timeout ?? 30000,
       max_retries: data.maxRetries ?? 3,
       max_concurrent: data.maxConcurrent ?? 5,
@@ -305,6 +309,10 @@ export async function updateLLMConfig(
 
   if (data.maxConcurrent !== undefined) {
     updateData.max_concurrent = data.maxConcurrent;
+  }
+
+  if (data.priority !== undefined) {
+    updateData.priority = data.priority;
   }
 
   const result = await db
@@ -509,18 +517,38 @@ export async function getActiveConfigByType(
   userId: number,
   configType: 'llm' | 'embedding' | 'rerank'
 ): Promise<LLMConfigRecord | null> {
-  const defaultConfig = await getDefaultConfigByType(userId, configType);
-  if (defaultConfig) return defaultConfig;
-
   const db = getDb();
   const config = await db
     .selectFrom('llm_configs')
     .where('user_id', '=', userId)
     .where('config_type', '=', configType)
     .selectAll()
+    .orderBy('is_default', 'desc')
+    .orderBy('priority', 'asc')
     .orderBy('created_at', 'asc')
     .limit(1)
     .executeTakeFirst();
 
   return config ?? null;
+}
+
+/**
+ * 获取指定类型的活跃配置列表（默认优先 + 优先级排序）
+ */
+export async function getActiveConfigListByType(
+  userId: number,
+  configType: 'llm' | 'embedding' | 'rerank'
+): Promise<LLMConfigRecord[]> {
+  const db = getDb();
+  const configs = await db
+    .selectFrom('llm_configs')
+    .where('user_id', '=', userId)
+    .where('config_type', '=', configType)
+    .selectAll()
+    .orderBy('is_default', 'desc')
+    .orderBy('priority', 'asc')
+    .orderBy('created_at', 'asc')
+    .execute();
+
+  return configs;
 }

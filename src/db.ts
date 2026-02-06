@@ -140,6 +140,7 @@ export interface LlmConfigsTable {
   config_type: string;
   enabled: number;
   is_default: number;
+  priority: number;
   timeout: number;
   max_retries: number;
   max_concurrent: number;

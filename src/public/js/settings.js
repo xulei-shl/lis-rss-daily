@@ -352,7 +352,7 @@ function renderLLMTable() {
       '<td><span class="type-badge">' + (config.config_type || 'llm') + '</span></td>' +
       '<td><span class="llm-model">' + escapeHtml(config.model) + '</span></td>' +
       '<td><span class="rss-url">' + escapeHtml(truncate(config.base_url, 35)) + '</span></td>' +
-      '<td><span class="api-key-masked">' + (config.has_api_key ? '••••••••' : '未设置') + '</span></td>' +
+      '<td>' + escapeHtml(String(config.priority ?? 100)) + '</td>' +
       '<td>' +
         (config.config_type === 'rerank'
           ? (config.enabled ? '<span class="status-badge active">已启用</span>' : '<span class="status-badge inactive">未启用</span>')
@@ -380,6 +380,7 @@ function showLLMAddModal() {
   document.getElementById('llmModel').value = 'gpt-4o-mini';
   document.getElementById('llmTimeout').value = '30000';
   document.getElementById('llmMaxRetries').value = '3';
+  document.getElementById('llmPriority').value = '100';
   document.getElementById('llmIsDefault').checked = llmConfigs.length === 0;
   document.getElementById('llmRerankEnabled').checked = false;
   document.getElementById('llmTestResult').className = 'test-result';
@@ -402,6 +403,7 @@ function editLLMConfig(id) {
   document.getElementById('llmModel').value = config.model;
   document.getElementById('llmTimeout').value = config.timeout;
   document.getElementById('llmMaxRetries').value = config.max_retries;
+  document.getElementById('llmPriority').value = config.priority ?? 100;
   document.getElementById('llmIsDefault').checked = config.is_default === 1;
   document.getElementById('llmRerankEnabled').checked = config.enabled === 1;
   document.getElementById('llmTestResult').className = 'test-result';
@@ -796,6 +798,7 @@ document.getElementById('llmConfigForm').addEventListener('submit', async functi
     model: document.getElementById('llmModel').value,
     timeout: parseInt(document.getElementById('llmTimeout').value),
     maxRetries: parseInt(document.getElementById('llmMaxRetries').value),
+    priority: parseInt(document.getElementById('llmPriority').value),
     isDefault: document.getElementById('llmIsDefault').checked,
     enabled: document.getElementById('llmRerankEnabled').checked,
   };

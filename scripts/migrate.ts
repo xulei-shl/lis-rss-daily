@@ -75,6 +75,15 @@ async function runMigrations() {
         continue;
       }
 
+      if (file === '003_llm_config_priority.sql') {
+        const hasPriority = hasColumn(db, 'llm_configs', 'priority');
+        if (!hasPriority) {
+          db.exec('ALTER TABLE llm_configs ADD COLUMN priority INTEGER DEFAULT 100;');
+          db.exec('UPDATE llm_configs SET priority = 100 WHERE priority IS NULL;');
+        }
+        continue;
+      }
+
       const sql = fs.readFileSync(fullPath, 'utf-8');
       db.exec(sql);
     }

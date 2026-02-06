@@ -198,6 +198,7 @@ CREATE TABLE IF NOT EXISTS llm_configs (
   config_type TEXT NOT NULL DEFAULT 'llm',
   enabled INTEGER DEFAULT 0,
   is_default INTEGER DEFAULT 0,
+  priority INTEGER DEFAULT 100,
   timeout INTEGER DEFAULT 30000,
   max_retries INTEGER DEFAULT 3,
   max_concurrent INTEGER DEFAULT 5,

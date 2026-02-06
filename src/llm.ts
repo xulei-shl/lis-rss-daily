@@ -7,7 +7,7 @@
 
 import OpenAI from 'openai';
 import { logger } from './logger.js';
-import { getActiveLLMConfig } from './api/llm-configs.js';
+import { getActiveConfigListByType, type LLMConfigRecord } from './api/llm-configs.js';
 import { decryptAPIKey } from './utils/crypto.js';
 import { config } from './config.js';
 
@@ -40,6 +40,11 @@ export interface LLMConfigOptions {
   model: string;
   timeout?: number;
   maxRetries?: number;
+}
+
+interface FailoverEntry {
+  configId: number;
+  provider: LLMProvider;
 }
 
 /* ── Provider: OpenAI-compatible (Qwen via dashscope, etc.) ── */
@@ -201,37 +206,37 @@ export function getLLM(): LLMProvider {
  */
 export async function getUserLLMProvider(userId: number): Promise<LLMProvider> {
   try {
-    const dbConfig = await getActiveLLMConfig(userId);
+    const dbConfigs = await getActiveConfigListByType(userId, 'llm');
 
-    if (!dbConfig) {
+    if (!dbConfigs || dbConfigs.length === 0) {
       log.warn({ userId }, 'No LLM config found for user, falling back to environment');
       return getLLM();
     }
 
-    const llmConfig: LLMConfigOptions = {
-      provider: dbConfig.provider as 'openai' | 'gemini' | 'custom',
-      baseURL: dbConfig.base_url,
-      apiKey: decryptAPIKey(dbConfig.api_key_encrypted, config.llmEncryptionKey),
-      model: dbConfig.model,
-      timeout: dbConfig.timeout,
-      maxRetries: dbConfig.max_retries,
-    };
-
-    let provider: LLMProvider;
-
-    switch (llmConfig.provider) {
-      case 'gemini':
-        provider = createGeminiProvider(llmConfig);
-        break;
-      case 'openai':
-      case 'custom':
-      default:
-        provider = createOpenAIProvider(llmConfig);
-        break;
+    const entries: FailoverEntry[] = [];
+    for (const dbConfig of dbConfigs) {
+      const provider = buildProviderFromDbConfig(dbConfig);
+      if (provider) {
+        entries.push({ configId: dbConfig.id, provider });
+      }
     }
 
-    log.info({ userId, provider: provider.name }, 'LLM provider initialized from database');
-    return provider;
+    if (entries.length === 0) {
+      log.warn({ userId }, 'No valid LLM config available, falling back to environment');
+      return getLLM();
+    }
+
+    if (entries.length === 1) {
+      log.info({ userId, provider: entries[0].provider.name }, 'LLM provider initialized from database');
+      return entries[0].provider;
+    }
+
+    const failoverProvider = createFailoverProvider(entries);
+    log.info(
+      { userId, provider: failoverProvider.name, count: entries.length },
+      'LLM provider initialized with failover'
+    );
+    return failoverProvider;
   } catch (error) {
     log.error({ error, userId }, 'Failed to get LLM config from database, falling back to environment');
     return getLLM();
@@ -254,4 +259,53 @@ export function createLLMProvider(llmConfig: LLMConfigOptions): LLMProvider {
     default:
       return createOpenAIProvider(llmConfig);
   }
+}
+
+function buildProviderFromDbConfig(dbConfig: LLMConfigRecord): LLMProvider | null {
+  try {
+    const llmConfig: LLMConfigOptions = {
+      provider: dbConfig.provider as 'openai' | 'gemini' | 'custom',
+      baseURL: dbConfig.base_url,
+      apiKey: decryptAPIKey(dbConfig.api_key_encrypted, config.llmEncryptionKey),
+      model: dbConfig.model,
+      timeout: dbConfig.timeout,
+      maxRetries: dbConfig.max_retries,
+    };
+    return createLLMProvider(llmConfig);
+  } catch (error) {
+    log.warn({ error, configId: dbConfig.id }, 'Failed to build LLM provider from config');
+    return null;
+  }
+}
+
+function createFailoverProvider(entries: FailoverEntry[]): LLMProvider {
+  const names = entries.map((entry) => entry.provider.name).join(' -> ');
+  return {
+    name: `failover(${names})`,
+    async chat(messages, options = {}) {
+      let lastError: Error | null = null;
+      for (const entry of entries) {
+        try {
+          const text = await entry.provider.chat(messages, options);
+          if (text && text.trim().length > 0) {
+            return text;
+          }
+          const emptyError = new Error('空响应');
+          lastError = emptyError;
+          log.warn(
+            { configId: entry.configId, provider: entry.provider.name, label: options.label },
+            'LLM 空响应，尝试下一个配置'
+          );
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error('未知错误');
+          log.warn(
+            { error: lastError, configId: entry.configId, provider: entry.provider.name, label: options.label },
+            'LLM 调用失败，尝试下一个配置'
+          );
+        }
+      }
+
+      throw lastError ?? new Error('全部 LLM 配置均失败');
+    },
+  };
 }
