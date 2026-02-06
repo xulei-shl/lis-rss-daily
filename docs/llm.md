@@ -61,3 +61,34 @@
   - LLM：`getActiveLLMConfig` → `getUserLLMProvider`  
   - Embedding：`src/vector/embedding-client.ts`  
   - Rerank：`src/vector/reranker.ts`
+
+---
+
+**4) 设置页与系统提示词管理更新（本次变更）**
+
+- **设置页重构为 Tab**：  
+  - 入口文件：`src/views/settings.ejs`  
+  - 新增 Tab：`RSS 订阅源 / LLM 配置 / Chroma 设置 / 系统提示词`  
+  - 默认停在“RSS 订阅源”，点击切换仅前端显示，不影响现有路由  
+
+- **系统提示词 CRUD（后端）**：  
+  - 服务层：`src/api/system-prompts.ts`  
+  - 路由层：`src/api/routes/system-prompts.routes.ts`  
+  - 路由聚合：`src/api/routes.ts`  
+  - 提供接口：  
+    - `GET /api/system-prompts`  
+    - `GET /api/system-prompts/:id`  
+    - `POST /api/system-prompts`  
+    - `PUT /api/system-prompts/:id`  
+    - `DELETE /api/system-prompts/:id`  
+  - `variables` 支持 JSON 字符串或对象，服务端校验 JSON 合法性  
+  - `is_active` 支持启用/禁用切换  
+
+- **系统提示词管理 UI（前端）**：  
+  - 表格字段：名称、类型、启用、更新时间、操作  
+  - 弹窗字段：名称、类型、模板、变量(JSON)、启用  
+  - 动态变量提示：按类型展示 `{{VAR}}` 占位符提示  
+
+- **当前接入状态**：  
+  - 已完成系统提示词的管理与持久化  
+  - 运行时仍未接入 `system_prompts`（后续可按任务类型接入）

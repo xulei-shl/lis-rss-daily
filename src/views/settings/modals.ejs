@@ -1,0 +1,150 @@
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="sourceModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">添加 RSS 订阅源</h3>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <form id="sourceForm">
+      <input type="hidden" id="sourceId">
+      <div class="form-group">
+        <label for="sourceName">名称 *</label>
+        <input type="text" id="sourceName" required placeholder="例如: ArXiv CS.AI">
+      </div>
+      <div class="form-group">
+        <label for="sourceUrl">URL *</label>
+        <input type="url" id="sourceUrl" required placeholder="https://arxiv.org/rss/cs.AI">
+        <div id="validationResult" class="validation-result"></div>
+      </div>
+      <div class="form-group">
+        <label for="fetchInterval">抓取间隔</label>
+        <select id="fetchInterval" class="fetch-interval-select">
+          <option value="3600">1 小时</option>
+          <option value="7200">2 小时</option>
+          <option value="14400">4 小时</option>
+          <option value="21600">6 小时</option>
+          <option value="43200">12 小时</option>
+          <option value="86400">24 小时</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="sourceStatus">状态</label>
+        <select id="sourceStatus">
+          <option value="active">启用</option>
+          <option value="inactive">禁用</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add/Edit System Prompt Modal -->
+<div class="modal-overlay" id="systemPromptModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="promptModalTitle">添加系统提示词</h3>
+      <button class="modal-close" onclick="closePromptModal()">&times;</button>
+    </div>
+    <form id="systemPromptForm">
+      <input type="hidden" id="systemPromptId">
+      <div class="form-group">
+        <label for="promptName">名称 *</label>
+        <input type="text" id="promptName" required placeholder="例如: 文章过滤提示词">
+      </div>
+      <div class="form-group">
+        <label for="promptType">类型 *</label>
+        <select id="promptType" required onchange="updatePromptVariableHint()">
+          <option value="filter">filter</option>
+          <option value="analysis">analysis</option>
+          <option value="summary">summary</option>
+          <option value="keywords">keywords</option>
+          <option value="translation">translation</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="promptTemplate">模板 *</label>
+        <textarea id="promptTemplate" rows="10" required placeholder="请在此输入提示词模板..."></textarea>
+        <div class="prompt-variable-hint" id="promptVariableHint"></div>
+      </div>
+      <div class="form-group">
+        <label for="promptVariables">变量 (JSON)</label>
+        <textarea id="promptVariables" rows="4" placeholder='{"ARTICLE_TITLE":"文章标题","ARTICLE_CONTENT":"正文"}'></textarea>
+      </div>
+      <div class="form-group">
+        <label for="promptActive">启用</label>
+        <input type="checkbox" id="promptActive">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closePromptModal()">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add/Edit LLM Config Modal -->
+<div class="modal-overlay" id="llmConfigModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="llmModalTitle">添加 LLM 配置</h3>
+      <button class="modal-close" onclick="closeLLMModal()">&times;</button>
+    </div>
+    <form id="llmConfigForm">
+      <input type="hidden" id="llmConfigId">
+      <div class="form-group">
+        <label for="llmConfigType">配置类型 *</label>
+        <select id="llmConfigType" required onchange="updateConfigTypeUI()">
+          <option value="llm">LLM</option>
+          <option value="embedding">Embedding</option>
+          <option value="rerank">Rerank</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="llmProvider">提供商 *</label>
+        <select id="llmProvider" required onchange="updateProviderDefaults()">
+          <option value="openai">OpenAI</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="custom">自定义</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="llmBaseURL">Base URL *</label>
+        <input type="url" id="llmBaseURL" required placeholder="https://api.openai.com/v1" value="https://api.openai.com/v1">
+      </div>
+      <div class="form-group">
+        <label for="llmApiKey">API 密钥 *</label>
+        <input type="password" id="llmApiKey" required placeholder="sk-...">
+      </div>
+      <div class="form-group">
+        <label for="llmModel">模型 *</label>
+        <input type="text" id="llmModel" required placeholder="gpt-4o-mini" value="gpt-4o-mini">
+      </div>
+      <div class="form-group">
+        <label for="llmTimeout">超时时间 (毫秒)</label>
+        <input type="number" id="llmTimeout" min="1000" value="30000">
+      </div>
+      <div class="form-group">
+        <label for="llmMaxRetries">最大重试次数</label>
+        <input type="number" id="llmMaxRetries" min="0" value="3">
+      </div>
+      <div class="form-group">
+        <label for="llmIsDefault">设为默认</label>
+        <input type="checkbox" id="llmIsDefault">
+      </div>
+      <div class="form-group" id="rerankEnabledGroup" style="display: none;">
+        <label for="llmRerankEnabled">启用重排序</label>
+        <input type="checkbox" id="llmRerankEnabled">
+      </div>
+      <div id="llmTestResult" class="test-result"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="testLLMConnection()">测试连接</button>
+        <button type="button" class="btn btn-secondary" onclick="closeLLMModal()">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,32 @@
+<section class="settings-panel active" data-tab="rss">
+<div class="settings-container">
+  <div class="section-header">
+    <h2>RSS 订阅源</h2>
+    <button class="btn btn-primary" onclick="showAddModal()">+ 添加订阅源</button>
+  </div>
+
+  <table class="rss-sources-table" id="rssSourcesTable">
+    <thead>
+      <tr>
+        <th>名称</th>
+        <th>URL</th>
+        <th>状态</th>
+        <th>抓取间隔</th>
+        <th>最后抓取</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="rssSourcesBody">
+      <!-- 动态加载 -->
+    </tbody>
+  </table>
+
+  <div id="emptyState" class="empty-state" style="display: none;">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11c3.87 0 7 3.13 7 7M6 17a1 1 0 100 2 1 1 0 000-2z" />
+    </svg>
+    <p>暂无 RSS 订阅源</p>
+    <p style="font-size: 0.9rem; margin-top: 8px;">点击上方按钮添加您的第一个订阅源</p>
+  </div>
+</div>
+</section>

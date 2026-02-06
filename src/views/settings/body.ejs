@@ -1,0 +1,380 @@
+<style>
+  .settings-tabs {
+    max-width: 1200px;
+    margin: 16px auto 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .settings-tab {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--dim);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .settings-tab.active {
+    color: var(--text);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px rgba(26, 77, 122, 0.2);
+  }
+
+  .settings-panel {
+    display: none;
+  }
+
+  .settings-panel.active {
+    display: block;
+  }
+
+  .settings-container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-header h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
+
+  .rss-sources-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .rss-sources-table th,
+  .rss-sources-table td {
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .rss-sources-table th {
+    background: var(--bg);
+    font-weight: 600;
+    color: var(--dim);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .rss-sources-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .rss-sources-table td {
+    font-size: 0.9rem;
+  }
+
+  .rss-name {
+    font-weight: 500;
+  }
+
+  .rss-url {
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rss-url a {
+    color: var(--dim);
+  }
+
+  .rss-url a:hover {
+    color: var(--accent);
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .status-badge.active {
+    background: rgba(42, 157, 110, 0.15);
+    color: var(--green);
+  }
+
+  .status-badge.inactive {
+    background: rgba(231, 76, 60, 0.15);
+    color: var(--red);
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: 6px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--dim);
+  }
+
+  .empty-state svg {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+  }
+
+  .validation-result {
+    margin-top: 8px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    display: none;
+  }
+
+  .validation-result.valid {
+    display: block;
+    background: rgba(42, 157, 110, 0.15);
+    color: var(--green);
+  }
+
+  .validation-result.invalid {
+    display: block;
+    background: rgba(231, 76, 60, 0.15);
+    color: var(--red);
+  }
+
+  .validation-result.checking {
+    display: block;
+    color: var(--dim);
+  }
+
+  .fetch-interval-select {
+    width: auto;
+    min-width: 150px;
+  }
+</style>
+
+<style>
+  .llm-section {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding-top: 0;
+    border-top: none;
+  }
+
+  .llm-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .llm-table th,
+  .llm-table td {
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .llm-table th {
+    background: var(--bg);
+    font-weight: 600;
+    color: var(--dim);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .llm-provider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+  }
+
+  .type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    background: rgba(26, 77, 122, 0.12);
+    color: var(--accent);
+  }
+
+  .provider-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .provider-badge.openai {
+    background: rgba(16, 163, 127, 0.15);
+    color: #10a37f;
+  }
+
+  .provider-badge.gemini {
+    background: rgba(66, 133, 244, 0.15);
+    color: #4285f4;
+  }
+
+  .provider-badge.custom {
+    background: rgba(107, 114, 128, 0.15);
+    color: var(--dim);
+  }
+
+  .default-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(251, 191, 36, 0.15);
+    color: #f59e0b;
+    margin-left: 8px;
+  }
+
+  .llm-model {
+    font-family: monospace;
+    font-size: 0.9rem;
+    color: var(--dim);
+  }
+
+  .api-key-masked {
+    font-family: monospace;
+    color: var(--dim);
+    letter-spacing: 2px;
+  }
+
+  .test-result {
+    margin-top: 8px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    display: none;
+  }
+
+  .test-result.success {
+    display: block;
+    background: rgba(42, 157, 110, 0.15);
+    color: var(--green);
+  }
+
+  .test-result.error {
+    display: block;
+    background: rgba(231, 76, 60, 0.15);
+    color: var(--red);
+  }
+
+  .test-result.testing {
+    display: block;
+    color: var(--dim);
+  }
+
+  .chroma-section {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding-top: 0;
+    border-top: none;
+  }
+
+  .chroma-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .chroma-form .form-group {
+    margin-bottom: 0;
+  }
+
+  .chroma-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  .chroma-status {
+    margin-top: 12px;
+    font-size: 0.85rem;
+    color: var(--dim);
+  }
+
+  @media (max-width: 768px) {
+    .chroma-form {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .system-prompts-section {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .prompts-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .prompts-table th,
+  .prompts-table td {
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .prompts-table th {
+    background: var(--bg);
+    font-weight: 600;
+    color: var(--dim);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .prompt-variable-hint {
+    margin-top: 8px;
+    color: var(--dim);
+    font-size: 0.85rem;
+  }
+</style>
+
+<div class="settings-tabs">
+  <button class="settings-tab active" data-tab="rss">RSS 订阅源</button>
+  <button class="settings-tab" data-tab="llm">LLM 配置</button>
+  <button class="settings-tab" data-tab="chroma">Chroma 设置</button>
+  <button class="settings-tab" data-tab="prompts">系统提示词</button>
+</div>
+
+<%- include('panel-rss') %>
+<%- include('panel-llm') %>
+<%- include('panel-chroma') %>
+<%- include('panel-prompts') %>
+<%- include('modals') %>
+
+<script src="/js/settings.js"></script>

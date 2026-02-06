@@ -1,0 +1,31 @@
+<section class="settings-panel" data-tab="prompts">
+  <div class="system-prompts-section">
+    <div class="section-header">
+      <h2>系统提示词</h2>
+      <button class="btn btn-primary" onclick="showPromptAddModal()">+ 添加提示词</button>
+    </div>
+
+    <table class="prompts-table" id="systemPromptsTable">
+      <thead>
+        <tr>
+          <th>名称</th>
+          <th>类型</th>
+          <th>启用</th>
+          <th>更新时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="systemPromptsBody">
+        <!-- 动态加载 -->
+      </tbody>
+    </table>
+
+    <div id="systemPromptsEmpty" class="empty-state" style="display: none;">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9h8M8 13h6M9 17h6M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" />
+      </svg>
+      <p>暂无系统提示词</p>
+      <p style="font-size: 0.9rem; margin-top: 8px;">点击上方按钮添加您的第一条提示词</p>
+    </div>
+  </div>
+</section>
