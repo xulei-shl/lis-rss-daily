@@ -20,7 +20,6 @@ const EXPORT_DIR = process.env.ARTICLE_EXPORT_DIR || path.join(process.cwd(), 'd
  */
 export interface ArticleForExport extends ArticlesTable {
   rss_source_name?: string;
-  keywords?: string[];
   translation?: {
     title_zh?: string;
     summary_zh?: string;
@@ -28,7 +27,6 @@ export interface ArticleForExport extends ArticlesTable {
   };
   filter_matches?: Array<{
     domainName: string | null;
-    matchedKeywords: string[];
     filterReason: string | null;
   }>;
 }
@@ -81,10 +79,6 @@ function buildFilename(article: ArticleForExport): string {
 function renderMarkdown(article: ArticleForExport): string {
   const lines: string[] = [];
 
-  const keywords = Array.isArray(article.keywords)
-    ? article.keywords
-    : safeParse<string[]>(article.keywords as any, []);
-
   // YAML front matter
   lines.push('---');
   lines.push(`id: ${article.id}`);
@@ -93,7 +87,6 @@ function renderMarkdown(article: ArticleForExport): string {
   if (article.rss_source_name) lines.push(`source: "${escapeFm(article.rss_source_name)}"`);
   if (article.published_at) lines.push(`published: "${article.published_at}"`);
   if (article.created_at) lines.push(`created: "${article.created_at}"`);
-  if (keywords.length > 0) lines.push(`tags: [${keywords.map((t) => `"${t}"`).join(', ')}]`);
   lines.push('---');
   lines.push('');
 
@@ -124,23 +117,14 @@ function renderMarkdown(article: ArticleForExport): string {
     lines.push('');
   }
 
-  // 关键词
-  if (keywords.length > 0) {
-    lines.push('## 关键词');
-    lines.push('');
-    lines.push(keywords.map((k) => `- ${k}`).join('\n'));
-    lines.push('');
-  }
-
   // 过滤匹配
   if (article.filter_matches && article.filter_matches.length > 0) {
     lines.push('## 过滤匹配');
     lines.push('');
     for (const match of article.filter_matches) {
       const name = match.domainName ? `【${match.domainName}】` : '【未归类】';
-      const kw = match.matchedKeywords.length > 0 ? `关键词：${match.matchedKeywords.join('、')}` : '关键词：无';
       const reason = match.filterReason ? `原因：${match.filterReason}` : '';
-      lines.push(`- ${name} ${kw}${reason ? `；${reason}` : ''}`);
+      lines.push(`- ${name}${reason ? ` ${reason}` : ''}`);
     }
     lines.push('');
   }
@@ -224,16 +208,5 @@ export async function exportBatchArticles(articles: ArticleForExport[]): Promise
   }
   log.info({ count: paths.length, dir: EXPORT_DIR }, 'Batch export completed');
   return paths;
-}
-
-/* ── Utility: Safe JSON Parse ── */
-
-function safeParse<T>(json: string | undefined, fallback: T): T {
-  if (!json) return fallback;
-  try {
-    return JSON.parse(json);
-  } catch {
-    return fallback;
-  }
 }
 

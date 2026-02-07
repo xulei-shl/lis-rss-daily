@@ -500,7 +500,7 @@ function renderArticleCard(article, index) {
     'failed': '失败'
   };
 
-  const summary = article.summary || article.markdown_content?.substring(0, 300) || '';
+  const summary = article.content || article.markdown_content?.substring(0, 300) || '';
 
   return \`
     <div class="article-card fade-in-up" style="animation-delay: \${index * 30}ms">

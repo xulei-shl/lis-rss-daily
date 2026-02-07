@@ -10,6 +10,7 @@ import { logger } from './logger.js';
 import { getActiveConfigListByType, type LLMConfigRecord } from './api/llm-configs.js';
 import { decryptAPIKey } from './utils/crypto.js';
 import { config } from './config.js';
+import { LLMLogger, type LLMCallContext } from './llm-logger.js';
 
 const log = logger.child({ module: 'llm' });
 
@@ -49,7 +50,7 @@ interface FailoverEntry {
 
 /* ── Provider: OpenAI-compatible (Qwen via dashscope, etc.) ── */
 
-function createOpenAIProvider(llmConfig: LLMConfigOptions): LLMProvider {
+function createOpenAIProvider(llmConfig: LLMConfigOptions, configId?: number): LLMProvider {
   const client = new OpenAI({
     apiKey: llmConfig.apiKey,
     baseURL: llmConfig.baseURL,
@@ -61,22 +62,53 @@ function createOpenAIProvider(llmConfig: LLMConfigOptions): LLMProvider {
   return {
     name: `openai/${model}`,
     async chat(messages, options = {}) {
-      const startTime = Date.now();
       const label = options.label || 'chat';
-      log.debug({ model, label, messages: messages.length }, `→ OpenAI: ${label}`);
 
-      const response = await client.chat.completions.create({
+      // 创建日志上下文
+      const callContext: LLMCallContext = {
+        provider: 'openai',
         model,
-        max_tokens: options.maxTokens ?? 2048,
+        apiKey: llmConfig.apiKey,
+        baseUrl: llmConfig.baseURL,
+        label,
+        configId,
+      };
+
+      const session = LLMLogger.start(callContext);
+      session.logRequest({
+        messages,
         temperature: options.temperature,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
-        ...(options.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
+        maxTokens: options.maxTokens,
+        jsonMode: options.jsonMode,
       });
 
-      const text = response.choices[0]?.message?.content || '';
-      const elapsed = Date.now() - startTime;
-      log.info({ model, label, elapsed: `${elapsed}ms`, responseLength: text.length }, `← OpenAI: ${label} done`);
-      return text;
+      try {
+        const response = await client.chat.completions.create({
+          model,
+          max_tokens: options.maxTokens ?? 2048,
+          temperature: options.temperature,
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          ...(options.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
+        });
+
+        const text = response.choices[0]?.message?.content || '';
+
+        session.logResponse({
+          success: true,
+          response: text,
+          responseLength: text.length,
+          elapsedMs: 0,
+        });
+
+        return text;
+      } catch (error) {
+        session.logResponse({
+          success: false,
+          error: error instanceof Error ? error : new Error('Unknown error'),
+          elapsedMs: 0,
+        });
+        throw error;
+      }
     },
   };
 }
@@ -85,7 +117,7 @@ function createOpenAIProvider(llmConfig: LLMConfigOptions): LLMProvider {
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
-function createGeminiProvider(llmConfig: LLMConfigOptions): LLMProvider {
+function createGeminiProvider(llmConfig: LLMConfigOptions, configId?: number): LLMProvider {
   const apiKey = llmConfig.apiKey;
   const model = llmConfig.model;
   const baseURL = llmConfig.baseURL;
@@ -93,67 +125,95 @@ function createGeminiProvider(llmConfig: LLMConfigOptions): LLMProvider {
   return {
     name: `gemini/${model}`,
     async chat(messages, options = {}) {
-      const startTime = Date.now();
       const label = options.label || 'chat';
-      log.debug({ model, label, messages: messages.length }, `→ Gemini: ${label}`);
 
-      // Convert ChatMessage[] to Gemini format
-      // Gemini uses "contents" with "role" (user/model) and system instruction separately
-      const systemParts: string[] = [];
-      const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
-
-      for (const msg of messages) {
-        if (msg.role === 'system') {
-          systemParts.push(msg.content);
-        } else {
-          contents.push({
-            role: msg.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: msg.content }],
-          });
-        }
-      }
-
-      const body: Record<string, any> = {
-        contents,
-        generationConfig: {
-          temperature: options.temperature ?? 0.3,
-          maxOutputTokens: options.maxTokens ?? 2048,
-          ...(options.jsonMode ? { responseMimeType: 'application/json' } : {}),
-        },
+      // 创建日志上下文
+      const callContext: LLMCallContext = {
+        provider: 'gemini',
+        model,
+        apiKey,
+        baseUrl: baseURL || GEMINI_API_BASE,
+        label,
+        configId,
       };
 
-      if (systemParts.length > 0) {
-        body.systemInstruction = {
-          parts: systemParts.map((text) => ({ text })),
-        };
-      }
-
-      // Use custom base URL if provided, otherwise use default
-      const apiUrl = baseURL || GEMINI_API_BASE;
-      const url = `${apiUrl}/models/${model}:generateContent?key=${apiKey}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+      const session = LLMLogger.start(callContext);
+      session.logRequest({
+        messages,
+        temperature: options.temperature,
+        maxTokens: options.maxTokens,
+        jsonMode: options.jsonMode,
       });
 
-      if (!res.ok) {
-        const err = await res.text();
-        log.error({ status: res.status, label, error: err }, `← Gemini: ${label} error`);
-        throw new Error(`Gemini ${label} error (${res.status}): ${err}`);
+      try {
+        // Convert ChatMessage[] to Gemini format
+        // Gemini uses "contents" with "role" (user/model) and system instruction separately
+        const systemParts: string[] = [];
+        const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+
+        for (const msg of messages) {
+          if (msg.role === 'system') {
+            systemParts.push(msg.content);
+          } else {
+            contents.push({
+              role: msg.role === 'assistant' ? 'model' : 'user',
+              parts: [{ text: msg.content }],
+            });
+          }
+        }
+
+        const body: Record<string, any> = {
+          contents,
+          generationConfig: {
+            temperature: options.temperature ?? 0.3,
+            maxOutputTokens: options.maxTokens ?? 2048,
+            ...(options.jsonMode ? { responseMimeType: 'application/json' } : {}),
+          },
+        };
+
+        if (systemParts.length > 0) {
+          body.systemInstruction = {
+            parts: systemParts.map((text) => ({ text })),
+          };
+        }
+
+        // Use custom base URL if provided, otherwise use default
+        const apiUrl = baseURL || GEMINI_API_BASE;
+        const url = `${apiUrl}/models/${model}:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const err = await res.text();
+          throw new Error(`Gemini ${label} error (${res.status}): ${err}`);
+        }
+
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        if (!text) {
+          throw new Error(`Gemini ${label}: empty response`);
+        }
+
+        session.logResponse({
+          success: true,
+          response: text,
+          responseLength: text.length,
+          elapsedMs: 0,
+        });
+
+        return text;
+      } catch (error) {
+        session.logResponse({
+          success: false,
+          error: error instanceof Error ? error : new Error('Unknown error'),
+          elapsedMs: 0,
+        });
+        throw error;
       }
-
-      const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-      if (!text) {
-        log.error({ label, response: data }, `← Gemini: ${label} empty response`);
-        throw new Error(`Gemini ${label}: empty response`);
-      }
-
-      const elapsed = Date.now() - startTime;
-      log.info({ model, label, elapsed: `${elapsed}ms`, responseLength: text.length }, `← Gemini: ${label} done`);
-      return text;
     },
   };
 }
@@ -248,16 +308,17 @@ export async function getUserLLMProvider(userId: number): Promise<LLMProvider> {
  * Useful for testing or temporary providers
  *
  * @param llmConfig - LLM configuration options
+ * @param configId - Optional config ID for logging
  * @returns LLM provider instance
  */
-export function createLLMProvider(llmConfig: LLMConfigOptions): LLMProvider {
+export function createLLMProvider(llmConfig: LLMConfigOptions, configId?: number): LLMProvider {
   switch (llmConfig.provider) {
     case 'gemini':
-      return createGeminiProvider(llmConfig);
+      return createGeminiProvider(llmConfig, configId);
     case 'openai':
     case 'custom':
     default:
-      return createOpenAIProvider(llmConfig);
+      return createOpenAIProvider(llmConfig, configId);
   }
 }
 
@@ -271,7 +332,7 @@ function buildProviderFromDbConfig(dbConfig: LLMConfigRecord): LLMProvider | nul
       timeout: dbConfig.timeout,
       maxRetries: dbConfig.max_retries,
     };
-    return createLLMProvider(llmConfig);
+    return createLLMProvider(llmConfig, dbConfig.id);
   } catch (error) {
     log.warn({ error, configId: dbConfig.id }, 'Failed to build LLM provider from config');
     return null;

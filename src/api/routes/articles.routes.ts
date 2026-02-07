@@ -155,15 +155,13 @@ router.get('/articles/:id', requireAuth, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Article not found' });
     }
 
-    const [keywords, translation, filterMatches] = await Promise.all([
-      articleService.getArticleKeywordsById(id, req.userId!),
+    const [translation, filterMatches] = await Promise.all([
       articleService.getArticleTranslation(id, req.userId!),
       articleService.getArticleFilterMatches(id, req.userId!),
     ]);
 
     res.json({
       ...article,
-      keywords,
       translation,
       filter_matches: filterMatches,
     });

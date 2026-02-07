@@ -1,20 +1,19 @@
 /**
- * 处理流水线：翻译 → 导出。
+ * 处理流水线：翻译。
  *
- * 两阶段流程：
+ * 流程：
  * 1. 翻译：英文内容翻译（LLM）
- * 2. 导出：导出 Markdown 文件（data/exports/）
+ * 2. 向量索引
+ * 3. 相关文章缓存更新
  *
  * 包含重试与批处理机制。
  */
 
 import { getDb } from './db.js';
 import { translateArticleIfNeeded } from './agent.js';
-import { exportArticleMarkdown, type ArticleForExport } from './export.js';
 import { indexArticle } from './vector/indexer.js';
 import {
   getArticleById,
-  getArticleFilterMatches,
   upsertArticleTranslation,
   updateArticleProcessStatus,
   refreshRelatedArticles,
@@ -32,7 +31,7 @@ export interface ProcessResult {
   title: string;
   url: string;
   status: 'completed' | 'failed' | 'skipped';
-  stage?: 'prepare' | 'analyze' | 'export';
+  stage?: 'prepare' | 'translate';
   error?: string;
   duration?: number;
   reason?: string; // For skipped status
@@ -325,27 +324,7 @@ async function runPipeline(
     return { status: 'failed', stage: 'translate', error: errMsg };
   }
 
-  // ── Stage 3: Export ──
-  try {
-    log.debug({ articleId }, '[stage3] Starting export');
-
-    const filterMatches = await getArticleFilterMatches(articleId, userId);
-
-    // Prepare article for export with analysis results
-    const articleForExport: ArticleForExport = {
-      ...updatedArticle,
-      translation: translationResult ?? undefined,
-      filter_matches: filterMatches,
-    };
-
-    const exportPath = await exportArticleMarkdown(articleForExport);
-    log.info({ articleId, path: exportPath }, '[stage3] Export OK');
-  } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error);
-    log.warn({ articleId, error: errMsg }, '[stage3] Export failed (non-fatal)');
-    // Export failure is not fatal - the article is still processed
-  }
-
+  // ── Stage 3: Vector Index (非致命) ──
   indexArticle(articleId, userId).catch((error) => {
     log.warn({ articleId, error }, '[stage3] 向量索引失败');
   });

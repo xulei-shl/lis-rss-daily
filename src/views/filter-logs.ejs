@@ -123,14 +123,6 @@
     min-width: 80px;
   }
 
-  .matched-keywords {
-    max-width: 200px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.85rem;
-  }
-
   .filter-reason {
     max-width: 250px;
     font-size: 0.85rem;
@@ -279,7 +271,6 @@
         <th>领域</th>
         <th>结果</th>
         <th>相关性</th>
-        <th>匹配关键词</th>
         <th>原因</th>
         <th>时间</th>
       </tr>
@@ -383,7 +374,6 @@ function renderLogs(logs, total) {
 
   tbody.innerHTML = logs.map(log => {
     const domain = domains.find(d => d.id === log.domain_id);
-    const matchedKeywords = log.matched_keywords ? JSON.parse(log.matched_keywords) : [];
 
     return \`
       <tr class="expand-row" data-id="\${log.id}">
@@ -398,19 +388,17 @@ function renderLogs(logs, total) {
           </span>
         </td>
         <td class="relevance-score">\${log.relevance_score !== null ? log.relevance_score.toFixed(2) : '-'}</td>
-        <td class="matched-keywords" title="\${matchedKeywords.join(', ')}">\${matchedKeywords.join(', ') || '-'}</td>
         <td class="filter-reason" title="\${escapeHtml(log.filter_reason || '')}">\${escapeHtml(log.filter_reason || '-')}</td>
         <td class="timestamp">\${formatDate(log.created_at)}</td>
       </tr>
       <tr class="detail-row" id="detail-\${log.id}">
-        <td colspan="8" class="detail-cell">
+        <td colspan="7" class="detail-cell">
           <div class="detail-content">
             <h4>过滤详情</h4>
             <p><strong>文章ID:</strong> \${log.article_id}</p>
             <p><strong>领域:</strong> \${domain ? escapeHtml(domain.name) : '-'}</p>
             <p><strong>结果:</strong> \${log.is_passed ? '通过' : '拒绝'}</p>
             <p><strong>相关性分数:</strong> \${log.relevance_score !== null ? log.relevance_score.toFixed(2) : '-'}</p>
-            <p><strong>匹配关键词:</strong> \${matchedKeywords.join(', ') || '-'}</p>
             <p><strong>原因:</strong> \${escapeHtml(log.filter_reason || '-')}</p>
             \${log.llm_response ? \`
               <h4 style="margin-top: 16px;">LLM 响应</h4>

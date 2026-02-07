@@ -409,7 +409,7 @@ function renderArticleCard(article, index) {
     'pending': '待处理'
   };
 
-  const content = article.summary || article.markdown_content || '';
+  const content = article.content || article.markdown_content || '';
   const hasContent = content.length > 0;
   const TRUNCATE_LENGTH = 400;
   const needsTruncate = content.length > TRUNCATE_LENGTH;

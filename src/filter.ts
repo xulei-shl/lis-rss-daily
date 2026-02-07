@@ -1,10 +1,8 @@
 /**
- * Article Filter Module - Two-Stage Filtering
+ * Article Filter Module - LLM Filtering
  *
- * Implements a two-stage filtering strategy:
- * 1. Keyword pre-filter (quick rejection)
- * 2. LLM precise filter (JSON mode)
- * 3. Keyword-only fallback when LLM fails
+ * Implements a single-stage filtering strategy:
+ * 1. LLM precise filter (JSON mode)
  *
  * All filter decisions are logged to article_filter_logs table.
  */
@@ -38,7 +36,6 @@ export interface FilterInput {
 export interface FilterResult {
   passed: boolean;
   relevanceScore?: number;
-  matchedKeywords?: string[];
   domainMatches: DomainMatchResult[];
   filterReason?: string;
   usedFallback: boolean;
@@ -52,7 +49,6 @@ export interface DomainMatchResult {
   domainName: string;
   passed: boolean;
   relevanceScore?: number;
-  matchedKeywords?: string[];
   reasoning?: string;
 }
 
@@ -60,10 +56,6 @@ export interface DomainMatchResult {
  * Filter options
  */
 export interface FilterOptions {
-  /** 强制仅关键词模式（跳过 LLM） */
-  skipLLM?: boolean;
-  /** 是否启用关键词预筛（默认 false） */
-  useKeywordPrefilter?: boolean;
   /** 通过的最低相关度分数（默认 0.5） */
   minRelevanceScore?: number;
 }
@@ -75,7 +67,6 @@ interface LLMEvaluation {
   domain_id: number;
   is_relevant: boolean;
   relevance_score: number;
-  matched_keywords: string[];
   reasoning: string;
 }
 
@@ -85,87 +76,7 @@ interface LLMResponse {
 
 /* ── Internal Types ── */
 
-interface KeywordMatchData {
-  domainId: number;
-  domainName: string;
-  keywords: Array<{ keyword: string; description: string | null; weight: number }>;
-}
-
-/* ── Stage 1: Keyword Pre-Filter ── */
-
-/**
- * Stage 1: Quick keyword-based pre-filtering
- * Returns matched domains with their matched keywords
- */
-async function keywordPreFilter(
-  input: FilterInput
-): Promise<{
-  hasMatch: boolean;
-  matchedDomains: Map<number, KeywordMatchData>;
-}> {
-  const db = getDb();
-  const matchedDomains = new Map<number, KeywordMatchData>();
-
-  // Get all active domains for user
-  const activeDomains = await getActiveTopicDomains(input.userId);
-
-  // Build search text from title and description
-  const searchText = `${input.title} ${input.description}`.toLowerCase();
-
-  for (const domain of activeDomains) {
-    const keywords = await getActiveKeywordsForDomain(domain.id);
-    const matchedKeywords: Array<{ keyword: string; description: string | null; weight: number }> = [];
-
-    for (const kw of keywords) {
-      if (searchText.includes(kw.keyword.toLowerCase())) {
-        matchedKeywords.push({ keyword: kw.keyword, description: kw.description, weight: kw.weight });
-      }
-    }
-
-    if (matchedKeywords.length > 0) {
-      matchedDomains.set(domain.id, {
-        domainId: domain.id,
-        domainName: domain.name,
-        keywords: matchedKeywords,
-      });
-    }
-  }
-
-  return {
-    hasMatch: matchedDomains.size > 0,
-    matchedDomains,
-  };
-}
-
-/**
- * 构建全部活跃领域的关键词数据（预筛关闭时使用）
- */
-async function buildAllDomainsMatchData(
-  userId: number
-): Promise<Map<number, KeywordMatchData>> {
-  const matchedDomains = new Map<number, KeywordMatchData>();
-  const activeDomains = await getActiveTopicDomains(userId);
-
-  for (const domain of activeDomains) {
-    const keywords = await getActiveKeywordsForDomain(domain.id);
-    if (keywords.length === 0) {
-      continue;
-    }
-    matchedDomains.set(domain.id, {
-      domainId: domain.id,
-      domainName: domain.name,
-      keywords: keywords.map((k) => ({
-        keyword: k.keyword,
-        description: k.description,
-        weight: k.weight,
-      })),
-    });
-  }
-
-  return matchedDomains;
-}
-
-/* ── Stage 2: LLM Precise Filter ── */
+/* ── LLM Precise Filter ── */
 
 /**
  * Build system prompt for LLM filtering
@@ -184,10 +95,7 @@ function buildFilterSystemPromptFromDomainsInfo(
 
 # Context & Constraints
 1. **语义匹配**：不要仅进行简单的关键词匹配。必须结合【描述】字段中的解释或同义词，对文章进行语义层面的理解。
-2. **权重逻辑**：
-   - 【权重】字段为数字，数值越大代表越重要。
-   - 命中高权重的主题领域或主题词，应显著提高文章的通过率。
-   - 仅命中低权重词汇且与核心领域关联不强时，应倾向于拒绝。
+2. **关键词说明**：主题词仅用于辅助理解领域范围，不作为硬性匹配规则。
 3. **综合评估**：文章必须在核心概念上与用户关注的领域高度重合，而非仅仅是提及。
 
 # Input Data Structure
@@ -218,7 +126,6 @@ ${domainsText}
       "domain_id": 1,
       "is_relevant": true,
       "relevance_score": 0.85,
-      "matched_keywords": ["keyword1", "keyword2"],
       "reasoning": "简短说明相关性（1-2句）"
     }
   ]
@@ -229,13 +136,11 @@ ${domainsText}
 - 每个领域独立评估
 - 一篇文章可以与多个领域相关
 - 只有具有实质性关联时才标记为相关
-- matched_keywords 必须来自该领域的主题词列表
 - reasoning 保持简洁（1-2句）`;
 }
 
 async function buildDomainInfo(
-  domains: Array<{ id: number; name: string; description: string | null; priority: number }>,
-  keywordsMap: Map<number, Array<{ keyword: string; description: string | null; weight: number }>>
+  domains: Array<{ id: number; name: string; description: string | null; priority: number }>
 ): Promise<Array<{
   id: number;
   name: string;
@@ -244,7 +149,7 @@ async function buildDomainInfo(
 }>> {
   return Promise.all(
     domains.map(async (domain) => {
-      const keywords = keywordsMap.get(domain.id) || [];
+      const keywords = await getActiveKeywordsForDomain(domain.id);
       return {
         id: domain.id,
         name: domain.name,
@@ -272,12 +177,12 @@ function formatDomainsInfo(
 ## 领域ID: ${d.id} - ${d.name}
 描述: ${d.description}
 主题词:
-${d.keywords
+${d.keywords.length > 0 ? d.keywords
   .map((k) => {
     const descPart = k.description ? `，描述/同义词：${k.description}` : '';
     return `- ${k.keyword}（权重：${k.weight}${descPart}）`;
   })
-  .join('\n')}
+  .join('\n') : '- 无'}
 `)
     .join('\n');
 }
@@ -286,31 +191,22 @@ ${d.keywords
  * Stage 2: LLM-based precise filtering
  */
 async function llmFilter(
-  input: FilterInput,
-  matchedDomains: Map<number, KeywordMatchData>
+  input: FilterInput
 ): Promise<{
   results: Map<number, Omit<DomainMatchResult, 'domainName'>>;
+  domainNames: Map<number, string>;
   error?: string;
   rawResponse?: string;
 }> {
-  const db = getDb();
-
   // Get full domain info
   const activeDomains = await getActiveTopicDomains(input.userId);
-  const relevantDomains = activeDomains.filter((d) => matchedDomains.has(d.id));
-
-  if (relevantDomains.length === 0) {
-    return { results: new Map() };
-  }
-
-  // Build keywords map for LLM prompt
-  const keywordsMap = new Map<number, Array<{ keyword: string; description: string | null; weight: number }>>();
-  for (const [domainId, data] of Array.from(matchedDomains.entries())) {
-    keywordsMap.set(domainId, data.keywords);
+  const domainNames = new Map(activeDomains.map((d) => [d.id, d.name]));
+  if (activeDomains.length === 0) {
+    return { results: new Map(), domainNames };
   }
 
   // Build messages
-  const domainsInfo = await buildDomainInfo(relevantDomains, keywordsMap);
+  const domainsInfo = await buildDomainInfo(activeDomains);
   const domainsText = formatDomainsInfo(domainsInfo);
   const fallbackSystemPrompt = buildFilterSystemPromptFromDomainsInfo(domainsInfo);
   const systemPrompt = await resolveSystemPrompt(input.userId, 'filter', fallbackSystemPrompt, {
@@ -346,12 +242,10 @@ ${input.content ? `内容预览: ${input.content.substring(0, 2000)}...` : ''}
     const results = new Map<number, Omit<DomainMatchResult, 'domainName'>>();
 
     for (const evaluation of parsed.evaluations) {
-      const domainName = matchedDomains.get(evaluation.domain_id)?.domainName || '';
       results.set(evaluation.domain_id, {
         domainId: evaluation.domain_id,
         passed: evaluation.is_relevant,
         relevanceScore: evaluation.relevance_score,
-        matchedKeywords: evaluation.matched_keywords,
         reasoning: evaluation.reasoning,
       });
     }
@@ -361,44 +255,12 @@ ${input.content ? `内容预览: ${input.content.substring(0, 2000)}...` : ''}
       'LLM filter completed'
     );
 
-    return { results, rawResponse: response };
+    return { results, rawResponse: response, domainNames };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     log.warn({ error: errorMessage, articleId: input.articleId }, 'LLM filter failed');
-    return { results: new Map(), error: errorMessage };
+    return { results: new Map(), error: errorMessage, domainNames };
   }
-}
-
-/* ── Fallback: Keyword-Only Matching ── */
-
-/**
- * Fallback: Keyword-only matching when LLM fails
- */
-function keywordOnlyFilter(
-  matchedDomains: Map<number, KeywordMatchData>,
-  minScore: number
-): DomainMatchResult[] {
-  const results: DomainMatchResult[] = [];
-
-  for (const [domainId, data] of Array.from(matchedDomains.entries())) {
-    // Calculate score based on keyword weights
-    const avgWeight = data.keywords.reduce((sum, k) => sum + k.weight, 0) / data.keywords.length;
-    // Max score for keyword-only is 0.8 (reserved for LLM-confirmed results)
-    const score = Math.min(0.8, avgWeight * 0.5 + 0.3);
-
-    if (score >= minScore) {
-      results.push({
-        domainId,
-        domainName: data.domainName,
-        passed: true,
-        relevanceScore: score,
-        matchedKeywords: data.keywords.map((k) => k.keyword),
-        reasoning: 'Passed via keyword matching (LLM unavailable)',
-      });
-    }
-  }
-
-  return results;
 }
 
 /* ── Filter Log Recording ── */
@@ -411,7 +273,6 @@ async function recordFilterLog(
   domainId: number | null,
   isPassed: boolean,
   relevanceScore: number | null,
-  matchedKeywords: string[] | null,
   filterReason: string | null,
   llmResponse: string | null = null
 ): Promise<void> {
@@ -424,7 +285,7 @@ async function recordFilterLog(
       domain_id: domainId,
       is_passed: isPassed ? 1 : 0,
       relevance_score: relevanceScore,
-      matched_keywords: matchedKeywords ? JSON.stringify(matchedKeywords) : null,
+      matched_keywords: null,
       filter_reason: filterReason,
       llm_response: llmResponse,
       created_at: new Date().toISOString(),
@@ -451,7 +312,6 @@ async function recordFilterResults(
       match.domainId,
       match.passed,
       match.relevanceScore ?? null,
-      match.matchedKeywords ?? null,
       match.reasoning ?? null,
       null // Individual domain logs don't need full LLM response
     );
@@ -460,14 +320,13 @@ async function recordFilterResults(
   const hasDomainLog = domainMatches.length > 0;
   const llmResponse = options.llmResponse ?? null;
   const reason = options.fallbackReason
-    || (hasDomainLog ? 'LLM 原始响应' : 'No keyword matches found');
+    || (hasDomainLog ? 'LLM 原始响应' : '无领域评估结果');
 
   if (!hasDomainLog || llmResponse) {
     await recordFilterLog(
       input.articleId,
       null,
       options.overallPassed,
-      null,
       null,
       reason,
       llmResponse
@@ -478,7 +337,7 @@ async function recordFilterResults(
 /* ── Main Filter Function ── */
 
 /**
- * Filter an article using two-stage filtering
+ * Filter an article using LLM filtering
  * @param input - Article data to filter
  * @param options - Filter options
  * @returns Filter result
@@ -492,104 +351,50 @@ export async function filterArticle(
 
   requestLog.debug({ title: input.title }, 'Starting article filter');
 
-  // Stage 1: Keyword pre-filter
-  let keywordResult: Awaited<ReturnType<typeof keywordPreFilter>> | null = null;
+  // LLM filter
+  const llmResult = await llmFilter(input);
 
-  if (options.useKeywordPrefilter) {
-    keywordResult = await keywordPreFilter(input);
-
-    if (!keywordResult.hasMatch) {
-      requestLog.info('Article rejected: no keyword matches');
-      await recordFilterLog(
-        input.articleId,
-        null,
-        false,
-        null,
-        null,
-        'No keyword matches'
-      );
-      // Auto-update filter_status to 'rejected'
-      await updateArticleFilterStatus(input.articleId, 'rejected', 0);
-      return {
-        passed: false,
-        domainMatches: [],
-        filterReason: 'No keyword matches',
-        usedFallback: false,
-      };
-    }
-  }
-
-  // If skipLLM is set, use keyword-only matching
-  if (options.skipLLM) {
-    requestLog.debug('Using keyword-only filter (skipLLM=true)');
-    if (!keywordResult) {
-      requestLog.warn('skipLLM=true requires keyword prefilter; forcing prefilter');
-      keywordResult = await keywordPreFilter(input);
-    }
-    const domainMatches = keywordOnlyFilter(keywordResult.matchedDomains, minScore);
-
-    // Auto-update filter_status
-    const passed = domainMatches.length > 0;
-    const relevanceScore = passed ? Math.max(...domainMatches.map((d) => d.relevanceScore ?? 0)) : 0;
-    await updateArticleFilterStatus(input.articleId, passed ? 'passed' : 'rejected', relevanceScore);
-
-    await recordFilterResults(input, domainMatches, {
-      overallPassed: passed,
-      fallbackReason: passed ? 'Passed via keyword matching' : 'Failed keyword relevance threshold',
-    });
-
+  if (llmResult.error) {
+    requestLog.warn({ error: llmResult.error }, 'LLM filter failed');
+    await updateArticleFilterStatus(input.articleId, 'rejected', 0);
+    await recordFilterLog(
+      input.articleId,
+      null,
+      false,
+      null,
+      `LLM failed: ${llmResult.error}`,
+      llmResult.rawResponse ?? null
+    );
     return {
-      passed,
-      relevanceScore: passed ? relevanceScore : undefined,
-      matchedKeywords: passed ? Array.from(new Set(domainMatches.flatMap((d) => d.matchedKeywords ?? []))) : [],
-      domainMatches,
-      filterReason: passed ? 'Passed via keyword matching' : 'Failed keyword relevance threshold',
-      usedFallback: true,
+      passed: false,
+      domainMatches: [],
+      filterReason: `LLM failed: ${llmResult.error}`,
+      usedFallback: false,
     };
   }
 
-  // Stage 2: LLM filter
-  const llmMatchedDomains = keywordResult
-    ? keywordResult.matchedDomains
-    : await buildAllDomainsMatchData(input.userId);
-  const llmResult = await llmFilter(input, llmMatchedDomains);
-
-  // If LLM failed, fall back to keyword-only
-  if (llmResult.error || llmResult.results.size === 0) {
-    requestLog.warn({ error: llmResult.error }, 'LLM filter failed, using keyword fallback');
-    if (!keywordResult) {
-      keywordResult = await keywordPreFilter(input);
-    }
-    const domainMatches = keywordOnlyFilter(keywordResult.matchedDomains, minScore);
-
-    // Auto-update filter_status
-    const passed = domainMatches.length > 0;
-    const relevanceScore = passed ? Math.max(...domainMatches.map((d) => d.relevanceScore ?? 0)) : 0;
-    await updateArticleFilterStatus(input.articleId, passed ? 'passed' : 'rejected', relevanceScore);
-
-    await recordFilterResults(input, domainMatches, {
-      llmResponse: llmResult.rawResponse ?? null,
-      overallPassed: passed,
-      fallbackReason: llmResult.error
-        ? `LLM failed: ${llmResult.error}`
-        : 'Passed via keyword matching (LLM unavailable)',
-    });
-
+  if (llmResult.results.size === 0) {
+    const reason = 'LLM 未返回有效评估结果';
+    await updateArticleFilterStatus(input.articleId, 'rejected', 0);
+    await recordFilterLog(
+      input.articleId,
+      null,
+      false,
+      null,
+      reason,
+      llmResult.rawResponse ?? null
+    );
     return {
-      passed,
-      relevanceScore: passed ? relevanceScore : undefined,
-      matchedKeywords: passed ? Array.from(new Set(domainMatches.flatMap((d) => d.matchedKeywords ?? []))) : [],
-      domainMatches,
-      filterReason: llmResult.error ? `LLM failed: ${llmResult.error}` : 'Passed via keyword matching (LLM unavailable)',
-      usedFallback: true,
+      passed: false,
+      domainMatches: [],
+      filterReason: reason,
+      usedFallback: false,
     };
   }
 
   // Process LLM results
   const domainMatches: DomainMatchResult[] = [];
-  const domainNames = new Map(
-    Array.from(llmMatchedDomains.entries()).map(([id, data]) => [id, data.domainName])
-  );
+  const domainNames = llmResult.domainNames;
 
   for (const [domainId, result] of Array.from(llmResult.results.entries())) {
     const domainName = domainNames.get(domainId) || '';
@@ -627,7 +432,6 @@ export async function filterArticle(
   return {
     passed,
     relevanceScore: passed ? relevanceScore : undefined,
-    matchedKeywords: passed ? Array.from(new Set(passedMatches.flatMap((m) => m.matchedKeywords ?? []))) : [],
     domainMatches,
     filterReason: passed ? 'Passed LLM evaluation' : 'Failed LLM relevance threshold',
     usedFallback: false,

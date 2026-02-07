@@ -310,20 +310,6 @@
     margin-top: var(--space-1);
   }
 
-  /* 关键词 */
-  .tags-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-
-  .tag-item {
-    font-family: var(--font-meta);
-    font-size: var(--text-2xs);
-    font-weight: 500;
-    color: var(--accent-primary);
-  }
-
   /* Action Buttons */
   .action-buttons {
     display: flex;
@@ -460,12 +446,6 @@
       <div class="sidebar-card" id="relatedCard" style="display: none;">
         <h3 class="sidebar-title">相关文章</h3>
         <ul class="related-articles-list" id="relatedList"></ul>
-      </div>
-
-      <!-- 关键词 -->
-      <div class="sidebar-card" id="keywordsCard" style="display: none;">
-        <h3 class="sidebar-title">关键词</h3>
-        <div class="tags-list" id="keywordsList"></div>
       </div>
 
       <!-- Article Info -->
@@ -621,13 +601,6 @@ function renderArticle(article) {
     filterSection.style.display = 'block';
     filterList.innerHTML = article.filter_matches.map((match) => {
       const domain = match.domainName ? escapeHtml(match.domainName) : '未归类';
-      const hasKeywords = (match.matchedKeywords || []).length > 0;
-      const keywordsHtml = hasKeywords
-        ? \`<div class="filter-keywords">
-             <span class="filter-keywords-label">关键词：</span>
-             <span class="filter-keywords-list">\${escapeHtml(match.matchedKeywords.join('、'))}</span>
-           </div>\`
-        : '';
       const reasonHtml = match.filterReason
         ? \`<div class="filter-reason">
              <span class="filter-reason-label">原因：</span>
@@ -637,7 +610,6 @@ function renderArticle(article) {
       return \`
         <li class="filter-item">
           <div class="filter-domain">【\${domain}】</div>
-          \${keywordsHtml}
           \${reasonHtml}
         </li>
       \`;
@@ -652,14 +624,6 @@ function renderArticle(article) {
     document.getElementById('rssContent').innerHTML = formatMarkdown(mainContent);
   }
 
-  // 关键词
-  const keywordsCard = document.getElementById('keywordsCard');
-  if (Array.isArray(article.keywords) && article.keywords.length > 0) {
-    keywordsCard.style.display = 'block';
-    document.getElementById('keywordsList').innerHTML = article.keywords.map(tag =>
-      \`<span class="tag-item">#\${escapeHtml(tag.trim())}</span>\`
-    ).join('');
-  }
 }
 
 // Load related articles

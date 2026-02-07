@@ -53,18 +53,6 @@
     border-bottom: none;
   }
 
-  .data-table tr.domain-row {
-    cursor: pointer;
-  }
-
-  .data-table tr.domain-row:hover {
-    background: var(--bg);
-  }
-
-  .data-table tr.domain-row.selected {
-    background: rgba(32, 117, 176, 0.1);
-  }
-
   .status-badge {
     display: inline-block;
     padding: 3px 8px;
@@ -111,47 +99,17 @@
   }
 
   .keyword-count {
-    text-align: center;
-    font-weight: 500;
-  }
-
-  .keyword-weight {
-    text-align: center;
+    font-size: 0.75rem;
     color: var(--dim);
-    font-size: 0.8rem;
   }
 
-  .keywords-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-  }
-
-  .keywords-header h3 {
-    font-size: 1rem;
-    font-weight: 600;
-  }
-
-  .no-selection {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 200px;
+  .keyword-domain-badge {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    background: var(--bg);
+    border-radius: 3px;
     color: var(--dim);
-    text-align: center;
-  }
-
-  .no-selection svg {
-    width: 48px;
-    height: 48px;
-    margin-bottom: 12px;
-    opacity: 0.5;
-  }
-
-  .weight-input {
-    width: 80px;
+    white-space: nowrap;
   }
 
   textarea {
@@ -198,25 +156,17 @@
 
   <!-- Keywords Panel -->
   <div class="topics-panel">
-    <div class="keywords-header" id="keywordsHeader">
-      <h3 id="keywordsTitle">选择一个领域查看关键词</h3>
-      <button class="btn btn-primary" id="addKeywordBtn" onclick="showKeywordModal()" style="display: none;">+ 添加关键词</button>
+    <div class="section-header">
+      <h2>关键词</h2>
+      <button class="btn btn-primary" onclick="showKeywordModal()">+ 添加关键词</button>
     </div>
 
-    <div id="keywordsContent">
-      <div class="no-selection">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-        </svg>
-        <p>点击左侧领域选择</p>
-      </div>
-    </div>
-
-    <table class="data-table" id="keywordsTable" style="display: none;">
+    <table class="data-table" id="keywordsTable">
       <thead>
         <tr>
           <th>关键词</th>
-          <th>权重</th>
+          <th>所属领域</th>
+          <th>状态</th>
           <th>操作</th>
         </tr>
       </thead>
@@ -224,7 +174,15 @@
         <!-- Dynamic content -->
       </tbody>
     </table>
+
+    <div id="keywordsEmpty" class="empty-state" style="display: none;">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+      </svg>
+      <p>暂无关键词</p>
+    </div>
   </div>
+
 </div>
 
 <!-- Domain Modal -->
@@ -274,20 +232,22 @@
     <form id="keywordForm">
       <input type="hidden" id="keywordId">
       <div class="form-group">
-        <label>领域</label>
-        <input type="text" id="keywordDomainName" disabled style="background: var(--bg);">
+        <label for="keywordDomainId">所属领域 *</label>
+        <select id="keywordDomainId" required>
+          <option value="">请选择领域</option>
+        </select>
       </div>
       <div class="form-group">
-        <label for="keywordText">关键词 *</label>
-        <input type="text" id="keywordText" required placeholder="例如: 深度学习">
+        <label for="keywordName">关键词 *</label>
+        <input type="text" id="keywordName" required placeholder="例如: 深度学习">
       </div>
       <div class="form-group">
         <label for="keywordDescription">描述</label>
-        <textarea id="keywordDescription" placeholder="可选描述..."></textarea>
+        <textarea id="keywordDescription" placeholder="简要描述这个关键词..."></textarea>
       </div>
       <div class="form-group">
         <label for="keywordWeight">权重</label>
-        <input type="number" id="keywordWeight" value="1.0" min="0" max="10" step="0.1" class="weight-input">
+        <input type="number" id="keywordWeight" value="1.0" min="0" max="10" step="0.1" style="width: 100px;">
         <small style="color: var(--dim);">0-10，数值越大权重越高</small>
       </div>
       <div class="form-group">
@@ -307,18 +267,31 @@
 
 <script>
 let domains = [];
-let selectedDomainId = null;
+let keywords = [];
 
-// Load domains on page load
+// Load domains and keywords on page load
 loadDomains();
+loadKeywords();
 
 async function loadDomains() {
   try {
-    const res = await fetch('/api/topic-domains/with-keyword-count');
-    domains = await res.json();
+    const res = await fetch('/api/topic-domains?limit=200');
+    const data = await res.json();
+    domains = data.domains || [];
     renderDomains();
+    updateDomainSelect();
   } catch (err) {
     console.error('Failed to load domains:', err);
+  }
+}
+
+async function loadKeywords() {
+  try {
+    const res = await fetch('/api/topic-keywords/all');
+    keywords = await res.json() || [];
+    renderKeywords();
+  } catch (err) {
+    console.error('Failed to load keywords:', err);
   }
 }
 
@@ -337,79 +310,80 @@ function renderDomains() {
   emptyState.style.display = 'none';
 
   tbody.innerHTML = domains.map(domain => \`
-    <tr class="domain-row \${selectedDomainId === domain.id ? 'selected' : ''}" onclick="selectDomain(\${domain.id})">
+    <tr class="domain-row">
       <td>
         <div style="font-weight: 500;">\${escapeHtml(domain.name)}</div>
         \${domain.description ? \`<div class="domain-description">\${escapeHtml(domain.description)}</div>\` : ''}
       </td>
-      <td class="keyword-count">\${domain.keyword_count || 0}</td>
+      <td>
+        <span class="keyword-count">\${domain.keyword_count || 0} 个关键词</span>
+      </td>
       <td>
         <span class="status-badge \${domain.is_active ? 'active' : 'inactive'}">
-          \${domain.is_active ? '启用' : '禁用'}
+          \${domain.is_active ? '&#10003;' : '&#10007;'}
         </span>
       </td>
       <td>
         <div class="action-buttons">
-          <button class="btn-icon" onclick="event.stopPropagation(); editDomain(\${domain.id})">编辑</button>
-          <button class="btn-icon" onclick="event.stopPropagation(); deleteDomain(\${domain.id})">删除</button>
+          <button class="btn-icon" onclick="editDomain(\${domain.id})">&#9998;</button>
+          <button class="btn-icon" onclick="deleteDomain(\${domain.id})">&#128465;</button>
         </div>
       </td>
     </tr>
   \`).join('');
 }
 
-function selectDomain(domainId) {
-  selectedDomainId = domainId;
-  renderDomains();
-  loadKeywords(domainId);
+function renderKeywords() {
+  const tbody = document.getElementById('keywordsBody');
+  const emptyState = document.getElementById('keywordsEmpty');
+  const table = document.getElementById('keywordsTable');
 
-  const domain = domains.find(d => d.id === domainId);
-  document.getElementById('keywordsTitle').textContent = domain?.name || '关键词';
-  document.getElementById('addKeywordBtn').style.display = 'block';
+  if (keywords.length === 0) {
+    table.style.display = 'none';
+    emptyState.style.display = 'block';
+    return;
+  }
+
+  table.style.display = 'table';
+  emptyState.style.display = 'none';
+
+  tbody.innerHTML = keywords.map(keyword => \`
+    <tr class="keyword-row">
+      <td>
+        <div style="font-weight: 500;">\${escapeHtml(keyword.keyword)}</div>
+        \${keyword.description ? \`<div class="domain-description">\${escapeHtml(keyword.description)}</div>\` : ''}
+      </td>
+      <td>
+        <span class="keyword-domain-badge">\${escapeHtml(keyword.domain_name)}</span>
+      </td>
+      <td>
+        <span class="status-badge \${keyword.is_active ? 'active' : 'inactive'}">
+          \${keyword.is_active ? '&#10003;' : '&#10007;'}
+        </span>
+      </td>
+      <td>
+        <div class="action-buttons">
+          <button class="btn-icon" onclick="editKeyword(\${keyword.id})">&#9998;</button>
+          <button class="btn-icon" onclick="deleteKeyword(\${keyword.id})">&#128465;</button>
+        </div>
+      </td>
+    </tr>
+  \`).join('');
 }
 
-async function loadKeywords(domainId) {
-  try {
-    const res = await fetch(\`/api/topic-domains/\${domainId}/keywords\`);
-    const data = await res.json();
-    const keywords = data.keywords || [];
-
-    const noSelection = document.getElementById('keywordsContent');
-    const table = document.getElementById('keywordsTable');
-    const tbody = document.getElementById('keywordsBody');
-
-    if (keywords.length === 0) {
-      noSelection.innerHTML = \`
-        <div class="empty-state">
-          <p>暂无关键词</p>
-          <p style="font-size: 0.85rem; margin-top: 8px;">点击上方按钮添加关键词</p>
-        </div>
-      \`;
-      table.style.display = 'none';
-      return;
+function updateDomainSelect() {
+  const select = document.getElementById('keywordDomainId');
+  const currentValue = select.value;
+  select.innerHTML = '<option value="">请选择领域</option>';
+  domains.forEach(domain => {
+    if (domain.is_active) {
+      const option = document.createElement('option');
+      option.value = domain.id;
+      option.textContent = domain.name;
+      select.appendChild(option);
     }
-
-    noSelection.style.display = 'none';
-    table.style.display = 'table';
-
-    tbody.innerHTML = keywords.map(kw => \`
-      <tr>
-        <td>
-          <div style="font-weight: 500;">\${escapeHtml(kw.keyword)}</div>
-          \${kw.description ? \`<div style="font-size: 0.8rem; color: var(--dim);">\${escapeHtml(kw.description)}</div>\` : ''}
-        </td>
-        <td class="keyword-weight">\${kw.weight.toFixed(1)}</td>
-        <td>
-          <div class="action-buttons">
-            <button class="btn-icon" onclick="editKeyword(\${kw.id})">编辑</button>
-            <button class="btn-icon" onclick="deleteKeyword(\${kw.id})">删除</button>
-          </div>
-        </td>
-      </tr>
-    \`).join('');
-  } catch (err) {
-    console.error('Failed to load keywords:', err);
-  }
+  });
+  select.value = currentValue;
 }
 
 // Domain modal functions
@@ -441,6 +415,47 @@ function closeDomainModal() {
   document.getElementById('domainModal').classList.remove('active');
 }
 
+// Keyword modal functions
+function showKeywordModal() {
+  if (domains.filter(d => d.is_active).length === 0) {
+    showConfirm('请先添加并启用一个主题领域', {
+      title: '提示',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
+    return;
+  }
+
+  document.getElementById('keywordModalTitle').textContent = '添加关键词';
+  document.getElementById('keywordId').value = '';
+  document.getElementById('keywordDomainId').value = '';
+  document.getElementById('keywordName').value = '';
+  document.getElementById('keywordDescription').value = '';
+  document.getElementById('keywordWeight').value = '1.0';
+  document.getElementById('keywordActive').value = 'true';
+  document.getElementById('keywordModal').classList.add('active');
+  document.getElementById('keywordName').focus();
+}
+
+function editKeyword(id) {
+  const keyword = keywords.find(k => k.id === id);
+  if (!keyword) return;
+
+  document.getElementById('keywordModalTitle').textContent = '编辑关键词';
+  document.getElementById('keywordId').value = keyword.id;
+  document.getElementById('keywordDomainId').value = keyword.domain_id;
+  document.getElementById('keywordName').value = keyword.keyword;
+  document.getElementById('keywordDescription').value = keyword.description || '';
+  document.getElementById('keywordWeight').value = keyword.weight;
+  document.getElementById('keywordActive').value = keyword.is_active ? 'true' : 'false';
+  document.getElementById('keywordModal').classList.add('active');
+}
+
+function closeKeywordModal() {
+  document.getElementById('keywordModal').classList.remove('active');
+}
+
+// Domain form submit
 document.getElementById('domainForm').addEventListener('submit', async function(e) {
   e.preventDefault();
 
@@ -465,9 +480,51 @@ document.getElementById('domainForm').addEventListener('submit', async function(
     if (res.ok) {
       closeDomainModal();
       await loadDomains();
-      if (selectedDomainId) {
-        await loadKeywords(selectedDomainId);
-      }
+      await loadKeywords();
+    } else {
+      const result = await res.json();
+      await showConfirm(result.error || '保存失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
+    }
+  } catch (err) {
+    await showConfirm('保存失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
+  }
+});
+
+// Keyword form submit
+document.getElementById('keywordForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const id = document.getElementById('keywordId').value;
+  const data = {
+    domainId: parseInt(document.getElementById('keywordDomainId').value),
+    keyword: document.getElementById('keywordName').value.trim(),
+    description: document.getElementById('keywordDescription').value.trim() || null,
+    weight: parseFloat(document.getElementById('keywordWeight').value),
+    isActive: document.getElementById('keywordActive').value === 'true'
+  };
+
+  try {
+    const url = id ? \`/api/topic-keywords/\${id}\` : '/api/topic-keywords';
+    const method = id ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (res.ok) {
+      closeKeywordModal();
+      await loadDomains();
+      await loadKeywords();
     } else {
       const result = await res.json();
       await showConfirm(result.error || '保存失败', {
@@ -487,7 +544,7 @@ document.getElementById('domainForm').addEventListener('submit', async function(
 
 async function deleteDomain(id) {
   const domain = domains.find(d => d.id === id);
-  const msg = domain ? \`确定要删除主题领域 "\${domain.name}" 吗？\\n\\n这将同时删除该领域下的所有关键词。\` : '确定要删除吗？';
+  const msg = domain ? \`确定要删除主题领域 "\${domain.name}" 吗？\\n\\n此操作将同时删除该领域下的所有关键词！\` : '确定要删除吗？';
   const confirmed = await showConfirm(msg, {
     title: '删除主题领域',
     okText: '删除',
@@ -498,21 +555,8 @@ async function deleteDomain(id) {
   try {
     const res = await fetch(\`/api/topic-domains/\${id}\`, { method: 'DELETE' });
     if (res.ok) {
-      if (selectedDomainId === id) {
-        selectedDomainId = null;
-        document.getElementById('keywordsTitle').textContent = '选择一个领域查看关键词';
-        document.getElementById('addKeywordBtn').style.display = 'none';
-        document.getElementById('keywordsContent').innerHTML = \`
-          <div class="no-selection">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-            </svg>
-            <p>点击左侧领域选择</p>
-          </div>
-        \`;
-        document.getElementById('keywordsTable').style.display = 'none';
-      }
       await loadDomains();
+      await loadKeywords();
     } else {
       const result = await res.json();
       await showConfirm(result.error || '删除失败', {
@@ -530,90 +574,10 @@ async function deleteDomain(id) {
   }
 }
 
-// Keyword modal functions
-function showKeywordModal() {
-  if (!selectedDomainId) return;
-
-  const domain = domains.find(d => d.id === selectedDomainId);
-  document.getElementById('keywordModalTitle').textContent = '添加关键词';
-  document.getElementById('keywordId').value = '';
-  document.getElementById('keywordDomainName').value = domain?.name || '';
-  document.getElementById('keywordText').value = '';
-  document.getElementById('keywordDescription').value = '';
-  document.getElementById('keywordWeight').value = '1.0';
-  document.getElementById('keywordActive').value = 'true';
-  document.getElementById('keywordModal').classList.add('active');
-  document.getElementById('keywordText').focus();
-}
-
-async function editKeyword(id) {
-  try {
-    const res = await fetch(\`/api/topic-keywords/\${id}\`);
-    const keyword = await res.json();
-
-    const domain = domains.find(d => d.id === keyword.domain_id);
-    document.getElementById('keywordModalTitle').textContent = '编辑关键词';
-    document.getElementById('keywordId').value = keyword.id;
-    document.getElementById('keywordDomainName').value = domain?.name || '';
-    document.getElementById('keywordText').value = keyword.keyword;
-    document.getElementById('keywordDescription').value = keyword.description || '';
-    document.getElementById('keywordWeight').value = keyword.weight;
-    document.getElementById('keywordActive').value = keyword.is_active ? 'true' : 'false';
-    document.getElementById('keywordModal').classList.add('active');
-  } catch (err) {
-    console.error('Failed to load keyword:', err);
-  }
-}
-
-function closeKeywordModal() {
-  document.getElementById('keywordModal').classList.remove('active');
-}
-
-document.getElementById('keywordForm').addEventListener('submit', async function(e) {
-  e.preventDefault();
-
-  const id = document.getElementById('keywordId').value;
-  const data = {
-    domainId: selectedDomainId,
-    keyword: document.getElementById('keywordText').value.trim(),
-    description: document.getElementById('keywordDescription').value.trim() || null,
-    weight: parseFloat(document.getElementById('keywordWeight').value),
-    isActive: document.getElementById('keywordActive').value === 'true'
-  };
-
-  try {
-    const url = id ? \`/api/topic-keywords/\${id}\` : '/api/topic-keywords';
-    const method = id ? 'PUT' : 'POST';
-
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-
-    if (res.ok) {
-      closeKeywordModal();
-      await loadDomains();
-      await loadKeywords(selectedDomainId);
-    } else {
-      const result = await res.json();
-      await showConfirm(result.error || '保存失败', {
-        title: '错误',
-        okText: '知道了',
-        okButtonType: 'btn-secondary'
-      });
-    }
-  } catch (err) {
-    await showConfirm('保存失败，请稍后重试', {
-      title: '错误',
-      okText: '知道了',
-      okButtonType: 'btn-secondary'
-    });
-  }
-});
-
 async function deleteKeyword(id) {
-  const confirmed = await showConfirm('确定要删除这个关键词吗？', {
+  const keyword = keywords.find(k => k.id === id);
+  const msg = keyword ? \`确定要删除关键词 "\${keyword.keyword}" 吗？\` : '确定要删除吗？';
+  const confirmed = await showConfirm(msg, {
     title: '删除关键词',
     okText: '删除',
     cancelText: '取消'
@@ -624,7 +588,7 @@ async function deleteKeyword(id) {
     const res = await fetch(\`/api/topic-keywords/\${id}\`, { method: 'DELETE' });
     if (res.ok) {
       await loadDomains();
-      await loadKeywords(selectedDomainId);
+      await loadKeywords();
     } else {
       const result = await res.json();
       await showConfirm(result.error || '删除失败', {
@@ -654,7 +618,6 @@ function escapeHtml(str) {
 document.getElementById('domainModal').addEventListener('click', function(e) {
   if (e.target === this) closeDomainModal();
 });
-
 document.getElementById('keywordModal').addEventListener('click', function(e) {
   if (e.target === this) closeKeywordModal();
 });
