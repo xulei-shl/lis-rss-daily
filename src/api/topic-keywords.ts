@@ -101,7 +101,7 @@ export async function createTopicKeyword(
       weight: data.weight ?? 1.0,
       is_active: data.isActive !== undefined ? (data.isActive ? 1 : 0) : 1,
       updated_at: new Date().toISOString(),
-    })
+    } as any)
     .executeTakeFirstOrThrow();
 
   const insertedId = Number(result.insertId);

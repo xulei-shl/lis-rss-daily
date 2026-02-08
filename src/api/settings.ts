@@ -5,7 +5,7 @@
  * Settings are stored as key-value pairs in the settings table.
  */
 
-import { getDb } from '../db.js';
+import { getDb, type DatabaseTable } from '../db.js';
 import { logger } from '../logger.js';
 
 const log = logger.child({ module: 'settings-service' });
@@ -79,7 +79,7 @@ export async function setUserSetting(
         key,
         value: stringValue,
         updated_at: now,
-      })
+      } as any)
       .execute();
   }
 

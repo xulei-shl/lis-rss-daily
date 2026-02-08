@@ -38,7 +38,7 @@ export function createToken(userId: number, username?: string): string {
   const payload: JWTPayload = { userId, username };
   return jwt.sign(payload, config.jwtSecret, {
     expiresIn: config.jwtExpiresIn,
-  });
+  } as jwt.SignOptions);
 }
 
 /**

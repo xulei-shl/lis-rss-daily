@@ -5,7 +5,7 @@
  * Provides CRUD operations with user isolation.
  */
 
-import { getDb, type DB } from '../db.js';
+import { getDb, type DB, type DatabaseTable } from '../db.js';
 import { logger } from '../logger.js';
 import type { RssSourcesTable } from '../db.js';
 
@@ -86,7 +86,7 @@ export async function createRSSSource(
       fetch_interval: data.fetchInterval ?? 3600,
       status: data.status ?? 'active',
       updated_at: new Date().toISOString(),
-    })
+    } as any)
     .executeTakeFirstOrThrow();
 
   const insertedId = Number(result.insertId);
@@ -197,7 +197,7 @@ export async function updateRSSSource(
     .where('user_id', '=', userId)
     .executeTakeFirst();
 
-  if (result.numUpdatedRows === 0) {
+  if (result.numUpdatedRows === 0n) {
     throw new Error('RSS source not found');
   }
 
@@ -220,7 +220,7 @@ export async function deleteRSSSource(id: number, userId: number): Promise<void>
     .where('user_id', '=', userId)
     .executeTakeFirst();
 
-  if (result.numDeletedRows === 0) {
+  if (result.numDeletedRows === 0n) {
     throw new Error('RSS source not found');
   }
 

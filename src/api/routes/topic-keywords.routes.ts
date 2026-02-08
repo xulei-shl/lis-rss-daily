@@ -18,7 +18,11 @@ const router = express.Router();
  */
 router.get('/topic-domains/:domainId/keywords', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const domainId = parseInt(req.params.domainId);
+    const domainIdParam = req.params.domainId;
+    if (Array.isArray(domainIdParam)) {
+      return res.status(400).json({ error: 'Invalid domain ID' });
+    }
+    const domainId = parseInt(domainIdParam);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 50;
     const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
@@ -68,7 +72,11 @@ router.get('/topic-keywords/all', requireAuth, async (req: AuthRequest, res) => 
  */
 router.get('/topic-keywords/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (Array.isArray(idParam)) {
+      return res.status(400).json({ error: 'Invalid topic keyword ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid topic keyword ID' });
@@ -136,7 +144,11 @@ router.post('/topic-keywords', requireAuth, async (req: AuthRequest, res) => {
  */
 router.put('/topic-keywords/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (Array.isArray(idParam)) {
+      return res.status(400).json({ error: 'Invalid topic keyword ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid topic keyword ID' });
@@ -204,7 +216,11 @@ router.put('/topic-keywords/:id', requireAuth, async (req: AuthRequest, res) => 
  */
 router.delete('/topic-keywords/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (Array.isArray(idParam)) {
+      return res.status(400).json({ error: 'Invalid topic keyword ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid topic keyword ID' });

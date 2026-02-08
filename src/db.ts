@@ -5,7 +5,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { Generated, Kysely, SqliteDialect } from 'kysely';
+import { Kysely, SqliteDialect } from 'kysely';
 import { logger } from './logger.js';
 import { config } from './config.js';
 import fs from 'fs';
@@ -27,27 +27,27 @@ export interface DatabaseTable {
 }
 
 export interface UsersTable {
-  id: Generated<number>;
+  id: number;
   username: string;
   password_hash: string;
-  created_at: Generated<string>;
+  created_at: string;
   updated_at: string;
 }
 
 export interface RssSourcesTable {
-  id: Generated<number>;
+  id: number;
   user_id: number;
   name: string;
   url: string;
   last_fetched_at: string | null;
   fetch_interval: number;
   status: 'active' | 'inactive';
-  created_at: Generated<string>;
+  created_at: string;
   updated_at: string;
 }
 
 export interface ArticlesTable {
-  id: Generated<number>;
+  id: number;
   rss_source_id: number;
   title: string;
   url: string;
@@ -61,34 +61,34 @@ export interface ArticlesTable {
   processed_at: string | null;
   published_at: string | null;
   error_message: string | null;
-  created_at: Generated<string>;
+  created_at: string;
   updated_at: string;
 }
 
 export interface TopicDomainsTable {
-  id: Generated<number>;
+  id: number;
   user_id: number;
   name: string;
   description: string | null;
   is_active: number;
   priority: number;
-  created_at: Generated<string>;
+  created_at: string;
   updated_at: string;
 }
 
 export interface TopicKeywordsTable {
-  id: Generated<number>;
+  id: number;
   domain_id: number;
   keyword: string;
   description: string | null;
   weight: number;
   is_active: number;
-  created_at: Generated<string>;
+  created_at: string;
   updated_at: string;
 }
 
 export interface ArticleFilterLogsTable {
-  id: Generated<number>;
+  id: number;
   article_id: number;
   domain_id: number | null;
   is_passed: number;
@@ -96,7 +96,7 @@ export interface ArticleFilterLogsTable {
   matched_keywords: string | null;
   filter_reason: string | null;
   llm_response: string | null;
-  created_at: Generated<string>;
+  created_at: string;
 }
 
 export interface ArticleRelatedTable {
@@ -116,7 +116,7 @@ export interface ArticleTranslationsTable {
 }
 
 export interface LlmConfigsTable {
-  id: Generated<number>;
+  id: number;
   user_id: number;
   provider: string;
   base_url: string;
@@ -129,12 +129,12 @@ export interface LlmConfigsTable {
   timeout: number;
   max_retries: number;
   max_concurrent: number;
-  created_at: Generated<string>;
+  created_at: string;
   updated_at: string;
 }
 
 export interface SettingsTable {
-  id: Generated<number>;
+  id: number;
   user_id: number;
   key: string;
   value: string;
@@ -142,14 +142,14 @@ export interface SettingsTable {
 }
 
 export interface SystemPromptsTable {
-  id: Generated<number>;
+  id: number;
   user_id: number;
   type: string;
   name: string;
   template: string;
   variables: string | null;
   is_active: number;
-  created_at: Generated<string>;
+  created_at: string;
   updated_at: string;
 }
 

@@ -4,7 +4,7 @@
  * 负责 system_prompts 表的 CRUD 操作。
  */
 
-import { getDb, type SystemPromptsTable } from '../db.js';
+import { getDb, type SystemPromptsTable, type DatabaseTable } from '../db.js';
 import { logger } from '../logger.js';
 import { variablesToJSON, getVariableDefinitions, PROMPT_VARIABLES } from '../config/system-prompt-variables.js';
 
@@ -175,7 +175,7 @@ export async function ensureDefaultSystemPrompts(
         variables: variablesToJSON(prompt.type),  // ← 使用统一的变量定义
         is_active: 1,
         updated_at: new Date().toISOString(),
-      })
+      } as any)
       .executeTakeFirst();
 
     created += 1;
@@ -235,7 +235,7 @@ export async function createSystemPrompt(
       variables,
       is_active: data.isActive === undefined ? 1 : data.isActive ? 1 : 0,
       updated_at: new Date().toISOString(),
-    })
+    } as any)
     .executeTakeFirstOrThrow();
 
   const insertedId = Number(result.insertId);
@@ -276,7 +276,7 @@ export async function updateSystemPrompt(
     .where('user_id', '=', userId)
     .executeTakeFirst();
 
-  if (result.numUpdatedRows === 0) {
+  if (result.numUpdatedRows === 0n) {
     throw new Error('System prompt not found');
   }
 
@@ -294,7 +294,7 @@ export async function deleteSystemPrompt(
     .where('user_id', '=', userId)
     .executeTakeFirst();
 
-  if (result.numDeletedRows === 0) {
+  if (result.numDeletedRows === 0n) {
     throw new Error('System prompt not found');
   }
 

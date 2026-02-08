@@ -188,7 +188,11 @@ router.put('/topic-domains/:id', requireAuth, async (req: AuthRequest, res) => {
  */
 router.delete('/topic-domains/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (Array.isArray(idParam)) {
+      return res.status(400).json({ error: 'Invalid topic domain ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid topic domain ID' });

@@ -5,7 +5,7 @@
  * Provides article storage with URL deduplication.
  */
 
-import { getDb } from '../db.js';
+import { getDb, type DatabaseTable } from '../db.js';
 import { logger } from '../logger.js';
 import type { RSSFeedItem } from '../rss-parser.js';
 import { toSimpleMarkdown } from '../utils/markdown.js';
@@ -144,7 +144,7 @@ export async function saveArticles(
           published_at: item.pubDate ? new Date(item.pubDate).toISOString() : null,
           created_at: now,
           updated_at: now,
-        })
+        } as any)
         .returning('id')
         .executeTakeFirst();
 

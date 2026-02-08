@@ -5,7 +5,7 @@
  * Provides CRUD operations with user isolation.
  */
 
-import { getDb, type DB } from '../db.js';
+import { getDb, type DB, type DatabaseTable } from '../db.js';
 import { logger } from '../logger.js';
 import type { TopicDomainsTable } from '../db.js';
 
@@ -92,7 +92,7 @@ export async function createTopicDomain(
       priority: data.priority ?? 0,
       is_active: data.isActive !== undefined ? (data.isActive ? 1 : 0) : 1,
       updated_at: new Date().toISOString(),
-    })
+    } as any)
     .executeTakeFirstOrThrow();
 
   const insertedId = Number(result.insertId);

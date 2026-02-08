@@ -5,7 +5,7 @@
  * Supports multiple LLM configurations per user with encryption for API keys.
  */
 
-import { getDb, type LlmConfigsTable } from '../db.js';
+import { getDb, type LlmConfigsTable, type DatabaseTable } from '../db.js';
 import { logger } from '../logger.js';
 import { encryptAPIKey, decryptAPIKey } from '../utils/crypto.js';
 import { config } from '../config.js';
@@ -229,7 +229,7 @@ export async function createLLMConfig(
       max_retries: data.maxRetries ?? 3,
       max_concurrent: data.maxConcurrent ?? 5,
       updated_at: new Date().toISOString(),
-    })
+    } as any)
     .executeTakeFirstOrThrow();
 
   const insertedId = Number(result.insertId);

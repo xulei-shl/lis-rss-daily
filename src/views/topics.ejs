@@ -275,9 +275,8 @@ loadKeywords();
 
 async function loadDomains() {
   try {
-    const res = await fetch('/api/topic-domains?limit=200');
-    const data = await res.json();
-    domains = data.domains || [];
+    const res = await fetch('/api/topic-domains/with-keyword-count');
+    domains = await res.json() || [];
     renderDomains();
     updateDomainSelect();
   } catch (err) {
@@ -320,13 +319,13 @@ function renderDomains() {
       </td>
       <td>
         <span class="status-badge \${domain.is_active ? 'active' : 'inactive'}">
-          \${domain.is_active ? '&#10003;' : '&#10007;'}
+          \${domain.is_active ? '启用' : '禁用'}
         </span>
       </td>
       <td>
         <div class="action-buttons">
-          <button class="btn-icon" onclick="editDomain(\${domain.id})">&#9998;</button>
-          <button class="btn-icon" onclick="deleteDomain(\${domain.id})">&#128465;</button>
+          <button class="btn-icon" onclick="editDomain(\${domain.id})">编辑</button>
+          <button class="btn-icon" onclick="deleteDomain(\${domain.id})">删除</button>
         </div>
       </td>
     </tr>
@@ -358,13 +357,13 @@ function renderKeywords() {
       </td>
       <td>
         <span class="status-badge \${keyword.is_active ? 'active' : 'inactive'}">
-          \${keyword.is_active ? '&#10003;' : '&#10007;'}
+          \${keyword.is_active ? '启用' : '禁用'}
         </span>
       </td>
       <td>
         <div class="action-buttons">
-          <button class="btn-icon" onclick="editKeyword(\${keyword.id})">&#9998;</button>
-          <button class="btn-icon" onclick="deleteKeyword(\${keyword.id})">&#128465;</button>
+          <button class="btn-icon" onclick="editKeyword(\${keyword.id})">编辑</button>
+          <button class="btn-icon" onclick="deleteKeyword(\${keyword.id})">删除</button>
         </div>
       </td>
     </tr>

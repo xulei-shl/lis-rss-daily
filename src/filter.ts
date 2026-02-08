@@ -305,7 +305,7 @@ async function recordFilterLog(
       filter_reason: filterReason,
       llm_response: llmResponse,
       created_at: new Date().toISOString(),
-    })
+    } as any)
     .execute();
 }
 
