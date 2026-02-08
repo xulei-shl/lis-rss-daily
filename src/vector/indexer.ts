@@ -8,6 +8,15 @@ const log = logger.child({ module: 'vector-indexer' });
 
 const BATCH_SIZE = 32;
 
+/**
+ * 向量索引结果
+ */
+export interface IndexResult {
+  articleId: number;
+  success: boolean;
+  error?: string;
+}
+
 class VectorIndexQueue {
   private running = Promise.resolve();
 
@@ -45,7 +54,11 @@ async function loadArticles(articleIds: number[], userId?: number) {
   return await query.execute();
 }
 
-async function doIndexArticles(articleIds: number[], userId?: number): Promise<void> {
+async function doIndexArticles(
+  articleIds: number[],
+  userId?: number,
+  onComplete?: (result: IndexResult) => void
+): Promise<void> {
   const rows = await loadArticles(articleIds, userId);
   if (rows.length === 0) return;
 
@@ -80,9 +93,31 @@ async function doIndexArticles(articleIds: number[], userId?: number): Promise<v
       const sliceDocs = documents.slice(i, i + BATCH_SIZE);
       const sliceIds = ids.slice(i, i + BATCH_SIZE);
       const sliceMetas = metadatas.slice(i, i + BATCH_SIZE);
-      const embeddings = await getEmbeddingsBatch(sliceDocs, uid);
-      await upsert(uid, sliceIds, embeddings, sliceMetas, sliceDocs);
-      total += sliceIds.length;
+
+      try {
+        const embeddings = await getEmbeddingsBatch(sliceDocs, uid);
+        await upsert(uid, sliceIds, embeddings, sliceMetas, sliceDocs);
+        total += sliceIds.length;
+
+        // 报告成功
+        sliceIds.forEach(id => {
+          const articleId = parseInt(id.split(':')[1], 10);
+          onComplete?.({ articleId, success: true });
+        });
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        log.warn({ error: errMsg, count: sliceIds.length }, '向量索引批次失败');
+
+        // 报告失败
+        sliceIds.forEach(id => {
+          const articleId = parseInt(id.split(':')[1], 10);
+          onComplete?.({
+            articleId,
+            success: false,
+            error: errMsg
+          });
+        });
+      }
     }
   }
 
@@ -103,14 +138,37 @@ async function doDeleteArticle(articleId: number, userId?: number): Promise<void
   await remove(userId, [buildVectorId(articleId, userId)]);
 }
 
-export async function indexArticle(articleId: number, userId?: number): Promise<void> {
-  queue.enqueue(() => doIndexArticles([articleId], userId));
+/**
+ * 索引单篇文章
+ * @param articleId 文章 ID
+ * @param userId 用户 ID（可选，会从数据库查询）
+ * @param onComplete 完成回调，接收索引结果
+ */
+export async function indexArticle(
+  articleId: number,
+  userId?: number,
+  onComplete?: (result: IndexResult) => void
+): Promise<void> {
+  queue.enqueue(() => doIndexArticles([articleId], userId, onComplete));
 }
 
-export async function indexArticles(articleIds: number[], userId?: number): Promise<void> {
-  queue.enqueue(() => doIndexArticles(articleIds, userId));
+/**
+ * 索引多篇文章
+ * @param articleIds 文章 ID 列表
+ * @param userId 用户 ID（可选，会从数据库查询）
+ * @param onComplete 完成回调，每次索引完成时调用
+ */
+export async function indexArticles(
+  articleIds: number[],
+  userId?: number,
+  onComplete?: (result: IndexResult) => void
+): Promise<void> {
+  queue.enqueue(() => doIndexArticles(articleIds, userId, onComplete));
 }
 
+/**
+ * 删除文章的向量索引
+ */
 export async function deleteArticle(articleId: number, userId?: number): Promise<void> {
   queue.enqueue(() => doDeleteArticle(articleId, userId));
 }

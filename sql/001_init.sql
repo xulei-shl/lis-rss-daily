@@ -128,34 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_article_filter_logs_domain_id ON article_filter_l
 CREATE INDEX IF NOT EXISTS idx_article_filter_logs_is_passed ON article_filter_logs(is_passed);
 
 -- ===========================================
--- 7. Keywords Table
--- ===========================================
-CREATE TABLE IF NOT EXISTS keywords (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  keyword TEXT NOT NULL UNIQUE,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_keywords_keyword ON keywords(keyword);
-
--- ===========================================
--- 8. Article Keywords Table
--- ===========================================
-CREATE TABLE IF NOT EXISTS article_keywords (
-  article_id INTEGER NOT NULL,
-  keyword_id INTEGER NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (article_id, keyword_id),
-  FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE,
-  FOREIGN KEY (keyword_id) REFERENCES keywords(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_article_keywords_article_id ON article_keywords(article_id);
-CREATE INDEX IF NOT EXISTS idx_article_keywords_keyword_id ON article_keywords(keyword_id);
-
--- ===========================================
--- 9. Article Related Table
+-- 7. Article Related Table
 -- ===========================================
 CREATE TABLE IF NOT EXISTS article_related (
   article_id INTEGER NOT NULL,
@@ -171,7 +144,7 @@ CREATE INDEX IF NOT EXISTS idx_article_related_article_id ON article_related(art
 CREATE INDEX IF NOT EXISTS idx_article_related_related_article_id ON article_related(related_article_id);
 
 -- ===========================================
--- 10. Article Translations Table
+-- 8. Article Translations Table
 -- ===========================================
 CREATE TABLE IF NOT EXISTS article_translations (
   article_id INTEGER PRIMARY KEY,
@@ -186,7 +159,7 @@ CREATE TABLE IF NOT EXISTS article_translations (
 CREATE INDEX IF NOT EXISTS idx_article_translations_article_id ON article_translations(article_id);
 
 -- ===========================================
--- 11. LLM Configs Table
+-- 9. LLM Configs Table
 -- ===========================================
 CREATE TABLE IF NOT EXISTS llm_configs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -211,7 +184,7 @@ CREATE INDEX IF NOT EXISTS idx_llm_configs_user_id ON llm_configs(user_id);
 CREATE INDEX IF NOT EXISTS idx_llm_configs_is_default ON llm_configs(is_default);
 
 -- ===========================================
--- 12. Settings Table
+-- 10. Settings Table
 -- ===========================================
 CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -227,7 +200,7 @@ CREATE INDEX IF NOT EXISTS idx_settings_user_id ON settings(user_id);
 CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key);
 
 -- ===========================================
--- 13. System Prompts Table
+-- 11. System Prompts Table
 -- ===========================================
 CREATE TABLE IF NOT EXISTS system_prompts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

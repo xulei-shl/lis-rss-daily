@@ -322,7 +322,7 @@ export async function updateLLMConfig(
     .where('user_id', '=', userId)
     .executeTakeFirst();
 
-  if (result.numUpdatedRows === 0) {
+  if (result.numUpdatedRows === 0n) {
     throw new Error('LLM config not found');
   }
 
@@ -341,7 +341,7 @@ export async function deleteLLMConfig(id: number, userId: number): Promise<void>
     .where('user_id', '=', userId)
     .executeTakeFirst();
 
-  if (result.numDeletedRows === 0) {
+  if (result.numDeletedRows === 0n) {
     throw new Error('LLM config not found');
   }
 

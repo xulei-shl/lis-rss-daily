@@ -125,9 +125,6 @@ export async function search(request: SearchRequest): Promise<SearchResponse> {
       userId,
       articleId!,
       limit,
-      semanticWeight,
-      keywordWeight,
-      normalizeScores,
       useCache && !refreshCache
     );
   }
@@ -406,9 +403,6 @@ async function searchRelated(
   userId: number,
   articleId: number,
   limit: number,
-  semanticWeight: number,
-  keywordWeight: number,
-  normalizeScores: boolean,
   useCache: boolean
 ): Promise<SearchResponse> {
   // Try cache first if enabled
@@ -429,10 +423,7 @@ async function searchRelated(
   const computed = await computeRelated(
     userId,
     articleId,
-    limit,
-    semanticWeight,
-    keywordWeight,
-    normalizeScores
+    limit
   );
 
   // Save cache asynchronously
@@ -452,10 +443,7 @@ async function searchRelated(
 async function computeRelated(
   userId: number,
   articleId: number,
-  limit: number,
-  semanticWeight: number,
-  keywordWeight: number,
-  normalizeScores: boolean
+  limit: number
 ): Promise<SearchResult[]> {
   const db = getDb();
 
@@ -480,7 +468,7 @@ async function computeRelated(
   const text = buildVectorText(article as any);
   if (!text) return [];
 
-  // Semantic search
+  // Semantic search only (keyword search removed)
   const embedding = await getEmbedding(text, userId);
   const semanticHits = await queryVector(userId, embedding, Math.max(limit * 3, limit), {
     user_id: userId,
@@ -490,46 +478,17 @@ async function computeRelated(
     .filter((hit) => hit.articleId && hit.articleId !== articleId)
     .map((hit) => ({
       articleId: hit.articleId,
+      finalScore: hit.score,
       semanticScore: hit.score,
     }));
 
-  // Keyword overlap search
-  const keywordResults = await findRelatedByKeywordOverlap(articleId, userId, limit * 3);
+  if (semanticResults.length === 0) return [];
 
-  // Merge scores
-  const scoreMap = new Map<number, { semanticScore: number; kwScore: number }>();
-
-  for (const item of semanticResults) {
-    const semScore = typeof item.semanticScore === 'number' ? item.semanticScore : 0.5;
-    scoreMap.set(item.articleId, { semanticScore: semScore, kwScore: 0 });
-  }
-
-  let maxMatchCount = 0;
-  for (const row of keywordResults) {
-    if (row.matchCount > maxMatchCount) {
-      maxMatchCount = row.matchCount;
-    }
-  }
-
-  for (const row of keywordResults) {
-    if (row.articleId === articleId) continue;
-    const kwScore = maxMatchCount > 0 ? row.matchCount / maxMatchCount : 0;
-    const current = scoreMap.get(row.articleId) || { semanticScore: 0, kwScore: 0 };
-    scoreMap.set(row.articleId, { semanticScore: current.semanticScore, kwScore });
-  }
-
-  if (scoreMap.size === 0) return [];
-
-  // Calculate final scores (no normalization for related articles)
-  const mergedScores = Array.from(scoreMap.entries()).map(([id, scores]) => {
-    const finalScore = scores.semanticScore * semanticWeight + scores.kwScore * keywordWeight;
-    return { articleId: id, finalScore };
-  });
-
-  mergedScores.sort((a, b) => b.finalScore - a.finalScore);
+  // Sort by score
+  semanticResults.sort((a, b) => b.finalScore - a.finalScore);
 
   // Load details
-  const topIds = mergedScores.slice(0, limit * 3).map((item) => item.articleId);
+  const topIds = semanticResults.slice(0, limit).map((item) => item.articleId);
   if (topIds.length === 0) return [];
 
   const rows = await db
@@ -549,16 +508,15 @@ async function computeRelated(
     ])
     .execute();
 
-  const scoreLookup = new Map(mergedScores.map((item) => [item.articleId, item.finalScore]));
-  const semScoreLookup = new Map(Array.from(scoreMap.entries()).map(([id, scores]) => [id, scores.semanticScore]));
-  const kwScoreLookup = new Map(Array.from(scoreMap.entries()).map(([id, scores]) => [id, scores.kwScore]));
+  const scoreLookup = new Map(semanticResults.map((item) => [item.articleId, item.finalScore]));
+  const semScoreLookup = new Map(semanticResults.map((item) => [item.articleId, item.semanticScore]));
 
   return rows
     .map((row) => ({
       articleId: row.id,
       score: Number(scoreLookup.get(row.id) ?? 0),
       semanticScore: semScoreLookup.get(row.id),
-      keywordScore: kwScoreLookup.get(row.id),
+      keywordScore: undefined,
       metadata: {
         title: row.title,
         url: row.url,
@@ -575,37 +533,6 @@ async function computeRelated(
       return bTime - aTime;
     })
     .slice(0, limit);
-}
-
-async function findRelatedByKeywordOverlap(
-  articleId: number,
-  userId: number,
-  limit: number
-): Promise<Array<{ articleId: number; matchCount: number }>> {
-  const db = getDb();
-
-  const rows = await db
-    .selectFrom('article_keywords as ak')
-    .innerJoin('article_keywords as ak2', 'ak.keyword_id', 'ak2.keyword_id')
-    .innerJoin('articles', 'articles.id', 'ak2.article_id')
-    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-    .where('ak.article_id', '=', articleId)
-    .where('ak2.article_id', '!=', articleId)
-    .where('rss_sources.user_id', '=', userId)
-    .where('articles.filter_status', '=', 'passed')
-    .where('articles.process_status', '=', 'completed')
-    .select(['articles.id as articleId'])
-    .select((eb) => eb.fn.count('ak2.keyword_id').as('match_count'))
-    .groupBy('articles.id')
-    .orderBy('match_count', 'desc')
-    .orderBy('articles.published_at', 'desc')
-    .limit(limit)
-    .execute();
-
-  return rows.map((row: any) => ({
-    articleId: row.articleId,
-    matchCount: Number(row.match_count ?? 0),
-  }));
 }
 
 async function getRelatedFromCache(

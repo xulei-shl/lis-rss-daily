@@ -12,9 +12,41 @@
  * - 调用耗时
  */
 
-import { logger } from './logger.js';
+import pino from 'pino';
+import pinoPretty from 'pino-pretty';
+import fs from 'fs';
+import path from 'path';
 
-const llmLog = logger.child({ module: 'llm-call' });
+/**
+ * 创建独立的 LLM 日志记录器
+ */
+function createLLMLogger(): pino.Logger {
+  const level = process.env.LOG_LEVEL || 'info';
+  const llmLogFile = process.env.LLM_LOG_FILE;
+
+  // Pretty stream for stdout
+  const prettyStream = pinoPretty({ colorize: true });
+
+  if (!llmLogFile) {
+    // 如果没有设置 LLM_LOG_FILE，使用主 logger 的 child
+    const { logger } = require('./logger.js');
+    return logger.child({ module: 'llm-call' });
+  }
+
+  // 创建独立的 LLM 日志文件
+  const absPath = path.resolve(llmLogFile);
+  fs.mkdirSync(path.dirname(absPath), { recursive: true });
+  const fileStream = fs.createWriteStream(absPath, { flags: 'a' });
+
+  const multistream = pino.multistream([
+    { level: level as pino.Level, stream: prettyStream },
+    { level: level as pino.Level, stream: fileStream },
+  ]);
+
+  return pino({ level }, multistream);
+}
+
+const llmLog = createLLMLogger();
 
 /**
  * 脱敏 API Key，只显示前 4 位和后 4 位

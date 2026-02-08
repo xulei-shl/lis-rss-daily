@@ -35,9 +35,10 @@ async function fixRejectedArticles() {
     })
     .where('filter_status', '=', 'rejected')
     .where('process_status', '=', 'pending')
-    .execute();
+    .executeTakeFirst();
 
-  console.log(`Updated ${result.numUpdatedRows} articles to completed`);
+  const numUpdated = result.numUpdatedRows;
+  console.log(`Updated ${numUpdated} articles to completed`);
 }
 
 fixRejectedArticles()

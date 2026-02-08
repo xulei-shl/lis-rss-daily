@@ -11,7 +11,7 @@
 
 import { getDb } from './db.js';
 import { translateArticleIfNeeded } from './agent.js';
-import { indexArticle } from './vector/indexer.js';
+import { indexArticle, type IndexResult } from './vector/indexer.js';
 import {
   getArticleById,
   upsertArticleTranslation,
@@ -325,8 +325,12 @@ async function runPipeline(
   }
 
   // ── Stage 3: Vector Index (非致命) ──
-  indexArticle(articleId, userId).catch((error) => {
-    log.warn({ articleId, error }, '[stage3] 向量索引失败');
+  indexArticle(articleId, userId, (result: IndexResult) => {
+    if (!result.success) {
+      log.warn({ articleId, error: result.error }, '[stage3] 向量索引失败');
+    } else {
+      log.debug({ articleId }, '[stage3] 向量索引成功');
+    }
   });
 
   // ── Stage 4: Related Articles (缓存计算，非致命) ──

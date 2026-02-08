@@ -5,6 +5,9 @@ import { getDb } from '../../db.js';
 import * as articleService from '../articles.js';
 import { logger } from '../../logger.js';
 import { deleteArticle as deleteVectorArticle } from '../../vector/indexer.js';
+import { getActiveConfigByType } from '../llm-configs.js';
+import { getClient } from '../../vector/chroma-client.js';
+import { getChromaSettings } from '../settings.js';
 
 const log = logger.child({ module: 'api-routes/articles' });
 
@@ -223,6 +226,58 @@ router.get('/articles/:id/related', requireAuth, async (req: AuthRequest, res) =
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to get related articles');
     res.status(500).json({ error: 'Failed to get related articles' });
+  }
+});
+
+/**
+ * GET /api/articles/vector-check
+ * 检查向量化配置是否完整
+ */
+router.get('/articles/vector-check', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId!;
+
+    // 检查 embedding 配置
+    const embeddingConfig = await getActiveConfigByType(userId, 'embedding');
+    const hasEmbedding = !!embeddingConfig;
+
+    // 检查 Chroma 配置和服务
+    const chromaSettings = await getChromaSettings(userId);
+    let chromaStatus = 'unknown';
+    try {
+      const client = await getClient(userId);
+      await client.heartbeat();
+      chromaStatus = 'available';
+    } catch {
+      chromaStatus = 'unavailable';
+    }
+
+    const embeddingMessage = hasEmbedding
+      ? 'Embedding 配置正常'
+      : '缺少 Embedding 配置。请在"LLM 配置"中添加一个 config_type 为 "embedding" 的配置。';
+
+    const chromaMessage = chromaStatus === 'available'
+      ? 'Chroma 服务正常'
+      : `Chroma 服务不可用 (${chromaSettings.host}:${chromaSettings.port})。请检查 Chroma 服务是否运行，或在"设置"中配置正确的 host 和 port。`;
+
+    res.json({
+      embedding: {
+        configured: hasEmbedding,
+        message: embeddingMessage,
+      },
+      chroma: {
+        configured: true,
+        status: chromaStatus,
+        host: chromaSettings.host,
+        port: chromaSettings.port,
+        message: chromaMessage,
+      },
+      ready: hasEmbedding && chromaStatus === 'available',
+    });
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    log.error({ error, userId: req.userId }, 'Failed to check vector config');
+    res.status(500).json({ error: errMsg });
   }
 });
 

@@ -43,6 +43,20 @@ export interface Config {
 }
 
 function getConfig(): Config {
+  // LLM Encryption Key with security warning
+  const llmEncryptionKey = process.env.LLM_ENCRYPTION_KEY || '0000000000000000000000000000000000000000000000000000000000000000';
+  const DEFAULT_ENCRYPTION_KEY = '0000000000000000000000000000000000000000000000000000000000000000';
+
+  if (llmEncryptionKey === DEFAULT_ENCRYPTION_KEY) {
+    console.warn('⚠️  警告: 使用默认的 LLM 加密密钥。生产环境请设置 LLM_ENCRYPTION_KEY 环境变量。');
+  }
+
+  // JWT Secret with security warning
+  const jwtSecret = process.env.JWT_SECRET || 'change-this-secret-in-production';
+  if (jwtSecret === 'change-this-secret-in-production') {
+    console.warn('⚠️  警告: 使用默认的 JWT 密钥。生产环境请设置 JWT_SECRET 环境变量。');
+  }
+
   return {
     // Server
     port: parseInt(process.env.PORT || '3000', 10),
@@ -52,7 +66,7 @@ function getConfig(): Config {
     databasePath: process.env.DATABASE_PATH || path.join(process.cwd(), 'data', 'rss-tracker.db'),
 
     // JWT
-    jwtSecret: process.env.JWT_SECRET || 'change-this-secret-in-production',
+    jwtSecret,
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
 
     // LLM
@@ -62,7 +76,7 @@ function getConfig(): Config {
     openaiDefaultModel: process.env.OPENAI_DEFAULT_MODEL || 'gpt-4o-mini',
     geminiApiKey: process.env.GEMINI_API_KEY,
     geminiModel: process.env.GEMINI_MODEL || 'gemini-1.5-flash',
-    llmEncryptionKey: process.env.LLM_ENCRYPTION_KEY || '0000000000000000000000000000000000000000000000000000000000000000',
+    llmEncryptionKey,
 
     // RSS
     rssFetchSchedule: process.env.RSS_FETCH_SCHEDULE || '0 9 * * *',

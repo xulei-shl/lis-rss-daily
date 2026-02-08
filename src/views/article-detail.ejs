@@ -384,6 +384,21 @@
 <!-- Loading State -->
 <div id="loadingState" class="loading">加载中...</div>
 
+<!-- Vector Config Warning (Hidden by default) -->
+<div id="vectorConfigWarning" style="display: none;" class="sidebar-card" style="margin-bottom: var(--space-6); max-width: 800px; margin-left: auto; margin-right: auto;">
+  <div style="display: flex; align-items: start; gap: var(--space-3);">
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-warning); flex-shrink: 0;">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+      <line x1="12" y1="9" x2="12" y2="13"></line>
+      <line x1="12" y1="17" x2="12.01" y2="17"></line>
+    </svg>
+    <div style="flex: 1;">
+      <h3 style="font-family: var(--font-heading); font-size: var(--text-base); font-weight: 700; margin-bottom: var(--space-2); color: var(--color-warning);">向量化功能未就绪</h3>
+      <ul id="vectorConfigWarnings" style="margin: 0; padding-left: var(--space-5); font-size: var(--text-sm); color: var(--text-primary);"></ul>
+    </div>
+  </div>
+</div>
+
 <!-- Error State (Hidden by default) -->
 <div id="errorState" class="error-state" style="display: none;">
   <div class="error-title">文章未找到</div>
@@ -481,20 +496,57 @@
 
 let articleData = null;
 
+// Check vector configuration
+async function checkVectorConfig() {
+  try {
+    const res = await fetch('/api/articles/vector-check');
+    if (!res.ok) return;
+
+    const data = await res.json();
+
+    if (!data.ready) {
+      const warnings = [];
+      if (!data.embedding.configured) {
+        warnings.push('<li>' + escapeHtml(data.embedding.message) + '</li>');
+      }
+      if (data.chroma.status !== 'available') {
+        warnings.push('<li>' + escapeHtml(data.chroma.message) + '</li>');
+      }
+
+      if (warnings.length > 0) {
+        const warningDiv = document.getElementById('vectorConfigWarning');
+        const warningList = document.getElementById('vectorConfigWarnings');
+        warningList.innerHTML = warnings.join('');
+        warningDiv.style.display = 'block';
+      }
+    }
+  } catch (err) {
+    console.error('Failed to check vector config:', err);
+  }
+}
+
 // Load article on page ready
 document.addEventListener('DOMContentLoaded', () => {
-  const pathParts = window.location.pathname.split('/');
+  // Remove trailing slash and parse article ID
+  const pathname = window.location.pathname.replace(/\/$/, '');
+  const pathParts = pathname.split('/');
   const articleId = parseInt(pathParts[pathParts.length - 1]);
 
-  if (articleId) {
+  // Check vector config
+  checkVectorConfig();
+
+  if (!isNaN(articleId)) {
     loadArticle(articleId);
+  } else {
+    console.error('Invalid article ID:', window.location.pathname);
+    showError();
   }
 });
 
 // Load article data
 async function loadArticle(id) {
   try {
-    const res = await fetch(\`/api/articles/\${id}\`);
+    const res = await fetch('/api/articles/' + id);
 
     if (!res.ok) {
       showError();
@@ -527,25 +579,24 @@ function renderArticle(article) {
   document.getElementById('articleTitle').textContent = article.title;
 
   // Meta
-  const metaHtml = \`
-    <div class="article-meta-item">
-      <span>\${escapeHtml(article.rss_source_name || 'Unknown')}</span>
-    </div>
-    <div class="article-meta-item">
-      <span>·</span>
-    </div>
-    <div class="article-meta-item">
-      <span>\${formatDateTime(article.published_at)}</span>
-    </div>
-    <div class="article-meta-item">
-      <span>·</span>
-    </div>
-    <div class="article-meta-item">
-      <a href="\${escapeHtml(article.url)}" target="_blank" rel="noopener">
-        原文链接
-      </a>
-    </div>
-  \`;
+  const metaHtml =
+    '<div class="article-meta-item">' +
+      '<span>' + escapeHtml(article.rss_source_name || 'Unknown') + '</span>' +
+    '</div>' +
+    '<div class="article-meta-item">' +
+      '<span>·</span>' +
+    '</div>' +
+    '<div class="article-meta-item">' +
+      '<span>' + formatDateTime(article.published_at) + '</span>' +
+    '</div>' +
+    '<div class="article-meta-item">' +
+      '<span>·</span>' +
+    '</div>' +
+    '<div class="article-meta-item">' +
+      '<a href="' + escapeHtml(article.url) + '" target="_blank" rel="noopener">' +
+        '原文链接' +
+      '</a>' +
+    '</div>';
   document.getElementById('articleMeta').innerHTML = metaHtml;
 
   // Original link
@@ -577,7 +628,7 @@ function renderArticle(article) {
   const summarySection = document.getElementById('summarySection');
   if (article.summary) {
     summarySection.style.display = 'block';
-    document.getElementById('rssSummary').innerHTML = \`<p>\${escapeHtml(article.summary)}</p>\`;
+    document.getElementById('rssSummary').innerHTML = '<p>' + escapeHtml(article.summary) + '</p>';
   }
 
   // 中文翻译
@@ -586,10 +637,10 @@ function renderArticle(article) {
     translationSection.style.display = 'block';
     const parts = [];
     if (article.translation.title_zh) {
-      parts.push(\`<p><strong>标题译文:</strong> \${escapeHtml(article.translation.title_zh)}</p>\`);
+      parts.push('<p><strong>标题译文:</strong> ' + escapeHtml(article.translation.title_zh) + '</p>');
     }
     if (article.translation.summary_zh) {
-      parts.push(\`<p><strong>摘要译文:</strong> \${escapeHtml(article.translation.summary_zh)}</p>\`);
+      parts.push('<p><strong>摘要译文:</strong> ' + escapeHtml(article.translation.summary_zh) + '</p>');
     }
     document.getElementById('translationContent').innerHTML = parts.join('');
   }
@@ -602,17 +653,15 @@ function renderArticle(article) {
     filterList.innerHTML = article.filter_matches.map((match) => {
       const domain = match.domainName ? escapeHtml(match.domainName) : '未归类';
       const reasonHtml = match.filterReason
-        ? \`<div class="filter-reason">
-             <span class="filter-reason-label">原因：</span>
-             <span class="filter-reason-text">\${escapeHtml(match.filterReason)}</span>
-           </div>\`
+        ? '<div class="filter-reason">' +
+             '<span class="filter-reason-label">原因：</span>' +
+             '<span class="filter-reason-text">' + escapeHtml(match.filterReason) + '</span>' +
+           '</div>'
         : '';
-      return \`
-        <li class="filter-item">
-          <div class="filter-domain">【\${domain}】</div>
-          \${reasonHtml}
-        </li>
-      \`;
+      return '<li class="filter-item">' +
+        '<div class="filter-domain">【' + domain + '】</div>' +
+        reasonHtml +
+      '</li>';
     }).join('');
   }
 
@@ -629,7 +678,7 @@ function renderArticle(article) {
 // Load related articles
 async function loadRelatedArticles(id) {
   try {
-    const res = await fetch(\`/api/articles/\${id}/related\`);
+    const res = await fetch('/api/articles/' + id + '/related');
 
     if (!res.ok) return;
 
@@ -637,16 +686,16 @@ async function loadRelatedArticles(id) {
 
     if (articles.length > 0) {
       document.getElementById('relatedCard').style.display = 'block';
-      document.getElementById('relatedList').innerHTML = articles.map(article => \`
-        <li class="related-article-item">
-          <a href="/articles/\${article.id}" class="related-article-link">
-            \${escapeHtml(article.title)}
-          </a>
-          <div class="related-article-meta">
-            \${formatTime(article.published_at)}
-          </div>
-        </li>
-      \`).join('');
+      document.getElementById('relatedList').innerHTML = articles.map(article =>
+        '<li class="related-article-item">' +
+          '<a href="/articles/' + article.id + '" class="related-article-link">' +
+            escapeHtml(article.title) +
+          '</a>' +
+          '<div class="related-article-meta">' +
+            formatTime(article.published_at) +
+          '</div>' +
+        '</li>'
+      ).join('');
     }
   } catch (err) {
     console.error('Failed to load related articles:', err);
@@ -658,27 +707,21 @@ function exportMarkdown() {
   if (!articleData) return;
 
   // Create a simple markdown export
-  const md = \`# \${articleData.title}
-
-**来源:** \${articleData.rss_source_name || 'Unknown'}
-**URL:** \${articleData.url}
-**发布时间:** \${formatDateTime(articleData.published_at)}
-
----
-
-\${articleData.summary || ''}
-
----
-
-\${articleData.markdown_content || articleData.content || ''}
-\`;
+  const md = '# ' + articleData.title + '\n\n' +
+    '**来源:** ' + (articleData.rss_source_name || 'Unknown') + '\n' +
+    '**URL:** ' + articleData.url + '\n' +
+    '**发布时间:** ' + formatDateTime(articleData.published_at) + '\n\n' +
+    '---\n\n' +
+    (articleData.summary || '') + '\n\n' +
+    '---\n\n' +
+    (articleData.markdown_content || articleData.content || '');
 
   // Download as file
   const blob = new Blob([md], { type: 'text/markdown' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = \`article-\${articleData.id}.md\`;
+  a.download = 'article-' + articleData.id + '.md';
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -688,7 +731,7 @@ async function processArticle() {
   if (!articleData) return;
 
   try {
-    const res = await fetch(\`/api/articles/\${articleData.id}/process\`, { method: 'POST' });
+    const res = await fetch('/api/articles/' + articleData.id + '/process', { method: 'POST' });
     const result = await res.json();
 
     if (res.ok) {
@@ -724,7 +767,7 @@ async function deleteArticle() {
   if (!confirmed) return;
 
   try {
-    const res = await fetch(\`/api/articles/\${articleData.id}\`, { method: 'DELETE' });
+    const res = await fetch('/api/articles/' + articleData.id, { method: 'DELETE' });
 
     if (res.ok) {
       window.location.href = '/articles';
@@ -749,21 +792,29 @@ async function deleteArticle() {
 function formatMarkdown(text) {
   if (!text) return '';
 
-  return text
+  // Escape backslashes first to handle them correctly
+  let result = text
     // Headers
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    // Bold
-    .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+    .replace(new RegExp('^### (.+)$', 'gm'), '<h3>$1</h3>')
+    .replace(new RegExp('^## (.+)$', 'gm'), '<h2>$1</h2>')
+    .replace(new RegExp('^# (.+)$', 'gm'), '<h1>$1</h1>')
+    // Bold (using character class to avoid escaping issues)
+    .replace(/[*][*]([^*]+?)[*][*]/g, '<strong>$1</strong>')
     // Italic
-    .replace(/\\*(.+?)\\*/g, '<em>$1</em>')
+    .replace(/[*]([^*]+?)[*]/g, '<em>$1</em>')
     // Code
-    .replace(/\`(.+?)\`/g, '<code>$1</code>')
+    .replace(/`([^`]+?)`/g, '<code>$1</code>')
     // Links
-    .replace(/\\[(.+?)\\]\\((.+?)\\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-    // Paragraphs
-    .split('\\n\\n').map(para => \`<p>\${para}</p>\`).join('');
+    .replace(/\[([^\]]+?)\]\(([^\)]+?)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+  // Split by double newlines and wrap in paragraphs
+  return result.split(new RegExp('\\n\\n', 'g')).map(para => {
+    para = para.trim();
+    if (!para) return '';
+    // Skip if already wrapped in HTML tags
+    if (para.startsWith('<')) return para;
+    return '<p>' + para + '</p>';
+  }).join('');
 }
 
 // Utility functions
@@ -813,8 +864,8 @@ function formatTime(dateStr) {
   const diff = now - date;
 
   if (diff < 60000) return '刚刚';
-  if (diff < 3600000) return \`\${Math.floor(diff / 60000)} 分钟前\`;
-  if (diff < 86400000) return \`\${Math.floor(diff / 3600000)} 小时前\`;
+  if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
 
   return date.toLocaleDateString('zh-CN', {
     month: 'short',

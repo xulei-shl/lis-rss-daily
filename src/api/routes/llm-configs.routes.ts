@@ -77,7 +77,11 @@ router.get('/llm-configs/default', requireAuth, async (req: AuthRequest, res) =>
  */
 router.get('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (Array.isArray(idParam)) {
+      return res.status(400).json({ error: 'Invalid LLM config ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid LLM config ID' });
@@ -194,7 +198,11 @@ router.post('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
  */
 router.put('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (Array.isArray(idParam)) {
+      return res.status(400).json({ error: 'Invalid LLM config ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid LLM config ID' });
@@ -321,7 +329,11 @@ router.put('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
  */
 router.delete('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (Array.isArray(idParam)) {
+      return res.status(400).json({ error: 'Invalid LLM config ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid LLM config ID' });
@@ -345,7 +357,11 @@ router.delete('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => 
  */
 router.post('/llm-configs/:id/set-default', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (Array.isArray(idParam)) {
+      return res.status(400).json({ error: 'Invalid LLM config ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid LLM config ID' });
@@ -369,7 +385,11 @@ router.post('/llm-configs/:id/set-default', requireAuth, async (req: AuthRequest
  */
 router.post('/llm-configs/:id/test', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (Array.isArray(idParam)) {
+      return res.status(400).json({ error: 'Invalid LLM config ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid LLM config ID' });

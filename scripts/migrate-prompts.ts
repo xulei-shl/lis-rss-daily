@@ -13,9 +13,10 @@ async function migrate() {
   // 删除所有用户的旧系统提示词
   const result = await db
     .deleteFrom('system_prompts')
-    .execute();
+    .executeTakeFirst();
 
-  console.log(`已删除 ${result.numDeletedRows} 条旧的系统提示词`);
+  const numDeleted = result.numDeletedRows;
+  console.log(`已删除 ${numDeleted} 条旧的系统提示词`);
   console.log('迁移完成！');
   console.log('请点击设置页面的"初始化默认模板"按钮来重新创建提示词。');
 }

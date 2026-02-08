@@ -3,6 +3,8 @@
  * 依赖服务已启动，并存在可登录用户
  */
 
+export {};
+
 const baseUrl = (process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
 const username = process.env.SEARCH_TEST_USERNAME || process.env.USERNAME;
 const password = process.env.SEARCH_TEST_PASSWORD || process.env.PASSWORD;

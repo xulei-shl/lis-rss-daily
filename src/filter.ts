@@ -13,6 +13,7 @@ import { logger } from './logger.js';
 import { getActiveTopicDomains } from './api/topic-domains.js';
 import { getActiveKeywordsForDomain } from './api/topic-keywords.js';
 import { resolveSystemPrompt } from './api/system-prompts.js';
+import { parseLLMJSON } from './utils/llm-json-parser.js';
 
 const log = logger.child({ module: 'article-filter' });
 
@@ -238,7 +239,22 @@ ${input.content ? `内容预览: ${input.content.substring(0, 2000)}...` : ''}
       maxTokens: 2048,
     });
 
-    const parsed = JSON.parse(response) as LLMResponse;
+    // 使用新的JSON解析工具
+    const parseResult = parseLLMJSON<LLMResponse>(response, {
+      allowPartial: true,
+      maxResponseLength: 2048,
+      errorPrefix: 'Filter evaluation',
+    });
+
+    if (!parseResult.success) {
+      log.warn(
+        { error: parseResult.error, articleId: input.articleId, rawResponse: response },
+        'LLM JSON parse failed'
+      );
+      return { results: new Map(), error: parseResult.error, rawResponse: response, domainNames };
+    }
+
+    const parsed = parseResult.data!;
     const results = new Map<number, Omit<DomainMatchResult, 'domainName'>>();
 
     for (const evaluation of parsed.evaluations) {
@@ -251,7 +267,7 @@ ${input.content ? `内容预览: ${input.content.substring(0, 2000)}...` : ''}
     }
 
     log.debug(
-      { articleId: input.articleId, evaluationCount: results.size },
+      { articleId: input.articleId, evaluationCount: results.size, usedPartialParse: parseResult.usedPartialParse },
       'LLM filter completed'
     );
 
@@ -564,3 +580,4 @@ export async function getFilterStats(userId: number): Promise<{
     byDomain,
   };
 }
+

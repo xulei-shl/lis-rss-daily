@@ -43,7 +43,11 @@ router.get('/rss-sources', requireAuth, async (req: AuthRequest, res) => {
  */
 router.get('/rss-sources/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (Array.isArray(idParam)) {
+      return res.status(400).json({ error: 'Invalid RSS source ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid RSS source ID' });
@@ -111,7 +115,11 @@ router.post('/rss-sources', requireAuth, async (req: AuthRequest, res) => {
  */
 router.put('/rss-sources/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (Array.isArray(idParam)) {
+      return res.status(400).json({ error: 'Invalid RSS source ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid RSS source ID' });
@@ -181,7 +189,11 @@ router.put('/rss-sources/:id', requireAuth, async (req: AuthRequest, res) => {
  */
 router.delete('/rss-sources/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (Array.isArray(idParam)) {
+      return res.status(400).json({ error: 'Invalid RSS source ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid RSS source ID' });
@@ -205,7 +217,11 @@ router.delete('/rss-sources/:id', requireAuth, async (req: AuthRequest, res) => 
  */
 router.post('/rss-sources/:id/fetch', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idParam = req.params.id;
+    if (Array.isArray(idParam)) {
+      return res.status(400).json({ error: 'Invalid RSS source ID' });
+    }
+    const id = parseInt(idParam);
 
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid RSS source ID' });

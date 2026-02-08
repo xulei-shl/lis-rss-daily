@@ -562,7 +562,7 @@ export async function deleteArticle(id: number, userId: number): Promise<void> {
     )
     .executeTakeFirst();
 
-  if (result.numDeletedRows === 0) {
+  if (result.numDeletedRows === 0n) {
     throw new Error('Article not found');
   }
 

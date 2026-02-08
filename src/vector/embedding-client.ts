@@ -5,6 +5,21 @@ import { getActiveConfigByType } from '../api/llm-configs.js';
 
 const log = logger.child({ module: 'vector-embedding' });
 
+/**
+ * Embedding 配置错误
+ * 提供清晰的配置缺失提示
+ */
+export class EmbeddingConfigError extends Error {
+  constructor(missingType: 'embedding' | 'chroma') {
+    const messages = {
+      embedding: '缺少 Embedding 配置。请在"LLM 配置"中添加一个 config_type 为 "embedding" 的配置。',
+      chroma: 'Chroma 服务不可用。请检查 Chroma 服务是否运行，或在"设置"中配置正确的 host 和 port。',
+    };
+    super(messages[missingType]);
+    this.name = 'EmbeddingConfigError';
+  }
+}
+
 interface EmbeddingConfig {
   baseUrl: string;
   apiKey: string;
@@ -16,7 +31,7 @@ interface EmbeddingConfig {
 async function loadEmbeddingConfig(userId: number): Promise<EmbeddingConfig> {
   const dbConfig = await getActiveConfigByType(userId, 'embedding');
   if (!dbConfig) {
-    throw new Error('缺少 embedding 配置');
+    throw new EmbeddingConfigError('embedding');
   }
 
   return {

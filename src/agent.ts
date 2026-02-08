@@ -5,6 +5,7 @@
 import { getUserLLMProvider, getLLM } from './llm.js';
 import { logger } from './logger.js';
 import { resolveSystemPrompt } from './api/system-prompts.js';
+import { parseLLMJSON } from './utils/llm-json-parser.js';
 
 const log = logger.child({ module: 'agent' });
 
@@ -60,7 +61,24 @@ export async function translateArticleIfNeeded(
       { maxTokens: 1024, jsonMode: true, label: 'translation' }
     );
 
-    const parsed = JSON.parse(text);
+    // 使用新的JSON解析工具
+    const parseResult = parseLLMJSON<{ title_zh?: string; summary_zh?: string }>(text, {
+      allowPartial: true,
+      maxResponseLength: 1024,
+      errorPrefix: 'Translation',
+    });
+
+    if (!parseResult.success) {
+      log.warn({ error: parseResult.error }, 'Translation JSON parse failed');
+      return {
+        titleZh: undefined,
+        summaryZh: undefined,
+        sourceLang: 'en',
+        usedFallback: true,
+      };
+    }
+
+    const parsed = parseResult.data!;
     const titleZh = shouldTranslateTitle ? safeString(parsed.title_zh) : undefined;
     const summaryZh = shouldTranslateContent ? safeString(parsed.summary_zh) : undefined;
 
