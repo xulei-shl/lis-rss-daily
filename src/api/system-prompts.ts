@@ -7,6 +7,12 @@
 import { getDb, type SystemPromptsTable, type DatabaseTable } from '../db.js';
 import { logger } from '../logger.js';
 import { variablesToJSON, getVariableDefinitions, PROMPT_VARIABLES } from '../config/system-prompt-variables.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const log = logger.child({ module: 'system-prompts-service' });
 
@@ -33,133 +39,43 @@ export interface QueryOptions {
   isActive?: boolean;
 }
 
-const DEFAULT_SYSTEM_PROMPTS: Array<{
-  type: string;
-  name: string;
-  template: string;
-}> = [
-  {
-    type: 'filter',
-    name: '默认文章过滤提示词',
-    template: `# Role
-你是一个专业的文章内容筛选与评估助手。你的核心任务是根据用户提供的【关注领域配置】（包含主题领域、主题词、权重及描述），对输入的【文章信息】（题目、摘要）进行深度分析，判断该文章是否符合用户的阅读需求，并给出"通过"或"拒绝"的决策。
+/**
+ * 默认提示词配置
+ * 每种类型对应一个 md 文件，如果文件不存在则不创建该类型的默认提示词
+ */
+const DEFAULT_PROMPT_CONFIG: Record<
+  string,
+  { fileName: string; name: string }
+> = {
+  filter: { fileName: 'filter.md', name: '默认文章过滤提示词' },
+  summary: { fileName: 'summary.md', name: '默认摘要提示词' },
+  keywords: { fileName: 'keywords.md', name: '默认关键词提示词' },
+  translation: { fileName: 'translation.md', name: '默认翻译提示词' },
+  daily_summary: { fileName: 'daily_summary.md', name: '默认当日总结提示词' },
+};
 
-# Context & Constraints
+/**
+ * 默认提示词模板目录
+ */
+const DEFAULT_PROMPTS_DIR = path.join(__dirname, '../config/default-prompts');
 
-1. **实质性关联原则**：文章必须**实质性讨论**专业领域的核心内容，而非仅仅提及专业词汇或职衔名称。
-2. **区分"提及"与"内容"**：
-   - ❌ **拒绝**：仅提及专业相关词汇但实际是政治新闻、人事变动、产品宣传等
-   - ❌ **拒绝**：专业词汇仅作为背景信息，非文章讨论重点
-   - ✅ **通过**：文章核心内容是关于专业方法、技术研究、行业动态、学术讨论
-3. **主要议题判断**：首先判断文章的**主要议题/主题**是什么，再评估是否与关注领域相关
-4. **谨慎语义扩展**：仅根据【描述】字段中明确说明的同义词或直接关联概念进行扩展，**禁止过度联想**
+/**
+ * 从 md 文件读取默认提示词模板
+ */
+function readDefaultPromptTemplate(type: string): string | null {
+  const config = DEFAULT_PROMPT_CONFIG[type];
+  if (!config) {
+    return null;
+  }
 
-# Input Data Structure
-用户将提供两部分信息：
-1. **关注配置**：包含领域（Domain）、该领域下的主题词（Keywords）、权重（Weight）、描述（Description）。
-2. **文章信息**：包含题目（Title）、摘要（Abstract）。
-
-# Workflow
-1. **判断文章主要议题**：这篇文章的核心主题是什么？（是技术讨论？政治新闻？人事变动？产品营销？）
-2. **提取专业内容**：如果文章涉及专业领域，提取其研究对象、方法、技术细节、行业影响等实质性内容
-3. **映射匹配**：将提取的实质性内容与用户的【关注配置】进行比对
-   - 仅当【描述】字段明确说明为同义词或直接关联时才视为扩展范围
-   - 职衔名称、机构名称出现≠专业内容相关
-4. **加权评估**：
-   - 识别命中了哪些领域和主题词
-   - 根据命中的项目权重进行综合打分
-   - *判定标准*：
-     - **通过**：文章核心内容强关联高权重领域/词汇，或关联多个中等权重词汇
-     - **拒绝**：文章内容与关注领域无关，或仅边缘提及低权重词汇，或属于关注领域的反面案例
-5. **生成结果**：输出最终决策及简短理由
-
-# 关注领域配置
-{{TOPIC_DOMAINS}}
-
-# 待分析文章
-标题：{{ARTICLE_TITLE}}
-链接：{{ARTICLE_URL}}
-{{#ARTICLE_CONTENT}}内容预览：{{ARTICLE_CONTENT}}{{/ARTICLE_CONTENT}}
-
-# Response Format
-请严格按照以下 JSON 格式输出结果（不要输出多余内容）：
-\`\`\`json
-{
-  "evaluations": [
-    {
-      "domain_id": 1,
-      "is_relevant": true,
-      "relevance_score": 0.85,
-      "reasoning": "简短说明相关性（1-2句）"
-    }
-  ]
+  const filePath = path.join(DEFAULT_PROMPTS_DIR, config.fileName);
+  try {
+    return fs.readFileSync(filePath, 'utf-8');
+  } catch (error) {
+    // 文件不存在，跳过该类型的默认提示词
+    return null;
+  }
 }
-\`\`\`
-
-# Important Notes
-- 每个领域独立评估
-- 一篇文章可以与多个领域相关
-- 只有具有实质性关联时才标记为相关
-- reasoning 保持简洁（1-2句）
-
-# 排除规则示例（拒绝条件）
-以下情况应标记为**拒绝**，即使文中提及专业相关词汇：
-- 🚫 政治人事变动（如"某官员不再担任某职位"）
-- 🚫 政治新闻中仅提及专业机构/职衔作为背景
-- 🚫 产品营销中仅使用专业术语作为宣传词汇
-- 🚫 法律案件中仅提及专业概念作为诉讼背景
-- 🚫 专业词汇仅作为比喻、类比使用，非实际讨论该专业内容`,
-  },
-  {
-    type: 'summary',
-    name: '默认摘要提示词',
-    template: '你是文章摘要助手，请用中文生成 200-300 字摘要，信息准确，不要添加编造内容。',
-  },
-  {
-    type: 'keywords',
-    name: '默认关键词提示词',
-    template:
-      '你是一个文献内容标签助手。请根据文章的标题与摘要，输出 3-8 个中文关键词（短语或术语）。如果内容不是中文，请保持术语准确并尽量转为中文表述。',
-  },
-  {
-    type: 'translation',
-    name: '默认翻译提示词',
-    template:
-      '你是专业中英翻译助手。请将英文翻译为中文，保持术语准确，不要添加解释。请严格输出 JSON：{"title_zh":"", "summary_zh":""}。',
-  },
-  {
-    type: 'daily_summary',
-    name: '默认当日总结提示词',
-    template: `你是专业的内容总结助手，请根据以下文章列表生成当日总结。
-
-## 文章列表（按源类型优先级排序）：
-{{ARTICLES_LIST}}
-
-## 输出要求：
-1. 生成 800-1000 字的中文总结
-2. 按主题领域归纳文章内容
-3. 突出期刊、博客、资讯的核心观点
-4. 使用清晰的层次结构
-
-输出格式（Markdown）：
-# {{DATE_RANGE}} 当日总结
-
-## 期刊精选
-- 要点1
-- 要点2
-
-## 博客推荐
-- 要点1
-- 要点2
-
-## 资讯动态
-- 要点1
-- 要点2
-
-## 总结观点
-综合评述`,
-  },
-];
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -229,11 +145,12 @@ export async function ensureDefaultSystemPrompts(
   let created = 0;
   let skipped = 0;
 
-  for (const prompt of DEFAULT_SYSTEM_PROMPTS) {
+  for (const [type, config] of Object.entries(DEFAULT_PROMPT_CONFIG)) {
+    // 检查是否已存在该类型的提示词
     const existing = await db
       .selectFrom('system_prompts')
       .where('user_id', '=', userId)
-      .where('type', '=', prompt.type)
+      .where('type', '=', type)
       .select(['id'])
       .executeTakeFirst();
 
@@ -242,14 +159,23 @@ export async function ensureDefaultSystemPrompts(
       continue;
     }
 
+    // 从 md 文件读取模板内容
+    const template = readDefaultPromptTemplate(type);
+    if (!template) {
+      // md 文件不存在，跳过
+      log.debug({ type, fileName: config.fileName }, 'Default prompt template file not found, skipping');
+      skipped += 1;
+      continue;
+    }
+
     await db
       .insertInto('system_prompts')
       .values({
         user_id: userId,
-        type: prompt.type,
-        name: prompt.name,
-        template: prompt.template,
-        variables: variablesToJSON(prompt.type),  // ← 使用统一的变量定义
+        type: type,
+        name: config.name,
+        template: template,
+        variables: variablesToJSON(type),
         is_active: 1,
         updated_at: new Date().toISOString(),
       } as any)
