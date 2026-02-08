@@ -8,22 +8,9 @@ import { getDb, type DailySummariesTable } from '../db.js';
 import { logger } from '../logger.js';
 import { getUserLLMProvider } from '../llm.js';
 import { resolveSystemPrompt } from './system-prompts.js';
+import { SOURCE_TYPE_PRIORITY, SOURCE_TYPE_LABELS, type SourceType } from '../constants/source-types.js';
 
 const log = logger.child({ module: 'daily-summary-service' });
-
-// 源类型优先级映射
-const SOURCE_TYPE_PRIORITY: Record<string, number> = {
-  journal: 1,
-  blog: 2,
-  news: 3,
-};
-
-// 源类型中文标签
-const SOURCE_TYPE_LABELS: Record<string, string> = {
-  journal: '期刊',
-  blog: '博客',
-  news: '资讯',
-};
 
 export interface DailySummaryArticle {
   id: number;
@@ -32,7 +19,7 @@ export interface DailySummaryArticle {
   summary: string | null;
   markdown_content: string | null;
   source_name: string;
-  source_type: 'journal' | 'blog' | 'news';
+  source_type: SourceType;
   published_at: string | null;
 }
 

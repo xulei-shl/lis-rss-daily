@@ -52,6 +52,11 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
       source: 'articles.markdown_content || articles.content',
       required: false,
     },
+    SOURCE_TYPE: {
+      description: 'RSS 源类型（journal/blog/news）',
+      source: 'rss_sources.source_type（通过 articles.rss_source_id 关联）',
+      required: false,
+    },
   },
 
   /**

@@ -107,11 +107,6 @@ pip install chromadb
 chromadb run --host 127.0.0.1 --port 8000
 ```
 
-**Docker 启动 (推荐):**
-```bash
-docker run -d -p 8000:8000 chromadb/chroma
-```
-
 ### 4. 初始化数据库
 
 ```bash

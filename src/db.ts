@@ -8,6 +8,7 @@ import Database from 'better-sqlite3';
 import { Kysely, SqliteDialect } from 'kysely';
 import { logger } from './logger.js';
 import { config } from './config.js';
+import { type SourceType } from './constants/source-types.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -40,7 +41,7 @@ export interface RssSourcesTable {
   user_id: number;
   name: string;
   url: string;
-  source_type: 'journal' | 'blog' | 'news';
+  source_type: SourceType;
   last_fetched_at: string | null;
   fetch_interval: number;
   status: 'active' | 'inactive';

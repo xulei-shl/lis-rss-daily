@@ -338,10 +338,11 @@ const DEFAULT_PROMPT_VARIABLES = {
   TOPIC_DOMAINS: '主题领域列表（从 topic_domains 和 topic_keywords 表动态构建）',
   ARTICLE_TITLE: '文章标题',
   ARTICLE_URL: '文章链接',
-  ARTICLE_CONTENT: '正文内容',
-  ARTICLE_SOURCE: '文章来源',
-  ARTICLE_AUTHOR: '文章作者',
-  PUBLISHED_DATE: '发布日期'
+  ARTICLE_CONTENT: '正文内容（截取前 2000 字符）',
+  SOURCE_TYPE: 'RSS 源类型（journal/blog/news）',
+  ARTICLES_LIST: '文章列表（标题、摘要、来源）- 用于 daily_summary 类型',
+  DATE_RANGE: '日期范围（YYYY-MM-DD 格式）- 用于 daily_summary 类型',
+  SUMMARY_LENGTH: '期望的摘要长度（默认 800-1000 字）- 用于 daily_summary 类型'
 };
 
 function getDefaultPromptVariablesJSON() {
@@ -353,6 +354,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Load data on page load
   loadLLMConfigs();
   loadSystemPrompts();
+  loadPromptVariables();
 });
 
 async function loadLLMConfigs() {
@@ -564,6 +566,61 @@ async function loadSystemPrompts() {
     emptyState.style.display = 'block';
     emptyState.innerHTML = '<p style="color: var(--red);">加载失败: ' + (err instanceof Error ? err.message : '未知错误') + '</p>';
   }
+}
+
+/**
+ * 从 API 加载变量定义并动态渲染到页面
+ */
+async function loadPromptVariables() {
+  try {
+    const res = await fetch('/api/system-prompts/variables', { cache: 'no-store' });
+    if (!res.ok) {
+      console.warn('Failed to load prompt variables, using fallback');
+      return;
+    }
+    const data = await res.json();
+    console.log('Prompt variables loaded:', data);
+    renderPromptVariables(data.variables || {});
+  } catch (err) {
+    console.error('Failed to load prompt variables:', err);
+  }
+}
+
+/**
+ * 动态渲染变量说明表格
+ */
+function renderPromptVariables(variables) {
+  const tableBody = document.getElementById('promptVariablesTableBody');
+  if (!tableBody) return;
+
+  // 按类型分组收集所有变量
+  const allVariables = new Map();
+
+  for (const [type, typeVars] of Object.entries(variables)) {
+    for (const [varName, varInfo] of Object.entries(typeVars)) {
+      if (!allVariables.has(varName)) {
+        allVariables.set(varName, varInfo);
+      }
+    }
+  }
+
+  // 渲染表格
+  let html = '';
+  for (const [varName, varInfo] of allVariables) {
+    const description = typeof varInfo === 'object' ? varInfo.description : varInfo;
+    html += `<tr><td><code>{{${varName}}}</code></td><td>${escapeHtml(description)}</td></tr>`;
+  }
+
+  tableBody.innerHTML = html || '<tr><td colspan="2">暂无变量定义</td></tr>';
+}
+
+/**
+ * HTML 转义，防止 XSS
+ */
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 function renderSystemPromptsTable() {

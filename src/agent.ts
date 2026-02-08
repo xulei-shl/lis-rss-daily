@@ -6,6 +6,7 @@ import { getUserLLMProvider, getLLM } from './llm.js';
 import { logger } from './logger.js';
 import { resolveSystemPrompt } from './api/system-prompts.js';
 import { parseLLMJSON } from './utils/llm-json-parser.js';
+import { buildPromptVariables, type ArticleContext } from './api/prompt-variable-builder.js';
 
 const log = logger.child({ module: 'agent' });
 
@@ -41,10 +42,17 @@ export async function translateArticleIfNeeded(
 
   const trimmedContent = (content || '').slice(0, MAX_TRANSLATION_CONTENT);
   const fallbackPrompt = `你是专业中英翻译助手。请将英文翻译为中文，保持术语准确，不要添加解释。请严格输出 JSON：{"title_zh":"", "summary_zh":""}。`;
-  const systemPrompt = await resolveSystemPrompt(userId, 'translation', fallbackPrompt, {
-    ARTICLE_TITLE: title || '无',
-    ARTICLE_CONTENT: trimmedContent || '无',
-  });
+
+  // 使用统一的变量构建器
+  const articleContext: ArticleContext = {
+    articleId: 0, // 翻译时不需要 articleId
+    userId: userId || 0,
+    title: title || '无',
+    description: '',
+    content: trimmedContent || '无',
+  };
+  const variables = await buildPromptVariables({ type: 'translation', article: articleContext });
+  const systemPrompt = await resolveSystemPrompt(userId, 'translation', fallbackPrompt, variables);
 
   const userPrompt = `标题: ${title || '无'}
 内容: ${trimmedContent || '无'}

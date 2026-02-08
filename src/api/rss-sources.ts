@@ -8,6 +8,7 @@
 import { getDb, type DB, type DatabaseTable } from '../db.js';
 import { logger } from '../logger.js';
 import type { RssSourcesTable } from '../db.js';
+import { type SourceType, DEFAULT_SOURCE_TYPE } from '../constants/source-types.js';
 
 const log = logger.child({ module: 'rss-sources-service' });
 
@@ -22,7 +23,7 @@ export type RssSourceRecord = RssSourcesTable;
 export interface CreateRSSSourceInput {
   name: string;
   url: string;
-  sourceType?: 'journal' | 'blog' | 'news';
+  sourceType?: SourceType;
   fetchInterval?: number;
   status?: 'active' | 'inactive';
 }
@@ -33,7 +34,7 @@ export interface CreateRSSSourceInput {
 export interface UpdateRSSSourceInput {
   name?: string;
   url?: string;
-  sourceType?: 'journal' | 'blog' | 'news';
+  sourceType?: SourceType;
   fetchInterval?: number;
   status?: 'active' | 'inactive';
 }
@@ -85,7 +86,7 @@ export async function createRSSSource(
       user_id: userId,
       name: data.name,
       url: data.url,
-      source_type: data.sourceType ?? 'blog',
+      source_type: data.sourceType ?? DEFAULT_SOURCE_TYPE,
       fetch_interval: data.fetchInterval ?? 3600,
       status: data.status ?? 'active',
       updated_at: new Date().toISOString(),

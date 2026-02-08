@@ -5,6 +5,7 @@ import * as rssSourceService from '../rss-sources.js';
 import { getRSSParser } from '../../rss-parser.js';
 import { initRSSScheduler } from '../../rss-scheduler.js';
 import { logger } from '../../logger.js';
+import { VALID_SOURCE_TYPES } from '../../constants/source-types.js';
 
 const log = logger.child({ module: 'api-routes/rss-sources' });
 
@@ -89,7 +90,7 @@ router.post('/rss-sources', requireAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Invalid URL format' });
     }
 
-    if (sourceType !== undefined && !['journal', 'blog', 'news'].includes(sourceType)) {
+    if (sourceType !== undefined && !VALID_SOURCE_TYPES.includes(sourceType)) {
       return res.status(400).json({ error: 'Source type must be journal, blog, or news' });
     }
 

@@ -556,8 +556,17 @@ export class RSSScheduler {
     const db = getDb();
     const articles = await db
       .selectFrom('articles')
-      .where('id', 'in', articleIds)
-      .select(['id', 'title', 'summary', 'content', 'markdown_content', 'url'])
+      .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+      .where('articles.id', 'in', articleIds)
+      .select([
+        'articles.id',
+        'articles.title',
+        'articles.summary',
+        'articles.content',
+        'articles.markdown_content',
+        'articles.url',
+        'rss_sources.source_type',
+      ])
       .execute();
 
     for (const article of articles) {
@@ -572,6 +581,7 @@ export class RSSScheduler {
           description: item?.contentSnippet || item?.description || '',
           // 优先使用清洗后的 Markdown，回退到原始 content
           content: article.markdown_content || article.content || undefined,
+          sourceType: article.source_type,
         };
 
         const result = await filterArticle(input);

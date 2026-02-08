@@ -10,10 +10,10 @@
 import { getDb } from './db.js';
 import { getUserLLMProvider, type ChatMessage } from './llm.js';
 import { logger } from './logger.js';
-import { getActiveTopicDomains } from './api/topic-domains.js';
-import { getActiveKeywordsForDomain } from './api/topic-keywords.js';
 import { resolveSystemPrompt } from './api/system-prompts.js';
 import { parseLLMJSON } from './utils/llm-json-parser.js';
+import { buildPromptVariables, type ArticleContext } from './api/prompt-variable-builder.js';
+import { type SourceType } from './constants/source-types.js';
 
 const log = logger.child({ module: 'article-filter' });
 
@@ -29,6 +29,7 @@ export interface FilterInput {
   url?: string;
   description: string;
   content?: string;
+  sourceType?: SourceType;
 }
 
 /**
@@ -93,54 +94,6 @@ interface AlternativeLLMResponse {
 
 /* ── LLM Precise Filter ── */
 
-async function buildDomainInfo(
-  domains: Array<{ id: number; name: string; description: string | null; priority: number }>
-): Promise<Array<{
-  id: number;
-  name: string;
-  description: string;
-  keywords: Array<{ keyword: string; description: string; weight: number }>;
-}>> {
-  return Promise.all(
-    domains.map(async (domain) => {
-      const keywords = await getActiveKeywordsForDomain(domain.id);
-      return {
-        id: domain.id,
-        name: domain.name,
-        description: domain.description || '',
-        keywords: keywords.map((k) => ({
-          keyword: k.keyword,
-          description: k.description || '',
-          weight: k.weight,
-        })),
-      };
-    })
-  );
-}
-
-function formatDomainsInfo(
-  domainsInfo: Array<{
-    id: number;
-    name: string;
-    description: string;
-    keywords: Array<{ keyword: string; description: string; weight: number }>;
-  }>
-): string {
-  return domainsInfo
-    .map((d) => `
-## 领域ID: ${d.id} - ${d.name}
-描述: ${d.description}
-主题词:
-${d.keywords.length > 0 ? d.keywords
-  .map((k) => {
-    const descPart = k.description ? `，描述/同义词：${k.description}` : '';
-    return `- ${k.keyword}（权重：${k.weight}${descPart}）`;
-  })
-  .join('\n') : '- 无'}
-`)
-    .join('\n');
-}
-
 /**
  * Stage 2: LLM-based precise filtering
  */
@@ -152,24 +105,30 @@ async function llmFilter(
   error?: string;
   rawResponse?: string;
 }> {
-  // Get full domain info
+  // Import here to avoid circular dependency
+  const { getActiveTopicDomains } = await import('./api/topic-domains.js');
+
+  // Get active domains for result mapping
   const activeDomains = await getActiveTopicDomains(input.userId);
-  const domainNames = new Map(activeDomains.map((d) => [d.id, d.name]));
+  const domainNames = new Map<number, string>(activeDomains.map((d) => [d.id, d.name]));
   if (activeDomains.length === 0) {
     return { results: new Map(), domainNames };
   }
 
-  // Build messages
-  const domainsInfo = await buildDomainInfo(activeDomains);
-  const domainsText = formatDomainsInfo(domainsInfo);
+  // Build variables using the unified builder
+  const articleContext: ArticleContext = {
+    articleId: input.articleId,
+    userId: input.userId,
+    title: input.title,
+    url: input.url,
+    description: input.description,
+    content: input.content,
+    sourceType: input.sourceType,
+  };
+  const variables = await buildPromptVariables({ type: 'filter', article: articleContext });
 
   // Get system prompt from database (no fallback - must be configured)
-  const systemPrompt = await resolveSystemPrompt(input.userId, 'filter', '', {
-    TOPIC_DOMAINS: domainsText,
-    ARTICLE_TITLE: input.title || '无',
-    ARTICLE_URL: input.url || '无',
-    ARTICLE_CONTENT: input.content ? input.content.substring(0, 2000) : '',
-  });
+  const systemPrompt = await resolveSystemPrompt(input.userId, 'filter', '', variables);
 
   if (!systemPrompt || systemPrompt.trim().length === 0) {
     return {
