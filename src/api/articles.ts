@@ -37,6 +37,7 @@ export interface ArticleWithSource {
   summary: string | null;
   content: string | null;
   markdown_content: string | null;
+  summary_zh: string | null;  // 翻译摘要
   filter_status: 'pending' | 'passed' | 'rejected';
   filter_score: number | null;
   filtered_at: string | null;
@@ -452,8 +453,33 @@ export async function getUserArticles(
 
   const total = Number(totalCountResult?.count ?? 0);
 
-  // Get paginated results
-  const articles = await query
+  // Build a fresh query for articles with translation left join
+  let articlesQuery = db
+    .selectFrom('articles')
+    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('article_translations', 'article_translations.article_id', 'articles.id')
+    .where('rss_sources.user_id', '=', userId);
+
+  // Re-apply filters
+  if (options.rssSourceId !== undefined) {
+    articlesQuery = articlesQuery.where('articles.rss_source_id', '=', options.rssSourceId);
+  }
+  if (options.filterStatus !== undefined) {
+    articlesQuery = articlesQuery.where('articles.filter_status', '=', options.filterStatus);
+  }
+  if (options.processStatus !== undefined) {
+    articlesQuery = articlesQuery.where('articles.process_status', '=', options.processStatus);
+  }
+  if (options.search !== undefined && options.search.trim() !== '') {
+    const searchTerm = `%${options.search.trim()}%`;
+    articlesQuery = articlesQuery.where((eb) => eb.or([
+      eb('articles.title', 'like', searchTerm),
+      eb('articles.summary', 'like', searchTerm),
+    ]));
+  }
+
+  // Get paginated results with translation
+  const articles = await articlesQuery
     .select([
       'articles.id',
       'articles.rss_source_id',
@@ -472,6 +498,7 @@ export async function getUserArticles(
       'articles.created_at',
       'articles.updated_at',
       'rss_sources.name as rss_source_name',
+      'article_translations.summary_zh',
     ])
     .orderBy('articles.created_at', 'desc')
     .limit(limit)

@@ -62,7 +62,7 @@ export interface FilterOptions {
 }
 
 /**
- * LLM response format
+ * LLM response format (standard evaluations array)
  */
 interface LLMEvaluation {
   domain_id: number;
@@ -75,70 +75,23 @@ interface LLMResponse {
   evaluations: LLMEvaluation[];
 }
 
+/**
+ * Alternative LLM response format (decision-based)
+ * Some custom prompts may return this format
+ */
+interface AlternativeLLMResponse {
+  decision: '通过' | '拒绝' | 'pass' | 'reject' | boolean;
+  reasoning?: string;
+  matched_domains?: Array<{
+    domain_id: number;
+    relevance_score?: number;
+    reasoning?: string;
+  }>;
+}
+
 /* ── Internal Types ── */
 
 /* ── LLM Precise Filter ── */
-
-/**
- * Build system prompt for LLM filtering
- */
-function buildFilterSystemPromptFromDomainsInfo(
-  domainsInfo: Array<{
-    id: number;
-    name: string;
-    description: string;
-    keywords: Array<{ keyword: string; description: string; weight: number }>;
-  }>
-): string {
-  const domainsText = formatDomainsInfo(domainsInfo);
-  return `# Role
-你是一个专业的文章内容筛选与评估助手。你的核心任务是根据用户提供的【关注领域配置】（包含主题领域、主题词、权重及描述），对输入的【文章信息】（题目、摘要）进行深度分析，判断该文章是否符合用户的阅读需求，并给出“通过”或“拒绝”的决策。
-
-# Context & Constraints
-1. **语义匹配**：不要仅进行简单的关键词匹配。必须结合【描述】字段中的解释或同义词，对文章进行语义层面的理解。
-2. **关键词说明**：主题词仅用于辅助理解领域范围，不作为硬性匹配规则。
-3. **综合评估**：文章必须在核心概念上与用户关注的领域高度重合，而非仅仅是提及。
-
-# Input Data Structure
-用户将提供两部分信息：
-1. **关注配置**：包含领域（Domain）、该领域下的主题词（Keywords）、权重（Weight）、描述（Description）。
-2. **文章信息**：包含题目（Title）、摘要（Abstract）。
-
-# Workflow
-1. **分析文章**：提取题目和摘要中的核心概念、研究对象、方法和结论。
-2. **映射匹配**：将提取的概念与用户的【关注配置】进行比对。利用【描述】字段扩展语义范围（例如：若描述中包含同义词，则视为命中）。
-3. **加权评估**：
-   - 识别命中了哪些领域和主题词。
-   - 根据命中的项目权重进行综合打分。
-   - *判定标准*：
-     - **通过**：文章核心内容强关联高权重领域/词汇，或关联多个中等权重词汇。
-     - **拒绝**：文章内容与关注领域无关，或仅边缘提及低权重词汇，或属于关注领域的反面案例。
-4. **生成结果**：输出最终决策及简短理由。
-
-# 关注领域配置
-${domainsText}
-
-# Response Format
-请严格按照以下 JSON 格式输出结果（不要输出多余内容）：
-\`\`\`json
-{
-  "evaluations": [
-    {
-      "domain_id": 1,
-      "is_relevant": true,
-      "relevance_score": 0.85,
-      "reasoning": "简短说明相关性（1-2句）"
-    }
-  ]
-}
-\`\`\`
-
-# Important Notes
-- 每个领域独立评估
-- 一篇文章可以与多个领域相关
-- 只有具有实质性关联时才标记为相关
-- reasoning 保持简洁（1-2句）`;
-}
 
 async function buildDomainInfo(
   domains: Array<{ id: number; name: string; description: string | null; priority: number }>
@@ -209,13 +162,23 @@ async function llmFilter(
   // Build messages
   const domainsInfo = await buildDomainInfo(activeDomains);
   const domainsText = formatDomainsInfo(domainsInfo);
-  const fallbackSystemPrompt = buildFilterSystemPromptFromDomainsInfo(domainsInfo);
-  const systemPrompt = await resolveSystemPrompt(input.userId, 'filter', fallbackSystemPrompt, {
+
+  // Get system prompt from database (no fallback - must be configured)
+  const systemPrompt = await resolveSystemPrompt(input.userId, 'filter', '', {
     TOPIC_DOMAINS: domainsText,
     ARTICLE_TITLE: input.title || '无',
     ARTICLE_URL: input.url || '无',
     ARTICLE_CONTENT: input.content ? input.content.substring(0, 2000) : '',
   });
+
+  if (!systemPrompt || systemPrompt.trim().length === 0) {
+    return {
+      results: new Map(),
+      domainNames,
+      error: '未配置 filter 类型的系统提示词，请在系统提示词管理中添加',
+    };
+  }
+
   const userPrompt = `请评估以下文章：
 
 # 文章信息
@@ -240,7 +203,7 @@ ${input.content ? `内容预览: ${input.content.substring(0, 2000)}...` : ''}
     });
 
     // 使用新的JSON解析工具
-    const parseResult = parseLLMJSON<LLMResponse>(response, {
+    const parseResult = parseLLMJSON<LLMResponse | AlternativeLLMResponse>(response, {
       allowPartial: true,
       maxResponseLength: 2048,
       errorPrefix: 'Filter evaluation',
@@ -257,13 +220,32 @@ ${input.content ? `内容预览: ${input.content.substring(0, 2000)}...` : ''}
     const parsed = parseResult.data!;
     const results = new Map<number, Omit<DomainMatchResult, 'domainName'>>();
 
-    for (const evaluation of parsed.evaluations) {
-      results.set(evaluation.domain_id, {
-        domainId: evaluation.domain_id,
-        passed: evaluation.is_relevant,
-        relevanceScore: evaluation.relevance_score,
-        reasoning: evaluation.reasoning,
-      });
+    // 检测响应格式并转换为统一格式
+    if ('evaluations' in parsed && Array.isArray(parsed.evaluations)) {
+      // 标准格式：evaluations 数组
+      for (const evaluation of parsed.evaluations) {
+        results.set(evaluation.domain_id, {
+          domainId: evaluation.domain_id,
+          passed: evaluation.is_relevant,
+          relevanceScore: evaluation.relevance_score,
+          reasoning: evaluation.reasoning,
+        });
+      }
+    } else if ('matched_domains' in parsed && Array.isArray(parsed.matched_domains)) {
+      // 备选格式：decision + matched_domains（兼容旧版自定义 prompt）
+      const decision = parsed.decision;
+      const isPassed = typeof decision === 'boolean' ? decision : decision === '通过' || decision === 'pass';
+      for (const match of parsed.matched_domains) {
+        results.set(match.domain_id, {
+          domainId: match.domain_id,
+          passed: isPassed,
+          relevanceScore: match.relevance_score ?? (isPassed ? 0.8 : 0),
+          reasoning: match.reasoning ?? parsed.reasoning ?? '',
+        });
+      }
+    } else {
+      log.warn({ parsed, rawResponse: response }, 'Unknown LLM response format');
+      return { results: new Map(), error: '未知的 LLM 响应格式', rawResponse: response, domainNames };
     }
 
     log.debug(

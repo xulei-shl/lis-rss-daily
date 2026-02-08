@@ -131,6 +131,12 @@
     font-weight: 600;
     line-height: 1.4;
     margin: 0;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .article-card-header .badge {
+    flex-shrink: 0;
   }
 
   .article-title a {
@@ -500,7 +506,8 @@ function renderArticleCard(article, index) {
     'failed': '失败'
   };
 
-  const summary = article.content || article.markdown_content?.substring(0, 300) || '';
+  // 优先显示翻译摘要，否则显示 RSS 摘要
+const summary = article.summary_zh || article.content || article.markdown_content?.substring(0, 300) || '';
 
   return \`
     <div class="article-card fade-in-up" style="animation-delay: \${index * 30}ms">

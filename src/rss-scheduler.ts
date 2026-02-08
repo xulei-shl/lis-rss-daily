@@ -48,6 +48,7 @@ export interface FetchTask {
   startedAt?: Date;
   completedAt?: Date;
   isFirstFetch: boolean;
+  isManualFetch: boolean;
 }
 
 /**
@@ -267,6 +268,7 @@ export class RSSScheduler {
         retryCount: 0,
         createdAt: new Date(),
         isFirstFetch: source.isFirstFetch,
+        isManualFetch: false,
       }));
 
       // Execute batch fetch
@@ -485,15 +487,17 @@ export class RSSScheduler {
 
     let feed = parseResult.feed;
 
-    // Limit articles on first fetch to avoid overwhelming the system
-    if (isFirstFetch && feed.items.length > config.rssFirstRunMaxArticles) {
+    // Limit articles on first fetch or manual fetch to avoid overwhelming the system
+    const shouldLimit = isFirstFetch || task.isManualFetch;
+    if (shouldLimit && feed.items.length > config.rssFirstRunMaxArticles) {
       log.info(
         {
           rssSourceId: task.rssSourceId,
           totalItems: feed.items.length,
-          limitedItems: config.rssFirstRunMaxArticles
+          limitedItems: config.rssFirstRunMaxArticles,
+          reason: task.isManualFetch ? 'manual fetch' : 'first fetch'
         },
-        'First fetch: limiting articles'
+        'Limiting articles'
       );
       feed = {
         ...feed,
@@ -662,6 +666,7 @@ export class RSSScheduler {
           retryCount: 0,
           createdAt: new Date(),
           isFirstFetch,
+          isManualFetch: true,
         };
       })
     );
@@ -696,6 +701,7 @@ export class RSSScheduler {
       retryCount: 0,
       createdAt: new Date(),
       isFirstFetch: !source.last_fetched_at,
+      isManualFetch: true,
     };
 
     const results = await this.executeFetchTasks([task]);
