@@ -483,9 +483,9 @@ async function computeRelated(
   semanticResults.sort((a, b) => b.finalScore - a.finalScore);
 
   // Apply score threshold logic:
-  // - Prioritize articles with score > 0.5, max 5 articles
+  // - Prioritize articles with score > 0.6, max 5 articles
   // - If insufficient high-score articles, return max 3 articles by score
-  const highScoreArticles = semanticResults.filter((r) => r.finalScore > 0.5);
+  const highScoreArticles = semanticResults.filter((r) => r.finalScore > 0.6);
   const effectiveLimit = highScoreArticles.length >= 3 ? Math.min(limit, 5) : Math.min(limit, 3);
   const topResults = highScoreArticles.length >= effectiveLimit
     ? highScoreArticles.slice(0, effectiveLimit)

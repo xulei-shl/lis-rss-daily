@@ -57,7 +57,7 @@ export interface DomainMatchResult {
  * Filter options
  */
 export interface FilterOptions {
-  /** 通过的最低相关度分数（默认 0.5） */
+  /** 通过的最低相关度分数（默认 0.6） */
   minRelevanceScore?: number;
 }
 
@@ -360,7 +360,7 @@ export async function filterArticle(
   input: FilterInput,
   options: FilterOptions = {}
 ): Promise<FilterResult> {
-  const minScore = options.minRelevanceScore ?? 0.5;
+  const minScore = options.minRelevanceScore ?? 0.6;
   const requestLog = log.child({ articleId: input.articleId, userId: input.userId });
 
   requestLog.debug({ title: input.title }, 'Starting article filter');

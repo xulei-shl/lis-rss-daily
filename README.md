@@ -1,247 +1,362 @@
 # RSS Literature Tracker
 
-<div align="center">
+智能 RSS 文献追踪系统 - 自动抓取、过滤、翻译和检索学术文献
 
-**智能 RSS 文献追踪系统**
+## 📋 目录
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node Version](https://img.shields.io/badge/node-%3E=18.0.0-brightgreen)](https://nodejs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/)
-
-一个基于 LLM 的智能 RSS 文献追踪系统，自动抓取、过滤、分析学术文献，帮助研究者高效获取领域前沿动态。
-
-[功能特性](#功能特性) • [快速开始](#快速开始) • [文档](#文档) • [部署](#部署)
-
-</div>
+- [项目简介](#项目简介)
+- [核心功能](#核心功能)
+- [技术栈](#技术栈)
+- [快速开始](#快速开始)
+- [配置说明](#配置说明)
+- [使用指南](#使用指南)
+- [API 接口](#api-接口)
+- [项目结构](#项目结构)
+- [常见问题](#常见问题)
 
 ---
 
 ## 项目简介
 
-RSS Literature Tracker 是一个面向学术研究者的智能文献追踪系统。通过订阅学术期刊、预印本平台的 RSS 源，系统可以：
+RSS Literature Tracker 是一个智能文献追踪系统，自动从 RSS 订阅源抓取文章，使用 LLM 进行智能过滤和翻译，并提供语义搜索功能，帮助您高效追踪和检索感兴趣的学术文献。
 
-- 自动抓取最新文献
-- 基于主题词的智能过滤
-- LLM 驱动的文章分析（摘要、标签、洞察）
-- 语义搜索快速定位相关文章
-- Markdown 导出与知识库集成
+### 核心流程
 
-适用于计算机科学、生物学、物理学等需要持续跟踪前沿文献的研究领域。
+```
+RSS 订阅源 → 自动抓取 → LLM 智能过滤 → 通过的文章 → 翻译 + 向量化 → 语义搜索
+```
 
 ---
 
-## 功能特性
+## 核心功能
 
-### 核心
-
-- **RSS 源管理**: 支持多个 RSS 源的订阅、验证、调度
-- **智能过滤**: 两阶段过滤机制（关键词预筛选 + LLM 精确过滤），**新文章自动触发过滤**
-- **定时抓取**: 基于 Cron 的定时任务，支持并发控制和重试
-- **文章分析**: LLM 自动生成中文摘要、研究标签、核心洞察
-- **语义搜索**: 在线向量模型 + 本地 Chroma 语义检索
-- **知识库集成**: 自动导出 Markdown，方便外部知识库使用
-
-### 自动化工作流
-
-```
-RSS 抓取 → 自动过滤 → LLM 分析 → Markdown 导出
-   ↓           ↓          ↓           ↓
- 定时任务    更新状态    生成洞察    知识库集成
-```
-
-### 界面
-
-- **学术风格设计**: Academic Brutalist 设计系统
-- **响应式布局**: 支持桌面端和移动端
-- **暗色模式**: 内置暗色主题支持
-- **完整页面**: 登录、首页、文章列表、搜索、设置、主题管理等 9 个页面
+| 功能 | 描述 |
+|------|------|
+| 📡 **RSS 订阅管理** | 添加、编辑、删除 RSS 订阅源，支持定时自动抓取 |
+| 🤖 **智能过滤** | 使用 LLM 根据主题配置智能过滤无关内容 |
+| 🌐 **自动翻译** | 自动将英文文献翻译为中文 |
+| 🔍 **语义搜索** | 基于向量的语义检索，找到相关文献 |
+| 📊 **统计分析** | 过滤统计、通过率分析、领域分布 |
+| 👥 **多用户支持** | 用户认证系统，支持多用户独立管理 |
+| ⚙️ **可配置** | 灵活的主题词、关注领域配置 |
 
 ---
 
 ## 技术栈
 
-| 类别 | 技术选型 |
-|------|----------|
-| 运行时 | Node.js 18+ |
-| 语言 | TypeScript 5.9 |
-| 数据库 | SQLite + Kysely ORM |
-| Web 框架 | Express 5 + EJS |
-| 认证 | JWT |
-| RSS 解析 | rss-parser |
-| 定时任务 | node-cron |
-| 网页抓取 | Playwright + Defuddle |
-| LLM | OpenAI API (兼容 Gemini) |
-| 向量搜索 | Chroma (本地) |
-| 日志 | Pino |
+| 类别 | 技术 |
+|------|------|
+| **运行时** | Node.js 20+ (TypeScript) |
+| **Web 框架** | Express 5.x |
+| **模板引擎** | EJS |
+| **数据库** | SQLite + Kysely ORM |
+| **向量数据库** | ChromaDB |
+| **LLM 集成** | OpenAI / Gemini |
+| **RSS 解析** | rss-parser |
+| **网页抓取** | Playwright + defuddle |
+| **认证** | JWT + bcryptjs |
+| **定时任务** | node-cron |
+| **日志** | pino |
 
 ---
 
 ## 快速开始
 
-### 前置要求
+### 环境要求
 
-- Node.js >= 18.0.0
-- pnpm >= 8.0.0
+- Node.js 20.x 或更高版本
+- pnpm (推荐) 或 npm
+- ChromaDB (用于向量检索)
 
-### 安装
+### 1. 安装依赖
 
 ```bash
-# 克隆仓库
-git clone https://github.com/yourusername/lis-rss-daily.git
-cd lis-rss-daily
-
-# 安装依赖
+# 使用 pnpm (推荐)
 pnpm install
 
-# 复制环境变量配置
-cp .env.example .env
-
-# 编辑 .env 文件，添加 LLM API Key
-# 必需: OPENAI_API_KEY 或 Gemini API 配置
+# 或使用 npm
+npm install
 ```
 
-### 初始化
+### 2. 配置环境变量
 
 ```bash
-# 运行数据库迁移
+# 复制环境变量模板
+cp .env.example .env
+
+# 编辑配置文件
+vim .env
+```
+
+### 3. 启动 ChromaDB
+
+ChromaDB 用于向量存储和语义搜索。
+
+**Windows (使用脚本):**
+```bash
+# 双击运行或命令行执行
+scripts\start-chroma.bat
+```
+
+**手动启动:**
+```bash
+# 安装 ChromaDB
+pip install chromadb
+
+# 启动服务 (默认端口 8000)
+chromadb run --host 127.0.0.1 --port 8000
+```
+
+**Docker 启动 (推荐):**
+```bash
+docker run -d -p 8000:8000 chromadb/chroma
+```
+
+### 4. 初始化数据库
+
+```bash
+# 执行数据库迁移
 pnpm run db:migrate
 
-# （可选）填充示例数据
+# 种子数据 (可选，创建测试数据)
 pnpm run db:seed
 ```
 
-### 启动
+### 5. 启动应用
 
+**开发模式:**
 ```bash
-# 开发模式
-pnpm dev
-
-# 服务将在 http://localhost:3000 启动
-# 默认用户: admin / admin123
+pnpm run dev
 ```
+
+**生产模式:**
+```bash
+# 构建 CSS
+pnpm run build:css
+
+# 启动应用
+pnpm start
+```
+
+或使用启动脚本:
+```bash
+# Windows
+scripts\start.bat
+
+# Linux/macOS
+bash scripts/start.sh
+```
+
+### 6. 访问应用
+
+打开浏览器访问: **http://localhost:3000**
+
+默认登录账号:
+- 用户名: `admin`
+- 密码: `admin123`
 
 ---
 
-## 环境变量配置
+## 配置说明
 
-### 配置体系
+### 环境变量配置
 
-本项目采用**分层兜底配置**设计：
+创建 `.env` 文件:
 
-| 优先级 | 配置来源 | 说明 |
-|--------|----------|------|
-| 1 | 数据库配置 (`llm_configs` 表) | 用户业务配置，动态可修改，支持多配置故障转移 |
-| 2 | 环境变量 (`.env` 文件) | 系统基础设施配置，兜底备用 |
+```env
+# ============ 服务配置 ============
+PORT=3000                          # 应用端口
+BASE_URL=http://localhost:3000      # 基础URL
 
-### LLM 配置
+# ============ 数据库配置 ============
+DATABASE_PATH=data/rss-tracker.db  # SQLite 数据库路径
 
-**数据库配置优先**：通过设置页配置的 LLM 参数会优先使用。
+# ============ JWT 认证 ============
+JWT_SECRET=your-secret-key-change  # JWT 密钥 (生产环境必改)
+JWT_EXPIRES_IN=7d                 # Token 过期时间
 
-**环境变量兜底**：当数据库中无配置时，自动使用环境变量。
+# ============ LLM 配置 ============
+LLM_PROVIDER=openai               # LLM 提供商 (openai | gemini)
 
-```bash
-# LLM 相关（兜底配置）
-LLM_PROVIDER=openai                    # LLM 提供商 (openai/gemini)
-OPENAI_API_KEY=sk-xxx                  # OpenAI API Key
-GEMINI_API_KEY=xxx                     # Gemini API Key
-OPENAI_BASE_URL=https://api.openai.com/v1  # OpenAI 兼容接口
-OPENAI_DEFAULT_MODEL=gpt-4o           # 默认模型
-GEMINI_MODEL=gemini-1.5-pro           # Gemini 模型
+# OpenAI 配置
+OPENAI_API_KEY=sk-xxx             # OpenAI API Key
+OPENAI_BASE_URL=                  # OpenAI 代理地址 (可选)
+OPENAI_DEFAULT_MODEL=gpt-4o-mini # 默认模型
 
-# 系统基础配置
-PORT=3000                              # 服务端口
-BASE_URL=http://localhost:3000         # 基础 URL
-DATABASE_PATH=data/database.sqlite     # 数据库路径
-JWT_SECRET=your-secret-key              # JWT 密钥
-JWT_EXPIRES_IN=7d                      # JWT 过期时间
+# Gemini 配置
+GEMINI_API_KEY=                  # Gemini API Key
+GEMINI_MODEL=gemini-1.5-flash    # Gemini 模型
 
-# 安全配置
-LLM_ENCRYPTION_KEY=xxx                 # API Key 加密密钥（64 字符十六进制）
+# LLM 加密密钥 (用于加密 API Key)
+LLM_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
 
-# 行为配置
-RSS_FETCH_SCHEDULE="0 9 * * *"         # RSS 定时任务 cron（每天 9 点）
-RSS_FETCH_ENABLED=true                 # 是否启用 RSS 定时抓取
-RSS_MAX_CONCURRENT=5                   # RSS 最大并发数
-RSS_FETCH_TIMEOUT=30000                # RSS 请求超时时间（ms）
-LOG_LEVEL=info                         # 日志级别
-LOG_FILE=logs/app.log                 # 日志文件路径
+# ============ RSS 抓取配置 ============
+RSS_FETCH_SCHEDULE=0 9 * * *      # 抓取调度 (每天早上9点)
+RSS_FETCH_ENABLED=true           # 是否启用自动抓取
+RSS_MAX_CONCURRENT=5            # 并发抓取数量
+RSS_FETCH_TIMEOUT=30000          # 抓取超时 (毫秒)
+RSS_FIRST_RUN_MAX_ARTICLES=50   # 首次抓取最大文章数
 
-# Chroma 配置（可选，默认值如下）
-# 建议通过设置页进行配置
-CHROMA_HOST=127.0.0.1
-CHROMA_PORT=8000
-CHROMA_COLLECTION=articles
-CHROMA_DISTANCE_METRIC=cosine
+# ============ 日志配置 ============
+LOG_LEVEL=info                    # 日志级别
+LOG_FILE=                         # 日志文件路径 (可选)
+LLM_LOG_FILE=                     # LLM 调用日志 (可选)
+LLM_LOG_FULL_PROMPT=false        # 是否记录完整 Prompt
+LLM_LOG_FULL_SAMPLE_RATE=20      # 完整日志采样率
 
-# 文章处理配置
-ARTICLE_PROCESS_ENABLED=true
-ARTICLE_PROCESS_BATCH_SIZE=10
-ARTICLE_PROCESS_MAX_CONCURRENT=3
+# ============ LLM 速率限制 ============
+LLM_RATE_LIMIT_ENABLED=true      # 是否启用速率限制
+LLM_RATE_LIMIT_REQUESTS_PER_MINUTE=60  # 每分钟请求数
+LLM_RATE_LIMIT_BURST_CAPACITY=10       # 突发容量
+LLM_RATE_LIMIT_QUEUE_TIMEOUT=30000     # 队列超时 (毫秒)
 ```
 
-完整配置请参考 [.env.example](.env.example)。
+### ChromaDB 配置
 
-### LLM 多配置故障转移
+确保 ChromaDB 正在运行，默认连接配置:
+- 主机: `127.0.0.1`
+- 端口: `8000`
 
-系统支持在数据库中配置多条 LLM 配置，实现故障转移：
-
-1. **默认优先**: `is_default = 1` 的配置优先尝试
-2. **优先级排序**: 按 `priority` 升序（数字越小越优先）
-3. **自动切换**: 调用异常或返回空响应时自动切换到下一条配置
-
-### 系统提示词
-
-系统提示词用于控制 LLM 行为，支持通过设置页动态管理：
-
-| 类型 | 用途 |
-|------|------|
-| `filter` | 文章过滤判断 |
-| `summary` | 生成中文摘要 |
-| `keywords` | 提取研究标签 |
-| `translation` | 翻译处理 |
-
-**兜底策略**：模板缺失时自动回退内置提示词或动态拼装。
+如需修改，在设置页面或环境变量中配置:
+```
+CHROMA_HOST=127.0.0.1
+CHROMA_PORT=8000
+```
 
 ---
 
 ## 使用指南
 
-### 1. 添加 RSS 源
+### 1. 登录与初始化
 
-进入「设置」页面，添加学术期刊的 RSS 源：
+1. 使用默认账号 `admin` / `admin123` 登录
+2. **立即修改密码** (设置 → 修改密码)
+
+### 2. 配置关注领域
+
+在「设置」→「关注领域」中配置您感兴趣的主题:
 
 ```
-https://arxiv.org/rss/cs.AI     # arXiv AI
-https://www.nature.com/nai/rss   # Nature AI
-https://dl.acm.org/rss/dl.xml    # ACM Digital Library
+示例: 机器学习领域
+- 名称: 机器学习
+- 描述: 机器学习、深度学习、人工智能相关研究
+- 主题词: neural networks, deep learning, transformer, etc.
 ```
 
-### 2. 配置主题词
+### 3. 添加 RSS 订阅源
 
-进入「主题管理」页面，创建主题领域并添加关键词：
+在「RSS 源」页面添加订阅:
 
-- 领域: 机器学习
-- 关键词: deep learning, neural network, transformer, GPT
+| 字段 | 说明 |
+|------|------|
+| 名称 | 便于识别的名称 |
+| URL | RSS 订阅地址 |
+| 抓取间隔 | 抓取频率 (秒)，建议 3600 (1小时) |
+| 状态 | 启用/禁用 |
 
-### 3. 启动自动抓取
+**常用学术 RSS 源:**
+- arXiv: `http://export.arxiv.org/api/query?search_query=cat:cs.*`
+- Google Scholar: 需使用第三方服务
+- Nature: `https://www.nature.com/subjects/artificial-intelligence/rss`
+- ScienceDirect: 需使用期刊特定 RSS
 
-系统将按 Cron 表达式定时抓取，也可手动点击「立即抓取」。
+### 4. 手动触发抓取
 
-### 4. 查看分析结果
+系统会在定时任务中自动抓取，也支持手动触发:
 
-- **首页**: 查看每日新增文章统计和时间线
-- **文章列表**: 筛选、搜索、批量处理文章
-- **文章详情**: 查看 AI 摘要、研究洞察、相关文章
-- **搜索页面**: 语义搜索相关文章
+1. 进入「RSS 源」页面
+2. 点击源右侧的「刷新」按钮
+3. 或在「设置」→「调度器」中触发全部抓取
+
+### 5. 查看与处理文章
+
+1. 进入「文章」页面查看已过滤的文章
+2. 点击文章标题查看详情
+3. 文章状态说明:
+   - `待处理`: 已通过过滤，等待翻译和向量化
+   - `处理中`: 正在翻译/索引
+   - `已完成`: 已完成全部处理，可搜索
+   - `已拒绝`: 未通过 LLM 过滤
+
+### 6. 搜索文献
+
+系统提供两种搜索方式:
+
+**关键词搜索:**
+- 在首页搜索框输入关键词
+- 支持标题、摘要、内容匹配
+
+**语义搜索:**
+- 进入「搜索」页面
+- 输入自然语言查询
+- 系统会找到语义最相关的文献
+
+### 7. 查看统计
+
+进入「统计」页面查看:
+- 总文章数、通过率
+- 各领域过滤统计
+- 过滤趋势图
 
 ---
 
-## 文档
+## API 接口
 
-- [部署文档](docs/deployment.md) - 生产环境部署指南
-- [用户手册](docs/user-guide.md) - 详细使用说明
-- [开发者文档](docs/developer-guide.md) - 架构设计与开发指南
-- [开发进度](docs/开发进度.md) - 项目开发进度记录
+### 认证接口
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/auth/login` | 用户登录 |
+| POST | `/api/auth/logout` | 用户登出 |
+
+### RSS 源管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/rss-sources` | 获取所有 RSS 源 |
+| POST | `/api/rss-sources` | 添加 RSS 源 |
+| GET | `/api/rss-sources/:id` | 获取单个 RSS 源 |
+| PUT | `/api/rss-sources/:id` | 更新 RSS 源 |
+| DELETE | `/api/rss-sources/:id` | 删除 RSS 源 |
+| POST | `/api/rss-sources/:id/fetch` | 手动触发抓取 |
+
+### 文章管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/articles` | 获取文章列表 |
+| GET | `/api/articles/:id` | 获取文章详情 |
+| POST | `/api/articles/:id/process` | 处理单篇文章 |
+| POST | `/api/articles/batch/process` | 批量处理文章 |
+| POST | `/api/articles/:id/retry` | 重试失败文章 |
+
+### 过滤配置
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/topic-domains` | 获取关注领域 |
+| POST | `/api/topic-domains` | 创建关注领域 |
+| PUT | `/api/topic-domains/:id` | 更新关注领域 |
+| DELETE | `/api/topic-domains/:id` | 删除关注领域 |
+| GET | `/api/topic-keywords` | 获取主题词 |
+| POST | `/api/topic-keywords` | 创建主题词 |
+
+### 搜索
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/search` | 关键词搜索 |
+| GET | `/api/search/semantic` | 语义搜索 |
+
+### 系统设置
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/settings` | 获取设置 |
+| PUT | `/api/settings` | 更新设置 |
+| GET | `/api/system-prompts` | 获取系统提示词 |
+| PUT | `/api/system-prompts/:id` | 更新提示词 |
+| GET | `/api/filter/stats` | 获取过滤统计 |
 
 ---
 
@@ -249,139 +364,116 @@ https://dl.acm.org/rss/dl.xml    # ACM Digital Library
 
 ```
 lis-rss-daily/
-├── src/                      # 源代码
-│   ├── api/                  # API 服务层
-│   │   ├── llm-configs.ts       # LLM 配置管理
-│   │   ├── system-prompts.ts    # 系统提示词管理
-│   │   └── routes/             # API 路由
-│   │       ├── llm-configs.routes.ts
-│   │       └── system-prompts.routes.ts
-│   ├── middleware/           # 中间件
-│   ├── views/                # EJS 视图模板
-│   │   └── settings/          # 设置页子模板
-│   │       ├── panel-rss.ejs      # RSS 源配置
-│   │       ├── panel-llm.ejs     # LLM 配置
-│   │       ├── panel-chroma.ejs  # Chroma 配置
-│   │       └── panel-prompts.ejs # 系统提示词
-│   ├── vector/               # 向量检索模块
-│   │   ├── embedding-client.ts  # Embedding 客户端
-│   │   ├── vector-store.ts      # Chroma 向量存储
-│   │   ├── reranker.ts          # Rerank 重排序
-│   │   ├── indexer.ts           # 向量索引队列
-│   │   ├── search.ts            # 语义检索入口
-│   │   └── text-builder.ts      # 向量化文本构建
+├── src/
 │   ├── index.ts              # 应用入口
 │   ├── config.ts             # 配置管理
+│   ├── db.ts                 # 数据库 (SQLite + Kysely)
 │   ├── logger.ts             # 日志模块
-│   ├── llm.ts                # LLM 抽象层
+│   │
+│   ├── api/                  # API 路由
+│   │   ├── routes/           # 路由定义
+│   │   ├── articles.ts       # 文章接口
+│   │   ├── rss-sources.ts   # RSS 源接口
+│   │   └── ...
+│   │
+│   ├── pipeline.ts           # 处理流水线 (翻译+索引)
+│   ├── filter.ts             # LLM 文章过滤
 │   ├── scraper.ts            # 网页抓取
-│   ├── rss-parser.ts         # RSS 解析器
-│   ├── rss-scheduler.ts      # RSS 调度器
-│   ├── filter.ts             # 两阶段过滤
-│   ├── agent.ts              # LLM 分析引擎
-│   ├── search.ts             # 文章搜索
-│   ├── export.ts             # Markdown 导出
-│   ├── pipeline.ts           # 文章处理流水线
-├── sql/                      # 数据库脚本
-│   ├── 001_init.sql          # 初始化（含默认模板）
-│   ├── 002_vector_refactor.sql
-│   └── 003_llm_config_priority.sql
-├── scripts/                  # 工具脚本
-├── data/                     # 数据目录
-│   ├── exports/              # Markdown 导出
-├── docs/                     # 文档
-└── logs/                     # 日志文件
+│   ├── rss-parser.ts         # RSS 解析
+│   ├── rss-scheduler.ts      # 定时抓取调度
+│   │
+│   ├── vector/               # 向量检索模块
+│   │   ├── indexer.ts        # 向量索引
+│   │   ├── vector-store.ts   # ChromaDB 操作
+│   │   ├── embedding-client.ts # Embedding 调用
+│   │   └── search-service.ts  # 搜索服务
+│   │
+│   ├── llm.ts                # LLM 集成
+│   ├── agent.ts              # 翻译代理
+│   ├── search.ts             # 传统搜索
+│   └── views/                # EJS 模板
+│
+├── scripts/                   # 工具脚本
+│   ├── start.bat             # Windows 启动脚本
+│   ├── start-chroma.bat      # ChromaDB 启动
+│   └── migrate.ts            # 数据库迁移
+│
+├── sql/                      # SQL 迁移文件
+│   └── 001_init.sql          # 初始表结构
+│
+├── docs/                      # 文档
+├── public/                    # 静态资源
+│   ├── css/
+│   └── js/
+│
+├── package.json
+├── .env.example
+└── tsconfig.json
 ```
 
 ---
 
-## 开发
+## 常见问题
 
-### 运行开发服务器
+### Q1: 启动失败，提示端口被占用
 
 ```bash
-pnpm dev
+# 查看占用端口的进程
+netstat -ano | findstr :3000
+
+# 修改 .env 中的 PORT
+PORT=3001
 ```
 
-### 类型检查
+### Q2: ChromaDB 连接失败
 
+确保 ChromaDB 已启动:
 ```bash
-pnpm typecheck
+# Docker 启动
+docker run -d -p 8000:8000 chromadb/chroma
+
+# 验证连接
+curl http://127.0.0.1:8000/api/v1
 ```
 
-### 数据库操作
+### Q3: LLM API 调用失败
+
+1. 检查 API Key 是否正确
+2. 确认账户有足够配额
+3. 查看日志中的详细错误信息
+4. 可尝试切换 LLM 提供商
+
+### Q4: RSS 抓取无数据
+
+1. 检查 RSS URL 是否正确
+2. 确认 RSS 源是否支持抓取
+3. 查看日志中的抓取错误
+
+### Q5: 文章过滤效果不佳
+
+1. 优化「关注领域」配置
+2. 添加更多描述性文字
+3. 调整主题词和权重
+4. 自定义过滤提示词
+
+### Q6: 如何重置数据库
 
 ```bash
-# 运行迁移
+# 删除数据库文件
+del data\rss-tracker.db
+
+# 重新执行迁移
 pnpm run db:migrate
-
-# 填充示例数据
-pnpm run db:seed
 ```
-
----
-
-## 部署
-
-### Docker 部署
-
-```bash
-# 构建镜像
-docker build -t lis-rss-daily .
-
-# 运行容器
-docker run -p 3000:3000 --env-file .env lis-rss-daily
-```
-
-### Docker Compose 部署
-
-```bash
-docker-compose up -d
-```
-
-详细部署指南请参考 [部署文档](docs/deployment.md)。
-
----
-
-## 路线图
-
-- [x] 阶段 0: 项目初始化
-- [x] 阶段 1: 数据库层
-- [x] 阶段 2: 核心模块复用
-- [x] 阶段 3: RSS 源管理
-- [x] 阶段 4: 主题词过滤
-- [x] 阶段 5: RSS 调度器
-- [x] 阶段 6: 文章处理流程
-- [x] 阶段 7: 前端页面开发
-- [x] 阶段 8: 向量检索与语义搜索
-- [ ] 阶段 9: 测试与优化
-- [ ] 阶段 10: 部署与文档
-
----
-
-## 参考资源
-
-本项目参考了以下开源项目：
-
-- [linkmind](https://github.com/singular-gerald/linkmind) - 核心模块复用来源
-- [Chroma](https://github.com/chroma-core/chroma) - 向量数据库
 
 ---
 
 ## 许可证
 
-[MIT](LICENSE)
+MIT License
 
 ---
 
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request！
-
----
-
-<div align="center">
-
-**Built with ❤️ for researchers**
-
-</div>
