@@ -334,11 +334,9 @@ async function recordFilterResults(
   }
 
   const hasDomainLog = domainMatches.length > 0;
-  const llmResponse = options.llmResponse ?? null;
-  const reason = options.fallbackReason
-    || (hasDomainLog ? 'LLM 原始响应' : '无领域评估结果');
-
-  if (!hasDomainLog || llmResponse) {
+  if (!hasDomainLog) {
+    const llmResponse = options.llmResponse ?? null;
+    const reason = options.fallbackReason || '无领域评估结果';
     await recordFilterLog(
       input.articleId,
       null,
@@ -580,4 +578,3 @@ export async function getFilterStats(userId: number): Promise<{
     byDomain,
   };
 }
-
