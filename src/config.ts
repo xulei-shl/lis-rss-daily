@@ -41,6 +41,14 @@ export interface Config {
   logLevel: string;
   logFile?: string;
   llmLogFile?: string;
+  llmLogFullPrompt: boolean;
+  llmLogFullSampleRate: number;
+
+  // LLM Rate Limiting
+  llmRateLimitEnabled: boolean;
+  llmRateLimitRequestsPerMinute: number;
+  llmRateLimitBurstCapacity: number;
+  llmRateLimitQueueTimeout: number;
 }
 
 function getConfig(): Config {
@@ -89,6 +97,14 @@ function getConfig(): Config {
     logLevel: process.env.LOG_LEVEL || 'info',
     logFile: process.env.LOG_FILE,
     llmLogFile: process.env.LLM_LOG_FILE,
+    llmLogFullPrompt: process.env.LLM_LOG_FULL_PROMPT === 'true',
+    llmLogFullSampleRate: parseInt(process.env.LLM_LOG_FULL_SAMPLE_RATE || '20', 10),
+
+    // LLM Rate Limiting
+    llmRateLimitEnabled: process.env.LLM_RATE_LIMIT_ENABLED !== 'false',
+    llmRateLimitRequestsPerMinute: parseInt(process.env.LLM_RATE_LIMIT_REQUESTS_PER_MINUTE || '60', 10),
+    llmRateLimitBurstCapacity: parseInt(process.env.LLM_RATE_LIMIT_BURST_CAPACITY || '10', 10),
+    llmRateLimitQueueTimeout: parseInt(process.env.LLM_RATE_LIMIT_QUEUE_TIMEOUT || '30000', 10),
   };
 }
 

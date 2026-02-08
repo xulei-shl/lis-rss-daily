@@ -48,6 +48,7 @@ function createLLMLogger(): pino.Logger {
 }
 
 const llmLog = createLLMLogger();
+let llmCallCounter = 0;
 
 /**
  * 脱敏 API Key，只显示前 4 位和后 4 位
@@ -86,6 +87,25 @@ function truncateText(text: string, maxLength: number = 500): string {
 }
 
 /**
+ * 是否记录完整提示词（支持采样）
+ */
+function shouldLogFullPrompt(): { enabled: boolean; sampleRate: number } {
+  if (config.llmLogFullPrompt) {
+    return { enabled: true, sampleRate: 1 };
+  }
+
+  const rawRate = config.llmLogFullSampleRate;
+  const sampleRate = Number.isFinite(rawRate) && rawRate > 0 ? Math.floor(rawRate) : 20;
+
+  if (sampleRate <= 1) {
+    return { enabled: true, sampleRate: 1 };
+  }
+
+  const count = ++llmCallCounter;
+  return { enabled: count % sampleRate === 0, sampleRate };
+}
+
+/**
  * 提取系统提示词
  */
 function extractSystemPrompt(messages: Array<{ role: string; content: string }>): string {
@@ -109,6 +129,9 @@ export interface LLMCallContext {
   model: string;
   apiKey: string;
   baseUrl: string;
+  apiKeySource?: string;
+  baseUrlSource?: string;
+  modelSource?: string;
   label?: string; // 用于标识调用的用途，如 'filter', 'translate'
   userId?: number;
   configId?: number;
@@ -122,6 +145,8 @@ export interface LLMCallParams {
   temperature?: number;
   maxTokens?: number;
   jsonMode?: boolean;
+  systemPromptSource?: string;
+  userPromptSource?: string;
   [key: string]: any; // 其他参数
 }
 
@@ -162,6 +187,9 @@ export class LLMLoggerSession {
   logRequest(params: LLMCallParams): void {
     const systemPrompt = extractSystemPrompt(params.messages);
     const userPrompt = extractUserPrompt(params.messages);
+    const fullPromptState = shouldLogFullPrompt();
+    const systemPromptLogged = fullPromptState.enabled ? systemPrompt : truncateText(systemPrompt);
+    const userPromptLogged = fullPromptState.enabled ? userPrompt : truncateText(userPrompt);
 
     llmLog.debug(
       {
@@ -169,11 +197,18 @@ export class LLMLoggerSession {
         model: this.context.model,
         apiKey: maskApiKey(this.context.apiKey),
         baseUrl: maskBaseUrl(this.context.baseUrl),
+        apiKeySource: this.context.apiKeySource,
+        baseUrlSource: this.context.baseUrlSource,
+        modelSource: this.context.modelSource,
         label: this.context.label,
         userId: this.context.userId,
         configId: this.context.configId,
-        systemPrompt: truncateText(systemPrompt),
-        userPrompt: truncateText(userPrompt),
+        systemPrompt: systemPromptLogged,
+        userPrompt: userPromptLogged,
+        systemPromptSource: params.systemPromptSource || 'messages',
+        userPromptSource: params.userPromptSource || 'messages',
+        fullPromptLogged: fullPromptState.enabled,
+        fullPromptSampleRate: fullPromptState.sampleRate,
         messages: params.messages.map((m) => ({ role: m.role, contentLength: m.content.length })),
         temperature: params.temperature,
         maxTokens: params.maxTokens,
@@ -269,5 +304,28 @@ export class LLMLogger {
       });
       throw error;
     }
+  }
+
+  /**
+   * 记录速率限制统计信息
+   * 用于监控和调试速率限制器的状态
+   */
+  static logRateLimitStats(stats: {
+    availableTokens: number;
+    queueLength: number;
+    totalRequests: number;
+    rejectedRequests: number;
+    avgWaitTimeMs: number;
+  }): void {
+    llmLog.info(
+      {
+        availableTokens: stats.availableTokens,
+        queueLength: stats.queueLength,
+        totalRequests: stats.totalRequests,
+        rejectedRequests: stats.rejectedRequests,
+        avgWaitTimeMs: stats.avgWaitTimeMs,
+      },
+      'Rate Limiter Stats'
+    );
   }
 }

@@ -11,6 +11,7 @@ import { getActiveConfigListByType, type LLMConfigRecord } from './api/llm-confi
 import { decryptAPIKey } from './utils/crypto.js';
 import { config } from './config.js';
 import { LLMLogger, type LLMCallContext } from './llm-logger.js';
+import { initGlobalRateLimiter, getGlobalRateLimiter, type RateLimiterConfig } from './utils/rate-limiter.js';
 
 const log = logger.child({ module: 'llm' });
 
@@ -41,11 +42,68 @@ export interface LLMConfigOptions {
   model: string;
   timeout?: number;
   maxRetries?: number;
+  source?: 'env' | 'db' | 'explicit' | 'unknown';
 }
 
 interface FailoverEntry {
   configId: number;
   provider: LLMProvider;
+}
+
+/* ── Rate Limiter Integration ── */
+
+/**
+ * Initialize the global rate limiter if enabled
+ */
+function ensureRateLimiterInitialized(): void {
+  if (!getGlobalRateLimiter() && config.llmRateLimitEnabled) {
+    const rateLimiterConfig: RateLimiterConfig = {
+      requestsPerMinute: config.llmRateLimitRequestsPerMinute,
+      burstCapacity: config.llmRateLimitBurstCapacity,
+      queueTimeout: config.llmRateLimitQueueTimeout,
+    };
+    initGlobalRateLimiter(rateLimiterConfig);
+  }
+}
+
+/**
+ * Wrap an LLMProvider with rate limiting
+ * If rate limiting is disabled, returns the original provider
+ */
+function withRateLimit(provider: LLMProvider): LLMProvider {
+  if (!config.llmRateLimitEnabled) {
+    return provider;
+  }
+
+  ensureRateLimiterInitialized();
+  const rateLimiter = getGlobalRateLimiter();
+
+  return {
+    name: `${provider.name} (rate-limited)`,
+    async chat(messages, options = {}) {
+      const label = options.label || 'chat';
+
+      if (!rateLimiter) {
+        // Rate limiter not available, proceed without limiting
+        return provider.chat(messages, options);
+      }
+
+      // Wait for rate limiter token
+      try {
+        await rateLimiter.waitForToken(label);
+      } catch (error) {
+        // Queue timeout - still allow the request to proceed
+        // This is better than failing the request
+        log.warn(
+          { label, provider: provider.name },
+          'Rate limit queue timeout, proceeding anyway'
+        );
+      }
+
+      // Proceed with actual LLM call
+      return provider.chat(messages, options);
+    },
+  };
 }
 
 /* ── Provider: OpenAI-compatible (Qwen via dashscope, etc.) ── */
@@ -59,7 +117,8 @@ function createOpenAIProvider(llmConfig: LLMConfigOptions, configId?: number): L
   });
   const model = llmConfig.model;
 
-  return {
+  const source = llmConfig.source ?? 'unknown';
+  const provider: LLMProvider = {
     name: `openai/${model}`,
     async chat(messages, options = {}) {
       const label = options.label || 'chat';
@@ -70,6 +129,9 @@ function createOpenAIProvider(llmConfig: LLMConfigOptions, configId?: number): L
         model,
         apiKey: llmConfig.apiKey,
         baseUrl: llmConfig.baseURL,
+        apiKeySource: source,
+        baseUrlSource: source,
+        modelSource: source,
         label,
         configId,
       };
@@ -111,6 +173,8 @@ function createOpenAIProvider(llmConfig: LLMConfigOptions, configId?: number): L
       }
     },
   };
+
+  return withRateLimit(provider);
 }
 
 /* ── Provider: Gemini (direct REST API) ── */
@@ -121,8 +185,9 @@ function createGeminiProvider(llmConfig: LLMConfigOptions, configId?: number): L
   const apiKey = llmConfig.apiKey;
   const model = llmConfig.model;
   const baseURL = llmConfig.baseURL;
+  const source = llmConfig.source ?? 'unknown';
 
-  return {
+  const provider: LLMProvider = {
     name: `gemini/${model}`,
     async chat(messages, options = {}) {
       const label = options.label || 'chat';
@@ -133,6 +198,9 @@ function createGeminiProvider(llmConfig: LLMConfigOptions, configId?: number): L
         model,
         apiKey,
         baseUrl: baseURL || GEMINI_API_BASE,
+        apiKeySource: source,
+        baseUrlSource: source,
+        modelSource: source,
         label,
         configId,
       };
@@ -216,6 +284,8 @@ function createGeminiProvider(llmConfig: LLMConfigOptions, configId?: number): L
       }
     },
   };
+
+  return withRateLimit(provider);
 }
 
 /* ── Provider from environment variables (fallback) ── */
@@ -230,6 +300,7 @@ function createProviderFromEnv(): LLMProvider {
         apiKey: process.env.GEMINI_API_KEY || '',
         baseURL: GEMINI_API_BASE,
         model: process.env.GEMINI_MODEL ?? 'gemini-2.0-flash',
+        source: 'env',
       });
     case 'openai':
     default:
@@ -238,6 +309,7 @@ function createProviderFromEnv(): LLMProvider {
         apiKey: process.env.OPENAI_API_KEY || '',
         baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
         model: process.env.OPENAI_DEFAULT_MODEL ?? 'gpt-4o-mini',
+        source: 'env',
       });
   }
 }
@@ -312,13 +384,17 @@ export async function getUserLLMProvider(userId: number): Promise<LLMProvider> {
  * @returns LLM provider instance
  */
 export function createLLMProvider(llmConfig: LLMConfigOptions, configId?: number): LLMProvider {
+  const normalizedConfig: LLMConfigOptions = {
+    ...llmConfig,
+    source: llmConfig.source ?? 'explicit',
+  };
   switch (llmConfig.provider) {
     case 'gemini':
-      return createGeminiProvider(llmConfig, configId);
+      return createGeminiProvider(normalizedConfig, configId);
     case 'openai':
     case 'custom':
     default:
-      return createOpenAIProvider(llmConfig, configId);
+      return createOpenAIProvider(normalizedConfig, configId);
   }
 }
 
@@ -331,6 +407,7 @@ function buildProviderFromDbConfig(dbConfig: LLMConfigRecord): LLMProvider | nul
       model: dbConfig.model,
       timeout: dbConfig.timeout,
       maxRetries: dbConfig.max_retries,
+      source: 'db',
     };
     return createLLMProvider(llmConfig, dbConfig.id);
   } catch (error) {
@@ -341,7 +418,7 @@ function buildProviderFromDbConfig(dbConfig: LLMConfigRecord): LLMProvider | nul
 
 function createFailoverProvider(entries: FailoverEntry[]): LLMProvider {
   const names = entries.map((entry) => entry.provider.name).join(' -> ');
-  return {
+  const provider: LLMProvider = {
     name: `failover(${names})`,
     async chat(messages, options = {}) {
       let lastError: Error | null = null;
@@ -369,4 +446,6 @@ function createFailoverProvider(entries: FailoverEntry[]): LLMProvider {
       throw lastError ?? new Error('全部 LLM 配置均失败');
     },
   };
+
+  return withRateLimit(provider);
 }
