@@ -18,6 +18,7 @@ import { getActiveRSSSourcesForFetch } from './api/rss-sources.js';
 import { saveArticles, checkArticlesExistByTitle } from './api/articles.js';
 import { filterArticle, type FilterInput } from './filter.js';
 import { processArticle } from './pipeline.js';
+import { config } from './config.js';
 
 const log = logger.child({ module: 'rss-scheduler' });
 
@@ -46,6 +47,7 @@ export interface FetchTask {
   createdAt: Date;
   startedAt?: Date;
   completedAt?: Date;
+  isFirstFetch: boolean;
 }
 
 /**
@@ -264,6 +266,7 @@ export class RSSScheduler {
         status: TaskStatus.PENDING,
         retryCount: 0,
         createdAt: new Date(),
+        isFirstFetch: source.isFirstFetch,
       }));
 
       // Execute batch fetch
@@ -306,7 +309,7 @@ export class RSSScheduler {
       name: string;
       fetch_interval: number;
     }>
-  ): Promise<Array<{ id: number; user_id: number; url: string; name: string }>> {
+  ): Promise<Array<{ id: number; user_id: number; url: string; name: string; isFirstFetch: boolean }>> {
     const db = getDb();
     const now = Date.now();
     const sourcesToFetch: Array<{
@@ -314,6 +317,7 @@ export class RSSScheduler {
       user_id: number;
       url: string;
       name: string;
+      isFirstFetch: boolean;
     }> = [];
 
     for (const source of sources) {
@@ -325,10 +329,11 @@ export class RSSScheduler {
         .executeTakeFirst();
 
       const lastFetched = sourceData?.last_fetched_at;
+      const isFirstFetch = !lastFetched;
 
-      if (!lastFetched) {
+      if (isFirstFetch) {
         // Never fetched, need to fetch
-        sourcesToFetch.push(source);
+        sourcesToFetch.push({ ...source, isFirstFetch });
         continue;
       }
 
@@ -337,7 +342,7 @@ export class RSSScheduler {
       const intervalMs = source.fetch_interval * 1000;
 
       if (elapsed >= intervalMs) {
-        sourcesToFetch.push(source);
+        sourcesToFetch.push({ ...source, isFirstFetch });
       }
     }
 
@@ -392,7 +397,7 @@ export class RSSScheduler {
       });
 
       // Execute fetch
-      const fetchPromise = this.doFetch(task);
+      const fetchPromise = this.doFetch(task, task.isFirstFetch);
 
       const result = await Promise.race([fetchPromise, timeoutPromise]);
 
@@ -464,7 +469,10 @@ export class RSSScheduler {
   /**
    * Actual fetch execution
    */
-  private async doFetch(task: FetchTask): Promise<{
+  private async doFetch(
+    task: FetchTask,
+    isFirstFetch: boolean
+  ): Promise<{
     articlesCount: number;
     newArticlesCount: number;
   }> {
@@ -475,7 +483,23 @@ export class RSSScheduler {
       throw new Error(parseResult.error || 'Failed to parse feed');
     }
 
-    const feed = parseResult.feed;
+    let feed = parseResult.feed;
+
+    // Limit articles on first fetch to avoid overwhelming the system
+    if (isFirstFetch && feed.items.length > config.rssFirstRunMaxArticles) {
+      log.info(
+        {
+          rssSourceId: task.rssSourceId,
+          totalItems: feed.items.length,
+          limitedItems: config.rssFirstRunMaxArticles
+        },
+        'First fetch: limiting articles'
+      );
+      feed = {
+        ...feed,
+        items: feed.items.slice(0, config.rssFirstRunMaxArticles)
+      };
+    }
 
     // Check if articles exist by (rss_source_id, title) combination
     const titles = feed.items.map((item) => item.title);
@@ -616,16 +640,31 @@ export class RSSScheduler {
     log.info('Manual fetch all triggered');
 
     const sources = await getActiveRSSSourcesForFetch();
+    const db = getDb();
 
-    const tasks: FetchTask[] = sources.map((source) => ({
-      rssSourceId: source.id,
-      userId: source.user_id,
-      url: source.url,
-      name: source.name,
-      status: TaskStatus.PENDING,
-      retryCount: 0,
-      createdAt: new Date(),
-    }));
+    // Get last_fetched_at for each source
+    const tasks: FetchTask[] = await Promise.all(
+      sources.map(async (source) => {
+        const sourceData = await db
+          .selectFrom('rss_sources')
+          .where('id', '=', source.id)
+          .select('last_fetched_at')
+          .executeTakeFirst();
+
+        const isFirstFetch = !sourceData?.last_fetched_at;
+
+        return {
+          rssSourceId: source.id,
+          userId: source.user_id,
+          url: source.url,
+          name: source.name,
+          status: TaskStatus.PENDING,
+          retryCount: 0,
+          createdAt: new Date(),
+          isFirstFetch,
+        };
+      })
+    );
 
     return this.executeFetchTasks(tasks);
   }
@@ -641,7 +680,7 @@ export class RSSScheduler {
       .selectFrom('rss_sources')
       .where('id', '=', rssSourceId)
       .where('user_id', '=', userId)
-      .select(['id', 'url', 'user_id', 'name'])
+      .select(['id', 'url', 'user_id', 'name', 'last_fetched_at'])
       .executeTakeFirst();
 
     if (!source) {
@@ -656,6 +695,7 @@ export class RSSScheduler {
       status: TaskStatus.PENDING,
       retryCount: 0,
       createdAt: new Date(),
+      isFirstFetch: !source.last_fetched_at,
     };
 
     const results = await this.executeFetchTasks([task]);

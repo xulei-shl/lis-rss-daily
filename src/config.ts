@@ -36,6 +36,7 @@ export interface Config {
   rssFetchEnabled: boolean;
   rssMaxConcurrent: number;
   rssFetchTimeout: number;
+  rssFirstRunMaxArticles: number;
 
   // Logging
   logLevel: string;
@@ -92,6 +93,7 @@ function getConfig(): Config {
     rssFetchEnabled: process.env.RSS_FETCH_ENABLED !== 'false',
     rssMaxConcurrent: parseInt(process.env.RSS_MAX_CONCURRENT || '5', 10),
     rssFetchTimeout: parseInt(process.env.RSS_FETCH_TIMEOUT || '30000', 10),
+    rssFirstRunMaxArticles: parseInt(process.env.RSS_FIRST_RUN_MAX_ARTICLES || '50', 10),
 
     // Logging
     logLevel: process.env.LOG_LEVEL || 'info',
