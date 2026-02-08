@@ -61,6 +61,7 @@ export interface ArticlesTable {
   filter_score: number | null;
   filtered_at: string | null;
   process_status: 'pending' | 'processing' | 'completed' | 'failed';
+  process_stages: string | null;
   processed_at: string | null;
   published_at: string | null;
   error_message: string | null;

@@ -37,12 +37,15 @@ async function loadArticles(articleIds: number[], userId?: number) {
   let query = db
     .selectFrom('articles')
     .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('article_translations', 'article_translations.article_id', 'articles.id')
     .where('articles.id', 'in', articleIds)
     .select([
       'articles.id',
       'articles.title',
       'articles.content',
       'articles.markdown_content',
+      'article_translations.title_zh',
+      'article_translations.summary_zh',
       'rss_sources.user_id as user_id',
     ]);
 
