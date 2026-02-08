@@ -22,6 +22,7 @@ export type RssSourceRecord = RssSourcesTable;
 export interface CreateRSSSourceInput {
   name: string;
   url: string;
+  sourceType?: 'journal' | 'blog' | 'news';
   fetchInterval?: number;
   status?: 'active' | 'inactive';
 }
@@ -32,6 +33,7 @@ export interface CreateRSSSourceInput {
 export interface UpdateRSSSourceInput {
   name?: string;
   url?: string;
+  sourceType?: 'journal' | 'blog' | 'news';
   fetchInterval?: number;
   status?: 'active' | 'inactive';
 }
@@ -83,6 +85,7 @@ export async function createRSSSource(
       user_id: userId,
       name: data.name,
       url: data.url,
+      source_type: data.sourceType ?? 'blog',
       fetch_interval: data.fetchInterval ?? 3600,
       status: data.status ?? 'active',
       updated_at: new Date().toISOString(),
@@ -189,6 +192,7 @@ export async function updateRSSSource(
     .set({
       ...(data.name !== undefined && { name: data.name }),
       ...(data.url !== undefined && { url: data.url }),
+      ...(data.sourceType !== undefined && { source_type: data.sourceType }),
       ...(data.fetchInterval !== undefined && { fetch_interval: data.fetchInterval }),
       ...(data.status !== undefined && { status: data.status }),
       updated_at: new Date().toISOString(),

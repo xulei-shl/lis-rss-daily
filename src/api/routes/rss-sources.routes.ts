@@ -72,7 +72,7 @@ router.get('/rss-sources/:id', requireAuth, async (req: AuthRequest, res) => {
  */
 router.post('/rss-sources', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const { name, url, fetchInterval, status } = req.body;
+    const { name, url, sourceType, fetchInterval, status } = req.body;
 
     // Validation
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -89,6 +89,10 @@ router.post('/rss-sources', requireAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Invalid URL format' });
     }
 
+    if (sourceType !== undefined && !['journal', 'blog', 'news'].includes(sourceType)) {
+      return res.status(400).json({ error: 'Source type must be journal, blog, or news' });
+    }
+
     // Check if URL already exists
     const exists = await rssSourceService.checkURLExists(req.userId!, url.trim());
     if (exists) {
@@ -98,6 +102,7 @@ router.post('/rss-sources', requireAuth, async (req: AuthRequest, res) => {
     const result = await rssSourceService.createRSSSource(req.userId!, {
       name: name.trim(),
       url: url.trim(),
+      sourceType,
       fetchInterval: fetchInterval ? parseInt(fetchInterval) : undefined,
       status,
     });
@@ -125,7 +130,10 @@ router.put('/rss-sources/:id', requireAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Invalid RSS source ID' });
     }
 
-    const { name, url, fetchInterval, status } = req.body;
+    const { name, url, sourceType, fetchInterval, status } = req.body;
+
+    // Debug logging
+    log.info({ id, sourceType, bodyKeys: Object.keys(req.body) }, 'RSS source update request');
 
     // Build update object with only provided fields
     const updateData: Record<string, unknown> = {};
@@ -156,6 +164,13 @@ router.put('/rss-sources/:id', requireAuth, async (req: AuthRequest, res) => {
       updateData.url = url.trim();
     }
 
+    if (sourceType !== undefined) {
+      if (!['journal', 'blog', 'news'].includes(sourceType)) {
+        return res.status(400).json({ error: 'Source type must be journal, blog, or news' });
+      }
+      updateData.sourceType = sourceType;
+    }
+
     if (fetchInterval !== undefined) {
       const interval = parseInt(fetchInterval);
       if (isNaN(interval) || interval < 60) {
@@ -171,7 +186,11 @@ router.put('/rss-sources/:id', requireAuth, async (req: AuthRequest, res) => {
       updateData.status = status;
     }
 
+    log.info({ id, updateData }, 'About to update RSS source');
+
     await rssSourceService.updateRSSSource(id, req.userId!, updateData);
+
+    log.info({ id }, 'RSS source updated successfully');
 
     res.json({ success: true });
   } catch (error) {

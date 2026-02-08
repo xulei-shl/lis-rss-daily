@@ -137,6 +137,27 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
       required: true,
     },
   },
+
+  /**
+   * daily_summary 类型变量 - 当日总结
+   */
+  daily_summary: {
+    ARTICLES_LIST: {
+      description: '文章列表（标题、摘要、来源）',
+      source: '从 articles 表动态构建，按源类型优先级排序',
+      required: true,
+    },
+    DATE_RANGE: {
+      description: '日期范围',
+      source: 'YYYY-MM-DD 格式',
+      required: true,
+    },
+    SUMMARY_LENGTH: {
+      description: '期望的摘要长度',
+      source: '默认 800-1000 字',
+      required: false,
+    },
+  },
 };
 
 /**

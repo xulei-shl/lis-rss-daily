@@ -84,6 +84,35 @@ async function runMigrations() {
         continue;
       }
 
+      if (file === '005_add_source_type.sql') {
+        // Check if source_type column exists in rss_sources
+        const hasSourceType = hasColumn(db, 'rss_sources', 'source_type');
+        if (!hasSourceType) {
+          db.exec("ALTER TABLE rss_sources ADD COLUMN source_type TEXT DEFAULT 'blog' CHECK(source_type IN ('journal', 'blog', 'news'));");
+          db.exec("CREATE INDEX IF NOT EXISTS idx_rss_sources_source_type ON rss_sources(source_type);");
+        }
+
+        // Check if daily_summaries table exists
+        const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='daily_summaries'").get() as { name: string } | undefined;
+        if (!tables) {
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS daily_summaries (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id INTEGER NOT NULL,
+              summary_date TEXT NOT NULL,
+              article_count INTEGER NOT NULL,
+              summary_content TEXT NOT NULL,
+              articles_data TEXT NOT NULL,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+              UNIQUE(user_id, summary_date)
+            );
+          `);
+          db.exec('CREATE INDEX IF NOT EXISTS idx_daily_summaries_user_date ON daily_summaries(user_id, summary_date DESC);');
+        }
+        continue;
+      }
+
       const sql = fs.readFileSync(fullPath, 'utf-8');
       db.exec(sql);
     }

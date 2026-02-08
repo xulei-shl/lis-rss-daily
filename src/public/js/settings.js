@@ -31,6 +31,8 @@ async function loadRSSSources() {
     if (!res.ok) throw new Error('加载失败');
     const data = await res.json();
     rssSources = data.sources || [];
+    console.log('Loaded RSS sources:', rssSources);
+    console.log('Source with id=1:', rssSources.find(s => s.id === 1));
     renderTable();
   } catch (err) {
     console.error('Failed to load RSS sources:', err);
@@ -51,7 +53,17 @@ function renderTable() {
   table.style.display = 'table';
   emptyState.style.display = 'none';
 
+  const sourceTypeLabels = {
+    'journal': '期刊',
+    'blog': '博客',
+    'news': '资讯'
+  };
+
+  console.log('Rendering table with sources:', rssSources);
+
   tbody.innerHTML = rssSources.map(function(source) {
+    const typeLabel = sourceTypeLabels[source.source_type] || '博客';
+    console.log(`Source ${source.id}: source_type=${source.source_type}, label=${typeLabel}`);
     return '<tr>' +
       '<td class="rss-name">' + escapeHtml(source.name) + '</td>' +
       '<td class="rss-url">' +
@@ -59,6 +71,7 @@ function renderTable() {
           escapeHtml(truncate(source.url, 35)) +
         '</a>' +
       '</td>' +
+      '<td><span class="type-badge">' + typeLabel + '</span></td>' +
       '<td>' +
         '<span class="status-badge ' + source.status + '">' + (source.status === 'active' ? '启用' : '禁用') + '</span>' +
       '</td>' +
@@ -80,6 +93,7 @@ function showAddModal() {
   document.getElementById('sourceId').value = '';
   document.getElementById('sourceName').value = '';
   document.getElementById('sourceUrl').value = '';
+  document.getElementById('sourceType').value = 'blog';
   document.getElementById('fetchInterval').value = '3600';
   document.getElementById('sourceStatus').value = 'active';
   document.getElementById('validationResult').className = 'validation-result';
@@ -92,15 +106,22 @@ function editSource(id) {
   const source = rssSources.find(s => s.id === id);
   if (!source) return;
 
+  console.log('Editing source:', source);
+  console.log('source.source_type:', source.source_type);
+
   document.getElementById('modalTitle').textContent = '编辑 RSS 订阅源';
   document.getElementById('sourceId').value = source.id;
   document.getElementById('sourceName').value = source.name;
   document.getElementById('sourceUrl').value = source.url;
+  document.getElementById('sourceType').value = source.source_type || 'blog';
   document.getElementById('fetchInterval').value = source.fetch_interval.toString();
   document.getElementById('sourceStatus').value = source.status;
   document.getElementById('validationResult').className = 'validation-result';
   document.getElementById('validationResult').textContent = '';
   document.getElementById('sourceModal').classList.add('active');
+
+  console.log('Set sourceType value to:', source.source_type || 'blog');
+  console.log('Current sourceType element value:', document.getElementById('sourceType').value);
 }
 
 function closeModal() {
@@ -154,13 +175,22 @@ document.getElementById('sourceForm').addEventListener('submit', async function(
   const data = {
     name: document.getElementById('sourceName').value.trim(),
     url: document.getElementById('sourceUrl').value.trim(),
+    sourceType: document.getElementById('sourceType').value,
     fetchInterval: parseInt(document.getElementById('fetchInterval').value),
     status: document.getElementById('sourceStatus').value
   };
 
+  // Debug logging
+  console.log('Form submit data:', data);
+  console.log('sourceType value:', data.sourceType);
+  console.log('sourceType element value:', document.getElementById('sourceType').value);
+
   try {
     const url = id ? '/api/rss-sources/' + id : '/api/rss-sources';
     const method = id ? 'PUT' : 'POST';
+
+    console.log('Sending request:', method, url);
+    console.log('Request body:', JSON.stringify(data));
 
     const res = await fetch(url, {
       method,
@@ -168,11 +198,22 @@ document.getElementById('sourceForm').addEventListener('submit', async function(
       body: JSON.stringify(data)
     });
 
+    console.log('Response status:', res.status);
+
     if (res.ok) {
+      console.log('Update successful, reloading sources...');
       closeModal();
-      loadRSSSources();
+      await loadRSSSources();
+      console.log('Sources reloaded');
+      // Show success message
+      await showConfirm('RSS 源已更新', {
+        title: '成功',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     } else {
       const result = await res.json();
+      console.log('Update failed:', result);
       await showConfirm(result.error || '保存失败', {
         title: '错误',
         okText: '知道了',
@@ -180,6 +221,7 @@ document.getElementById('sourceForm').addEventListener('submit', async function(
       });
     }
   } catch (err) {
+    console.log('Update error:', err);
     await showConfirm('保存失败，请稍后重试', {
       title: '错误',
       okText: '知道了',

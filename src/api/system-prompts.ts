@@ -127,6 +127,38 @@ const DEFAULT_SYSTEM_PROMPTS: Array<{
     template:
       '你是专业中英翻译助手。请将英文翻译为中文，保持术语准确，不要添加解释。请严格输出 JSON：{"title_zh":"", "summary_zh":""}。',
   },
+  {
+    type: 'daily_summary',
+    name: '默认当日总结提示词',
+    template: `你是专业的内容总结助手，请根据以下文章列表生成当日总结。
+
+## 文章列表（按源类型优先级排序）：
+{{ARTICLES_LIST}}
+
+## 输出要求：
+1. 生成 800-1000 字的中文总结
+2. 按主题领域归纳文章内容
+3. 突出期刊、博客、资讯的核心观点
+4. 使用清晰的层次结构
+
+输出格式（Markdown）：
+# {{DATE_RANGE}} 当日总结
+
+## 期刊精选
+- 要点1
+- 要点2
+
+## 博客推荐
+- 要点1
+- 要点2
+
+## 资讯动态
+- 要点1
+- 要点2
+
+## 总结观点
+综合评述`,
+  },
 ];
 
 function escapeRegExp(value: string): string {

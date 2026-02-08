@@ -24,6 +24,7 @@ export interface DatabaseTable {
   llm_configs: LlmConfigsTable;
   settings: SettingsTable;
   system_prompts: SystemPromptsTable;
+  daily_summaries: DailySummariesTable;
 }
 
 export interface UsersTable {
@@ -39,6 +40,7 @@ export interface RssSourcesTable {
   user_id: number;
   name: string;
   url: string;
+  source_type: 'journal' | 'blog' | 'news';
   last_fetched_at: string | null;
   fetch_interval: number;
   status: 'active' | 'inactive';
@@ -151,6 +153,16 @@ export interface SystemPromptsTable {
   is_active: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface DailySummariesTable {
+  id: number;
+  user_id: number;
+  summary_date: string;
+  article_count: number;
+  summary_content: string;
+  articles_data: string;
+  created_at: string;
 }
 
 export type DB = Kysely<DatabaseTable>;
