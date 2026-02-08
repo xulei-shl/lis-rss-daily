@@ -60,7 +60,7 @@ export function createApp(): express.Express {
   // Page routes
   app.get('/login', (req: Request, res: Response) => {
     res.render('login', {
-      pageTitle: 'Login - RSS Literature Tracker',
+      pageTitle: 'Login - LIS-RSS Literature Tracker',
     });
   });
 
@@ -92,7 +92,7 @@ export function createApp(): express.Express {
       return res.redirect('/login');
     }
     res.render('settings', {
-      pageTitle: 'Settings - RSS Literature Tracker',
+      pageTitle: 'Settings - LIS-RSS Literature Tracker',
       user: req.user,
     });
   });
@@ -103,7 +103,7 @@ export function createApp(): express.Express {
       return res.redirect('/login');
     }
     res.render('topics', {
-      pageTitle: 'Topic Management - RSS Literature Tracker',
+      pageTitle: 'Topic Management - LIS-RSS Literature Tracker',
       user: req.user,
     });
   });
@@ -113,7 +113,7 @@ export function createApp(): express.Express {
       return res.redirect('/login');
     }
     res.render('filter-logs', {
-      pageTitle: 'Filter Logs - RSS Literature Tracker',
+      pageTitle: 'Filter Logs - LIS-RSS Literature Tracker',
       user: req.user,
     });
   });
@@ -123,7 +123,7 @@ export function createApp(): express.Express {
       return res.redirect('/login');
     }
     res.render('filter-stats', {
-      pageTitle: 'Filter Statistics - RSS Literature Tracker',
+      pageTitle: 'Filter Statistics - LIS-RSS Literature Tracker',
       user: req.user,
     });
   });
@@ -134,7 +134,7 @@ export function createApp(): express.Express {
       return res.redirect('/login');
     }
     res.render('index', {
-      pageTitle: '每日摘要 - RSS Literature Tracker',
+      pageTitle: '每日摘要 - LIS-RSS Literature Tracker',
       user: req.user,
     });
   });
@@ -145,7 +145,7 @@ export function createApp(): express.Express {
       return res.redirect('/login');
     }
     res.render('articles', {
-      pageTitle: '文章列表 - RSS Literature Tracker',
+      pageTitle: '文章列表 - LIS-RSS Literature Tracker',
       user: req.user,
     });
   });
@@ -157,7 +157,7 @@ export function createApp(): express.Express {
     }
     // The article detail page will fetch data via API
     res.render('article-detail', {
-      pageTitle: '文章详情 - RSS Literature Tracker',
+      pageTitle: '文章详情 - LIS-RSS Literature Tracker',
       user: req.user,
     });
   });
@@ -168,7 +168,7 @@ export function createApp(): express.Express {
       return res.redirect('/login');
     }
     res.render('search', {
-      pageTitle: '语义搜索 - RSS Literature Tracker',
+      pageTitle: '语义搜索 - LIS-RSS Literature Tracker',
       user: req.user,
     });
   });

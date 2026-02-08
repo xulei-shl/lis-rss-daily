@@ -23,7 +23,7 @@ const log = logger.child({ module: 'main' });
 async function main() {
   // Initialize logger
   initLogger();
-  log.info('🚀 RSS Literature Tracker starting...');
+  log.info('🚀 LIS-RSS Literature Tracker starting...');
 
   // Log configuration
   log.info({

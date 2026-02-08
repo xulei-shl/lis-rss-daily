@@ -1,6 +1,6 @@
 # 开发者文档
 
-本文档面向开发者，介绍 RSS Literature Tracker 的架构设计、技术细节和开发指南。
+本文档面向开发者，介绍 LIS-RSS Literature Tracker 的架构设计、技术细节和开发指南。
 
 ---
 

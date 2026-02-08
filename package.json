@@ -1,7 +1,7 @@
 {
   "name": "lis-rss-daily",
   "version": "0.1.0",
-  "description": "RSS Literature Tracker - 智能RSS文献追踪系统",
+  "description": "LIS-RSS Literature Tracker - 智能RSS文献追踪系统",
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",

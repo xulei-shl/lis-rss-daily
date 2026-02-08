@@ -1,5 +1,5 @@
 @echo off
-REM RSS Literature Tracker - Application Startup Script
+REM LIS-RSS Literature Tracker - Application Startup Script
 
 setlocal enabledelayedexpansion
 
@@ -8,7 +8,7 @@ cd /d "%~dp0.."
 
 echo.
 echo ===============================================
-echo   RSS Literature Tracker - Application Startup
+echo   LIS-RSS Literature Tracker - Application Startup
 echo ===============================================
 echo.
 
@@ -77,7 +77,7 @@ REM Start application
 cls
 echo.
 echo ===============================================
-echo   RSS Literature Tracker
+echo   LIS-RSS Literature Tracker
 echo ===============================================
 echo   Access URL: http://localhost:3000
 echo   Default User: admin / admin123

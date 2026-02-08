@@ -1,6 +1,6 @@
 # 用户使用手册
 
-本手册面向 RSS Literature Tracker 的最终用户，介绍如何使用系统的各项功能。
+本手册面向 LIS-RSS Literature Tracker 的最终用户，介绍如何使用系统的各项功能。
 
 ---
 

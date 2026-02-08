@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# RSS Literature Tracker - Linux/macOS 启动脚本
+# LIS-RSS Literature Tracker - Linux/macOS 启动脚本
 
 set -e
 
@@ -135,10 +135,10 @@ check_required_env() {
 
 # 启动应用
 start_app() {
-    print_info "启动 RSS Literature Tracker..."
+    print_info "启动 LIS-RSS Literature Tracker..."
     echo ""
     print_success "==============================================="
-    print_success "  RSS Literature Tracker 启动中..."
+    print_success "  LIS-RSS Literature Tracker 启动中..."
     print_success "  访问地址: http://localhost:3000"
     print_success "  默认用户: admin / admin123"
     print_success "==============================================="
@@ -150,7 +150,7 @@ start_app() {
 # 主函数
 main() {
     echo ""
-    print_success "RSS Literature Tracker - 启动脚本"
+    print_success "LIS-RSS Literature Tracker - 启动脚本"
     print_success "================================"
     echo ""
 

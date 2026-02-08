@@ -1,5 +1,5 @@
 @echo off
-REM RSS Literature Tracker - Windows Startup Script
+REM LIS-RSS Literature Tracker - Windows Startup Script
 
 setlocal enabledelayedexpansion
 
@@ -8,7 +8,7 @@ cd /d "%~dp0.."
 
 echo.
 echo ===============================================
-echo   RSS Literature Tracker - Startup Script
+echo   LIS-RSS Literature Tracker - Startup Script
 echo ===============================================
 echo.
 

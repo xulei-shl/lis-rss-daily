@@ -1,5 +1,5 @@
 @echo off
-REM RSS Literature Tracker - Chroma Startup Script
+REM LIS-RSS Literature Tracker - Chroma Startup Script
 REM This script ensures Chroma is properly started before continuing
 
 setlocal enabledelayedexpansion
@@ -9,7 +9,7 @@ cd /d "%~dp0.."
 
 echo.
 echo ===============================================
-echo   RSS Literature Tracker - Chroma Startup
+echo   LIS-RSS Literature Tracker - Chroma Startup
 echo ===============================================
 echo.
 

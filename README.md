@@ -1,4 +1,4 @@
-# RSS Literature Tracker
+# LIS-RSS Literature Tracker
 
 智能 RSS 文献追踪系统 - 自动抓取、过滤、翻译和检索学术文献
 
@@ -18,7 +18,7 @@
 
 ## 项目简介
 
-RSS Literature Tracker 是一个智能文献追踪系统，自动从 RSS 订阅源抓取文章，使用 LLM 进行智能过滤和翻译，并提供语义搜索功能，帮助您高效追踪和检索感兴趣的学术文献。
+LIS-RSS Literature Tracker 是一个智能文献追踪系统，自动从 RSS 订阅源抓取文章，使用 LLM 进行智能过滤和翻译，并提供语义搜索功能，帮助您高效追踪和检索感兴趣的学术文献。
 
 ### 核心流程
 

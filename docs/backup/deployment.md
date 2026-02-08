@@ -1,6 +1,6 @@
 # 部署文档
 
-本文档介绍如何在不同环境下部署 RSS Literature Tracker 系统。
+本文档介绍如何在不同环境下部署 LIS-RSS Literature Tracker 系统。
 
 ---
 
@@ -237,7 +237,7 @@ pm2 monit          # 监控面板
 
 ```ini
 [Unit]
-Description=RSS Literature Tracker
+Description=LIS-RSS Literature Tracker
 After=network.target
 
 [Service]
