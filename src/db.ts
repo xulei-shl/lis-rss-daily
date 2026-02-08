@@ -108,6 +108,7 @@ export interface ArticleRelatedTable {
   related_article_id: number;
   score: number;
   created_at: string;
+  updated_at: string;
 }
 
 export interface ArticleTranslationsTable {

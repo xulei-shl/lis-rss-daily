@@ -596,6 +596,7 @@ async function saveRelatedToCache(articleId: number, results: SearchResult[]): P
           related_article_id: item.articleId,
           score: item.score,
           created_at: now,
+          updated_at: now,
         }))
       )
       .execute();

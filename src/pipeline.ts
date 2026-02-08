@@ -19,6 +19,7 @@ import {
   refreshRelatedArticles,
   type ArticleWithSource,
 } from './api/articles.js';
+import { incrementalRefreshRelated } from './api/articles-refresh.js';
 import { logger } from './logger.js';
 import { toSimpleMarkdown } from './utils/markdown.js';
 
@@ -464,6 +465,23 @@ async function runPipeline(
 
   // ── Complete ──
   await updateArticleProcessStatus(articleId, 'completed');
+
+  // ── Incremental Refresh: Update similar old articles' related lists ──
+  // This is a fire-and-forget operation that runs in the background
+  // to ensure new articles appear in related lists of existing similar content.
+  incrementalRefreshRelated(articleId, userId, { topN: 10, minScore: 0.5 })
+    .then((refreshedIds) => {
+      if (refreshedIds.length > 0) {
+        log.debug(
+          { articleId, refreshedCount: refreshedIds.length },
+          '[pipeline] Incremental refresh completed'
+        );
+      }
+    })
+    .catch((error) => {
+      // Non-fatal: log but don't fail the pipeline
+      log.warn({ articleId, error: error.message }, '[pipeline] Incremental refresh failed (non-fatal)');
+    });
 
   return { status: 'completed' };
 }

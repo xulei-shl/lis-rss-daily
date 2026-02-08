@@ -113,6 +113,17 @@ async function runMigrations() {
         continue;
       }
 
+      if (file === '006_add_related_updated_at.sql') {
+        // Check if updated_at column exists in article_related
+        const hasUpdatedAt = hasColumn(db, 'article_related', 'updated_at');
+        if (!hasUpdatedAt) {
+          db.exec('ALTER TABLE article_related ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;');
+          db.exec('UPDATE article_related SET updated_at = created_at WHERE updated_at IS NULL;');
+        }
+        db.exec('CREATE INDEX IF NOT EXISTS idx_article_related_updated_at ON article_related(updated_at);');
+        continue;
+      }
+
       const sql = fs.readFileSync(fullPath, 'utf-8');
       db.exec(sql);
     }

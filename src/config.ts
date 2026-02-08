@@ -38,6 +38,12 @@ export interface Config {
   rssFetchTimeout: number;
   rssFirstRunMaxArticles: number;
 
+  // Related Articles Refresh
+  relatedRefreshEnabled: boolean;
+  relatedRefreshSchedule: string;
+  relatedRefreshBatchSize: number;
+  relatedRefreshStaleDays: number;
+
   // Logging
   logLevel: string;
   logFile?: string;
@@ -94,6 +100,12 @@ function getConfig(): Config {
     rssMaxConcurrent: parseInt(process.env.RSS_MAX_CONCURRENT || '5', 10),
     rssFetchTimeout: parseInt(process.env.RSS_FETCH_TIMEOUT || '30000', 10),
     rssFirstRunMaxArticles: parseInt(process.env.RSS_FIRST_RUN_MAX_ARTICLES || '50', 10),
+
+    // Related Articles Refresh
+    relatedRefreshEnabled: process.env.RELATED_REFRESH_ENABLED !== 'false',
+    relatedRefreshSchedule: process.env.RELATED_REFRESH_SCHEDULE || '0 2 * * *',
+    relatedRefreshBatchSize: parseInt(process.env.RELATED_REFRESH_BATCH_SIZE || '100', 10),
+    relatedRefreshStaleDays: parseInt(process.env.RELATED_REFRESH_STALE_DAYS || '7', 10),
 
     // Logging
     logLevel: process.env.LOG_LEVEL || 'info',

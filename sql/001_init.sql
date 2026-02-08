@@ -23,11 +23,16 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 -- ===========================================
 -- 2. RSS Sources Table
 -- ===========================================
+-- source_type 取值来自 src/constants/source-types.ts: SOURCE_TYPES
+--   - 'journal' (期刊)
+--   - 'blog' (博客, 默认)
+--   - 'news' (资讯)
 CREATE TABLE IF NOT EXISTS rss_sources (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
   name TEXT NOT NULL,
   url TEXT NOT NULL UNIQUE,
+  source_type TEXT DEFAULT 'blog' CHECK(source_type IN ('journal', 'blog', 'news')),
   last_fetched_at DATETIME,
   fetch_interval INTEGER DEFAULT 3600,
   status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
@@ -38,6 +43,7 @@ CREATE TABLE IF NOT EXISTS rss_sources (
 
 CREATE INDEX IF NOT EXISTS idx_rss_sources_user_id ON rss_sources(user_id);
 CREATE INDEX IF NOT EXISTS idx_rss_sources_status ON rss_sources(status);
+CREATE INDEX IF NOT EXISTS idx_rss_sources_source_type ON rss_sources(source_type);
 
 -- ===========================================
 -- 3. Articles Table
@@ -54,6 +60,7 @@ CREATE TABLE IF NOT EXISTS articles (
   filter_score REAL,
   filtered_at DATETIME,
   process_status TEXT DEFAULT 'pending' CHECK(process_status IN ('pending', 'processing', 'completed', 'failed')),
+  process_stages TEXT,
   processed_at DATETIME,
   published_at DATETIME,
   error_message TEXT,
@@ -135,6 +142,7 @@ CREATE TABLE IF NOT EXISTS article_related (
   related_article_id INTEGER NOT NULL,
   score REAL NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (article_id, related_article_id),
   FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE,
   FOREIGN KEY (related_article_id) REFERENCES articles(id) ON DELETE CASCADE
@@ -142,6 +150,7 @@ CREATE TABLE IF NOT EXISTS article_related (
 
 CREATE INDEX IF NOT EXISTS idx_article_related_article_id ON article_related(article_id);
 CREATE INDEX IF NOT EXISTS idx_article_related_related_article_id ON article_related(related_article_id);
+CREATE INDEX IF NOT EXISTS idx_article_related_updated_at ON article_related(updated_at);
 
 -- ===========================================
 -- 8. Article Translations Table
@@ -218,6 +227,23 @@ CREATE TABLE IF NOT EXISTS system_prompts (
 CREATE INDEX IF NOT EXISTS idx_system_prompts_user_id ON system_prompts(user_id);
 CREATE INDEX IF NOT EXISTS idx_system_prompts_type ON system_prompts(type);
 CREATE INDEX IF NOT EXISTS idx_system_prompts_is_active ON system_prompts(is_active);
+
+-- ===========================================
+-- 12. Daily Summaries Table
+-- ===========================================
+CREATE TABLE IF NOT EXISTS daily_summaries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  summary_date TEXT NOT NULL,
+  article_count INTEGER NOT NULL,
+  summary_content TEXT NOT NULL,
+  articles_data TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(user_id, summary_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_summaries_user_date ON daily_summaries(user_id, summary_date DESC);
 
 -- ===========================================
 -- Insert Default Data

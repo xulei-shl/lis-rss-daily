@@ -10,6 +10,7 @@ import { initLogger, logger } from './logger.js';
 import { initDb, closeDb } from './db.js';
 import { initRSSParser } from './rss-parser.js';
 import { initRSSScheduler } from './rss-scheduler.js';
+import { initRelatedScheduler } from './related-scheduler.js';
 import { config } from './config.js';
 import { createApp, startServer } from './api/web.js';
 import path from 'path';
@@ -32,6 +33,8 @@ async function main() {
     llmProvider: config.llmProvider,
     rssFetchEnabled: config.rssFetchEnabled,
     rssFetchSchedule: config.rssFetchSchedule,
+    relatedRefreshEnabled: config.relatedRefreshEnabled,
+    relatedRefreshSchedule: config.relatedRefreshSchedule,
   }, 'Configuration loaded');
 
   // Initialize database
@@ -63,6 +66,20 @@ async function main() {
     log.info('📅 RSS scheduler disabled');
   }
 
+  // Initialize and start Related Articles refresh scheduler
+  const relatedScheduler = initRelatedScheduler({
+    enabled: config.relatedRefreshEnabled,
+    schedule: config.relatedRefreshSchedule,
+    batchSize: config.relatedRefreshBatchSize,
+    staleDays: config.relatedRefreshStaleDays,
+  });
+  if (config.relatedRefreshEnabled) {
+    relatedScheduler.start();
+    log.info(`🔄 Related articles scheduler started (schedule: ${config.relatedRefreshSchedule})`);
+  } else {
+    log.info('🔄 Related articles scheduler disabled');
+  }
+
   // Keep process running
   log.info('✅ Application ready. Press Ctrl+C to stop.');
 
@@ -73,6 +90,10 @@ async function main() {
     // Stop scheduler
     await scheduler.stop();
     log.info('📅 RSS scheduler stopped');
+
+    // Stop related articles scheduler
+    await relatedScheduler.stop();
+    log.info('🔄 Related articles scheduler stopped');
 
     server.close(() => {
       log.info('🌐 Web server closed');
