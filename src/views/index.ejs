@@ -409,7 +409,8 @@ function renderArticleCard(article, index) {
     'pending': '待处理'
   };
 
-  const content = article.content || article.markdown_content || '';
+  // 优先显示翻译后的中文摘要，如果没有则使用原始内容
+  const content = article.summary_zh || article.content || article.markdown_content || '';
   const hasContent = content.length > 0;
   const TRUNCATE_LENGTH = 400;
   const needsTruncate = content.length > TRUNCATE_LENGTH;
