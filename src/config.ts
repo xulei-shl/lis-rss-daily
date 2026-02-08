@@ -40,6 +40,7 @@ export interface Config {
   // Logging
   logLevel: string;
   logFile?: string;
+  llmLogFile?: string;
 }
 
 function getConfig(): Config {
@@ -87,6 +88,7 @@ function getConfig(): Config {
     // Logging
     logLevel: process.env.LOG_LEVEL || 'info',
     logFile: process.env.LOG_FILE,
+    llmLogFile: process.env.LLM_LOG_FILE,
   };
 }
 

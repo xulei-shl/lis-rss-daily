@@ -16,13 +16,14 @@ import pino from 'pino';
 import pinoPretty from 'pino-pretty';
 import fs from 'fs';
 import path from 'path';
+import { config } from './config.js';
 
 /**
  * 创建独立的 LLM 日志记录器
  */
 function createLLMLogger(): pino.Logger {
   const level = process.env.LOG_LEVEL || 'info';
-  const llmLogFile = process.env.LLM_LOG_FILE;
+  const llmLogFile = config.llmLogFile;
 
   // Pretty stream for stdout
   const prettyStream = pinoPretty({ colorize: true });
