@@ -240,14 +240,12 @@ async function keywordSearchOnly(
   const lowerQuery = query.toLowerCase();
   const terms = query.trim().split(/\s+/).filter((t) => t.length > 0);
 
-  const calcRelevance = (title: string, summary: string | null): number => {
+  const calcRelevance = (title: string): number => {
     let score = 0;
     const safeTitle = title.toLowerCase();
-    const safeSummary = (summary || '').toLowerCase();
 
-    if (safeTitle.includes(lowerQuery)) score += 0.5;
+    if (safeTitle.includes(lowerQuery)) score += 0.7;
     if (safeTitle.startsWith(lowerQuery)) score += 0.3;
-    if (safeSummary.includes(lowerQuery)) score += 0.2;
 
     return Math.min(score, 1);
   };
@@ -265,7 +263,6 @@ async function keywordSearchOnly(
           const pattern = `%${term}%`;
           return eb.or([
             eb('articles.title', 'like', pattern),
-            eb('articles.summary', 'like', pattern),
             eb('articles.markdown_content', 'like', pattern),
           ]);
         })
@@ -278,7 +275,6 @@ async function keywordSearchOnly(
       'articles.id',
       'articles.title',
       'articles.url',
-      'articles.summary',
       'articles.published_at',
       'rss_sources.name as rss_source_name',
     ])
@@ -289,12 +285,12 @@ async function keywordSearchOnly(
   return articles
     .map((article) => ({
       articleId: article.id,
-      score: calcRelevance(article.title, article.summary),
-      keywordScore: calcRelevance(article.title, article.summary),
+      score: calcRelevance(article.title),
+      keywordScore: calcRelevance(article.title),
       metadata: {
         title: article.title,
         url: article.url,
-        summary: article.summary,
+        summary: null,
         published_at: article.published_at,
         rss_source_name: article.rss_source_name ?? undefined,
       },
@@ -456,7 +452,6 @@ async function computeRelated(
     .select([
       'articles.id',
       'articles.title',
-      'articles.summary',
       'articles.content',
       'articles.markdown_content',
     ])
@@ -484,11 +479,20 @@ async function computeRelated(
 
   if (semanticResults.length === 0) return [];
 
-  // Sort by score
+  // Sort by score descending
   semanticResults.sort((a, b) => b.finalScore - a.finalScore);
 
+  // Apply score threshold logic:
+  // - Prioritize articles with score > 0.5, max 5 articles
+  // - If insufficient high-score articles, return max 3 articles by score
+  const highScoreArticles = semanticResults.filter((r) => r.finalScore > 0.5);
+  const effectiveLimit = highScoreArticles.length >= 3 ? Math.min(limit, 5) : Math.min(limit, 3);
+  const topResults = highScoreArticles.length >= effectiveLimit
+    ? highScoreArticles.slice(0, effectiveLimit)
+    : semanticResults.slice(0, effectiveLimit);
+
   // Load details
-  const topIds = semanticResults.slice(0, limit).map((item) => item.articleId);
+  const topIds = topResults.map((item) => item.articleId);
   if (topIds.length === 0) return [];
 
   const rows = await db
@@ -502,14 +506,13 @@ async function computeRelated(
       'articles.id',
       'articles.title',
       'articles.url',
-      'articles.summary',
       'articles.published_at',
       'rss_sources.name as rss_source_name',
     ])
     .execute();
 
-  const scoreLookup = new Map(semanticResults.map((item) => [item.articleId, item.finalScore]));
-  const semScoreLookup = new Map(semanticResults.map((item) => [item.articleId, item.semanticScore]));
+  const scoreLookup = new Map(topResults.map((item) => [item.articleId, item.finalScore]));
+  const semScoreLookup = new Map(topResults.map((item) => [item.articleId, item.semanticScore]));
 
   return rows
     .map((row) => ({
@@ -520,7 +523,7 @@ async function computeRelated(
       metadata: {
         title: row.title,
         url: row.url,
-        summary: row.summary,
+        summary: null,
         published_at: row.published_at,
         rss_source_name: row.rss_source_name ?? undefined,
       },
@@ -532,7 +535,7 @@ async function computeRelated(
       const bTime = b.metadata?.published_at ? Date.parse(b.metadata.published_at) : 0;
       return bTime - aTime;
     })
-    .slice(0, limit);
+    .slice(0, effectiveLimit);
 }
 
 async function getRelatedFromCache(
@@ -554,7 +557,6 @@ async function getRelatedFromCache(
       'articles.id',
       'articles.title',
       'articles.url',
-      'articles.summary',
       'articles.published_at',
       'rss_sources.name as rss_source_name',
       'ar.score as score',
@@ -570,7 +572,7 @@ async function getRelatedFromCache(
     metadata: {
       title: row.title,
       url: row.url,
-      summary: row.summary,
+      summary: null,
       published_at: row.published_at,
       rss_source_name: row.rss_source_name ?? undefined,
     },
@@ -621,7 +623,6 @@ async function enrichWithMetadata(
       'articles.id',
       'articles.title',
       'articles.url',
-      'articles.summary',
       'articles.published_at',
       'rss_sources.name as rss_source_name',
     ])
@@ -639,7 +640,7 @@ async function enrichWithMetadata(
         metadata: {
           title: article.title,
           url: article.url,
-          summary: article.summary,
+          summary: null,
           published_at: article.published_at,
           rss_source_name: article.rss_source_name ?? undefined,
         },

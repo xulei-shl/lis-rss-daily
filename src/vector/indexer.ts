@@ -41,7 +41,6 @@ async function loadArticles(articleIds: number[], userId?: number) {
     .select([
       'articles.id',
       'articles.title',
-      'articles.summary',
       'articles.content',
       'articles.markdown_content',
       'rss_sources.user_id as user_id',

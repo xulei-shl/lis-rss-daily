@@ -200,6 +200,8 @@ async function loadRelatedArticles(id) {
             escapeHtml(article.title) +
           '</a>' +
           '<div class="related-article-meta">' +
+            '<span class="related-score">相关度: ' + formatScore(article.score) + '</span>' +
+            '<span class="related-separator">·</span>' +
             formatTime(article.published_at) +
           '</div>' +
         '</li>'
@@ -208,6 +210,12 @@ async function loadRelatedArticles(id) {
   } catch (err) {
     console.error('Failed to load related articles:', err);
   }
+}
+
+// 格式化相关性得分
+function formatScore(score) {
+  if (typeof score !== 'number') return 'N/A';
+  return (score * 100).toFixed(0) + '%';
 }
 
 // 导出 Markdown
