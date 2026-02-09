@@ -36,9 +36,10 @@ RSS 订阅源 → 自动抓取 → LLM 智能过滤 → 通过的文章 → 翻�
 | 🤖 **智能过滤** | 使用 LLM 根据主题配置智能过滤无关内容 |
 | 🌐 **自动翻译** | 自动将英文文献翻译为中文 |
 | 🔍 **语义搜索** | 基于向量的语义检索，找到相关文献 |
+| 🔗 **相关文章推荐** | 基于向量相似度自动关联相关文献，增量刷新机制 |
 | 📊 **统计分析** | 过滤统计、通过率分析、领域分布 |
 | 👥 **多用户支持** | 用户认证系统，支持多用户独立管理 |
-| ⚙️ **可配置** | 灵活的主题词、关注领域配置 |
+| ⚙️ **可配置** | 灵活的主题词、关注领域、系统提示词配置 |
 
 ---
 
@@ -286,7 +287,16 @@ CHROMA_PORT=8000
 - 输入自然语言查询
 - 系统会找到语义最相关的文献
 
-### 7. 查看统计
+### 7. 查看相关文章
+
+每篇文章会自动推荐语义最相关的文献：
+
+1. 点击文章进入详情页
+2. 在「相关文章」区域查看推荐列表
+3. 相关度基于向量相似度计算
+4. 新文章处理完成后会自动刷新相关文章列表
+
+### 8. 查看统计
 
 进入「统计」页面查看:
 - 总文章数、通过率
@@ -324,6 +334,8 @@ CHROMA_PORT=8000
 | POST | `/api/articles/:id/process` | 处理单篇文章 |
 | POST | `/api/articles/batch/process` | 批量处理文章 |
 | POST | `/api/articles/:id/retry` | 重试失败文章 |
+| GET | `/api/articles/:id/related` | 获取相关文章列表 |
+| POST | `/api/articles/:id/related/refresh` | 手动刷新相关文章 |
 
 ### 过滤配置
 
@@ -368,14 +380,16 @@ lis-rss-daily/
 │   ├── api/                  # API 路由
 │   │   ├── routes/           # 路由定义
 │   │   ├── articles.ts       # 文章接口
-│   │   ├── rss-sources.ts   # RSS 源接口
+│   │   ├── articles-refresh.ts  # 相关文章刷新
+│   │   ├── rss-sources.ts    # RSS 源接口
 │   │   └── ...
 │   │
 │   ├── pipeline.ts           # 处理流水线 (翻译+索引)
 │   ├── filter.ts             # LLM 文章过滤
 │   ├── scraper.ts            # 网页抓取
 │   ├── rss-parser.ts         # RSS 解析
-│   ├── rss-scheduler.ts      # 定时抓取调度
+│   ├── rss-scheduler.ts      # RSS 定时抓取调度
+│   ├── related-scheduler.ts  # 相关文章刷新调度
 │   │
 │   ├── vector/               # 向量检索模块
 │   │   ├── indexer.ts        # 向量索引
