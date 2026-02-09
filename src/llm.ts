@@ -145,13 +145,17 @@ function createOpenAIProvider(llmConfig: LLMConfigOptions, configId?: number): L
       });
 
       try {
-        const response = await client.chat.completions.create({
+        const requestConfig: Record<string, any> = {
           model,
-          max_tokens: options.maxTokens ?? 2048,
           temperature: options.temperature,
           messages: messages.map((m) => ({ role: m.role, content: m.content })),
           ...(options.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
-        });
+        };
+        // 只有明确指定 maxTokens 时才添加限制
+        if (options.maxTokens !== undefined) {
+          requestConfig.max_tokens = options.maxTokens;
+        }
+        const response = await client.chat.completions.create(requestConfig);
 
         const text = response.choices[0]?.message?.content || '';
 
@@ -230,13 +234,17 @@ function createGeminiProvider(llmConfig: LLMConfigOptions, configId?: number): L
           }
         }
 
+        const generationConfig: Record<string, any> = {
+          temperature: options.temperature ?? 0.3,
+          ...(options.jsonMode ? { responseMimeType: 'application/json' } : {}),
+        };
+        // 只有明确指定 maxTokens 时才添加限制
+        if (options.maxTokens !== undefined) {
+          generationConfig.maxOutputTokens = options.maxTokens;
+        }
         const body: Record<string, any> = {
           contents,
-          generationConfig: {
-            temperature: options.temperature ?? 0.3,
-            maxOutputTokens: options.maxTokens ?? 2048,
-            ...(options.jsonMode ? { responseMimeType: 'application/json' } : {}),
-          },
+          generationConfig,
         };
 
         if (systemParts.length > 0) {

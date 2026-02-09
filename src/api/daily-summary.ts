@@ -208,7 +208,6 @@ ${articlesText}
     ],
     {
       temperature: 0.3,
-      maxTokens: 2048,
       label: 'daily_summary',
     }
   );

@@ -66,7 +66,7 @@ export async function translateArticleIfNeeded(
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { maxTokens: 1024, jsonMode: true, label: 'translation' }
+      { jsonMode: true, label: 'translation' }
     );
 
     // 使用新的JSON解析工具
