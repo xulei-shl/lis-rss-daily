@@ -588,38 +588,9 @@ export async function getActiveConfigByTypeAndTask(
   configType: 'llm' | 'embedding' | 'rerank',
   taskType?: string
 ): Promise<LLMConfigRecord | null> {
-  const db = getDb();
-
-  // 使用 CASE 表达式实现优先级排序
-  // 优先级 1: task_type 精确匹配
-  // 优先级 2: task_type 为空（兜底配置）
-  const config = await db
-    .selectFrom('llm_configs')
-    .where('user_id', '=', userId)
-    .where('config_type', '=', configType)
-    .where('enabled', '=', 1)
-    .where((eb) =>
-      eb.or([
-        eb('task_type', '=', taskType ?? null),
-        eb('task_type', 'is', null),
-      ])
-    )
-    .selectAll()
-    .orderBy((eb) =>
-      eb.case()
-        .when('task_type', '=', taskType ?? null)
-        .then(1)
-        .when('task_type', 'is', null)
-        .then(2)
-        .else(3)
-    )
-    .orderBy('is_default', 'desc')
-    .orderBy('priority', 'asc')
-    .orderBy('created_at', 'asc')
-    .limit(1)
-    .executeTakeFirst();
-
-  return config ?? null;
+  // 复用列表查询函数，取第一条
+  const configs = await getActiveConfigListByTypeAndTask(userId, configType, taskType);
+  return configs[0] ?? null;
 }
 
 /**
@@ -633,9 +604,7 @@ export async function getActiveConfigListByTypeAndTask(
 ): Promise<LLMConfigRecord[]> {
   const db = getDb();
 
-  // 使用 CASE 表达式实现优先级排序
-  // 优先级 1: task_type 精确匹配
-  // 优先级 2: task_type 为空（兜底配置）
+  // 查询所有匹配的配置（task_type 精确匹配或为空）
   const configs = await db
     .selectFrom('llm_configs')
     .where('user_id', '=', userId)
@@ -648,18 +617,28 @@ export async function getActiveConfigListByTypeAndTask(
       ])
     )
     .selectAll()
-    .orderBy((eb) =>
-      eb.case()
-        .when('task_type', '=', taskType ?? null)
-        .then(1)
-        .when('task_type', 'is', null)
-        .then(2)
-        .else(3)
-    )
-    .orderBy('is_default', 'desc')
-    .orderBy('priority', 'asc')
-    .orderBy('created_at', 'asc')
     .execute();
 
-  return configs;
+  // 在应用层排序：精确匹配 task_type 优先，然后是 task_type 为空的兜底配置
+  return configs.sort((a, b) => {
+    // 优先级 1: task_type 精确匹配
+    const aExactMatch = a.task_type === (taskType ?? null) ? 1 : 0;
+    const bExactMatch = b.task_type === (taskType ?? null) ? 1 : 0;
+    if (aExactMatch !== bExactMatch) {
+      return bExactMatch - aExactMatch; // 精确匹配优先
+    }
+
+    // 优先级 2: is_default（默认配置优先）
+    if (a.is_default !== b.is_default) {
+      return (b.is_default ?? 0) - (a.is_default ?? 0);
+    }
+
+    // 优先级 3: priority（数字越小越优先）
+    if ((a.priority ?? 100) !== (b.priority ?? 100)) {
+      return (a.priority ?? 100) - (b.priority ?? 100);
+    }
+
+    // 优先级 4: created_at（最早创建的优先）
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  });
 }

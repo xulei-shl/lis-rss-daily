@@ -5,7 +5,6 @@
 import { getUserLLMProvider, getLLM } from './llm.js';
 import { logger } from './logger.js';
 import { resolveSystemPrompt } from './api/system-prompts.js';
-import { parseLLMJSON } from './utils/llm-json-parser.js';
 import { buildPromptVariables, type ArticleContext } from './api/prompt-variable-builder.js';
 
 const log = logger.child({ module: 'agent' });
@@ -69,15 +68,13 @@ export async function translateArticleIfNeeded(
       { jsonMode: true, label: 'translation' }
     );
 
-    // 使用新的JSON解析工具
-    const parseResult = parseLLMJSON<{ title_zh?: string; summary_zh?: string }>(text, {
-      allowPartial: true,
-      maxResponseLength: 1024,
-      errorPrefix: 'Translation',
-    });
+    // 使用正则表达式提取翻译结果，兼容多种字段命名格式
+    // 支持: title_zh / title, summary_zh / summary
+    const titleZh = shouldTranslateTitle ? extractTranslationField(text, 'title') : undefined;
+    const summaryZh = shouldTranslateContent ? extractTranslationField(text, 'summary') : undefined;
 
-    if (!parseResult.success) {
-      log.warn({ error: parseResult.error }, 'Translation JSON parse failed');
+    if (!titleZh && !summaryZh) {
+      log.warn({ responsePreview: text.substring(0, 200) }, 'Translation extraction failed, no valid fields found');
       return {
         titleZh: undefined,
         summaryZh: undefined,
@@ -85,10 +82,6 @@ export async function translateArticleIfNeeded(
         usedFallback: true,
       };
     }
-
-    const parsed = parseResult.data!;
-    const titleZh = shouldTranslateTitle ? safeString(parsed.title_zh) : undefined;
-    const summaryZh = shouldTranslateContent ? safeString(parsed.summary_zh) : undefined;
 
     return {
       titleZh,
@@ -108,6 +101,40 @@ export async function translateArticleIfNeeded(
 }
 
 /* ── Utility Functions ── */
+
+/**
+ * 使用正则表达式从 JSON 响应中提取翻译字段
+ * 支持多种字段命名格式：title_zh / title, summary_zh / summary
+ *
+ * @param text - LLM 返回的 JSON 文本
+ * @param fieldName - 字段名（不带后缀），如 'title' 或 'summary'
+ * @returns 提取的字符串值，未找到则返回 undefined
+ */
+function extractTranslationField(text: string, fieldName: 'title' | 'summary'): string | undefined {
+  // 支持的字段名变体
+  const variants = [`${fieldName}_zh`, fieldName];
+
+  for (const variant of variants) {
+    // 匹配 "field_name": "value" 格式
+    // 处理转义字符、嵌套引号等情况
+    const regex = new RegExp(`"\\s*${escapeRegExp(variant)}\\s*"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`, 'i');
+    const match = text.match(regex);
+    if (match && match[1]) {
+      // 解析 JSON 转义字符
+      const decoded = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      return safeString(decoded);
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * 转义正则表达式特殊字符
+ */
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 function detectLanguage(text?: string): 'zh' | 'en' | 'unknown' {
   if (!text || text.trim().length === 0) return 'unknown';
