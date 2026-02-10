@@ -55,7 +55,7 @@ if not errorlevel 1 (
 
 REM Start Chroma in background (hidden window)
 echo [INFO] Starting Chroma vector database service...
-start /B "" cmd /c "chroma run --host %CHROMA_HOST% --port %CHROMA_PORT% --path \"%CHROMA_DATA_DIR%\" > \"%CHROMA_LOG_DIR%\chroma.log\" 2>&1"
+start /B "" chroma run --host %CHROMA_HOST% --port %CHROMA_PORT% --path "%CHROMA_DATA_DIR%"
 
 REM Wait for Chroma to be ready with health check
 echo [INFO] Waiting for Chroma to be ready (max %CHROMA_MAX_WAIT% seconds)...

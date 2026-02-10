@@ -546,6 +546,7 @@ export async function getActiveConfigByType(
     .selectFrom('llm_configs')
     .where('user_id', '=', userId)
     .where('config_type', '=', configType)
+    .where('enabled', '=', 1)
     .selectAll()
     .orderBy('is_default', 'desc')
     .orderBy('priority', 'asc')
@@ -568,6 +569,7 @@ export async function getActiveConfigListByType(
     .selectFrom('llm_configs')
     .where('user_id', '=', userId)
     .where('config_type', '=', configType)
+    .where('enabled', '=', 1)
     .selectAll()
     .orderBy('is_default', 'desc')
     .orderBy('priority', 'asc')
@@ -595,6 +597,7 @@ export async function getActiveConfigByTypeAndTask(
     .selectFrom('llm_configs')
     .where('user_id', '=', userId)
     .where('config_type', '=', configType)
+    .where('enabled', '=', 1)
     .where((eb) =>
       eb.or([
         eb('task_type', '=', taskType ?? null),
@@ -637,6 +640,7 @@ export async function getActiveConfigListByTypeAndTask(
     .selectFrom('llm_configs')
     .where('user_id', '=', userId)
     .where('config_type', '=', configType)
+    .where('enabled', '=', 1)
     .where((eb) =>
       eb.or([
         eb('task_type', '=', taskType ?? null),

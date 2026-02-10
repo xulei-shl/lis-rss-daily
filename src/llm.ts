@@ -339,51 +339,51 @@ export function getLLM(): LLMProvider {
 
 /**
  * Get LLM provider for a specific user from database configuration
- * Falls back to environment variables if no config is found
+ * Throws error if no config is found (no fallback to environment variables)
  *
  * @param userId - User ID to get LLM config for
  * @param taskType - Optional task type (filter, translation, daily_summary, etc.)
  * @returns LLM provider instance
+ * @throws Error if no LLM config found for user
  */
 export async function getUserLLMProvider(userId: number, taskType?: string): Promise<LLMProvider> {
-  try {
-    const dbConfigs = taskType
-      ? await getActiveConfigListByTypeAndTask(userId, 'llm', taskType)
-      : await getActiveConfigListByType(userId, 'llm');
+  const dbConfigs = taskType
+    ? await getActiveConfigListByTypeAndTask(userId, 'llm', taskType)
+    : await getActiveConfigListByType(userId, 'llm');
 
-    if (!dbConfigs || dbConfigs.length === 0) {
-      log.warn({ userId, taskType }, 'No LLM config found for user, falling back to environment');
-      return getLLM();
-    }
-
-    const entries: FailoverEntry[] = [];
-    for (const dbConfig of dbConfigs) {
-      const provider = buildProviderFromDbConfig(dbConfig);
-      if (provider) {
-        entries.push({ configId: dbConfig.id, provider });
-      }
-    }
-
-    if (entries.length === 0) {
-      log.warn({ userId, taskType }, 'No valid LLM config available, falling back to environment');
-      return getLLM();
-    }
-
-    if (entries.length === 1) {
-      log.info({ userId, taskType, provider: entries[0].provider.name }, 'LLM provider initialized from database');
-      return entries[0].provider;
-    }
-
-    const failoverProvider = createFailoverProvider(entries);
-    log.info(
-      { userId, taskType, provider: failoverProvider.name, count: entries.length },
-      'LLM provider initialized with failover'
+  if (!dbConfigs || dbConfigs.length === 0) {
+    throw new Error(
+      `未找到用户 ${userId}${taskType ? ` 的 ${taskType} 任务类型` : ''} 的 LLM 配置。` +
+      `请在设置中添加并启用至少一个 LLM 配置。`
     );
-    return failoverProvider;
-  } catch (error) {
-    log.error({ error, userId, taskType }, 'Failed to get LLM config from database, falling back to environment');
-    return getLLM();
   }
+
+  const entries: FailoverEntry[] = [];
+  for (const dbConfig of dbConfigs) {
+    const provider = buildProviderFromDbConfig(dbConfig);
+    if (provider) {
+      entries.push({ configId: dbConfig.id, provider });
+    }
+  }
+
+  if (entries.length === 0) {
+    throw new Error(
+      `用户 ${userId}${taskType ? ` 的 ${taskType} 任务类型` : ''} 的所有 LLM 配置均无效。` +
+      `请检查配置是否正确。`
+    );
+  }
+
+  if (entries.length === 1) {
+    log.info({ userId, taskType, provider: entries[0].provider.name }, 'LLM provider initialized from database');
+    return entries[0].provider;
+  }
+
+  const failoverProvider = createFailoverProvider(entries);
+  log.info(
+    { userId, taskType, provider: failoverProvider.name, count: entries.length },
+    'LLM provider initialized with failover'
+  );
+  return failoverProvider;
 }
 
 /**

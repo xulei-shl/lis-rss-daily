@@ -560,9 +560,9 @@ function renderLLMTable() {
       '<td><span class="rss-url">' + escapeHtml(truncate(config.base_url, 35)) + '</span></td>' +
       '<td>' + escapeHtml(String(config.priority ?? 100)) + '</td>' +
       '<td>' +
-        (config.config_type === 'rerank'
-          ? (config.enabled ? '<span class="status-badge active">已启用</span>' : '<span class="status-badge inactive">未启用</span>')
-          : '<span class="status-badge active">已启用</span>'
+        (config.enabled
+          ? '<span class="status-badge active">已启用</span>'
+          : '<span class="status-badge inactive">未启用</span>'
         ) +
       '</td>' +
       '<td>' +
@@ -589,7 +589,7 @@ function showLLMAddModal() {
   document.getElementById('llmMaxRetries').value = '3';
   document.getElementById('llmPriority').value = '100';
   document.getElementById('llmIsDefault').checked = llmConfigs.length === 0;
-  document.getElementById('llmRerankEnabled').checked = false;
+  document.getElementById('llmEnabled').checked = false;
   document.getElementById('llmTestResult').className = 'test-result';
   document.getElementById('llmTestResult').textContent = '';
   updateConfigTypeUI();
@@ -613,7 +613,7 @@ function editLLMConfig(id) {
   document.getElementById('llmMaxRetries').value = config.max_retries;
   document.getElementById('llmPriority').value = config.priority ?? 100;
   document.getElementById('llmIsDefault').checked = config.is_default === 1;
-  document.getElementById('llmRerankEnabled').checked = config.enabled === 1;
+  document.getElementById('llmEnabled').checked = config.enabled === 1;
   document.getElementById('llmTestResult').className = 'test-result';
   document.getElementById('llmTestResult').textContent = '';
   updateConfigTypeUI();
@@ -961,16 +961,8 @@ function updateProviderDefaults() {
 }
 
 function updateConfigTypeUI() {
-  const configType = document.getElementById('llmConfigType').value;
-  const rerankGroup = document.getElementById('rerankEnabledGroup');
-  const rerankCheckbox = document.getElementById('llmRerankEnabled');
-
-  if (configType === 'rerank') {
-    rerankGroup.style.display = 'block';
-  } else {
-    rerankGroup.style.display = 'none';
-    rerankCheckbox.checked = false;
-  }
+  // 所有类型的配置都可以启用，不需要特殊处理
+  // 启用选项始终显示
 }
 
 /**
@@ -1013,7 +1005,7 @@ async function testLLMConnection() {
     baseURL: document.getElementById('llmBaseURL').value,
     apiKey: document.getElementById('llmApiKey').value,
     model: document.getElementById('llmModel').value,
-    enabled: document.getElementById('llmRerankEnabled').checked,
+    enabled: document.getElementById('llmEnabled').checked,
   };
 
   try {
@@ -1079,7 +1071,7 @@ document.getElementById('llmConfigForm').addEventListener('submit', async functi
     maxRetries: parseInt(document.getElementById('llmMaxRetries').value),
     priority: parseInt(document.getElementById('llmPriority').value),
     isDefault: document.getElementById('llmIsDefault').checked,
-    enabled: document.getElementById('llmRerankEnabled').checked,
+    enabled: document.getElementById('llmEnabled').checked,
   };
 
   try {
