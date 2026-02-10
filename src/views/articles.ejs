@@ -77,38 +77,21 @@
     box-shadow: 0 0 0 3px var(--accent-subtle);
   }
 
+  /* Date input overrides for theme consistency */
   .filter-date {
-    padding: 8px 12px;
-    border: 1px solid var(--border);
-    border-radius: 0;
-    background: var(--bg-surface);
-    color: var(--text-primary);
-    font-family: var(--font-meta);
-    font-size: var(--text-sm);
-    font-weight: 500;
-    cursor: pointer;
-    min-width: 140px;
+    color-scheme: light;
   }
 
-  .filter-date:focus {
-    outline: none;
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 3px var(--accent-subtle);
+  @media (prefers-color-scheme: dark) {
+    .filter-date {
+      color-scheme: dark;
+    }
   }
 
-  .filter-date::-webkit-calendar-picker-indicator {
-    cursor: pointer;
-    opacity: 0.6;
-  }
-
-  .filter-date::-webkit-calendar-picker-indicator:hover {
-    opacity: 1;
-  }
-
-  /* Search Box */
+  /* Search Box width override to match first row */
   .search-box {
-    flex: 1;
-    min-width: 280px;
+    width: 1005px;
+    max-width: 100%;
     position: relative;
   }
 
@@ -356,42 +339,57 @@
 
 <!-- Filters Bar -->
 <div class="filters-bar">
-  <div class="filter-group">
-    <span class="filter-label">来源</span>
-    <select id="filterSource" class="filter-select">
-      <option value="">全部来源</option>
-    </select>
+  <!-- First Row: All Filters -->
+  <div class="filter-row">
+    <!-- Primary Filters Section -->
+    <div class="filter-section">
+      <div class="filter-group">
+        <span class="filter-label">来源</span>
+        <select id="filterSource" class="filter-select">
+          <option value="">全部来源</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">状态</span>
+        <select id="filterStatus" class="filter-select">
+          <option value="">全部状态</option>
+          <option value="passed">通过</option>
+          <option value="rejected">拒绝</option>
+          <option value="pending">待处理</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">处理状态</span>
+        <select id="filterProcess" class="filter-select">
+          <option value="">全部</option>
+          <option value="pending">待处理</option>
+          <option value="processing">处理中</option>
+          <option value="completed">已完成</option>
+          <option value="failed">失败</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Date Range Section -->
+    <div class="filter-section">
+      <div class="filter-group">
+        <span class="filter-label">爬取日期</span>
+        <div class="date-range-group">
+          <input type="date" id="dateFrom" class="filter-date" placeholder="起始日期" title="起始日期">
+          <span class="date-separator">—</span>
+          <input type="date" id="dateTo" class="filter-date" placeholder="结束日期" title="结束日期">
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div class="filter-group">
-    <span class="filter-label">状态</span>
-    <select id="filterStatus" class="filter-select">
-      <option value="">全部状态</option>
-      <option value="passed">通过</option>
-      <option value="rejected">拒绝</option>
-      <option value="pending">待处理</option>
-    </select>
-  </div>
-
-  <div class="filter-group">
-    <span class="filter-label">处理状态</span>
-    <select id="filterProcess" class="filter-select">
-      <option value="">全部</option>
-      <option value="pending">待处理</option>
-      <option value="processing">处理中</option>
-      <option value="completed">已完成</option>
-      <option value="failed">失败</option>
-    </select>
-  </div>
-
-  <div class="filter-group">
-    <span class="filter-label">爬取日期</span>
-    <input type="date" id="dateFrom" class="filter-date" title="起始日期">
-    <span style="color: var(--text-tertiary); margin: 0 4px;">至</span>
-    <input type="date" id="dateTo" class="filter-date" title="结束日期">
-  </div>
-
+  <!-- Second Row: Search -->
   <div class="search-box">
+    <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    </svg>
     <input type="text" id="searchInput" class="search-input" placeholder="搜索标题或摘要...">
   </div>
 </div>
