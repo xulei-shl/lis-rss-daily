@@ -1,15 +1,36 @@
 /**
  * RSS 源类型常量
  *
- * 单一真实来源（SSOT）：定义所有支持的 RSS 源类型
- * 新增类型时只需修改此文件
+ * 从 YAML 配置文件加载类型定义
+ * 保持向后兼容的 API
+ *
+ * 单一真实来源 (SSOT): config/types.yaml
  */
 
-export const SOURCE_TYPES = {
-  JOURNAL: 'journal',
-  BLOG: 'blog',
-  NEWS: 'news',
-} as const;
+import {
+  getSourceTypeCodes,
+  getSourceTypePriority,
+  getSourceTypeLabels,
+  getDefaultSourceType,
+} from '../config/types-config.js';
+
+// 动态构建 SOURCE_TYPES 常量
+const typeCodes = getSourceTypeCodes();
+const SOURCE_TYPES_OBJ: Record<string, string> = {};
+
+for (const code of typeCodes) {
+  SOURCE_TYPES_OBJ[code.toUpperCase()] = code;
+}
+
+/**
+ * RSS 源类型常量
+ */
+export const SOURCE_TYPES = SOURCE_TYPES_OBJ as {
+  JOURNAL: 'journal';
+  BLOG: 'blog';
+  NEWS: 'news';
+  // 未来新增类型会自动添加
+};
 
 /**
  * RSS 源类型
@@ -19,27 +40,19 @@ export type SourceType = (typeof SOURCE_TYPES)[keyof typeof SOURCE_TYPES];
 /**
  * RSS 源类型优先级（数字越小优先级越高）
  */
-export const SOURCE_TYPE_PRIORITY: Record<SourceType, number> = {
-  journal: 1,
-  blog: 2,
-  news: 3,
-};
+export const SOURCE_TYPE_PRIORITY: Record<SourceType, number> = getSourceTypePriority() as Record<SourceType, number>;
 
 /**
  * RSS 源类型中文标签
  */
-export const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
-  journal: '期刊',
-  blog: '博客',
-  news: '资讯',
-};
+export const SOURCE_TYPE_LABELS: Record<SourceType, string> = getSourceTypeLabels() as Record<SourceType, string>;
 
 /**
  * 所有有效的源类型值数组（用于运行时验证）
  */
-export const VALID_SOURCE_TYPES = Object.values(SOURCE_TYPES) as SourceType[];
+export const VALID_SOURCE_TYPES = getSourceTypeCodes() as SourceType[];
 
 /**
  * 默认源类型
  */
-export const DEFAULT_SOURCE_TYPE: SourceType = SOURCE_TYPES.BLOG;
+export const DEFAULT_SOURCE_TYPE: SourceType = getDefaultSourceType() as SourceType;

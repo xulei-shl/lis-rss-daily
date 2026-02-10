@@ -1,0 +1,86 @@
+# 类型定义配置
+# 单一真实来源 (SSOT) - 所有类型枚举在此文件中定义
+
+version: "1.0"
+
+# 任务类型定义（用于 LLM 配置和系统提示词）
+task_types:
+  filter:
+    code: "filter"
+    label: "文章过滤"
+    label_en: "Filter"
+    description: "判断文章与主题的相关性"
+    priority: 1
+    enabled: true
+
+  summary:
+    code: "summary"
+    label: "文章摘要"
+    label_en: "Summary"
+    description: "生成文章内容摘要"
+    priority: 2
+    enabled: true
+
+  keywords:
+    code: "keywords"
+    label: "关键词提取"
+    label_en: "Keywords"
+    description: "从文章中提取关键词"
+    priority: 3
+    enabled: true
+
+  translation:
+    code: "translation"
+    label: "中英翻译"
+    label_en: "Translation"
+    description: "翻译文章内容"
+    priority: 4
+    enabled: true
+
+  daily_summary:
+    code: "daily_summary"
+    label: "当日总结"
+    label_en: "Daily Summary"
+    description: "汇总当日所有通过的文章"
+    priority: 5
+    enabled: true
+
+  analysis:
+    code: "analysis"
+    label: "文章分析"
+    label_en: "Analysis"
+    description: "深度分析文章内容（预留）"
+    priority: 6
+    enabled: false
+
+# RSS 源类型定义（用于订阅源分类）
+source_types:
+  journal:
+    code: "journal"
+    label: "期刊"
+    label_en: "Journal"
+    description: "学术期刊 RSS 源"
+    priority: 1
+    icon: "journal"
+
+  blog:
+    code: "blog"
+    label: "博客"
+    label_en: "Blog"
+    description: "个人或团队博客"
+    priority: 2
+    icon: "blog"
+    default: true
+
+  news:
+    code: "news"
+    label: "资讯"
+    label_en: "News"
+    description: "新闻资讯网站"
+    priority: 3
+    icon: "news"
+
+metadata:
+  created_at: "2025-01-10"
+  updated_at: "2025-01-10"
+  schema_version: "1.0"

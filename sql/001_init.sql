@@ -23,10 +23,11 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 -- ===========================================
 -- 2. RSS Sources Table
 -- ===========================================
--- source_type 取值来自 src/constants/source-types.ts: SOURCE_TYPES
+-- source_type 取值来自 config/types.yaml: source_types
 --   - 'journal' (期刊)
 --   - 'blog' (博客, 默认)
 --   - 'news' (资讯)
+-- 新增类型需更新 YAML 配置并创建新的迁移脚本
 CREATE TABLE IF NOT EXISTS rss_sources (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
@@ -170,6 +171,8 @@ CREATE INDEX IF NOT EXISTS idx_article_translations_article_id ON article_transl
 -- ===========================================
 -- 9. LLM Configs Table
 -- ===========================================
+-- task_type 取值来自 config/types.yaml: task_types (filter, summary, keywords, translation, daily_summary, analysis)
+-- 新增类型需更新 YAML 配置并创建新的迁移脚本
 CREATE TABLE IF NOT EXISTS llm_configs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
@@ -214,6 +217,7 @@ CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key);
 -- ===========================================
 -- 11. System Prompts Table
 -- ===========================================
+-- type 取值来自 config/types.yaml: task_types (filter, summary, keywords, translation, daily_summary, analysis)
 CREATE TABLE IF NOT EXISTS system_prompts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
@@ -247,6 +251,20 @@ CREATE TABLE IF NOT EXISTS daily_summaries (
 );
 
 CREATE INDEX IF NOT EXISTS idx_daily_summaries_user_date ON daily_summaries(user_id, summary_date DESC);
+
+-- ===========================================
+-- 13. Schema Metadata Table
+-- ===========================================
+-- 用于跟踪数据库 schema 版本和配置版本
+CREATE TABLE IF NOT EXISTS schema_metadata (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 存储当前类型配置版本（与 config/types.yaml 对应）
+INSERT OR IGNORE INTO schema_metadata (key, value, updated_at)
+VALUES ('types_config_version', '1.0', CURRENT_TIMESTAMP);
 
 -- ===========================================
 -- Insert Default Data

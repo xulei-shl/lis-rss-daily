@@ -4,6 +4,7 @@ import { requireAuth } from '../../middleware/auth.js';
 import * as llmConfigService from '../llm-configs.js';
 import { logger } from '../../logger.js';
 import { TASK_TYPES, type TaskType } from '../../config/system-prompt-variables.js';
+import { getTaskTypeCodes } from '../../config/types-config.js';
 
 const log = logger.child({ module: 'api-routes/llm-configs' });
 
@@ -26,8 +27,8 @@ router.get('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
     const taskType = req.query.taskType as TaskType | undefined;
 
     // Validate taskType if provided
-    if (taskType && !TASK_TYPES.includes(taskType)) {
-      return res.status(400).json({ error: `taskType must be one of: ${TASK_TYPES.join(', ')}` });
+    if (taskType && !getTaskTypeCodes().includes(taskType)) {
+      return res.status(400).json({ error: `taskType must be one of: ${getTaskTypeCodes().join(', ')}` });
     }
 
     const result = await llmConfigService.getUserLLMConfigs(req.userId!, {
@@ -162,8 +163,8 @@ router.post('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
 
     // Validate taskType if provided
     if (taskType !== undefined && taskType !== null && taskType !== '') {
-      if (typeof taskType !== 'string' || !TASK_TYPES.includes(taskType)) {
-        return res.status(400).json({ error: `taskType must be one of: ${TASK_TYPES.join(', ')}` });
+      if (typeof taskType !== 'string' || !getTaskTypeCodes().includes(taskType)) {
+        return res.status(400).json({ error: `taskType must be one of: ${getTaskTypeCodes().join(', ')}` });
       }
       // Constraint: taskType and isDefault are mutually exclusive
       if (isDefault === true) {
@@ -289,8 +290,8 @@ router.put('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
 
     if (taskType !== undefined) {
       if (taskType !== null && taskType !== '') {
-        if (typeof taskType !== 'string' || !TASK_TYPES.includes(taskType)) {
-          return res.status(400).json({ error: `taskType must be one of: ${TASK_TYPES.join(', ')}` });
+        if (typeof taskType !== 'string' || !getTaskTypeCodes().includes(taskType)) {
+          return res.status(400).json({ error: `taskType must be one of: ${getTaskTypeCodes().join(', ')}` });
         }
         // Constraint: taskType and isDefault are mutually exclusive
         if (isDefault === true) {

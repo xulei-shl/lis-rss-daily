@@ -215,11 +215,14 @@ export function validateRequiredVariables(
 
 /**
  * 任务类型常量（用于 LLM 配置验证）
+ * 从 config/types.yaml 动态加载
  */
-export const TASK_TYPES = ['filter', 'summary', 'keywords', 'translation', 'daily_summary', 'analysis'] as const;
+import { getTaskTypeCodes } from './types-config.js';
+
+const _taskTypes = getTaskTypeCodes();
+export const TASK_TYPES = _taskTypes as readonly string[];
 
 /**
  * 任务类型（用于 LLM 配置验证）
  */
-export type TaskType = typeof TASK_TYPES[number];
-// 类型：'filter' | 'summary' | 'keywords' | 'translation' | 'daily_summary' | 'analysis'
+export type TaskType = 'filter' | 'summary' | 'keywords' | 'translation' | 'daily_summary' | 'analysis';

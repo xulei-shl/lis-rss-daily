@@ -22,6 +22,147 @@ setActiveTab('rss');
 
 let rssSources = [];
 
+// 类型定义缓存
+let typeDefinitions = null;
+
+// 加载类型定义（从 YAML 配置）
+async function loadTypeDefinitions() {
+  try {
+    const res = await fetch('/api/types', { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to load types');
+    typeDefinitions = await res.json();
+    populateTypeSelects();
+  } catch (err) {
+    console.error('加载类型定义失败:', err);
+    populateFallbackTypeOptions();
+  }
+}
+
+// 填充类型选择框
+function populateTypeSelects() {
+  if (!typeDefinitions) return;
+
+  // 填充源类型
+  const sourceTypeSelect = document.getElementById('sourceType');
+  if (sourceTypeSelect) {
+    sourceTypeSelect.innerHTML = '';
+    typeDefinitions.source_types.forEach(type => {
+      const option = document.createElement('option');
+      option.value = type.code;
+      option.textContent = type.label;
+      if (type.default) option.selected = true;
+      sourceTypeSelect.appendChild(option);
+    });
+  }
+
+  // 填充任务类型（LLM 配置）
+  const taskTypeSelect = document.getElementById('llmTaskType');
+  if (taskTypeSelect) {
+    // 保留"通用配置"选项
+    const defaultOption = taskTypeSelect.querySelector('option[value=""]');
+    taskTypeSelect.innerHTML = '';
+    if (defaultOption) taskTypeSelect.appendChild(defaultOption);
+
+    typeDefinitions.task_types.forEach(type => {
+      const option = document.createElement('option');
+      option.value = type.code;
+      option.textContent = `${type.code} - ${type.label}`;
+      taskTypeSelect.appendChild(option);
+    });
+  }
+
+  // 更新系统提示词类型选择
+  const promptTypeSelect = document.getElementById('promptType');
+  if (promptTypeSelect) {
+    promptTypeSelect.innerHTML = '';
+    typeDefinitions.task_types.forEach(type => {
+      const option = document.createElement('option');
+      option.value = type.code;
+      option.textContent = type.code;
+      promptTypeSelect.appendChild(option);
+    });
+  }
+}
+
+// 回退选项（API 失败时使用硬编码选项）
+function populateFallbackTypeOptions() {
+  console.warn('使用硬编码类型选项作为回退');
+
+  // 回退源类型
+  const sourceTypeSelect = document.getElementById('sourceType');
+  if (sourceTypeSelect) {
+    sourceTypeSelect.innerHTML = '';
+    const sourceTypes = [
+      { code: 'blog', label: '博客', default: true },
+      { code: 'journal', label: '期刊', default: false },
+      { code: 'news', label: '资讯', default: false }
+    ];
+    sourceTypes.forEach(type => {
+      const option = document.createElement('option');
+      option.value = type.code;
+      option.textContent = type.label;
+      if (type.default) option.selected = true;
+      sourceTypeSelect.appendChild(option);
+    });
+  }
+
+  // 回退任务类型
+  const taskTypeSelect = document.getElementById('llmTaskType');
+  if (taskTypeSelect) {
+    const defaultOption = taskTypeSelect.querySelector('option[value=""]');
+    taskTypeSelect.innerHTML = '';
+    if (defaultOption) taskTypeSelect.appendChild(defaultOption);
+
+    const taskTypes = ['filter', 'summary', 'keywords', 'translation', 'daily_summary', 'analysis'];
+    const taskLabels = {
+      'filter': '文章过滤',
+      'summary': '文章摘要',
+      'keywords': '关键词提取',
+      'translation': '中英翻译',
+      'daily_summary': '当日总结',
+      'analysis': '文章分析'
+    };
+    taskTypes.forEach(code => {
+      const option = document.createElement('option');
+      option.value = code;
+      option.textContent = `${code} - ${taskLabels[code]}`;
+      taskTypeSelect.appendChild(option);
+    });
+  }
+
+  // 回退提示词类型
+  const promptTypeSelect = document.getElementById('promptType');
+  if (promptTypeSelect) {
+    promptTypeSelect.innerHTML = '';
+    ['filter', 'summary', 'keywords', 'translation', 'daily_summary', 'analysis'].forEach(code => {
+      const option = document.createElement('option');
+      option.value = code;
+      option.textContent = code;
+      promptTypeSelect.appendChild(option);
+    });
+  }
+}
+
+// 获取源类型标签（用于表格显示）
+function getSourceTypeLabel(sourceType) {
+  if (typeDefinitions && typeDefinitions.source_types) {
+    const type = typeDefinitions.source_types.find(t => t.code === sourceType);
+    return type ? type.label : '博客';
+  }
+  // 回退到硬编码映射
+  const labels = { 'journal': '期刊', 'blog': '博客', 'news': '资讯' };
+  return labels[sourceType] || '博客';
+}
+
+// 获取默认源类型
+function getDefaultSourceType() {
+  if (typeDefinitions && typeDefinitions.source_types) {
+    const defaultType = typeDefinitions.source_types.find(t => t.default);
+    return defaultType ? defaultType.code : 'blog';
+  }
+  return 'blog';
+}
+
 // Load RSS sources on page load
 loadRSSSources();
 
@@ -53,16 +194,10 @@ function renderTable() {
   table.style.display = 'table';
   emptyState.style.display = 'none';
 
-  const sourceTypeLabels = {
-    'journal': '期刊',
-    'blog': '博客',
-    'news': '资讯'
-  };
-
   console.log('Rendering table with sources:', rssSources);
 
   tbody.innerHTML = rssSources.map(function(source) {
-    const typeLabel = sourceTypeLabels[source.source_type] || '博客';
+    const typeLabel = getSourceTypeLabel(source.source_type);
     console.log(`Source ${source.id}: source_type=${source.source_type}, label=${typeLabel}`);
     return '<tr>' +
       '<td class="rss-name">' + escapeHtml(source.name) + '</td>' +
@@ -93,7 +228,7 @@ function showAddModal() {
   document.getElementById('sourceId').value = '';
   document.getElementById('sourceName').value = '';
   document.getElementById('sourceUrl').value = '';
-  document.getElementById('sourceType').value = 'blog';
+  document.getElementById('sourceType').value = getDefaultSourceType();
   document.getElementById('fetchInterval').value = '3600';
   document.getElementById('sourceStatus').value = 'active';
   document.getElementById('validationResult').className = 'validation-result';
@@ -351,6 +486,9 @@ function getDefaultPromptVariablesJSON() {
 
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', function() {
+  // 加载类型定义（优先加载，其他函数依赖它）
+  loadTypeDefinitions();
+
   // Load data on page load
   loadLLMConfigs();
   loadSystemPrompts();
