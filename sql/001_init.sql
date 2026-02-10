@@ -178,6 +178,7 @@ CREATE TABLE IF NOT EXISTS llm_configs (
   api_key_encrypted TEXT NOT NULL,
   model TEXT NOT NULL,
   config_type TEXT NOT NULL DEFAULT 'llm',
+  task_type TEXT,
   enabled INTEGER DEFAULT 0,
   is_default INTEGER DEFAULT 0,
   priority INTEGER DEFAULT 100,
@@ -191,6 +192,8 @@ CREATE TABLE IF NOT EXISTS llm_configs (
 
 CREATE INDEX IF NOT EXISTS idx_llm_configs_user_id ON llm_configs(user_id);
 CREATE INDEX IF NOT EXISTS idx_llm_configs_is_default ON llm_configs(is_default);
+CREATE INDEX IF NOT EXISTS idx_llm_configs_task_type ON llm_configs(task_type);
+CREATE INDEX IF NOT EXISTS idx_llm_configs_user_config_task ON llm_configs(user_id, config_type, task_type, is_default, priority);
 
 -- ===========================================
 -- 10. Settings Table

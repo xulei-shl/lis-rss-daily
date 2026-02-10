@@ -212,3 +212,14 @@ export function validateRequiredVariables(
     missing,
   };
 }
+
+/**
+ * 任务类型常量（用于 LLM 配置验证）
+ */
+export const TASK_TYPES = ['filter', 'summary', 'keywords', 'translation', 'daily_summary', 'analysis'] as const;
+
+/**
+ * 任务类型（用于 LLM 配置验证）
+ */
+export type TaskType = typeof TASK_TYPES[number];
+// 类型：'filter' | 'summary' | 'keywords' | 'translation' | 'daily_summary' | 'analysis'

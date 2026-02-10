@@ -9,6 +9,7 @@ import { getDb, type LlmConfigsTable, type DatabaseTable } from '../db.js';
 import { logger } from '../logger.js';
 import { encryptAPIKey, decryptAPIKey } from '../utils/crypto.js';
 import { config } from '../config.js';
+import { TASK_TYPES, type TaskType } from '../config/system-prompt-variables.js';
 
 const log = logger.child({ module: 'llm-configs-service' });
 
@@ -21,6 +22,7 @@ export interface CreateLLMConfigInput {
   apiKey: string;
   model: string;
   configType?: 'llm' | 'embedding' | 'rerank';
+  taskType?: TaskType;
   enabled?: boolean;
   isDefault?: boolean;
   priority?: number;
@@ -35,6 +37,7 @@ export interface UpdateLLMConfigInput {
   apiKey?: string;
   model?: string;
   configType?: 'llm' | 'embedding' | 'rerank';
+  taskType?: TaskType;
   enabled?: boolean;
   isDefault?: boolean;
   priority?: number;
@@ -48,6 +51,7 @@ export interface QueryOptions {
   limit?: number;
   provider?: string;
   configType?: 'llm' | 'embedding' | 'rerank';
+  taskType?: TaskType;
 }
 
 export interface PaginatedResult<T> {
@@ -101,6 +105,9 @@ export async function getUserLLMConfigs(
   }
   if (options.configType) {
     query = query.where('config_type', '=', options.configType);
+  }
+  if (options.taskType) {
+    query = query.where('task_type', '=', options.taskType);
   }
 
   // Get total count
@@ -199,6 +206,11 @@ export async function createLLMConfig(
   const configType = data.configType ?? 'llm';
   const enabled = data.enabled ?? false;
 
+  // 约束验证：taskType 和 isDefault 互斥
+  if (data.taskType && data.isDefault) {
+    throw new Error('有任务类型的配置不能设置为默认配置。只有通用配置（task_type 为空）才能设置为默认。');
+  }
+
   // Encrypt API key
   const encryptedKey = encryptAPIKey(data.apiKey, config.llmEncryptionKey);
 
@@ -222,6 +234,7 @@ export async function createLLMConfig(
       api_key_encrypted: encryptedKey,
       model: data.model,
       config_type: configType,
+      task_type: data.taskType ?? null,
       enabled: enabled ? 1 : 0,
       is_default: data.isDefault ? 1 : 0,
       priority: data.priority ?? 100,
@@ -261,6 +274,13 @@ export async function updateLLMConfig(
     throw new Error('LLM config not found');
   }
 
+  // 约束验证：taskType 和 isDefault 互斥
+  const newTaskType = data.taskType ?? existing.task_type;
+  const newIsDefault = data.isDefault ?? (existing.is_default === 1);
+  if (newTaskType && newIsDefault) {
+    throw new Error('有任务类型的配置不能设置为默认配置。只有通用配置（task_type 为空）才能设置为默认。');
+  }
+
   if (data.provider !== undefined) {
     updateData.provider = data.provider;
   }
@@ -279,6 +299,10 @@ export async function updateLLMConfig(
 
   if (data.configType !== undefined) {
     updateData.config_type = data.configType;
+  }
+
+  if (data.taskType !== undefined) {
+    updateData.task_type = data.taskType;
   }
 
   if (data.enabled !== undefined) {
@@ -545,6 +569,89 @@ export async function getActiveConfigListByType(
     .where('user_id', '=', userId)
     .where('config_type', '=', configType)
     .selectAll()
+    .orderBy('is_default', 'desc')
+    .orderBy('priority', 'asc')
+    .orderBy('created_at', 'asc')
+    .execute();
+
+  return configs;
+}
+
+/**
+ * 获取指定类型和任务类型的活跃配置（单条）
+ * 优先级：精确匹配 task_type > task_type 为空（兜底）
+ */
+export async function getActiveConfigByTypeAndTask(
+  userId: number,
+  configType: 'llm' | 'embedding' | 'rerank',
+  taskType?: string
+): Promise<LLMConfigRecord | null> {
+  const db = getDb();
+
+  // 使用 CASE 表达式实现优先级排序
+  // 优先级 1: task_type 精确匹配
+  // 优先级 2: task_type 为空（兜底配置）
+  const config = await db
+    .selectFrom('llm_configs')
+    .where('user_id', '=', userId)
+    .where('config_type', '=', configType)
+    .where((eb) =>
+      eb.or([
+        eb('task_type', '=', taskType ?? null),
+        eb('task_type', 'is', null),
+      ])
+    )
+    .selectAll()
+    .orderBy((eb) =>
+      eb.case()
+        .when('task_type', '=', taskType ?? null)
+        .then(1)
+        .when('task_type', 'is', null)
+        .then(2)
+        .else(3)
+    )
+    .orderBy('is_default', 'desc')
+    .orderBy('priority', 'asc')
+    .orderBy('created_at', 'asc')
+    .limit(1)
+    .executeTakeFirst();
+
+  return config ?? null;
+}
+
+/**
+ * 获取指定类型和任务类型的活跃配置列表（支持故障转移）
+ * 优先级：精确匹配 task_type > task_type 为空（兜底配置）
+ */
+export async function getActiveConfigListByTypeAndTask(
+  userId: number,
+  configType: 'llm' | 'embedding' | 'rerank',
+  taskType?: string
+): Promise<LLMConfigRecord[]> {
+  const db = getDb();
+
+  // 使用 CASE 表达式实现优先级排序
+  // 优先级 1: task_type 精确匹配
+  // 优先级 2: task_type 为空（兜底配置）
+  const configs = await db
+    .selectFrom('llm_configs')
+    .where('user_id', '=', userId)
+    .where('config_type', '=', configType)
+    .where((eb) =>
+      eb.or([
+        eb('task_type', '=', taskType ?? null),
+        eb('task_type', 'is', null),
+      ])
+    )
+    .selectAll()
+    .orderBy((eb) =>
+      eb.case()
+        .when('task_type', '=', taskType ?? null)
+        .then(1)
+        .when('task_type', 'is', null)
+        .then(2)
+        .else(3)
+    )
     .orderBy('is_default', 'desc')
     .orderBy('priority', 'asc')
     .orderBy('created_at', 'asc')

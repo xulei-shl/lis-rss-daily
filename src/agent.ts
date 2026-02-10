@@ -58,7 +58,7 @@ export async function translateArticleIfNeeded(
 内容: ${trimmedContent || '无'}
 只翻译英文部分，若原文为空则输出空字符串。`;
 
-  const llm = userId ? await getUserLLMProvider(userId) : getLLM();
+  const llm = userId ? await getUserLLMProvider(userId, 'translation') : getLLM();
 
   try {
     const text = await llm.chat(

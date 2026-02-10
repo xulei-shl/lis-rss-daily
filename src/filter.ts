@@ -153,7 +153,7 @@ ${input.content ? `内容预览: ${input.content.substring(0, 2000)}...` : ''}
   ];
 
   try {
-    const llm = await getUserLLMProvider(input.userId);
+    const llm = await getUserLLMProvider(input.userId, 'filter');
     const response = await llm.chat(messages, {
       jsonMode: true,
       temperature: 0.3,

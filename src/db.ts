@@ -128,6 +128,7 @@ export interface LlmConfigsTable {
   api_key_encrypted: string;
   model: string;
   config_type: string;
+  task_type: string | null;
   enabled: number;
   is_default: number;
   priority: number;

@@ -200,7 +200,7 @@ ${articlesText}
   );
 
   // 调用 LLM 生成总结
-  const llm = await getUserLLMProvider(userId);
+  const llm = await getUserLLMProvider(userId, 'daily_summary');
   const summary = await llm.chat(
     [
       { role: 'system', content: promptTemplate },

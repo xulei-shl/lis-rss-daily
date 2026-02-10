@@ -49,6 +49,15 @@ async function runMigrations() {
       const fullPath = path.join(sqlDir, file);
       console.log(`   - ${file}`);
 
+      if (file === '002_add_process_stages.sql') {
+        // Check if process_stages column exists in articles
+        const hasProcessStages = hasColumn(db, 'articles', 'process_stages');
+        if (!hasProcessStages) {
+          db.exec('ALTER TABLE articles ADD COLUMN process_stages TEXT;');
+        }
+        continue;
+      }
+
       if (file === '002_vector_refactor.sql') {
         const hasConfigType = hasColumn(db, 'llm_configs', 'config_type');
         const hasEnabled = hasColumn(db, 'llm_configs', 'enabled');
@@ -121,6 +130,19 @@ async function runMigrations() {
           db.exec('UPDATE article_related SET updated_at = created_at WHERE updated_at IS NULL;');
         }
         db.exec('CREATE INDEX IF NOT EXISTS idx_article_related_updated_at ON article_related(updated_at);');
+        continue;
+      }
+
+      if (file === '007_add_task_type.sql') {
+        // Check if task_type column exists in llm_configs
+        const hasTaskType = hasColumn(db, 'llm_configs', 'task_type');
+        if (!hasTaskType) {
+          db.exec('ALTER TABLE llm_configs ADD COLUMN task_type TEXT;');
+          console.log('      → Added task_type column');
+        }
+        db.exec('CREATE INDEX IF NOT EXISTS idx_llm_configs_task_type ON llm_configs(task_type);');
+        db.exec('CREATE INDEX IF NOT EXISTS idx_llm_configs_user_config_task ON llm_configs(user_id, config_type, task_type, is_default, priority);');
+        console.log('      → Created indexes for task_type');
         continue;
       }
 

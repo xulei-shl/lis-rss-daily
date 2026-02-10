@@ -3,6 +3,7 @@ import type { AuthRequest } from '../../middleware/auth.js';
 import { requireAuth } from '../../middleware/auth.js';
 import * as llmConfigService from '../llm-configs.js';
 import { logger } from '../../logger.js';
+import { TASK_TYPES, type TaskType } from '../../config/system-prompt-variables.js';
 
 const log = logger.child({ module: 'api-routes/llm-configs' });
 
@@ -22,12 +23,19 @@ router.get('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
     const limit = parseInt(req.query.limit as string) || 20;
     const provider = req.query.provider as string | undefined;
     const configType = req.query.configType as 'llm' | 'embedding' | 'rerank' | undefined;
+    const taskType = req.query.taskType as TaskType | undefined;
+
+    // Validate taskType if provided
+    if (taskType && !TASK_TYPES.includes(taskType)) {
+      return res.status(400).json({ error: `taskType must be one of: ${TASK_TYPES.join(', ')}` });
+    }
 
     const result = await llmConfigService.getUserLLMConfigs(req.userId!, {
       page,
       limit,
       provider,
       configType,
+      taskType,
     });
 
     res.json(result);
@@ -112,6 +120,7 @@ router.post('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
       apiKey,
       model,
       configType,
+      taskType,
       enabled,
       isDefault,
       priority,
@@ -151,6 +160,17 @@ router.post('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'configType must be llm, embedding, or rerank' });
     }
 
+    // Validate taskType if provided
+    if (taskType !== undefined && taskType !== null && taskType !== '') {
+      if (typeof taskType !== 'string' || !TASK_TYPES.includes(taskType)) {
+        return res.status(400).json({ error: `taskType must be one of: ${TASK_TYPES.join(', ')}` });
+      }
+      // Constraint: taskType and isDefault are mutually exclusive
+      if (isDefault === true) {
+        return res.status(400).json({ error: '有任务类型的配置不能设置为默认配置。只有通用配置（task_type 为空）才能设置为默认。' });
+      }
+    }
+
     if (enabled !== undefined && typeof enabled !== 'boolean') {
       return res.status(400).json({ error: 'enabled must be a boolean' });
     }
@@ -177,6 +197,7 @@ router.post('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
       apiKey: apiKey.trim(),
       model: model.trim(),
       configType: (configType as 'llm' | 'embedding' | 'rerank') || 'llm',
+      taskType: taskType || undefined,
       enabled: enabled === true,
       isDefault,
       priority: priority !== undefined ? parseInt(priority) : undefined,
@@ -214,6 +235,7 @@ router.put('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
       apiKey,
       model,
       configType,
+      taskType,
       enabled,
       isDefault,
       priority,
@@ -263,6 +285,19 @@ router.put('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: 'configType must be llm, embedding, or rerank' });
       }
       updateData.configType = configType as 'llm' | 'embedding' | 'rerank';
+    }
+
+    if (taskType !== undefined) {
+      if (taskType !== null && taskType !== '') {
+        if (typeof taskType !== 'string' || !TASK_TYPES.includes(taskType)) {
+          return res.status(400).json({ error: `taskType must be one of: ${TASK_TYPES.join(', ')}` });
+        }
+        // Constraint: taskType and isDefault are mutually exclusive
+        if (isDefault === true) {
+          return res.status(400).json({ error: '有任务类型的配置不能设置为默认配置。只有通用配置（task_type 为空）才能设置为默认。' });
+        }
+      }
+      updateData.taskType = taskType || undefined;
     }
 
     if (enabled !== undefined) {

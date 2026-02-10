@@ -79,7 +79,7 @@ if not errorlevel 1 (
 REM Wait 1 second and retry
 set /a WAIT_COUNT+=1
 set /a "REMAINING=%CHROMA_MAX_WAIT%-%WAIT_COUNT%"
-set /p "=[INFO] Waiting... (!REMAINING!s remaining) "<nul
+<nul set /p "=Waiting... (!REMAINING!s remaining) "
 timeout /t 1 /nobreak >nul
 goto :wait_loop
 

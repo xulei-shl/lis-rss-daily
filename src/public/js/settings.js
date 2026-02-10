@@ -394,7 +394,21 @@ function renderLLMTable() {
   table.style.display = 'table';
   emptyState.style.display = 'none';
 
+  // 任务类型显示名称映射
+  const taskTypeLabels = {
+    'filter': 'filter',
+    'summary': 'summary',
+    'keywords': 'keywords',
+    'translation': 'translation',
+    'daily_summary': 'daily_summary',
+    'analysis': 'analysis'
+  };
+
   tbody.innerHTML = llmConfigs.map(function(config) {
+    const taskTypeDisplay = config.task_type
+      ? '<span class="type-badge">' + escapeHtml(taskTypeLabels[config.task_type] || config.task_type) + '</span>'
+      : '<span style="color: var(--dim);">—</span>';
+
     return '<tr>' +
       '<td>' +
         '<div class="llm-provider">' +
@@ -403,6 +417,7 @@ function renderLLMTable() {
         '</div>' +
       '</td>' +
       '<td><span class="type-badge">' + (config.config_type || 'llm') + '</span></td>' +
+      '<td>' + taskTypeDisplay + '</td>' +
       '<td><span class="llm-model">' + escapeHtml(config.model) + '</span></td>' +
       '<td><span class="rss-url">' + escapeHtml(truncate(config.base_url, 35)) + '</span></td>' +
       '<td>' + escapeHtml(String(config.priority ?? 100)) + '</td>' +
@@ -427,6 +442,7 @@ function showLLMAddModal() {
   document.getElementById('llmModalTitle').textContent = '添加 LLM 配置';
   document.getElementById('llmConfigId').value = '';
   document.getElementById('llmConfigType').value = 'llm';
+  document.getElementById('llmTaskType').value = '';
   document.getElementById('llmProvider').value = 'openai';
   document.getElementById('llmBaseURL').value = 'https://api.openai.com/v1';
   document.getElementById('llmApiKey').value = '';
@@ -450,6 +466,7 @@ function editLLMConfig(id) {
   document.getElementById('llmModalTitle').textContent = '编辑 LLM 配置';
   document.getElementById('llmConfigId').value = config.id;
   document.getElementById('llmConfigType').value = config.config_type || 'llm';
+  document.getElementById('llmTaskType').value = config.task_type || '';
   document.getElementById('llmProvider').value = config.provider;
   document.getElementById('llmBaseURL').value = config.base_url;
   document.getElementById('llmApiKey').value = '';
@@ -818,6 +835,34 @@ function updateConfigTypeUI() {
   }
 }
 
+/**
+ * 当任务类型改变时，自动取消"设为默认"选项
+ * taskType 和 isDefault 是互斥的
+ */
+function updateTaskTypeChanged() {
+  const taskType = document.getElementById('llmTaskType').value;
+  const isDefaultCheckbox = document.getElementById('llmIsDefault');
+
+  if (taskType) {
+    // 选择了任务类型，自动取消"设为默认"
+    isDefaultCheckbox.checked = false;
+  }
+}
+
+/**
+ * 当"设为默认"改变时，自动清空任务类型
+ * taskType 和 isDefault 是互斥的
+ */
+function updateIsDefaultChanged() {
+  const isDefaultCheckbox = document.getElementById('llmIsDefault');
+  const taskTypeSelect = document.getElementById('llmTaskType');
+
+  if (isDefaultCheckbox.checked) {
+    // 设为默认，自动清空任务类型
+    taskTypeSelect.value = '';
+  }
+}
+
 async function testLLMConnection() {
   const resultDiv = document.getElementById('llmTestResult');
   resultDiv.className = 'test-result testing';
@@ -887,6 +932,7 @@ document.getElementById('llmConfigForm').addEventListener('submit', async functi
   const id = document.getElementById('llmConfigId').value;
   const data = {
     configType: document.getElementById('llmConfigType').value,
+    taskType: document.getElementById('llmTaskType').value || null,
     provider: document.getElementById('llmProvider').value,
     baseURL: document.getElementById('llmBaseURL').value,
     apiKey: document.getElementById('llmApiKey').value,

@@ -7,7 +7,7 @@
 
 import OpenAI from 'openai';
 import { logger } from './logger.js';
-import { getActiveConfigListByType, type LLMConfigRecord } from './api/llm-configs.js';
+import { getActiveConfigListByType, getActiveConfigListByTypeAndTask, type LLMConfigRecord } from './api/llm-configs.js';
 import { decryptAPIKey } from './utils/crypto.js';
 import { config } from './config.js';
 import { LLMLogger, type LLMCallContext } from './llm-logger.js';
@@ -342,14 +342,17 @@ export function getLLM(): LLMProvider {
  * Falls back to environment variables if no config is found
  *
  * @param userId - User ID to get LLM config for
+ * @param taskType - Optional task type (filter, translation, daily_summary, etc.)
  * @returns LLM provider instance
  */
-export async function getUserLLMProvider(userId: number): Promise<LLMProvider> {
+export async function getUserLLMProvider(userId: number, taskType?: string): Promise<LLMProvider> {
   try {
-    const dbConfigs = await getActiveConfigListByType(userId, 'llm');
+    const dbConfigs = taskType
+      ? await getActiveConfigListByTypeAndTask(userId, 'llm', taskType)
+      : await getActiveConfigListByType(userId, 'llm');
 
     if (!dbConfigs || dbConfigs.length === 0) {
-      log.warn({ userId }, 'No LLM config found for user, falling back to environment');
+      log.warn({ userId, taskType }, 'No LLM config found for user, falling back to environment');
       return getLLM();
     }
 
@@ -362,23 +365,23 @@ export async function getUserLLMProvider(userId: number): Promise<LLMProvider> {
     }
 
     if (entries.length === 0) {
-      log.warn({ userId }, 'No valid LLM config available, falling back to environment');
+      log.warn({ userId, taskType }, 'No valid LLM config available, falling back to environment');
       return getLLM();
     }
 
     if (entries.length === 1) {
-      log.info({ userId, provider: entries[0].provider.name }, 'LLM provider initialized from database');
+      log.info({ userId, taskType, provider: entries[0].provider.name }, 'LLM provider initialized from database');
       return entries[0].provider;
     }
 
     const failoverProvider = createFailoverProvider(entries);
     log.info(
-      { userId, provider: failoverProvider.name, count: entries.length },
+      { userId, taskType, provider: failoverProvider.name, count: entries.length },
       'LLM provider initialized with failover'
     );
     return failoverProvider;
   } catch (error) {
-    log.error({ error, userId }, 'Failed to get LLM config from database, falling back to environment');
+    log.error({ error, userId, taskType }, 'Failed to get LLM config from database, falling back to environment');
     return getLLM();
   }
 }

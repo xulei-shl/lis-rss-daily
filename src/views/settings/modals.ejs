@@ -112,6 +112,19 @@
         </select>
       </div>
       <div class="form-group">
+        <label for="llmTaskType">任务类型</label>
+        <select id="llmTaskType" onchange="updateTaskTypeChanged()">
+          <option value="">通用配置（默认）</option>
+          <option value="filter">filter - 文章过滤</option>
+          <option value="summary">summary - 文章摘要</option>
+          <option value="keywords">keywords - 关键词提取</option>
+          <option value="translation">translation - 中英翻译</option>
+          <option value="daily_summary">daily_summary - 当日总结</option>
+          <option value="analysis">analysis - 文章分析</option>
+        </select>
+        <small style="color: var(--dim); display: block; margin-top: 4px;">选择任务类型后，该配置将仅用于指定任务。通用配置可作为所有任务的兜底配置。</small>
+      </div>
+      <div class="form-group">
         <label for="llmProvider">提供商 *</label>
         <select id="llmProvider" required onchange="updateProviderDefaults()">
           <option value="openai">OpenAI</option>
@@ -144,8 +157,8 @@
         <input type="number" id="llmPriority" min="0" value="100">
       </div>
       <div class="form-group">
-        <label for="llmIsDefault">设为默认</label>
-        <input type="checkbox" id="llmIsDefault">
+        <label for="llmIsDefault">设为默认（仅通用配置可用）</label>
+        <input type="checkbox" id="llmIsDefault" onchange="updateIsDefaultChanged()">
       </div>
       <div class="form-group" id="rerankEnabledGroup" style="display: none;">
         <label for="llmRerankEnabled">启用重排序</label>
