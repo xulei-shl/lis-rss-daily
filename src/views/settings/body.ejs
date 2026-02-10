@@ -122,7 +122,14 @@
 
   .action-buttons {
     display: flex;
-    gap: 6px;
+    gap: 4px;
+    flex-wrap: nowrap;
+  }
+
+  .action-buttons .btn-icon {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    white-space: nowrap;
   }
 
   .empty-state {
@@ -188,15 +195,57 @@
   .llm-table th,
   .llm-table td {
     text-align: left;
-    padding: 12px 16px;
+    padding: 10px 12px;
     border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  /* LLM 表格列宽控制 */
+  .llm-table th:nth-child(1),
+  .llm-table td:nth-child(1) {
+    width: 120px;
+  }
+
+  .llm-table th:nth-child(2),
+  .llm-table td:nth-child(2) {
+    width: 90px;
+  }
+
+  .llm-table th:nth-child(3),
+  .llm-table td:nth-child(3) {
+    width: 110px;
+  }
+
+  .llm-table th:nth-child(4),
+  .llm-table td:nth-child(4) {
+    width: 140px;
+  }
+
+  .llm-table th:nth-child(5),
+  .llm-table td:nth-child(5) {
+    width: 160px;
+  }
+
+  .llm-table th:nth-child(6),
+  .llm-table td:nth-child(6) {
+    width: 70px;
+  }
+
+  .llm-table th:nth-child(7),
+  .llm-table td:nth-child(7) {
+    width: 80px;
+  }
+
+  .llm-table th:nth-child(8),
+  .llm-table td:nth-child(8) {
+    width: 180px;
   }
 
   .llm-table th {
     background: var(--bg);
     font-weight: 600;
     color: var(--dim);
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
@@ -204,28 +253,31 @@
   .llm-provider {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     font-weight: 500;
+    white-space: nowrap;
   }
 
   .type-badge {
     display: inline-block;
-    padding: 2px 8px;
+    padding: 2px 6px;
     border-radius: 4px;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 600;
     text-transform: uppercase;
     background: rgba(26, 77, 122, 0.12);
     color: var(--accent);
+    white-space: nowrap;
   }
 
   .provider-badge {
     display: inline-block;
-    padding: 2px 8px;
+    padding: 2px 6px;
     border-radius: 4px;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 600;
     text-transform: uppercase;
+    white-space: nowrap;
   }
 
   .provider-badge.openai {
@@ -256,8 +308,13 @@
 
   .llm-model {
     font-family: monospace;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: var(--dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+    display: inline-block;
   }
 
   .api-key-masked {
