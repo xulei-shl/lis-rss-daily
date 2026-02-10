@@ -458,7 +458,7 @@ async function loadArticles(page = 1) {
   }, 10500);
 
   try {
-    const res = await fetch(\`/api/articles?page=\${page}&limit=\${perPage}&filterStatus=passed\`, {
+    const res = await fetch(\`/api/articles?page=\${page}&limit=\${perPage}&filterStatus=passed&daysAgo=7\`, {
       signal: controller.signal
     });
     clearTimeout(timeoutId);

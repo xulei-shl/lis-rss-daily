@@ -40,6 +40,14 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
       | 'failed'
       | undefined;
     const searchQuery = req.query.search as string | undefined;
+    const daysAgo = req.query.daysAgo
+      ? parseInt(req.query.daysAgo as string)
+      : undefined;
+    // 日期范围过滤
+    const createdAfter = req.query.createdAfter as string | undefined;
+    const createdBefore = req.query.createdBefore as string | undefined;
+    // 搜索时跳过时间过滤，实现全量检索（但日期范围过滤仍然生效）
+    const skipDaysFilterForSearch = searchQuery && searchQuery.trim() !== '' ? true : undefined;
 
     const result = await articleService.getUserArticles(req.userId!, {
       page,
@@ -48,6 +56,10 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
       filterStatus,
       processStatus,
       search: searchQuery,
+      daysAgo,
+      createdAfter,
+      createdBefore,
+      skipDaysFilterForSearch,
     });
 
     res.json(result);

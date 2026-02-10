@@ -415,12 +415,26 @@ export async function getUserArticles(
     search?: string;
     page?: number;
     limit?: number;
+    daysAgo?: number;
+    /** 爬取日期范围过滤 */
+    createdAfter?: string;  // ISO date string (YYYY-MM-DD)
+    createdBefore?: string; // ISO date string (YYYY-MM-DD)
+    /** 搜索时是否跳过时间过滤（搜索在全量数据中进行，结果显示不受时间限制） */
+    skipDaysFilterForSearch?: boolean;
   } = {}
 ): Promise<PaginatedArticlesResult> {
   const db = getDb();
   const page = options.page ?? 1;
   const limit = options.limit ?? 20;
   const offset = (page - 1) * limit;
+
+  // 判断是否应该应用时间过滤
+  // 如果是搜索模式且启用了 skipDaysFilterForSearch，则不应用时间过滤
+  // 日期范围过滤优先于 daysAgo 过滤
+  const hasDateRange = options.createdAfter || options.createdBefore;
+  const shouldApplyDaysFilter = options.daysAgo !== undefined &&
+    !hasDateRange &&
+    !(options.skipDaysFilterForSearch && options.search && options.search.trim() !== '');
 
   let query = db
     .selectFrom('articles')
@@ -447,6 +461,25 @@ export async function getUserArticles(
     ]));
   }
 
+  // 时间过滤：根据 shouldApplyDaysFilter 决定是否应用
+  if (shouldApplyDaysFilter) {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - options.daysAgo!);
+    query = query.where('articles.created_at', '>=', cutoffDate.toISOString());
+  }
+
+  // 日期范围过滤（优先级高于 daysAgo）
+  if (options.createdAfter) {
+    const startDate = new Date(options.createdAfter);
+    startDate.setHours(0, 0, 0, 0);
+    query = query.where('articles.created_at', '>=', startDate.toISOString());
+  }
+  if (options.createdBefore) {
+    const endDate = new Date(options.createdBefore);
+    endDate.setHours(23, 59, 59, 999);
+    query = query.where('articles.created_at', '<=', endDate.toISOString());
+  }
+
   // Get total count
   const totalCountResult = await query
     .select((eb) => eb.fn.count('articles.id').as('count'))
@@ -461,7 +494,7 @@ export async function getUserArticles(
     .leftJoin('article_translations', 'article_translations.article_id', 'articles.id')
     .where('rss_sources.user_id', '=', userId);
 
-  // Re-apply filters
+  // Re-apply filters (same logic as above)
   if (options.rssSourceId !== undefined) {
     articlesQuery = articlesQuery.where('articles.rss_source_id', '=', options.rssSourceId);
   }
@@ -477,6 +510,25 @@ export async function getUserArticles(
       eb('articles.title', 'like', searchTerm),
       eb('articles.summary', 'like', searchTerm),
     ]));
+  }
+
+  // 时间过滤：使用相同的 shouldApplyDaysFilter 逻辑
+  if (shouldApplyDaysFilter) {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - options.daysAgo!);
+    articlesQuery = articlesQuery.where('articles.created_at', '>=', cutoffDate.toISOString());
+  }
+
+  // 日期范围过滤（优先级高于 daysAgo）
+  if (options.createdAfter) {
+    const startDate = new Date(options.createdAfter);
+    startDate.setHours(0, 0, 0, 0);
+    articlesQuery = articlesQuery.where('articles.created_at', '>=', startDate.toISOString());
+  }
+  if (options.createdBefore) {
+    const endDate = new Date(options.createdBefore);
+    endDate.setHours(23, 59, 59, 999);
+    articlesQuery = articlesQuery.where('articles.created_at', '<=', endDate.toISOString());
   }
 
   // Get paginated results with translation

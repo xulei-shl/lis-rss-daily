@@ -77,6 +77,34 @@
     box-shadow: 0 0 0 3px var(--accent-subtle);
   }
 
+  .filter-date {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-family: var(--font-meta);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    min-width: 140px;
+  }
+
+  .filter-date:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px var(--accent-subtle);
+  }
+
+  .filter-date::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.6;
+  }
+
+  .filter-date::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+
   /* Search Box */
   .search-box {
     flex: 1;
@@ -356,6 +384,13 @@
     </select>
   </div>
 
+  <div class="filter-group">
+    <span class="filter-label">爬取日期</span>
+    <input type="date" id="dateFrom" class="filter-date" title="起始日期">
+    <span style="color: var(--text-tertiary); margin: 0 4px;">至</span>
+    <input type="date" id="dateTo" class="filter-date" title="结束日期">
+  </div>
+
   <div class="search-box">
     <input type="text" id="searchInput" class="search-input" placeholder="搜索标题或摘要...">
   </div>
@@ -407,6 +442,13 @@ function setupEventListeners() {
       loadArticles();
     });
   });
+
+  ['dateFrom', 'dateTo'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => {
+      currentPage = 1;
+      loadArticles();
+    });
+  });
 }
 
 // Load RSS sources for filter
@@ -443,11 +485,22 @@ async function loadArticles() {
   const filterStatus = document.getElementById('filterStatus').value;
   const processStatus = document.getElementById('filterProcess').value;
   const searchQuery = document.getElementById('searchInput').value.trim();
+  const dateFrom = document.getElementById('dateFrom').value;
+  const dateTo = document.getElementById('dateTo').value;
+
+  // 日期范围优先于默认的 daysAgo
+  const hasDateRange = dateFrom || dateTo;
 
   if (sourceId) params.append('rssSourceId', sourceId);
   if (filterStatus) params.append('filterStatus', filterStatus);
   if (processStatus) params.append('processStatus', processStatus);
   if (searchQuery) params.append('search', searchQuery);
+  if (dateFrom) params.append('createdAfter', dateFrom);
+  if (dateTo) params.append('createdBefore', dateTo);
+  // 只有在没有日期范围时才使用默认的30天过滤
+  if (!hasDateRange) {
+    params.append('daysAgo', '30');
+  }
 
   try {
     const res = await fetch(\`/api/articles?\${params}\`);
