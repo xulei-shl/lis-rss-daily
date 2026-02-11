@@ -62,34 +62,7 @@ python3 --version
 pip3 --version
 ```
 
-### 5. 安装 Playwright 系统依赖
-
-Playwright Chromium 需要以下系统库：
-
-```bash
-sudo apt-get update
-sudo apt-get install -y \
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libatspi2.0-0 \
-    libcairo2 \
-    libdbus-1-3 \
-    libpango-1.0-0 \
-    libxshmfence1
-```
-
-### 6. 克隆项目仓库
+### 5. 克隆项目仓库
 
 ```bash
 # 克隆项目（替换为你的仓库地址）
@@ -101,7 +74,7 @@ cd lis-rss-daily
 cd /path/to/lis-rss-daily
 ```
 
-### 7. 安装 Node.js 依赖
+### 6. 安装 Node.js 依赖
 
 ```bash
 # 安装项目依赖
@@ -114,17 +87,7 @@ pnpm rebuild better-sqlite3
 pnpm install --force
 ```
 
-### 8. 安装 Playwright 浏览器
-
-```bash
-# 安装 Chromium 浏览器
-npx playwright install chromium
-
-# 可选：安装系统级依赖（如果上一步失败）
-sudo npx playwright install-deps chromium
-```
-
-### 9. 安装 ChromaDB
+### 7. 安装 ChromaDB
 
 ```bash
 # 使用 pip 安装 ChromaDB
@@ -134,7 +97,7 @@ pip3 install chromadb
 chroma --version
 ```
 
-### 10. 配置环境变量
+### 8. 配置环境变量
 
 ```bash
 # 复制环境变量模板
@@ -174,14 +137,14 @@ LLM_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000
 CLI_API_KEY=your-cli-api-key-here
 ```
 
-### 11. 创建必要目录
+### 9. 创建必要目录
 
 ```bash
 # 创建数据和日志目录
 mkdir -p data/exports logs data/vector/chroma
 ```
 
-### 12. 初始化数据库
+### 10. 初始化数据库
 
 ```bash
 # 运行数据库迁移
@@ -191,7 +154,7 @@ pnpm run db:migrate
 pnpm run db:seed
 ```
 
-### 13. 测试 ChromaDB 连接
+### 11. 测试 ChromaDB 连接
 
 ```bash
 # 启动 ChromaDB 测试连接
@@ -200,7 +163,7 @@ chroma run --host 127.0.0.1 --port 8000 --path ./data/vector/chroma
 
 按 `Ctrl+C` 停止测试。
 
-### 14. 启动应用
+### 12. 启动应用
 
 **方式一：使用启动脚本（推荐）**
 
@@ -222,7 +185,7 @@ chroma run --host 127.0.0.1 --port 8000 --path ./data/vector/chroma > logs/chrom
 pnpm run dev
 ```
 
-### 15. 验证部署
+### 13. 验证部署
 
 ```bash
 # 检查应用是否运行
@@ -379,16 +342,6 @@ sudo ufw status
 ---
 
 ## 常见问题排查
-
-### Playwright 浏览器无法启动
-
-```bash
-# 错误：Executables don't exist
-npx playwright install --force chromium
-
-# 错误：缺少系统依赖
-sudo apt-get install -y libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2
-```
 
 ### better-sqlite3 编译失败
 
