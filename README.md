@@ -104,21 +104,33 @@ scripts\start-chroma.bat
 # 安装 ChromaDB
 pip install chromadb
 
-# 启动服务 (默认端口 8000)
-chromadb run --host 127.0.0.1 --port 8000
+# 创建向量数据目录
+mkdir -p data/vector/chroma
+
+# 启动服务 (默认端口 8000，指定数据存储路径)
+chroma run --host 127.0.0.1 --port 8000 --path ./data/vector/chroma
 ```
 
-### 4. 初始化数据库
+### 4. 创建必要目录
+
+```bash
+# 创建数据和日志目录
+mkdir -p data/exports logs data/vector/chroma
+```
+
+### 5. 初始化数据库
 
 ```bash
 # 执行数据库迁移
 pnpm run db:migrate
-
-# 种子数据 (可选，创建测试数据)
-pnpm run db:seed
 ```
 
-### 5. 启动应用
+迁移会自动创建：
+- 默认 admin 用户（密码：admin123）
+- 必要的数据库表和索引
+- 默认系统设置
+
+### 6. 启动应用
 
 **开发模式:**
 ```bash
@@ -143,7 +155,7 @@ scripts\start.bat
 bash scripts/start.sh
 ```
 
-### 6. 访问应用
+### 7. 访问应用
 
 打开浏览器访问: **http://localhost:3000**
 
@@ -162,49 +174,52 @@ bash scripts/start.sh
 ```env
 # ============ 服务配置 ============
 PORT=3000                          # 应用端口
-BASE_URL=http://localhost:3000      # 基础URL
+BASE_URL=http://localhost:3000     # 基础URL
 
 # ============ 数据库配置 ============
 DATABASE_PATH=data/rss-tracker.db  # SQLite 数据库路径
 
 # ============ JWT 认证 ============
+# 用于签发用户登录 Token，生产环境必须使用强随机字符串！
+# 生成方法：openssl rand -hex 32 (Linux/macOS) 或 openssl rand -hex 32 (Windows Git Bash)
 JWT_SECRET=your-secret-key-change  # JWT 密钥 (生产环境必改)
-JWT_EXPIRES_IN=7d                 # Token 过期时间
+JWT_EXPIRES_IN=7d                   # Token 过期时间
 
 # ============ LLM 配置 ============
-LLM_PROVIDER=openai               # LLM 提供商 (openai | gemini)
+# LLM 配置请在 Web 界面中设置（设置 → LLM 配置）
 
-# OpenAI 配置
-OPENAI_API_KEY=sk-xxx             # OpenAI API Key
-OPENAI_BASE_URL=                  # OpenAI 代理地址 (可选)
-OPENAI_DEFAULT_MODEL=gpt-4o-mini # 默认模型
-
-# Gemini 配置
-GEMINI_API_KEY=                  # Gemini API Key
-GEMINI_MODEL=gemini-1.5-flash    # Gemini 模型
-
-# LLM 加密密钥 (用于加密 API Key)
+# LLM 加密密钥（用于加密数据库中存储的 LLM API Key，必须是 64 位十六进制字符）
+# 生成方法：openssl rand -hex 32 (Linux/macOS) 或 openssl rand -hex 32 (Windows Git Bash)
 LLM_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
 
 # ============ RSS 抓取配置 ============
-RSS_FETCH_SCHEDULE=0 9 * * *      # 抓取调度 (每天早上9点)
-RSS_FETCH_ENABLED=true           # 是否启用自动抓取
-RSS_MAX_CONCURRENT=5            # 并发抓取数量
-RSS_FETCH_TIMEOUT=30000          # 抓取超时 (毫秒)
-RSS_FIRST_RUN_MAX_ARTICLES=50   # 首次抓取最大文章数
+RSS_FETCH_SCHEDULE=0 2 * * *      # 抓取调度 (默认每天凌晨2点)
+RSS_FETCH_ENABLED=true            # 是否启用自动抓取
+RSS_MAX_CONCURRENT=5               # 并发抓取数量
+RSS_FETCH_TIMEOUT=30000            # 抓取超时 (毫秒)
+RSS_FIRST_RUN_MAX_ARTICLES=50     # 首次抓取最大文章数
+
+# ============ 相关文章刷新配置 ============
+RELATED_REFRESH_ENABLED=true       # 是否启用相关文章定期刷新
+RELATED_REFRESH_SCHEDULE=0 3 * * * # 刷新时间 (默认每天凌晨3点)
+RELATED_REFRESH_BATCH_SIZE=100    # 每批处理数量
+RELATED_REFRESH_STALE_DAYS=7       # 刷新过期天数
+
+# ============ CLI API 密钥（用于每日总结 CLI）=============
+CLI_API_KEY=your-cli-api-key-here
 
 # ============ 日志配置 ============
-LOG_LEVEL=info                    # 日志级别
-LOG_FILE=                         # 日志文件路径 (可选)
-LLM_LOG_FILE=                     # LLM 调用日志 (可选)
-LLM_LOG_FULL_PROMPT=false        # 是否记录完整 Prompt
-LLM_LOG_FULL_SAMPLE_RATE=20      # 完整日志采样率
+LOG_LEVEL=info                     # 日志级别
+LOG_FILE=                          # 日志文件路径 (可选)
+LLM_LOG_FILE=                      # LLM 调用日志 (可选)
+LLM_LOG_FULL_PROMPT=false          # 是否记录完整 Prompt
+LLM_LOG_FULL_SAMPLE_RATE=20        # 完整日志采样率
 
 # ============ LLM 速率限制 ============
-LLM_RATE_LIMIT_ENABLED=true      # 是否启用速率限制
+LLM_RATE_LIMIT_ENABLED=true        # 是否启用速率限制
 LLM_RATE_LIMIT_REQUESTS_PER_MINUTE=60  # 每分钟请求数
-LLM_RATE_LIMIT_BURST_CAPACITY=10       # 突发容量
-LLM_RATE_LIMIT_QUEUE_TIMEOUT=30000     # 队列超时 (毫秒)
+LLM_RATE_LIMIT_BURST_CAPACITY=10        # 突发容量
+LLM_RATE_LIMIT_QUEUE_TIMEOUT=30000      # 队列超时 (毫秒)
 ```
 
 ### ChromaDB 配置
@@ -212,11 +227,13 @@ LLM_RATE_LIMIT_QUEUE_TIMEOUT=30000     # 队列超时 (毫秒)
 确保 ChromaDB 正在运行，默认连接配置:
 - 主机: `127.0.0.1`
 - 端口: `8000`
+- 数据路径: `./data/vector/chroma`
 
 如需修改，在设置页面或环境变量中配置:
 ```
 CHROMA_HOST=127.0.0.1
 CHROMA_PORT=8000
+CHROMA_PATH=./data/vector/chroma
 ```
 
 ---

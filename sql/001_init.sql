@@ -272,7 +272,7 @@ VALUES ('types_config_version', '1.0', CURRENT_TIMESTAMP);
 
 -- Default admin user (password: admin123 - CHANGE IN PRODUCTION!)
 INSERT OR IGNORE INTO users (id, username, password_hash)
-VALUES (1, 'admin', '$2b$10$K8Xj5Z5Z5Z5Z5Z5Z5Z5Z5O5Z5Z5Z5Z5Z5Z5Z5Z5Z5Z5Z5Z5Z5Z5Z5');
+VALUES (1, 'admin', '$2a$10$fmMiQ94fM351fv3Iojv6EurpOWhRzj5vuY9SZpDxyQTiv17ecySD.');
 
 -- Default settings for admin user
 INSERT OR IGNORE INTO settings (user_id, key, value)

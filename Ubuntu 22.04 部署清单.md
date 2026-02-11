@@ -77,6 +77,13 @@ cd /path/to/lis-rss-daily
 ### 6. 安装 Node.js 依赖
 
 ```bash
+
+# 配置 pnpm 使用淘宝镜像
+pnpm config set registry https://registry.npmmirror.com
+
+# 查看当前 registry 配置
+pnpm config get registry
+
 # 安装项目依赖
 pnpm install
 
@@ -113,25 +120,67 @@ nano .env
 
 ```env
 # ============ 服务配置 ============
-PORT=3000
-BASE_URL=http://localhost:3000
+PORT=8007
+BASE_URL=http://localhost:8007
 
 # ============ 数据库配置 ============
 DATABASE_PATH=data/rss-tracker.db
 
 # ============ JWT 认证 ============
-# 生产环境必须修改！
-JWT_SECRET=your-random-secret-key-change-this
+# 用于签发用户登录 Token，生产环境必须使用强随机字符串！
+# 生成方法：openssl rand -hex 32
+JWT_SECRET=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
 JWT_EXPIRES_IN=7d
 
 # ============ LLM 配置 ============
-LLM_PROVIDER=openai
-OPENAI_API_KEY=sk-your-api-key-here
-OPENAI_BASE_URL=  # 可选，使用代理时填写
-OPENAI_DEFAULT_MODEL=gpt-4o-mini
+# LLM 配置请在 Web 界面中设置（设置 → LLM 配置）
+# 以下密钥用于加密数据库中存储的 LLM API Key，必须是 64 位十六进制字符（32 字节）！
+# 生成方法：openssl rand -hex 32
+LLM_ENCRYPTION_KEY=a1b2c3d4e5f678901234567890123456789012345678901234567890123456789
 
-# LLM 加密密钥（生产环境必须修改！）
-LLM_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000000
+# ============ RSS 抓取配置 ============
+# 抓取时间（cron 表达式，默认每天凌晨 2 点）
+RSS_FETCH_SCHEDULE=0 2 * * *
+# 是否启用 RSS 抓取
+RSS_FETCH_ENABLED=true
+# 最大并发数
+RSS_MAX_CONCURRENT=5
+# 超时时间（毫秒）
+RSS_FETCH_TIMEOUT=30000
+# 首次运行最大文章数（首次抓取限制）
+RSS_FIRST_RUN_MAX_ARTICLES=50
+
+# ============ 相关文章刷新配置 ============
+# 是否启用相关文章定期刷新
+RELATED_REFRESH_ENABLED=true
+# 刷新时间（cron 表达式，默认每天凌晨 3 点）
+RELATED_REFRESH_SCHEDULE=0 3 * * *
+# 每批处理数量
+RELATED_REFRESH_BATCH_SIZE=100
+# 刷新过期天数（超过此天数未刷新的文章会被重新处理）
+RELATED_REFRESH_STALE_DAYS=7
+
+# ============ 日志配置 ============
+# 日志级别（debug | info | warn | error）
+LOG_LEVEL=info
+# 应用日志文件路径（留空则只输出到控制台）
+LOG_FILE=
+# LLM 调用日志文件路径（用于调试 LLM 调用）
+LLM_LOG_FILE=
+# 是否记录完整 Prompt（调试用，会占用大量空间）
+LLM_LOG_FULL_PROMPT=false
+# 完整 Prompt 采样率（百分比，0-100）
+LLM_LOG_FULL_SAMPLE_RATE=20
+
+# ============ LLM 限流配置 ============
+# 是否启用 LLM 调用限流
+LLM_RATE_LIMIT_ENABLED=true
+# 每分钟最大请求数
+LLM_RATE_LIMIT_REQUESTS_PER_MINUTE=60
+# 突发容量（允许短时超过的请求数）
+LLM_RATE_LIMIT_BURST_CAPACITY=10
+# 队列超时时间（毫秒）
+LLM_RATE_LIMIT_QUEUE_TIMEOUT=30000
 
 # ============ CLI API 密钥（用于每日总结 CLI）=============
 CLI_API_KEY=your-cli-api-key-here
@@ -149,10 +198,12 @@ mkdir -p data/exports logs data/vector/chroma
 ```bash
 # 运行数据库迁移
 pnpm run db:migrate
-
-# 可选：创建种子数据（测试用户等）
-pnpm run db:seed
 ```
+
+迁移会自动创建：
+- 默认 admin 用户（密码：admin123）
+- 必要的数据库表和索引
+- 默认系统设置
 
 ### 11. 测试 ChromaDB 连接
 
@@ -189,17 +240,17 @@ pnpm run dev
 
 ```bash
 # 检查应用是否运行
-curl http://localhost:3000
+curl http://localhost:8007
 
 # 检查 ChromaDB 是否运行
 curl http://127.0.0.1:8000/api/v1/heartbeat
 ```
 
-访问 `http://your-server-ip:3000`，使用默认账号登录：
+访问 `http://your-server-ip:8007`，使用默认账号登录：
 - 用户名：`admin`
 - 密码：`admin123`
 
-**登录后立即修改密码！**
+**登录后立即修改密码！** 生产环境请使用强密码。
 
 ---
 
@@ -261,7 +312,7 @@ Type=simple
 User=your-username
 WorkingDirectory=/opt/lis-rss-daily
 Environment="NODE_ENV=production"
-Environment="PORT=3000"
+Environment="PORT=8007"
 ExecStart=/usr/local/bin/pnpm start
 Restart=always
 RestartSec=10
@@ -283,45 +334,6 @@ sudo systemctl status lis-rss
 
 ---
 
-## 配置 Nginx 反向代理（可选）
-
-如果需要通过域名访问，配置 Nginx：
-
-```bash
-sudo apt-get install -y nginx
-sudo vim /etc/nginx/sites-available/lis-rss
-```
-
-配置内容：
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
-
-启用配置：
-
-```bash
-sudo ln -s /etc/nginx/sites-available/lis-rss /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
-```
-
----
-
 ## 防火墙配置
 
 ```bash
@@ -330,7 +342,7 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 
 # 如果不使用 Nginx，直接允许应用端口
-sudo ufw allow 3000/tcp
+sudo ufw allow 8007/tcp
 
 # 启用防火墙
 sudo ufw enable
@@ -376,8 +388,8 @@ tail -f logs/app.log
 sudo journalctl -u lis-rss -f
 
 # 检查端口占用
-sudo netstat -tulpn | grep 3000
-sudo lsof -i :3000
+sudo netstat -tulpn | grep 8007
+sudo lsof -i :8007
 ```
 
 ---
