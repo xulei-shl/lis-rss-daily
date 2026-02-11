@@ -173,6 +173,17 @@ export function createApp(): express.Express {
     });
   });
 
+  // Daily summary history page
+  app.get('/history', optionalAuth, (req: any, res: Response) => {
+    if (!req.userId) {
+      return res.redirect('/login');
+    }
+    res.render('history', {
+      pageTitle: '历史总结 - LIS-RSS Literature Tracker',
+      user: req.user,
+    });
+  });
+
   // Error handling middleware
   app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
     log.error({ error: err.message, stack: err.stack }, 'Unhandled error');

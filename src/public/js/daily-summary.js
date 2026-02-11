@@ -13,6 +13,7 @@
   const historyBtn = document.getElementById('historyBtn');
   const generateBtn = document.getElementById('generateBtn');
   const copySummaryBtn = document.getElementById('copySummaryBtn');
+  const downloadSummaryBtn = document.getElementById('downloadSummaryBtn');
   const regenerateBtn = document.getElementById('regenerateBtn');
   const historyModal = document.getElementById('historyModal');
   const closeHistoryModal = document.getElementById('closeHistoryModal');
@@ -51,9 +52,11 @@
 
   // Copy button
   copySummaryBtn.addEventListener('click', async () => {
-    const summaryText = document.getElementById('summaryText').innerText;
+    const summaryTextEl = document.getElementById('summaryText');
+    // Use full content if available (summary + articles list), otherwise use innerText
+    const textToCopy = summaryTextEl.dataset.fullContent || summaryTextEl.innerText;
     try {
-      await navigator.clipboard.writeText(summaryText);
+      await navigator.clipboard.writeText(textToCopy);
       const originalText = copySummaryBtn.innerHTML;
       copySummaryBtn.innerHTML = `
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -67,6 +70,25 @@
     } catch (err) {
       console.error('Failed to copy:', err);
     }
+  });
+
+  // Download button
+  downloadSummaryBtn.addEventListener('click', () => {
+    const summaryTextEl = document.getElementById('summaryText');
+    const textToDownload = summaryTextEl.dataset.fullContent || summaryTextEl.innerText;
+    const date = document.querySelector('.summary-meta-item span')?.textContent || 'summary';
+    const filename = `daily-summary-${date}.md`;
+
+    // Create blob and download
+    const blob = new Blob([textToDownload], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   });
 
   // Close history modal
@@ -144,7 +166,7 @@
   }
 
   // Show result state
-  function showSummaryResult(date, articleCount, summary, generatedAt) {
+  async function showSummaryResult(date, articleCount, summary, generatedAt) {
     document.getElementById('summaryLoading').style.display = 'none';
     document.getElementById('summaryEmpty').style.display = 'none';
     document.getElementById('summaryError').style.display = 'none';
@@ -177,7 +199,11 @@
     `;
 
     // Render summary content
-    document.getElementById('summaryText').innerHTML = renderMarkdown(summary);
+    const summaryHtml = renderMarkdown(summary);
+    document.getElementById('summaryText').innerHTML = summaryHtml;
+
+    // Load and render articles list
+    await loadAndRenderArticlesList(date, summary);
   }
 
   // Show error state
@@ -233,7 +259,7 @@
     historyList.innerHTML = '<div class="loading">加载中...</div>';
 
     try {
-      const res = await fetch('/api/daily-summary/history?limit=30');
+      const res = await fetch('/api/daily-summary/history?limit=5');
       if (!res.ok) throw new Error('Failed to load history');
 
       const data = await res.json();
@@ -249,7 +275,11 @@
           <div class="history-date">${item.summary_date}</div>
           <div class="history-meta">${item.article_count} 篇章 · ${formatDate(item.created_at)}</div>
         </div>
-      `).join('');
+      `).join('') + `
+        <div class="history-more">
+          <a href="/history">查看全部历史 →</a>
+        </div>
+      `;
     } catch (err) {
       console.error('Failed to load history:', err);
       historyList.innerHTML = '<div class="history-empty">加载失败</div>';
@@ -293,6 +323,90 @@
       console.error('Failed to load summary:', err);
       showSummaryError('加载失败，请重试');
     }
+  }
+
+  // Load and render articles list
+  async function loadAndRenderArticlesList(date, summary) {
+    try {
+      const res = await fetch(`/api/daily-summary/${date}/articles`);
+      if (!res.ok) return;
+
+      const articlesData = await res.json();
+      renderArticlesList(articlesData, summary);
+    } catch (err) {
+      console.error('Failed to load articles:', err);
+    }
+  }
+
+  // Render articles list
+  function renderArticlesList(articlesData, summary) {
+    const summaryText = document.getElementById('summaryText');
+    const articlesHtml = buildArticlesListHtml(articlesData);
+
+    // Append articles list after summary
+    summaryText.innerHTML += articlesHtml;
+
+    // Store full content for copy/download
+    summaryText.dataset.fullContent = summary + '\n\n' + buildArticlesListText(articlesData);
+  }
+
+  // Build articles list HTML
+  function buildArticlesListHtml(articlesData) {
+    const typeLabels = {
+      journal: '期刊精选',
+      blog: '博客推荐',
+      news: '资讯动态'
+    };
+
+    let html = '<div class="summary-articles-section">';
+
+    for (const [type, articles] of Object.entries(typeLabels)) {
+      const articleList = articlesData[type] || [];
+      if (articleList.length === 0) continue;
+
+      html += `
+        <div class="articles-subsection">
+          <h4 class="articles-subsection-title">${articles}</h4>
+          <ul class="articles-list">
+            ${articleList.map(article => `
+              <li class="articles-list-item">
+                <a href="${escapeHtml(article.url)}" target="_blank" rel="noopener" class="article-link">
+                  ${escapeHtml(article.title)}
+                </a>
+                <span class="article-source">${escapeHtml(article.source_name)}</span>
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+      `;
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  // Build articles list text for copy/download
+  function buildArticlesListText(articlesData) {
+    const typeLabels = {
+      journal: '期刊精选',
+      blog: '博客推荐',
+      news: '资讯动态'
+    };
+
+    let text = '## 文章列表\n\n';
+
+    for (const [type, label] of Object.entries(typeLabels)) {
+      const articleList = articlesData[type] || [];
+      if (articleList.length === 0) continue;
+
+      text += `### ${label}\n`;
+      articleList.forEach((article, index) => {
+        text += `${index + 1}. [${article.title}](${article.url}) - ${article.source_name}\n`;
+      });
+      text += '\n';
+    }
+
+    return text;
   }
 
   // Export for external access (e.g., history item onclick)
