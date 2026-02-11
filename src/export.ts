@@ -104,16 +104,10 @@ function renderMarkdown(article: ArticleForExport): string {
 
   // 中文翻译
   const translation = article.translation;
-  if (translation && (translation.title_zh || translation.summary_zh)) {
+  if (translation && translation.summary_zh) {
     lines.push('## 中文翻译');
     lines.push('');
-    if (translation.title_zh) {
-      lines.push(`**标题译文:** ${translation.title_zh}`);
-    }
-    if (translation.summary_zh) {
-      if (translation.title_zh) lines.push('');
-      lines.push(`**摘要译文:** ${translation.summary_zh}`);
-    }
+    lines.push(translation.summary_zh);
     lines.push('');
   }
 

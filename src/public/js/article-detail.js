@@ -141,16 +141,10 @@ function renderArticle(article) {
 
   // 中文翻译
   const translationSection = document.getElementById('translationSection');
-  if (article.translation && (article.translation.title_zh || article.translation.summary_zh)) {
+  if (article.translation && article.translation.summary_zh) {
     translationSection.style.display = 'block';
-    const parts = [];
-    if (article.translation.title_zh) {
-      parts.push('<p><strong>标题译文:</strong> ' + escapeHtml(article.translation.title_zh) + '</p>');
-    }
-    if (article.translation.summary_zh) {
-      parts.push('<p><strong>摘要译文:</strong> ' + escapeHtml(article.translation.summary_zh) + '</p>');
-    }
-    document.getElementById('translationContent').innerHTML = parts.join('');
+    document.getElementById('translationContent').innerHTML =
+      '<p>' + escapeHtml(article.translation.summary_zh) + '</p>';
   }
 
   // 过滤匹配

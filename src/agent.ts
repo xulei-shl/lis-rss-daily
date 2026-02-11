@@ -12,8 +12,7 @@ const log = logger.child({ module: 'agent' });
 /* ── Public Types ── */
 
 export interface TranslationResult {
-  titleZh?: string;
-  summaryZh?: string;
+  summaryZh?: string; // 标题+正文整体译文
   sourceLang: 'zh' | 'en' | 'unknown';
   usedFallback: boolean;
 }
@@ -40,7 +39,7 @@ export async function translateArticleIfNeeded(
   }
 
   const trimmedContent = (content || '').slice(0, MAX_TRANSLATION_CONTENT);
-  const fallbackPrompt = `你是专业中英翻译助手。请将英文翻译为中文，保持术语准确，不要添加解释。请严格输出 JSON：{"title_zh":"", "summary_zh":""}。`;
+  const fallbackPrompt = `你是专业中英翻译助手。请将英文翻译为中文，保持术语准确，不要添加解释。请输出纯文本译文，不要输出 JSON。`;
 
   // 使用统一的变量构建器
   const articleContext: ArticleContext = {
@@ -53,8 +52,9 @@ export async function translateArticleIfNeeded(
   const variables = await buildPromptVariables({ type: 'translation', article: articleContext });
   const systemPrompt = await resolveSystemPrompt(userId, 'translation', fallbackPrompt, variables);
 
-  const userPrompt = `标题: ${title || '无'}
-内容: ${trimmedContent || '无'}
+  const userPrompt = `请将以下内容翻译为中文，保持术语准确，不要添加解释，只输出译文纯文本。
+标题：${title || '无'}
+正文：${trimmedContent || '无'}
 只翻译英文部分，若原文为空则输出空字符串。`;
 
   const llm = userId ? await getUserLLMProvider(userId, 'translation') : getLLM();
@@ -65,27 +65,11 @@ export async function translateArticleIfNeeded(
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { jsonMode: true, label: 'translation' }
+      { label: 'translation' }
     );
 
-    // 使用正则表达式提取翻译结果，兼容多种字段命名格式
-    // 支持: title_zh / title, summary_zh / summary
-    const titleZh = shouldTranslateTitle ? extractTranslationField(text, 'title') : undefined;
-    const summaryZh = shouldTranslateContent ? extractTranslationField(text, 'summary') : undefined;
-
-    if (!titleZh && !summaryZh) {
-      log.warn({ responsePreview: text.substring(0, 200) }, 'Translation extraction failed, no valid fields found');
-      return {
-        titleZh: undefined,
-        summaryZh: undefined,
-        sourceLang: 'en',
-        usedFallback: true,
-      };
-    }
-
     return {
-      titleZh,
-      summaryZh,
+      summaryZh: shouldTranslateTitle || shouldTranslateContent ? safeString(text) : undefined,
       sourceLang: 'en',
       usedFallback: false,
     };
@@ -101,40 +85,6 @@ export async function translateArticleIfNeeded(
 }
 
 /* ── Utility Functions ── */
-
-/**
- * 使用正则表达式从 JSON 响应中提取翻译字段
- * 支持多种字段命名格式：title_zh / title, summary_zh / summary
- *
- * @param text - LLM 返回的 JSON 文本
- * @param fieldName - 字段名（不带后缀），如 'title' 或 'summary'
- * @returns 提取的字符串值，未找到则返回 undefined
- */
-function extractTranslationField(text: string, fieldName: 'title' | 'summary'): string | undefined {
-  // 支持的字段名变体
-  const variants = [`${fieldName}_zh`, fieldName];
-
-  for (const variant of variants) {
-    // 匹配 "field_name": "value" 格式
-    // 处理转义字符、嵌套引号等情况
-    const regex = new RegExp(`"\\s*${escapeRegExp(variant)}\\s*"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`, 'i');
-    const match = text.match(regex);
-    if (match && match[1]) {
-      // 解析 JSON 转义字符
-      const decoded = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-      return safeString(decoded);
-    }
-  }
-
-  return undefined;
-}
-
-/**
- * 转义正则表达式特殊字符
- */
-function escapeRegExp(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 function detectLanguage(text?: string): 'zh' | 'en' | 'unknown' {
   if (!text || text.trim().length === 0) return 'unknown';

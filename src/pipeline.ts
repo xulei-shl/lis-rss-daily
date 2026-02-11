@@ -394,9 +394,9 @@ async function runPipeline(
         { articleId, stage: 'translate' }
       );
 
-      if (translationResult && (translationResult.titleZh || translationResult.summaryZh)) {
+      if (translationResult && translationResult.summaryZh) {
         await upsertArticleTranslation(articleId, userId, {
-          title_zh: translationResult.titleZh ?? null,
+          title_zh: null,
           summary_zh: translationResult.summaryZh ?? null,
           source_lang: translationResult.sourceLang ?? null,
         });
