@@ -179,3 +179,71 @@ export async function handleLogin(
 export function handleLogout(res: Response): void {
   clearSessionCookie(res);
 }
+
+/**
+ * CLI authentication middleware
+ * Validates user_id and api_key from query parameters or headers
+ * Designed for CLI/script access without cookie-based auth
+ */
+export async function requireCliAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  // Get CLI_API_KEY from environment
+  const cliApiKey = process.env.CLI_API_KEY;
+
+  if (!cliApiKey) {
+    res.status(500).json({ status: 'error', error: 'CLI_API_KEY not configured on server' });
+    return;
+  }
+
+  // Get user_id from query parameter
+  const userIdStr = req.query.user_id as string;
+  if (!userIdStr) {
+    res.status(400).json({ status: 'error', error: 'Missing user_id parameter' });
+    return;
+  }
+
+  const userId = parseInt(userIdStr, 10);
+  if (isNaN(userId)) {
+    res.status(400).json({ status: 'error', error: 'Invalid user_id parameter' });
+    return;
+  }
+
+  // Get api_key from query parameter or header
+  const apiKeyQuery = req.query.api_key as string;
+  const apiKeyHeader = req.headers['x-api-key'] as string;
+  const providedApiKey = apiKeyQuery || apiKeyHeader;
+
+  if (!providedApiKey) {
+    res.status(401).json({ status: 'error', error: 'Missing api_key' });
+    return;
+  }
+
+  // Verify API key
+  if (providedApiKey !== cliApiKey) {
+    res.status(401).json({ status: 'error', error: 'Invalid api_key' });
+    return;
+  }
+
+  // Verify user exists
+  try {
+    const { getDb } = await import('../db.js');
+    const db = getDb();
+    const user = await db
+      .selectFrom('users')
+      .where('id', '=', userId)
+      .selectAll()
+      .executeTakeFirst();
+
+    if (!user) {
+      res.status(404).json({ status: 'error', error: 'User not found' });
+      return;
+    }
+
+    // Attach user info to request
+    req.userId = userId;
+    req.user = { id: userId, username: user.username };
+    next();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Database error';
+    res.status(500).json({ status: 'error', error: message });
+  }
+}

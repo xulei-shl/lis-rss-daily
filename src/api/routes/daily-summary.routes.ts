@@ -4,7 +4,7 @@
 
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, requireCliAuth } from '../../middleware/auth.js';
 import { logger } from '../../logger.js';
 import * as dailySummaryService from '../daily-summary.js';
 
@@ -145,6 +145,60 @@ router.get('/daily-summary/:date/articles', requireAuth, async (req: AuthRequest
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to get daily summary articles');
     res.status(500).json({ error: 'Failed to get daily summary articles' });
+  }
+});
+
+/**
+ * POST /api/daily-summary/cli
+ * CLI 专用端点：生成当日总结（无需 Cookie 认证）
+ * 使用 user_id 和 api_key 查询参数进行认证
+ */
+router.post('/daily-summary/cli', requireCliAuth, async (req: AuthRequest, res) => {
+  try {
+    const { date, limit } = req.body || {};
+
+    const result = await dailySummaryService.generateDailySummary({
+      userId: req.userId!,
+      date,
+      limit,
+    });
+
+    // 判断是否为空结果（无新文章）
+    const isEmpty = result.totalArticles === 0;
+
+    if (isEmpty) {
+      // 无新文章，返回空状态
+      res.json({
+        status: 'empty',
+        message: '当日暂无通过的文章',
+        data: {
+          date: result.date,
+          totalArticles: result.totalArticles,
+          articlesByType: result.articlesByType,
+        },
+      });
+    } else {
+      // 有新文章，保存到数据库并返回完整结果
+      await dailySummaryService.saveDailySummary({
+        userId: req.userId!,
+        date: result.date,
+        articleCount: result.totalArticles,
+        summaryContent: result.summary,
+        articlesData: result.articlesByType,
+      });
+
+      res.json({
+        status: 'success',
+        data: result,
+      });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to generate daily summary';
+    log.error({ error, userId: req.userId }, 'CLI: Failed to generate daily summary');
+    res.status(500).json({
+      status: 'error',
+      error: message,
+    });
   }
 });
 
