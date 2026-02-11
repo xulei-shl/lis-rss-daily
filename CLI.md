@@ -107,6 +107,7 @@ POST /api/daily-summary/cli
 ```json
 {
   "status": "success",
+  "cached": false,           // true=已存在缓存，false=新生成
   "data": {
     "date": "2025-02-11",
     "totalArticles": 15,
@@ -225,10 +226,12 @@ func main() {
 
 ## 注意事项
 
-1. **无新文章时不会调用 LLM** - 系统会自动检测当日是否有通过的文章，无新文章时直接返回固定消息，避免浪费
+1. **缓存机制** - 如果当天已生成过总结，CLI 会直接返回数据库中的缓存结果，不会重新调用 LLM
 
-2. **API Key 安全** - 请勿将 `CLI_API_KEY` 提交到代码仓库
+2. **无新文章时不会调用 LLM** - 系统会自动检测当日是否有通过的文章，无新文章时直接返回固定消息，避免浪费
 
-3. **服务端口** - 默认端口 8007，可通过 `.env` 中的 `PORT` 变量修改
+3. **API Key 安全** - 请勿将 `CLI_API_KEY` 提交到代码仓库
 
-4. **认证方式** - CLI 端点使用 `user_id` + `api_key` 认证，与 Web 端的 Cookie 认证独立
+4. **服务端口** - 默认端口 8007，可通过 `.env` 中的 `PORT` 变量修改
+
+5. **认证方式** - CLI 端点使用 `user_id` + `api_key` 认证，与 Web 端的 Cookie 认证独立

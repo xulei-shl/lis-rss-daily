@@ -152,10 +152,40 @@ router.get('/daily-summary/:date/articles', requireAuth, async (req: AuthRequest
  * POST /api/daily-summary/cli
  * CLI 专用端点：生成当日总结（无需 Cookie 认证）
  * 使用 user_id 和 api_key 查询参数进行认证
+ *
+ * 行为：
+ * - 如果数据库中已存在当天总结，直接返回
+ * - 如果不存在，生成新的总结并保存
  */
 router.post('/daily-summary/cli', requireCliAuth, async (req: AuthRequest, res) => {
   try {
     const { date, limit } = req.body || {};
+    const targetDate = date || new Date().toISOString().split('T')[0];
+
+    // 先检查数据库是否已有当天的总结
+    const existing = await dailySummaryService.getDailySummaryByDate(req.userId!, targetDate);
+
+    if (existing) {
+      // 已存在，直接返回
+      log.info({ userId: req.userId, date: targetDate }, 'CLI: Returning cached daily summary');
+
+      const articlesData = JSON.parse(existing.articles_data);
+
+      return res.json({
+        status: 'success',
+        cached: true,
+        data: {
+          date: existing.summary_date,
+          totalArticles: existing.article_count,
+          articlesByType: articlesData,
+          summary: existing.summary_content,
+          generatedAt: existing.created_at,
+        },
+      });
+    }
+
+    // 不存在，生成新的总结
+    log.info({ userId: req.userId, date: targetDate }, 'CLI: Generating new daily summary');
 
     const result = await dailySummaryService.generateDailySummary({
       userId: req.userId!,
@@ -170,6 +200,7 @@ router.post('/daily-summary/cli', requireCliAuth, async (req: AuthRequest, res) 
       // 无新文章，返回空状态
       res.json({
         status: 'empty',
+        cached: false,
         message: '当日暂无通过的文章',
         data: {
           date: result.date,
@@ -189,6 +220,7 @@ router.post('/daily-summary/cli', requireCliAuth, async (req: AuthRequest, res) 
 
       res.json({
         status: 'success',
+        cached: false,
         data: result,
       });
     }
