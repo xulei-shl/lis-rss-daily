@@ -25,18 +25,22 @@ sudo apt-get install -y curl git build-essential
 
 ### 2. 安装 Node.js 20+
 
-使用 NodeSource 仓库安装最新 LTS 版本：
-
 ```bash
-# 导入 NodeSource GPG 密钥
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+# Download and install nvm:
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 
-# 安装 Node.js
-sudo apt-get install -y nodejs
+# in lieu of restarting the shell
+\. "$HOME/.nvm/nvm.sh"
 
-# 验证安装
-node -v
-npm -v
+# Download and install Node.js:
+nvm install 24
+
+# Verify the Node.js version:
+node -v # Should print "v24.13.1".
+
+# Verify npm version:
+npm -v # Should print "11.8.0".
+
 ```
 
 ### 3. 安装 pnpm
@@ -97,6 +101,10 @@ pnpm install --force
 ### 7. 安装 ChromaDB
 
 ```bash
+# 虚拟环境
+python3 -m venv lis-rss
+source lis-rss/bin/activate
+
 # 使用 pip 安装 ChromaDB
 pip3 install chromadb
 

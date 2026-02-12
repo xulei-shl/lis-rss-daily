@@ -17,6 +17,7 @@ import pinoPretty from 'pino-pretty';
 import fs from 'fs';
 import path from 'path';
 import { config } from './config.js';
+import { logger } from './logger.js';
 
 /**
  * 创建独立的 LLM 日志记录器
@@ -30,7 +31,6 @@ function createLLMLogger(): pino.Logger {
 
   if (!llmLogFile) {
     // 如果没有设置 LLM_LOG_FILE，使用主 logger 的 child
-    const { logger } = require('./logger.js');
     return logger.child({ module: 'llm-call' });
   }
 

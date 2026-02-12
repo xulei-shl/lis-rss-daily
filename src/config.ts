@@ -12,6 +12,7 @@ const __dirname = path.dirname(__filename);
 
 export interface Config {
   // Server
+  host: string;
   port: number;
   baseUrl: string;
 
@@ -75,6 +76,7 @@ function getConfig(): Config {
 
   return {
     // Server
+    host: process.env.HOST || '0.0.0.0',
     port: parseInt(process.env.PORT || '3000', 10),
     baseUrl: process.env.BASE_URL || 'http://localhost:3000',
 

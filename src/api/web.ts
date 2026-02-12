@@ -219,9 +219,12 @@ export function createApp(): express.Express {
  * @returns Server instance
  */
 export function startServer(app: express.Express): ReturnType<typeof app.listen> {
-  const server = app.listen(config.port, () => {
-    log.info(`Web server listening on port ${config.port}`);
+  const server = app.listen(config.port, config.host, () => {
+    log.info(`Web server listening on ${config.host}:${config.port}`);
     log.info(`  > http://localhost:${config.port}`);
+    if (config.host !== 'localhost' && config.host !== '127.0.0.1') {
+      log.info(`  > http://${config.host}:${config.port} (LAN)`);
+    }
   });
 
   // Graceful shutdown
