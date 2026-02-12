@@ -384,28 +384,17 @@ sudo systemctl status chromadb
 ### 2. 创建应用服务
 
 ```bash
-# 替换 your-username 和 Node.js 版本路径（通过 which node 查看）
-sudo vim /etc/systemd/system/lis-rss.service
-```
-
-内容：
-
-```ini
+cat > /etc/systemd/system/lis-rss.service << 'EOF'
 [Unit]
 Description=LIS-RSS Literature Tracker
 After=network.target chromadb.service
 
 [Service]
 Type=simple
-User=your-username
+User=root
 WorkingDirectory=/opt/lis-rss-daily
-# PATH 包含 nvm 安装的 Node.js 和 pnpm（根据 which node 结果调整版本号）
-Environment="PATH=/home/your-username/.nvm/versions/node/v24.13.1/bin:/usr/local/bin:/usr/bin:/bin"
-Environment="NODE_ENV=production"
-Environment="PORT=8007"
-Environment="TERM=dumb"  # 支持 systemd 环境下的 clear 命令
-# 直接调用启动脚本，无需激活虚拟环境
-ExecStart=/bin/bash /opt/lis-rss-daily/scripts/start-app.sh
+Environment="PATH=/root/.nvm/versions/node/v24.13.1/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/root/.nvm/versions/node/v24.13.1/bin/pnpm dev
 Restart=always
 RestartSec=10
 StandardOutput=append:/opt/lis-rss-daily/logs/app.log
@@ -413,6 +402,8 @@ StandardError=append:/opt/lis-rss-daily/logs/error.log
 
 [Install]
 WantedBy=multi-user.target
+EOF
+
 ```
 
 启动服务：
