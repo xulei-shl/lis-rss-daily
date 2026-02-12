@@ -90,7 +90,7 @@ else
 fi
 
 # Clear screen and show startup banner
-clear
+clear || true  # Ignore clear errors in non-terminal environments (e.g., systemd)
 
 echo ""
 echo "==============================================="

@@ -264,9 +264,90 @@ curl http://127.0.0.1:8000/api/v1/heartbeat
 
 ## 配置为系统服务（生产环境）
 
-### 1. 创建 ChromaDB 服务
+> **前置检查**：
+> ```bash
+> # 查看当前用户名（替换配置中的 your-username）
+> whoami
+>
+> # 查看 nvm 安装的 Node.js 路径（用于配置 PATH）
+> which node
+> which pnpm
+> ```
+
+### 配置示例（Root 用户）
+
+如果你使用 root 用户（通过 `sudo -i` 切换），配置如下：
+
+#### 1. 创建 ChromaDB 服务
 
 ```bash
+vim /etc/systemd/system/chromadb.service
+```
+
+内容：
+
+```ini
+[Unit]
+Description=ChromaDB Vector Database
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/lis-rss-daily
+# PATH 包含 Python 虚拟环境的 bin 目录
+Environment="PATH=/opt/lis-rss-daily/lis-rss/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/opt/lis-rss-daily/lis-rss/bin/chroma run --host 127.0.0.1 --port 8000 --path /opt/lis-rss-daily/data/vector/chroma
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+#### 2. 创建应用服务
+
+```bash
+vim /etc/systemd/system/lis-rss.service
+```
+
+内容：
+
+```ini
+[Unit]
+Description=LIS-RSS Literature Tracker
+After=network.target chromadb.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/lis-rss-daily
+# PATH 包含 nvm 安装的 Node.js 和 pnpm
+Environment="PATH=/root/.nvm/versions/node/v24.13.1/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="NODE_ENV=production"
+Environment="PORT=8007"
+Environment="TERM=dumb"  # 支持 systemd 环境下的 clear 命令
+# 直接调用启动脚本，无需激活虚拟环境
+ExecStart=/bin/bash /opt/lis-rss-daily/scripts/start-app.sh
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/lis-rss-daily/logs/app.log
+StandardError=append:/opt/lis-rss-daily/logs/error.log
+
+[Install]
+WantedBy=multi-user.target
+```
+
+---
+
+### 配置示例（普通用户）
+
+如果你使用普通用户（非 root），配置如下：
+
+#### 1. 创建 ChromaDB 服务
+
+```bash
+# 替换 your-username 为实际用户名
 sudo vim /etc/systemd/system/chromadb.service
 ```
 
@@ -281,11 +362,9 @@ After=network.target
 Type=simple
 User=your-username
 WorkingDirectory=/opt/lis-rss-daily
-Environment="PATH=/usr/local/bin:/usr/bin:/bin"
-Environment="CHROMA_HOST=127.0.0.1"
-Environment="CHROMA_PORT=8000"
-Environment="CHROMA_DATA_DIR=/opt/lis-rss-daily/data/vector/chroma"
-ExecStart=/usr/local/bin/chroma run --host 127.0.0.1 --port 8000 --path /opt/lis-rss-daily/data/vector/chroma
+# PATH 包含 Python 虚拟环境的 bin 目录
+Environment="PATH=/opt/lis-rss-daily/lis-rss/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/opt/lis-rss-daily/lis-rss/bin/chroma run --host 127.0.0.1 --port 8000 --path /opt/lis-rss-daily/data/vector/chroma
 Restart=always
 RestartSec=10
 
@@ -305,6 +384,7 @@ sudo systemctl status chromadb
 ### 2. 创建应用服务
 
 ```bash
+# 替换 your-username 和 Node.js 版本路径（通过 which node 查看）
 sudo vim /etc/systemd/system/lis-rss.service
 ```
 
@@ -319,9 +399,13 @@ After=network.target chromadb.service
 Type=simple
 User=your-username
 WorkingDirectory=/opt/lis-rss-daily
+# PATH 包含 nvm 安装的 Node.js 和 pnpm（根据 which node 结果调整版本号）
+Environment="PATH=/home/your-username/.nvm/versions/node/v24.13.1/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="NODE_ENV=production"
 Environment="PORT=8007"
-ExecStart=/usr/local/bin/pnpm start
+Environment="TERM=dumb"  # 支持 systemd 环境下的 clear 命令
+# 直接调用启动脚本，无需激活虚拟环境
+ExecStart=/bin/bash /opt/lis-rss-daily/scripts/start-app.sh
 Restart=always
 RestartSec=10
 StandardOutput=append:/opt/lis-rss-daily/logs/app.log
@@ -335,10 +419,23 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
+sudo systemctl enable chromadb
 sudo systemctl enable lis-rss
+sudo systemctl start chromadb
 sudo systemctl start lis-rss
+sudo systemctl status chromadb
 sudo systemctl status lis-rss
 ```
+
+---
+
+### 快速对比
+
+| 配置项 | Root 用户 | 普通用户 |
+|--------|-----------|----------|
+| User | `root` | `your-username` |
+| PATH (Node.js) | `/root/.nvm/...` | `/home/your-username/.nvm/...` |
+| 命令前缀 | 无需 `sudo` | 需要 `sudo` |
 
 ---
 
@@ -406,12 +503,40 @@ sudo lsof -i :8007
 
 ### 更新代码
 
+**正常更新（无本地修改）：**
+
 ```bash
 cd /opt/lis-rss-daily
 git pull origin main
 pnpm install
 pnpm rebuild better-sqlite3
 sudo systemctl restart lis-rss
+```
+
+**有本地修改冲突时（强制覆盖本地）：**
+
+```bash
+# 方式一：强制重置到远程版本（丢弃所有本地修改）
+git fetch origin main && git reset --hard origin/main
+
+# 然后安装依赖并重启
+pnpm install
+pnpm rebuild better-sqlite3
+sudo systemctl restart lis-rss
+```
+
+> **注意**：
+> - `git reset --hard` 会永久丢弃所有本地代码修改
+> - 数据库文件（`data/rss-tracker.db`）和环境变量（`.env`）不受影响
+> - 如需保留本地修改，先使用 `git stash` 备份
+
+### 放行服务器端口
+```
+# 1. 允许 8007 端口
+sudo ufw allow 8007/tcp
+
+# 2. 检查防火墙状态
+sudo ufw status
 ```
 
 ### 备份数据库
