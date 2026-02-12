@@ -10,6 +10,10 @@
  * - 请求参数
  * - 响应结果
  * - 调用耗时
+ *
+ * ENV:
+ *   LLM_LOG_FILE — LLM 日志文件路径
+ *   LLM_LOG_RETENTION_DAYS — LLM 日志保留天数 (default: 7)
  */
 
 import pino from 'pino';
@@ -19,12 +23,47 @@ import path from 'path';
 import { config } from './config.js';
 import { logger } from './logger.js';
 
+let _cleanupTimer: NodeJS.Timeout | null = null;
+
+/** 获取今天的日期字符串 YYYY-MM-DD */
+function getDateStr(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/** 清理过期日志文件 */
+function cleanupOldLogs(logDir: string, logBaseName: string, retentionDays: number): void {
+  try {
+    const files = fs.readdirSync(logDir);
+    const now = Date.now();
+    const maxAge = retentionDays * 24 * 60 * 60 * 1000;
+
+    for (const file of files) {
+      if (!file.startsWith(logBaseName)) continue;
+
+      const filePath = path.join(logDir, file);
+      const stats = fs.statSync(filePath);
+      const age = now - stats.mtimeMs;
+
+      if (age > maxAge) {
+        fs.unlinkSync(filePath);
+      }
+    }
+  } catch {
+    // 忽略清理错误
+  }
+}
+
 /**
- * 创建独立的 LLM 日志记录器
+ * 创建独立的 LLM 日志记录器（带日期轮转）
  */
 function createLLMLogger(): pino.Logger {
   const level = process.env.LOG_LEVEL || 'info';
   const llmLogFile = config.llmLogFile;
+  const retentionDays = parseInt(process.env.LLM_LOG_RETENTION_DAYS || '7', 10);
 
   // Pretty stream for stdout
   const prettyStream = pinoPretty({ colorize: true });
@@ -34,10 +73,24 @@ function createLLMLogger(): pino.Logger {
     return logger.child({ module: 'llm-call' });
   }
 
-  // 创建独立的 LLM 日志文件
+  // 创建独立的 LLM 日志文件，带日期后缀
   const absPath = path.resolve(llmLogFile);
-  fs.mkdirSync(path.dirname(absPath), { recursive: true });
-  const fileStream = fs.createWriteStream(absPath, { flags: 'a' });
+  const logDir = path.dirname(absPath);
+  const logName = path.basename(absPath);
+  const ext = path.extname(logName);
+  const baseName = path.basename(logName, ext);
+
+  fs.mkdirSync(logDir, { recursive: true });
+
+  const dateStr = getDateStr();
+  const rotatedPath = path.join(logDir, `${baseName}.${dateStr}${ext}`);
+  const fileStream = fs.createWriteStream(rotatedPath, { flags: 'a' });
+
+  // 每天凌晨清理过期日志
+  if (_cleanupTimer) clearInterval(_cleanupTimer);
+  _cleanupTimer = setInterval(() => {
+    cleanupOldLogs(logDir, `${baseName}.`, retentionDays);
+  }, 60 * 60 * 1000); // 每小时检查一次
 
   const multistream = pino.multistream([
     { level: level as pino.Level, stream: prettyStream },
