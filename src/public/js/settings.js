@@ -21,6 +21,12 @@ tabButtons.forEach((btn) => {
 setActiveTab('rss');
 
 let rssSources = [];
+let rssPagination = {
+  page: 1,
+  limit: 10,
+  total: 0,
+  totalPages: 0
+};
 
 // 类型定义缓存
 let typeDefinitions = null;
@@ -166,15 +172,19 @@ function getDefaultSourceType() {
 // Load RSS sources on page load
 loadRSSSources();
 
-async function loadRSSSources() {
+async function loadRSSSources(page = 1) {
   try {
-    const res = await fetch('/api/rss-sources', { cache: 'no-store' });
+    const res = await fetch(`/api/rss-sources?page=${page}&limit=${rssPagination.limit}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('加载失败');
     const data = await res.json();
     rssSources = data.sources || [];
+    rssPagination.page = data.page || 1;
+    rssPagination.total = data.total || 0;
+    rssPagination.totalPages = data.totalPages || 0;
     console.log('Loaded RSS sources:', rssSources);
     console.log('Source with id=1:', rssSources.find(s => s.id === 1));
     renderTable();
+    renderPagination('rss');
   } catch (err) {
     console.error('Failed to load RSS sources:', err);
   }
@@ -338,7 +348,7 @@ document.getElementById('sourceForm').addEventListener('submit', async function(
     if (res.ok) {
       console.log('Update successful, reloading sources...');
       closeModal();
-      await loadRSSSources();
+      await loadRSSSources(rssPagination.page);
       console.log('Sources reloaded');
       // Show success message
       await showConfirm('RSS 源已更新', {
@@ -376,7 +386,11 @@ async function deleteSource(id) {
   try {
     const res = await fetch('/api/rss-sources/' + id, { method: 'DELETE' });
     if (res.ok) {
-      loadRSSSources();
+      // If current page is now empty (after delete), go to previous page
+      const newPage = rssSources.length === 1 && rssPagination.page > 1
+        ? rssPagination.page - 1
+        : rssPagination.page;
+      loadRSSSources(newPage);
     } else {
       const result = await res.json();
       await showConfirm(result.error || '删除失败', {
@@ -450,6 +464,78 @@ function formatDate(dateStr) {
   });
 }
 
+// Render pagination controls
+function renderPagination(type) {
+  const pagination = type === 'rss' ? rssPagination : llmPagination;
+  const containerId = type === 'rss' ? 'rssPagination' : 'llmPagination';
+  const container = document.getElementById(containerId);
+
+  if (!container) return;
+
+  // Only show pagination if there's more than one page
+  if (pagination.totalPages <= 1) {
+    container.innerHTML = '';
+    return;
+  }
+
+  let html = '<div class="pagination">';
+
+  // Previous button
+  if (pagination.page > 1) {
+    html += `<a href="#" onclick="goToPage('${type}', ${pagination.page - 1}); return false;">&laquo; 上一页</a>`;
+  } else {
+    html += '<span class="disabled">&laquo; 上一页</span>';
+  }
+
+  // Page numbers (show max 5 pages)
+  const startPage = Math.max(1, pagination.page - 2);
+  const endPage = Math.min(pagination.totalPages, startPage + 4);
+
+  // Always show first page
+  if (startPage > 1) {
+    html += `<a href="#" onclick="goToPage('${type}', 1); return false;">1</a>`;
+    if (startPage > 2) {
+      html += '<span>...</span>';
+    }
+  }
+
+  // Page range
+  for (let i = startPage; i <= endPage; i++) {
+    if (i === pagination.page) {
+      html += `<span class="current">${i}</span>`;
+    } else {
+      html += `<a href="#" onclick="goToPage('${type}', ${i}); return false;">${i}</a>`;
+    }
+  }
+
+  // Always show last page
+  if (endPage < pagination.totalPages) {
+    if (endPage < pagination.totalPages - 1) {
+      html += '<span>...</span>';
+    }
+    html += `<a href="#" onclick="goToPage('${type}', ${pagination.totalPages}); return false;">${pagination.totalPages}</a>`;
+  }
+
+  // Next button
+  if (pagination.page < pagination.totalPages) {
+    html += `<a href="#" onclick="goToPage('${type}', ${pagination.page + 1}); return false;">下一页 &raquo;</a>`;
+  } else {
+    html += '<span class="disabled">下一页 &raquo;</span>';
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+// Navigate to specific page
+function goToPage(type, page) {
+  if (type === 'rss') {
+    loadRSSSources(page);
+  } else if (type === 'llm') {
+    loadLLMConfigs(page);
+  }
+}
+
 // Close modal on overlay click
 document.getElementById('sourceModal').addEventListener('click', function(e) {
   if (e.target === this) {
@@ -467,6 +553,12 @@ document.addEventListener('keydown', function(e) {
 });
 
 let llmConfigs = [];
+let llmPagination = {
+  page: 1,
+  limit: 10,
+  total: 0,
+  totalPages: 0
+};
 let systemPrompts = [];
 
 const DEFAULT_PROMPT_VARIABLES = {
@@ -495,9 +587,9 @@ document.addEventListener('DOMContentLoaded', function() {
   loadPromptVariables();
 });
 
-async function loadLLMConfigs() {
+async function loadLLMConfigs(page = 1) {
   try {
-    const res = await fetch('/api/llm-configs', { cache: 'no-store' });
+    const res = await fetch(`/api/llm-configs?page=${page}&limit=${llmPagination.limit}`, { cache: 'no-store' });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       console.error('LLM configs API error:', res.status, errData);
@@ -506,10 +598,13 @@ async function loadLLMConfigs() {
     const data = await res.json();
     console.log('LLM configs loaded:', data);
     llmConfigs = data.configs || [];
+    llmPagination.page = data.page || 1;
+    llmPagination.total = data.total || 0;
+    llmPagination.totalPages = data.totalPages || 0;
     renderLLMTable();
+    renderPagination('llm');
   } catch (err) {
     console.error('Failed to load LLM configs:', err);
-    const tbody = document.getElementById('llmConfigsBody');
     const emptyState = document.getElementById('llmEmptyState');
     const table = document.getElementById('llmConfigsTable');
     table.style.display = 'none';
@@ -1086,7 +1181,7 @@ document.getElementById('llmConfigForm').addEventListener('submit', async functi
 
     if (res.ok) {
       closeLLMModal();
-      loadLLMConfigs();
+      loadLLMConfigs(llmPagination.page);
     } else {
       const result = await res.json();
       await showConfirm(result.error || '保存失败', {
@@ -1115,7 +1210,11 @@ async function deleteLLMConfig(id) {
   try {
     const res = await fetch('/api/llm-configs/' + id, { method: 'DELETE' });
     if (res.ok) {
-      loadLLMConfigs();
+      // If current page is now empty (after delete), go to previous page
+      const newPage = llmConfigs.length === 1 && llmPagination.page > 1
+        ? llmPagination.page - 1
+        : llmPagination.page;
+      loadLLMConfigs(newPage);
     } else {
       const result = await res.json();
       await showConfirm(result.error || '删除失败', {
@@ -1137,7 +1236,7 @@ async function setDefaultLLMConfig(id) {
   try {
     const res = await fetch('/api/llm-configs/' + id + '/set-default', { method: 'POST' });
     if (res.ok) {
-      loadLLMConfigs();
+      loadLLMConfigs(llmPagination.page);
     } else {
       const result = await res.json();
       await showConfirm(result.error || '设置失败', {
