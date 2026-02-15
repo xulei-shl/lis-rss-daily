@@ -9,8 +9,71 @@ import { logger } from '../logger.js';
 import { getUserLLMProvider } from '../llm.js';
 import { resolveSystemPrompt } from './system-prompts.js';
 import { SOURCE_TYPE_PRIORITY, SOURCE_TYPE_LABELS, type SourceType } from '../constants/source-types.js';
+import { config } from '../config.js';
+import { getUserSetting } from './settings.js';
 
 const log = logger.child({ module: 'daily-summary-service' });
+
+/**
+ * 获取用户时区设置
+ */
+async function getUserTimezone(userId: number): Promise<string> {
+  const setting = await getUserSetting(userId, 'timezone');
+  return setting || config.defaultTimezone;
+}
+
+/**
+ * 将本地日期转换为 UTC 查询范围
+ *
+ * @param dateStr - 本地日期字符串 (YYYY-MM-DD)
+ * @param timezone - 时区 (如 'Asia/Shanghai')
+ * @returns [startUtc, endUtc] UTC 时间范围
+ *
+ * @example
+ * // 本地日期 2026-02-15 (Asia/Shanghai UTC+8)
+ * // 本地 2026-02-15 00:00:00 = UTC 2026-02-14 16:00:00
+ * // 本地 2026-02-15 23:59:59 = UTC 2026-02-15 15:59:59
+ */
+function localDateToUtcRange(dateStr: string, timezone: string): [string, string] {
+  // 构造本地日期的开始和结束时间
+  const localStart = new Date(`${dateStr}T00:00:00`);
+  const localEnd = new Date(`${dateStr}T23:59:59.999`);
+
+  // 转换为 ISO 字符串并保留时区信息
+  const startIso = localStart.toLocaleString('en-US', { timeZone: timezone, hour12: false });
+  const endIso = localEnd.toLocaleString('en-US', { timeZone: timezone, hour12: false });
+
+  // 重新构造带时区的 Date 对象并转换为 UTC
+  const startUtc = new Date(
+    new Date(`${dateStr}T00:00:00`).toLocaleString('en-US', { timeZone: 'UTC' })
+  );
+  const endUtc = new Date(
+    new Date(`${dateStr}T23:59:59.999`).toLocaleString('en-US', { timeZone: 'UTC' })
+  );
+
+  // 更精确的方法：直接计算时区偏移
+  const offsetMs = getTimezoneOffsetMs(timezone);
+  const startDate = new Date(`${dateStr}T00:00:00.000Z`);
+  const endDate = new Date(`${dateStr}T23:59:59.999Z`);
+
+  // 应用时区偏移（本地时间 -> UTC）
+  // 本地时间 = UTC + offset，所以 UTC = 本地时间 - offset
+  const startUtcTime = new Date(startDate.getTime() - offsetMs);
+  const endUtcTime = new Date(endDate.getTime() - offsetMs);
+
+  return [startUtcTime.toISOString(), endUtcTime.toISOString()];
+}
+
+/**
+ * 获取时区偏移毫秒数
+ */
+function getTimezoneOffsetMs(timezone: string): number {
+  // 创建一个日期对象来获取时区偏移
+  const date = new Date();
+  const utcDate = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
+  const tzDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }));
+  return tzDate.getTime() - utcDate.getTime();
+}
 
 export interface DailySummaryArticle {
   id: number;
@@ -67,9 +130,14 @@ export async function getDailyPassedArticles(
 ): Promise<DailySummaryArticle[]> {
   const db = getDb();
 
-  // 计算日期范围（当天 00:00:00 到 23:59:59）
-  const startDate = new Date(dateStr + 'T00:00:00.000Z').toISOString();
-  const endDate = new Date(dateStr + 'T23:59:59.999Z').toISOString();
+  // 获取用户时区
+  const timezone = await getUserTimezone(userId);
+
+  // 计算日期范围（将本地日期转换为 UTC 时间范围）
+  // 例如：本地日期 2026-02-15 (UTC+8) -> UTC 范围 [2026-02-14T16:00:00Z, 2026-02-15T15:59:59Z]
+  const [startDate, endDate] = localDateToUtcRange(dateStr, timezone);
+
+  log.info({ userId, date: dateStr, timezone, startDate, endDate }, 'Daily article query date range');
 
   const articles = await db
     .selectFrom('articles')

@@ -57,6 +57,12 @@ export interface Config {
   llmRateLimitRequestsPerMinute: number;
   llmRateLimitBurstCapacity: number;
   llmRateLimitQueueTimeout: number;
+
+  // Staggered Delay (for auto-filter after RSS fetch)
+  staggerDelayMaxMinutes: number;
+
+  // Timezone
+  defaultTimezone: string;
 }
 
 function getConfig(): Config {
@@ -121,6 +127,12 @@ function getConfig(): Config {
     llmRateLimitRequestsPerMinute: parseInt(process.env.LLM_RATE_LIMIT_REQUESTS_PER_MINUTE || '60', 10),
     llmRateLimitBurstCapacity: parseInt(process.env.LLM_RATE_LIMIT_BURST_CAPACITY || '10', 10),
     llmRateLimitQueueTimeout: parseInt(process.env.LLM_RATE_LIMIT_QUEUE_TIMEOUT || '30000', 10),
+
+    // Staggered Delay (for auto-filter after RSS fetch)
+    staggerDelayMaxMinutes: parseInt(process.env.STAGGER_DELAY_MAX_MINUTES || '30', 10),
+
+    // Timezone
+    defaultTimezone: process.env.DEFAULT_TIMEZONE || 'Asia/Shanghai',
   };
 }
 

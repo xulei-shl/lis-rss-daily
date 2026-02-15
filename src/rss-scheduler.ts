@@ -22,6 +22,15 @@ import { config } from './config.js';
 
 const log = logger.child({ module: 'rss-scheduler' });
 
+/* ── Utility Functions ── */
+
+/**
+ * Sleep for a specified duration (milliseconds)
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Task status enumeration
  */
@@ -544,6 +553,16 @@ export class RSSScheduler {
     items: RSSFeedItem[]
   ): Promise<void> {
     const filterLog = log.child({ userId, articleCount: articleIds.length });
+
+    // Staggered delay to spread out LLM API calls after RSS fetch
+    // This prevents concentrated API call pressure when multiple sources have new articles
+    const staggerDelayMaxMs = config.staggerDelayMaxMinutes * 60 * 1000;
+    if (staggerDelayMaxMs > 0) {
+      const staggerDelay = Math.random() * staggerDelayMaxMs;
+      filterLog.debug({ delayMs: Math.round(staggerDelay) }, 'Applying staggered delay before auto-filter');
+      await sleep(staggerDelay);
+    }
+
     filterLog.info('Starting auto-filter for new articles');
 
     let passedCount = 0;
