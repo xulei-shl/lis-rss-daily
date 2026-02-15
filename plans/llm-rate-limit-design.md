@@ -59,16 +59,18 @@ Add in `.env`:
 # LLM Rate Limiting Configuration
 LLM_RATE_LIMIT_ENABLED=true
 # Maximum LLM calls per minute
-LLM_RATE_LIMIT_PER_MINUTE=10
+LLM_RATE_LIMIT_REQUESTS_PER_MINUTE=60
 # Burst capacity (allows short-term excess)
-LLM_RATE_LIMIT_BURST=5
+LLM_RATE_LIMIT_BURST_CAPACITY=10
+# Queue timeout in milliseconds
+LLM_RATE_LIMIT_QUEUE_TIMEOUT=30000
 # Staggered delay maximum value (minutes)
 STAGGER_DELAY_MAX_MINUTES=30
 ```
 
 ### 3.2 Implement Rate Limiter
 
-Create new file `src/rate-limiter.ts`:
+Create new file `src/utils/rate-limiter.ts` (actual implementation):
 
 ```typescript
 /**
@@ -170,8 +172,9 @@ private async triggerAutoFilter(
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `LLM_RATE_LIMIT_ENABLED` | `true` | Enable rate limiting |
-| `LLM_RATE_LIMIT_PER_MINUTE` | `10` | Maximum LLM calls per minute |
-| `LLM_RATE_LIMIT_BURST` | `5` | Burst capacity, allows short-term excess |
+| `LLM_RATE_LIMIT_REQUESTS_PER_MINUTE` | `60` | Maximum LLM calls per minute |
+| `LLM_RATE_LIMIT_BURST_CAPACITY` | `10` | Burst capacity, allows short-term excess |
+| `LLM_RATE_LIMIT_QUEUE_TIMEOUT` | `30000` | Queue timeout in milliseconds (30s) |
 | `STAGGER_DELAY_MAX_MINUTES` | `30` | Maximum random delay (minutes) |
 
 ## 5. Expected Effects
@@ -234,11 +237,11 @@ LLM_RATE_LIMIT_SKIP_MANUAL=false
 
 ## 7. Implementation Steps
 
-1. [ ] Create `src/rate-limiter.ts` - Token bucket rate limiter
-2. [ ] Modify `src/llm.ts` - Add rate limiting in chat method
-3. [ ] Modify `src/rss-scheduler.ts` - Add staggered delay
+1. [x] Create `src/utils/rate-limiter.ts` - Token bucket rate limiter (with timeout & stats)
+2. [x] Modify `src/llm.ts` - Add rate limiting in chat method via `withRateLimit()`
+3. [x] Modify `src/rss-scheduler.ts` - Add staggered delay in `triggerAutoFilter()`
 4. [ ] Update `.env.example` - Add new configuration items
-5. [ ] Update `src/config.ts` - Add configuration parsing
+5. [x] Update `src/config.ts` - Add configuration parsing
 6. [ ] Add unit tests
 
 ## 7. Risk Assessment
