@@ -15,12 +15,20 @@
   const pagination = document.getElementById('pagination');
   const resultsCount = document.getElementById('resultsCount');
   const searchInput = document.getElementById('searchInput');
+  const typeFilter = document.getElementById('typeFilter');
   const yearFilter = document.getElementById('yearFilter');
   const monthFilter = document.getElementById('monthFilter');
   const summaryModal = document.getElementById('summaryModal');
   const closeSummaryModal = document.getElementById('closeSummaryModal');
   const modalTitle = document.getElementById('modalTitle');
   const modalBody = document.getElementById('modalBody');
+
+  // Type labels
+  const typeLabels = {
+    journal: '期刊精选',
+    blog_news: '博客资讯',
+    all: '综合'
+  };
 
   // Initialize
   document.addEventListener('DOMContentLoaded', () => {
@@ -37,6 +45,11 @@
         currentPage = 1;
         filterAndRender();
       }, 300);
+    });
+
+    typeFilter.addEventListener('change', () => {
+      currentPage = 1;
+      filterAndRender();
     });
 
     yearFilter.addEventListener('change', () => {
@@ -113,10 +126,14 @@
   // Filter and render
   function filterAndRender() {
     const searchQuery = searchInput.value.trim();
+    const selectedType = typeFilter.value;
     const selectedYear = yearFilter.value;
     const selectedMonth = monthFilter.value;
 
     filteredHistory = allHistory.filter(item => {
+      // Type filter
+      if (selectedType && item.summary_type !== selectedType) return false;
+
       // Date filter
       const date = new Date(item.summary_date);
       const year = date.getFullYear();
@@ -191,9 +208,13 @@
 
   // Render single history item
   function renderHistoryItem(item) {
+    const typeLabel = typeLabels[item.summary_type] || '综合';
     return `
-      <div class="history-item-card" onclick="window.historyPage.viewSummary('${item.summary_date}')">
-        <div class="history-item-date">${item.summary_date}</div>
+      <div class="history-item-card" onclick="window.historyPage.viewSummary('${item.summary_date}', '${item.summary_type}')">
+        <div class="history-item-header">
+          <span class="history-item-date">${item.summary_date}</span>
+          <span class="history-item-type badge-${item.summary_type}">${typeLabel}</span>
+        </div>
         <div class="history-item-meta">
           <span class="history-item-count">${item.article_count} 篇章</span>
           <span class="history-item-time">${formatDate(item.created_at)}</span>
@@ -261,16 +282,17 @@
   }
 
   // View summary detail
-  async function viewSummary(date) {
-    modalTitle.textContent = `每日总结 - ${date}`;
+  async function viewSummary(date, summaryType) {
+    const typeLabel = typeLabels[summaryType] || '综合';
+    modalTitle.textContent = `每日总结 - ${date} (${typeLabel})`;
     modalBody.innerHTML = '<div class="loading">加载中...</div>';
     summaryModal.classList.add('active');
 
     try {
       // Load summary and articles in parallel
       const [summaryRes, articlesRes] = await Promise.all([
-        fetch(`/api/daily-summary/${date}`),
-        fetch(`/api/daily-summary/${date}/articles`)
+        fetch(`/api/daily-summary/${date}?type=${summaryType}`),
+        fetch(`/api/daily-summary/${date}/articles?type=${summaryType}`)
       ]);
 
       if (!summaryRes.ok) throw new Error('Failed to load summary');
@@ -294,8 +316,11 @@
   function renderSummaryDetail(summaryData, articlesData) {
     // Build full content for copy/download
     const summary = summaryData.summary_content;
-    const articlesText = articlesData ? buildArticlesListText(articlesData) : '';
+    const summaryType = summaryData.summary_type;
+    const articlesText = articlesData ? buildArticlesListText(articlesData, summaryType) : '';
     const fullContent = articlesText ? (summary + '\n\n' + articlesText) : summary;
+
+    const typeLabel = typeLabels[summaryType] || '综合';
 
     modalBody.innerHTML = `
       <div class="summary-detail">
@@ -314,6 +339,9 @@
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
             </svg>
             <span>${summaryData.article_count} 篇文章</span>
+          </div>
+          <div class="summary-meta-item summary-type-badge">
+            <span class="badge-${summaryType}">${typeLabel}</span>
           </div>
           <div class="summary-meta-item">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -340,7 +368,7 @@
         </div>
         <div class="summary-detail-content" data-full-content="${escapeHtml(fullContent)}">
           ${renderMarkdown(summary)}
-          ${articlesData ? buildArticlesListHtml(articlesData) : ''}
+          ${articlesData ? buildArticlesListHtml(articlesData, summaryType) : ''}
         </div>
       </div>
     `;
@@ -414,8 +442,15 @@
   }
 
   // Build articles list HTML
-  function buildArticlesListHtml(articlesData) {
-    const typeLabels = {
+  function buildArticlesListHtml(articlesData, summaryType) {
+    // Filter sections based on summary type
+    const showSections = summaryType === 'journal'
+      ? ['journal']
+      : summaryType === 'blog_news'
+      ? ['blog', 'news']
+      : ['journal', 'blog', 'news'];
+
+    const articleTypeLabels = {
       journal: '期刊精选',
       blog: '博客推荐',
       news: '资讯动态'
@@ -423,13 +458,14 @@
 
     let html = '<div class="summary-articles-section">';
 
-    for (const [type, articles] of Object.entries(typeLabels)) {
+    for (const type of showSections) {
       const articleList = articlesData[type] || [];
       if (articleList.length === 0) continue;
 
+      const label = articleTypeLabels[type];
       html += `
         <div class="articles-subsection">
-          <h4 class="articles-subsection-title">${articles}</h4>
+          <h4 class="articles-subsection-title">${label}</h4>
           <ul class="articles-list">
             ${articleList.map(article => `
               <li class="articles-list-item">
@@ -449,8 +485,15 @@
   }
 
   // Build articles list text for copy/download
-  function buildArticlesListText(articlesData) {
-    const typeLabels = {
+  function buildArticlesListText(articlesData, summaryType) {
+    // Filter sections based on summary type
+    const showSections = summaryType === 'journal'
+      ? ['journal']
+      : summaryType === 'blog_news'
+      ? ['blog', 'news']
+      : ['journal', 'blog', 'news'];
+
+    const articleTypeLabels = {
       journal: '期刊精选',
       blog: '博客推荐',
       news: '资讯动态'
@@ -458,10 +501,11 @@
 
     let text = '## 文章列表\n\n';
 
-    for (const [type, label] of Object.entries(typeLabels)) {
+    for (const type of showSections) {
       const articleList = articlesData[type] || [];
       if (articleList.length === 0) continue;
 
+      const label = articleTypeLabels[type];
       text += `### ${label}\n`;
       articleList.forEach((article, index) => {
         text += `${index + 1}. [${article.title}](${article.url}) - ${article.source_name}\n`;

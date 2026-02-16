@@ -15,20 +15,61 @@
   const historyModal = document.getElementById('historyModal');
   const closeHistoryModal = document.getElementById('closeHistoryModal');
 
+  // Tab elements
+  const tabJournal = document.getElementById('tabJournal');
+  const tabBlogNews = document.getElementById('tabBlogNews');
+  const journalBadge = document.getElementById('journalBadge');
+  const blogNewsBadge = document.getElementById('blogNewsBadge');
+  const emptyMessage = document.getElementById('emptyMessage');
+
+  // Current state
+  let currentSummaryType = 'journal';
+  let summaryCache = {
+    journal: null,
+    blog_news: null
+  };
+
   // Toggle panel expansion
   summaryPanelHeader.addEventListener('click', () => {
     dailySummaryPanel.classList.toggle('expanded');
     // Load summary on first expand if not loaded
     if (dailySummaryPanel.classList.contains('expanded') && !summaryPanelContent.dataset.loaded) {
-      loadTodaySummary();
+      loadTodaySummary(currentSummaryType);
       summaryPanelContent.dataset.loaded = 'true';
     }
+  });
+
+  // Tab switching
+  document.querySelectorAll('.summary-tab').forEach(tab => {
+    tab.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const type = tab.dataset.type;
+      if (type === currentSummaryType) return;
+
+      // Update tab styles
+      document.querySelectorAll('.summary-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      currentSummaryType = type;
+
+      // Update empty message
+      if (emptyMessage) {
+        emptyMessage.textContent = type === 'journal'
+          ? '点击下方按钮生成今日期刊总结'
+          : '点击下方按钮生成今日博客资讯总结';
+      }
+
+      // Load summary for this type
+      await loadTodaySummary(type);
+    });
   });
 
   // Refresh button
   refreshBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
-    await loadTodaySummary();
+    // Clear cache for current type
+    summaryCache[currentSummaryType] = null;
+    await loadTodaySummary(currentSummaryType);
   });
 
   // History button
@@ -39,7 +80,7 @@
 
   // Generate button
   generateBtn.addEventListener('click', async () => {
-    await generateDailySummary();
+    await generateDailySummary(currentSummaryType);
   });
 
   // Close history modal
@@ -54,11 +95,11 @@
   });
 
   // Load today's summary
-  async function loadTodaySummary() {
+  async function loadTodaySummary(type = currentSummaryType) {
     showSummaryLoading();
 
     try {
-      const res = await fetch('/api/daily-summary/today');
+      const res = await fetch(`/api/daily-summary/today?type=${type}`);
 
       if (res.status === 404) {
         showSummaryEmpty();
@@ -70,7 +111,14 @@
       }
 
       const data = await res.json();
-      showSummaryResult(data.summary_date, data.article_count, data.summary_content, data.created_at);
+      
+      // Cache the result
+      summaryCache[type] = data;
+      
+      // Update badge
+      updateTypeBadge(type, data.article_count);
+      
+      showSummaryResult(data.summary_date, data.article_count, data.summary_content, data.created_at, data.summary_type);
     } catch (err) {
       console.error('Failed to load summary:', err);
       showSummaryError('加载失败，请重试');
@@ -78,14 +126,14 @@
   }
 
   // Generate new summary
-  async function generateDailySummary() {
+  async function generateDailySummary(type = currentSummaryType) {
     showSummaryLoading();
 
     try {
       const res = await fetch('/api/daily-summary/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 30 })
+        body: JSON.stringify({ limit: 30, type: type })
       });
 
       if (!res.ok) {
@@ -93,10 +141,30 @@
       }
 
       const data = await res.json();
-      showSummaryResult(data.date, data.totalArticles, data.summary, data.generatedAt);
+      
+      // Cache the result
+      summaryCache[type] = data;
+      
+      // Update badge
+      updateTypeBadge(type, data.totalArticles);
+      
+      showSummaryResult(data.date, data.totalArticles, data.summary, data.generatedAt, data.type);
     } catch (err) {
       console.error('Failed to generate summary:', err);
       showSummaryError('生成失败，请重试');
+    }
+  }
+
+  // Update type badge
+  function updateTypeBadge(type, count) {
+    const badge = type === 'journal' ? journalBadge : blogNewsBadge;
+    if (badge) {
+      if (count > 0) {
+        badge.textContent = count;
+        badge.style.display = 'inline';
+      } else {
+        badge.style.display = 'none';
+      }
     }
   }
 
@@ -117,11 +185,19 @@
   }
 
   // Show result state
-  async function showSummaryResult(date, articleCount, summary, generatedAt) {
+  async function showSummaryResult(date, articleCount, summary, generatedAt, summaryType) {
     document.getElementById('summaryLoading').style.display = 'none';
     document.getElementById('summaryEmpty').style.display = 'none';
     document.getElementById('summaryError').style.display = 'none';
     document.getElementById('summaryResult').style.display = 'block';
+
+    // Type label
+    const typeLabels = {
+      journal: '期刊精选',
+      blog_news: '博客资讯',
+      all: '综合'
+    };
+    const typeLabel = typeLabels[summaryType] || '综合';
 
     // Render meta with action buttons
     document.getElementById('summaryMeta').innerHTML = `
@@ -139,6 +215,9 @@
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
         </svg>
         <span>${articleCount} 篇文章</span>
+      </div>
+      <div class="summary-meta-item summary-type-badge">
+        <span class="badge-${summaryType}">${typeLabel}</span>
       </div>
       <div class="summary-meta-item">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -180,7 +259,7 @@
     document.getElementById('summaryText').innerHTML = summaryHtml;
 
     // Load and render articles list
-    await loadAndRenderArticlesList(date, summary);
+    await loadAndRenderArticlesList(date, summaryType, summary);
   }
 
   // Attach event listeners to action buttons
@@ -224,7 +303,7 @@
 
     if (regenerateBtn) {
       regenerateBtn.onclick = async () => {
-        await generateDailySummary();
+        await generateDailySummary(currentSummaryType);
       };
     }
   }
@@ -282,7 +361,7 @@
     historyList.innerHTML = '<div class="loading">加载中...</div>';
 
     try {
-      const res = await fetch('/api/daily-summary/history?limit=5');
+      const res = await fetch('/api/daily-summary/history?limit=10');
       if (!res.ok) throw new Error('Failed to load history');
 
       const data = await res.json();
@@ -293,9 +372,19 @@
         return;
       }
 
+      // Type labels
+      const typeLabels = {
+        journal: '期刊',
+        blog_news: '博客资讯',
+        all: '综合'
+      };
+
       historyList.innerHTML = history.map(item => `
-        <div class="history-item" onclick="window.dailySummary.viewHistorySummary('${item.summary_date}')">
-          <div class="history-date">${item.summary_date}</div>
+        <div class="history-item" onclick="window.dailySummary.viewHistorySummary('${item.summary_date}', '${item.summary_type}')">
+          <div class="history-item-header">
+            <span class="history-date">${item.summary_date}</span>
+            <span class="history-type badge-${item.summary_type}">${typeLabels[item.summary_type] || '综合'}</span>
+          </div>
           <div class="history-meta">${item.article_count} 篇章 · ${formatDate(item.created_at)}</div>
         </div>
       `).join('') + `
@@ -329,19 +418,28 @@
   }
 
   // View history summary
-  async function viewHistorySummary(date) {
+  async function viewHistorySummary(date, type) {
     historyModal.classList.remove('active');
+
+    // Switch to the correct tab
+    const targetType = type || 'journal';
+    if (targetType !== currentSummaryType) {
+      document.querySelectorAll('.summary-tab').forEach(t => t.classList.remove('active'));
+      const targetTab = targetType === 'journal' ? tabJournal : tabBlogNews;
+      if (targetTab) targetTab.classList.add('active');
+      currentSummaryType = targetType;
+    }
 
     // Expand panel and load the specific date
     dailySummaryPanel.classList.add('expanded');
     showSummaryLoading();
 
     try {
-      const res = await fetch(`/api/daily-summary/${date}`);
+      const res = await fetch(`/api/daily-summary/${date}?type=${targetType}`);
       if (!res.ok) throw new Error('Failed to load summary');
 
       const data = await res.json();
-      showSummaryResult(data.summary_date, data.article_count, data.summary_content, data.created_at);
+      showSummaryResult(data.summary_date, data.article_count, data.summary_content, data.created_at, data.summary_type);
     } catch (err) {
       console.error('Failed to load summary:', err);
       showSummaryError('加载失败，请重试');
@@ -349,32 +447,39 @@
   }
 
   // Load and render articles list
-  async function loadAndRenderArticlesList(date, summary) {
+  async function loadAndRenderArticlesList(date, summaryType, summary) {
     try {
-      const res = await fetch(`/api/daily-summary/${date}/articles`);
+      const res = await fetch(`/api/daily-summary/${date}/articles?type=${summaryType}`);
       if (!res.ok) return;
 
       const articlesData = await res.json();
-      renderArticlesList(articlesData, summary);
+      renderArticlesList(articlesData, summary, summaryType);
     } catch (err) {
       console.error('Failed to load articles:', err);
     }
   }
 
   // Render articles list
-  function renderArticlesList(articlesData, summary) {
+  function renderArticlesList(articlesData, summary, summaryType) {
     const summaryText = document.getElementById('summaryText');
-    const articlesHtml = buildArticlesListHtml(articlesData);
+    const articlesHtml = buildArticlesListHtml(articlesData, summaryType);
 
     // Append articles list after summary
     summaryText.innerHTML += articlesHtml;
 
     // Store full content for copy/download
-    summaryText.dataset.fullContent = summary + '\n\n' + buildArticlesListText(articlesData);
+    summaryText.dataset.fullContent = summary + '\n\n' + buildArticlesListText(articlesData, summaryType);
   }
 
   // Build articles list HTML
-  function buildArticlesListHtml(articlesData) {
+  function buildArticlesListHtml(articlesData, summaryType) {
+    // Filter sections based on summary type
+    const showSections = summaryType === 'journal' 
+      ? ['journal']
+      : summaryType === 'blog_news'
+      ? ['blog', 'news']
+      : ['journal', 'blog', 'news'];
+
     const typeLabels = {
       journal: '期刊精选',
       blog: '博客推荐',
@@ -383,13 +488,14 @@
 
     let html = '<div class="summary-articles-section">';
 
-    for (const [type, articles] of Object.entries(typeLabels)) {
+    for (const type of showSections) {
       const articleList = articlesData[type] || [];
       if (articleList.length === 0) continue;
 
+      const label = typeLabels[type];
       html += `
         <div class="articles-subsection">
-          <h4 class="articles-subsection-title">${articles}</h4>
+          <h4 class="articles-subsection-title">${label}</h4>
           <ul class="articles-list">
             ${articleList.map(article => `
               <li class="articles-list-item">
@@ -409,7 +515,14 @@
   }
 
   // Build articles list text for copy/download
-  function buildArticlesListText(articlesData) {
+  function buildArticlesListText(articlesData, summaryType) {
+    // Filter sections based on summary type
+    const showSections = summaryType === 'journal' 
+      ? ['journal']
+      : summaryType === 'blog_news'
+      ? ['blog', 'news']
+      : ['journal', 'blog', 'news'];
+
     const typeLabels = {
       journal: '期刊精选',
       blog: '博客推荐',
@@ -418,10 +531,11 @@
 
     let text = '## 文章列表\n\n';
 
-    for (const [type, label] of Object.entries(typeLabels)) {
+    for (const type of showSections) {
       const articleList = articlesData[type] || [];
       if (articleList.length === 0) continue;
 
+      const label = typeLabels[type];
       text += `### ${label}\n`;
       articleList.forEach((article, index) => {
         text += `${index + 1}. [${article.title}](${article.url}) - ${article.source_name}\n`;

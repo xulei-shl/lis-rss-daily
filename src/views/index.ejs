@@ -65,27 +65,44 @@
     </div>
 
     <div class="summary-panel-content" id="summaryPanelContent">
-      <!-- Loading State -->
-      <div class="summary-loading" id="summaryLoading" style="display: none;">
-        <div class="loading-spinner"></div>
-        <p>正在生成当日总结...</p>
-        <p class="loading-hint">这可能需要 30-60 秒</p>
+      <!-- Tab Navigation -->
+      <div class="summary-tabs">
+        <button class="summary-tab active" data-type="journal" id="tabJournal">
+          <span class="tab-icon">📚</span>
+          <span class="tab-label">期刊精选</span>
+          <span class="tab-badge" id="journalBadge" style="display: none;">0</span>
+        </button>
+        <button class="summary-tab" data-type="blog_news" id="tabBlogNews">
+          <span class="tab-icon">📝</span>
+          <span class="tab-label">博客资讯</span>
+          <span class="tab-badge" id="blogNewsBadge" style="display: none;">0</span>
+        </button>
       </div>
 
-      <!-- Empty State -->
-      <div class="summary-empty" id="summaryEmpty" style="display: none;">
-        <p>点击下方按钮生成今日总结</p>
-        <button class="btn btn-primary" id="generateBtn">生成总结</button>
-      </div>
+      <!-- Tab Content -->
+      <div class="summary-tab-content" id="summaryTabContent">
+        <!-- Loading State -->
+        <div class="summary-loading" id="summaryLoading" style="display: none;">
+          <div class="loading-spinner"></div>
+          <p>正在生成当日总结...</p>
+          <p class="loading-hint">这可能需要 30-60 秒</p>
+        </div>
 
-      <!-- Result State -->
-      <div class="summary-result" id="summaryResult" style="display: none;">
-        <div class="summary-meta" id="summaryMeta"></div>
-        <div class="summary-content markdown-content" id="summaryText"></div>
-      </div>
+        <!-- Empty State -->
+        <div class="summary-empty" id="summaryEmpty" style="display: none;">
+          <p id="emptyMessage">点击下方按钮生成今日期刊总结</p>
+          <button class="btn btn-primary" id="generateBtn">生成总结</button>
+        </div>
 
-      <!-- Error State -->
-      <div class="summary-error" id="summaryError" style="display: none;"></div>
+        <!-- Result State -->
+        <div class="summary-result" id="summaryResult" style="display: none;">
+          <div class="summary-meta" id="summaryMeta"></div>
+          <div class="summary-content markdown-content" id="summaryText"></div>
+        </div>
+
+        <!-- Error State -->
+        <div class="summary-error" id="summaryError" style="display: none;"></div>
+      </div>
     </div>
   </div>
 

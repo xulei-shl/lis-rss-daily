@@ -58,16 +58,28 @@ async function runMigrations() {
       console.log(`   - ${file}`);
 
       // ============================================================
-      // 008: 添加 is_read 字段（当前版本增量迁移）
+      // 009: 添加 summary_type 字段（当前版本增量迁移）
       // ============================================================
-      if (file === '008_add_is_read.sql') {
-        const hasIsRead = hasColumn(db, 'articles', 'is_read');
-        if (!hasIsRead) {
-          db.exec('ALTER TABLE articles ADD COLUMN is_read INTEGER DEFAULT 0;');
-          console.log('      → Added is_read column');
+      if (file === '009_add_summary_type.sql') {
+        // 检查 summary_type 字段是否存在
+        const hasSummaryType = hasColumn(db, 'daily_summaries', 'summary_type');
+        if (!hasSummaryType) {
+          db.exec('ALTER TABLE daily_summaries ADD COLUMN summary_type TEXT DEFAULT \'all\';');
+          console.log('      → Added summary_type column');
         }
-        db.exec('CREATE INDEX IF NOT EXISTS idx_articles_is_read ON articles(is_read);');
-        console.log('      → Created index for is_read');
+        
+        // 更新现有数据
+        db.exec('UPDATE daily_summaries SET summary_type = \'all\' WHERE summary_type IS NULL;');
+        console.log('      → Updated existing records');
+        
+        // 删除旧的唯一索引并创建新的复合索引
+        db.exec('DROP INDEX IF EXISTS idx_daily_summaries_user_date;');
+        db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_summaries_user_date_type ON daily_summaries(user_id, summary_date, summary_type);');
+        console.log('      → Created new composite index');
+        
+        // 创建类型筛选索引
+        db.exec('CREATE INDEX IF NOT EXISTS idx_daily_summaries_type ON daily_summaries(summary_type);');
+        console.log('      → Created type filter index');
         continue;
       }
 
@@ -88,7 +100,15 @@ async function runMigrations() {
       }
 
       // ============================================================
-      // 002-007: 历史迁移已包含在 001_init.sql 中，跳过
+      // 008: 添加 is_read 字段（历史迁移，跳过）
+      // ============================================================
+      if (file === '008_add_is_read.sql') {
+        console.log('      → Skipped (handled in 001_init.sql for new databases)');
+        continue;
+      }
+
+      // ============================================================
+      // 其他迁移脚本（002-007）：已包含在 001_init.sql 中，跳过
       // ============================================================
       console.log('      → Skipped (already included in 001_init.sql)');
     }

@@ -240,19 +240,25 @@ CREATE INDEX IF NOT EXISTS idx_system_prompts_is_active ON system_prompts(is_act
 -- ===========================================
 -- 12. Daily Summaries Table
 -- ===========================================
+-- summary_type 取值：'journal'（期刊）、'blog_news'（博客资讯）、'all'（历史兼容）
 CREATE TABLE IF NOT EXISTS daily_summaries (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
   summary_date TEXT NOT NULL,
+  summary_type TEXT DEFAULT 'all',
   article_count INTEGER NOT NULL,
   summary_content TEXT NOT NULL,
   articles_data TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  UNIQUE(user_id, summary_date)
+  UNIQUE(user_id, summary_date, summary_type)
 );
 
-CREATE INDEX IF NOT EXISTS idx_daily_summaries_user_date ON daily_summaries(user_id, summary_date DESC);
+-- 复合索引：支持按用户、日期、类型查询
+CREATE INDEX IF NOT EXISTS idx_daily_summaries_user_date_type ON daily_summaries(user_id, summary_date DESC, summary_type);
+
+-- 类型筛选索引
+CREATE INDEX IF NOT EXISTS idx_daily_summaries_type ON daily_summaries(summary_type);
 
 -- ===========================================
 -- 13. Schema Metadata Table

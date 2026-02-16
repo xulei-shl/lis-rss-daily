@@ -164,6 +164,7 @@ export interface DailySummariesTable {
   id: number;
   user_id: number;
   summary_date: string;
+  summary_type: 'journal' | 'blog_news' | 'all';
   article_count: number;
   summary_content: string;
   articles_data: string;

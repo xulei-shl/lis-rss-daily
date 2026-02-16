@@ -15,6 +15,14 @@ import { getUserSetting } from './settings.js';
 const log = logger.child({ module: 'daily-summary-service' });
 
 /**
+ * 总结类型定义
+ * - journal: 期刊类总结
+ * - blog_news: 博客资讯类总结
+ * - all: 综合总结（历史兼容）
+ */
+export type SummaryType = 'journal' | 'blog_news' | 'all';
+
+/**
  * 获取用户时区设置
  */
 async function getUserTimezone(userId: number): Promise<string> {
@@ -90,10 +98,12 @@ export interface DailySummaryInput {
   userId: number;
   date?: string; // YYYY-MM-DD 格式，默认今天
   limit?: number; // 默认 30
+  type?: SummaryType; // 总结类型
 }
 
 export interface DailySummaryResult {
   date: string;
+  type: SummaryType;
   totalArticles: number;
   articlesByType: {
     journal: DailySummaryArticle[];
@@ -107,6 +117,7 @@ export interface DailySummaryResult {
 export interface DailySummaryHistoryItem {
   id: number;
   summary_date: string;
+  summary_type: SummaryType;
   article_count: number;
   summary_content: string;
   created_at: string;
@@ -115,6 +126,7 @@ export interface DailySummaryHistoryItem {
 export interface SaveDailySummaryInput {
   userId: number;
   date: string;
+  type: SummaryType;
   articleCount: number;
   summaryContent: string;
   articlesData: DailySummaryResult['articlesByType'];
@@ -122,11 +134,13 @@ export interface SaveDailySummaryInput {
 
 /**
  * 获取当日通过的文章，按源类型排序
+ * @param type - 总结类型，用于筛选文章来源
  */
 export async function getDailyPassedArticles(
   userId: number,
   dateStr: string,
-  limit: number = 30
+  limit: number = 30,
+  type?: SummaryType
 ): Promise<DailySummaryArticle[]> {
   const db = getDb();
 
@@ -137,15 +151,25 @@ export async function getDailyPassedArticles(
   // 例如：本地日期 2026-02-15 (UTC+8) -> UTC 范围 [2026-02-14T16:00:00Z, 2026-02-15T15:59:59Z]
   const [startDate, endDate] = localDateToUtcRange(dateStr, timezone);
 
-  log.info({ userId, date: dateStr, timezone, startDate, endDate }, 'Daily article query date range');
+  log.info({ userId, date: dateStr, timezone, startDate, endDate, type }, 'Daily article query date range');
 
-  const articles = await db
+  let query = db
     .selectFrom('articles')
     .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .where('rss_sources.user_id', '=', userId)
     .where('articles.filter_status', '=', 'passed')
     .where('articles.created_at', '>=', startDate)
-    .where('articles.created_at', '<=', endDate)
+    .where('articles.created_at', '<=', endDate);
+
+  // 根据总结类型筛选文章来源
+  if (type === 'journal') {
+    query = query.where('rss_sources.source_type', '=', 'journal');
+  } else if (type === 'blog_news') {
+    query = query.where('rss_sources.source_type', 'in', ['blog', 'news']);
+  }
+  // type 为 undefined 或 'all' 时不筛选
+
+  const articles = await query
     .select([
       'articles.id',
       'articles.title',
@@ -219,17 +243,18 @@ function buildArticlesListText(articlesByType: {
 export async function generateDailySummary(
   input: DailySummaryInput
 ): Promise<DailySummaryResult> {
-  const { userId, date, limit = 30 } = input;
+  const { userId, date, limit = 30, type = 'all' } = input;
 
   // 默认使用今天日期（用户时区）
   const today = date || new Date().toISOString().split('T')[0];
 
-  // 获取文章列表
-  const articles = await getDailyPassedArticles(userId, today, limit);
+  // 获取文章列表（根据类型筛选）
+  const articles = await getDailyPassedArticles(userId, today, limit, type);
 
   if (articles.length === 0) {
     return {
       date: today,
+      type,
       totalArticles: 0,
       articlesByType: { journal: [], blog: [], news: [] },
       summary: '当日暂无通过的文章。',
@@ -247,6 +272,13 @@ export async function generateDailySummary(
   // 构建文章列表文本
   const articlesText = buildArticlesListText(articlesByType);
 
+  // 根据总结类型定制提示词
+  const typePrompt = type === 'journal' 
+    ? '这是一份期刊类文章总结，请重点关注学术研究和专业领域的内容。'
+    : type === 'blog_news'
+    ? '这是一份博客和资讯类文章总结，请重点关注技术动态和行业资讯。'
+    : '请综合分析期刊、博客和资讯的内容。';
+
   // 获取系统提示词并渲染
   const promptTemplate = await resolveSystemPrompt(
     userId,
@@ -259,7 +291,7 @@ ${articlesText}
 ## 输出要求
 1. 生成 800-1000 字的中文总结
 2. 按主题领域归纳文章内容
-3. 突出期刊、博客、资讯的核心观点
+3. ${typePrompt}
 4. 使用清晰的层次结构（Markdown 格式）`,
     {
       ARTICLES_LIST: articlesText,
@@ -280,10 +312,11 @@ ${articlesText}
     }
   );
 
-  log.info({ userId, date: today, articleCount: articles.length }, 'Daily summary generated');
+  log.info({ userId, date: today, articleCount: articles.length, type }, 'Daily summary generated');
 
   return {
     date: today,
+    type,
     totalArticles: articles.length,
     articlesByType,
     summary,
@@ -296,24 +329,25 @@ ${articlesText}
  */
 export async function saveDailySummary(input: SaveDailySummaryInput): Promise<void> {
   const db = getDb();
-  const { userId, date, articleCount, summaryContent, articlesData } = input;
+  const { userId, date, type, articleCount, summaryContent, articlesData } = input;
 
   // 将 articlesData 转换为 JSON 字符串
   const articlesJson = JSON.stringify(articlesData);
 
-  // 使用 INSERT OR REPLACE 处理重复（同一天同一用户）
+  // 使用 INSERT OR REPLACE 处理重复（同一天同一用户同一类型）
   await db
     .insertInto('daily_summaries')
     .values({
       user_id: userId,
       summary_date: date,
+      summary_type: type,
       article_count: articleCount,
       summary_content: summaryContent,
       articles_data: articlesJson,
       created_at: new Date().toISOString(),
     } as any)
     .onConflict((oc) =>
-      oc.columns(['user_id', 'summary_date']).doUpdateSet({
+      oc.columns(['user_id', 'summary_date', 'summary_type']).doUpdateSet({
         article_count: articleCount,
         summary_content: summaryContent,
         articles_data: articlesJson,
@@ -322,36 +356,50 @@ export async function saveDailySummary(input: SaveDailySummaryInput): Promise<vo
     )
     .execute();
 
-  log.info({ userId, date, articleCount }, 'Daily summary saved');
+  log.info({ userId, date, type, articleCount }, 'Daily summary saved');
 }
 
 /**
  * 获取指定日期的总结
+ * @param type - 可选，指定总结类型
  */
 export async function getDailySummaryByDate(
   userId: number,
-  date: string
+  date: string,
+  type?: SummaryType
 ): Promise<DailySummariesTable | undefined> {
   const db = getDb();
-  return db
+  let query = db
     .selectFrom('daily_summaries')
     .where('user_id', '=', userId)
-    .where('summary_date', '=', date)
-    .selectAll()
-    .executeTakeFirst();
+    .where('summary_date', '=', date);
+  
+  if (type) {
+    query = query.where('summary_type', '=', type);
+  }
+  
+  return query.selectAll().executeTakeFirst();
 }
 
 /**
  * 获取历史总结列表
+ * @param type - 可选，筛选指定类型
  */
 export async function getDailySummaryHistory(
   userId: number,
-  limit: number = 30
+  limit: number = 30,
+  type?: SummaryType
 ): Promise<DailySummaryHistoryItem[]> {
   const db = getDb();
-  const results = await db
+  let query = db
     .selectFrom('daily_summaries')
-    .where('user_id', '=', userId)
+    .where('user_id', '=', userId);
+  
+  if (type) {
+    query = query.where('summary_type', '=', type);
+  }
+  
+  const results = await query
     .selectAll()
     .orderBy('summary_date', 'desc')
     .limit(limit)
@@ -360,6 +408,7 @@ export async function getDailySummaryHistory(
   return results.map((row) => ({
     id: row.id,
     summary_date: row.summary_date,
+    summary_type: row.summary_type as SummaryType,
     article_count: row.article_count,
     summary_content: row.summary_content,
     created_at: row.created_at,
@@ -368,10 +417,12 @@ export async function getDailySummaryHistory(
 
 /**
  * 获取今日总结（如果存在）
+ * @param type - 可选，指定总结类型
  */
 export async function getTodaySummary(
-  userId: number
+  userId: number,
+  type?: SummaryType
 ): Promise<DailySummariesTable | undefined> {
   const today = new Date().toISOString().split('T')[0];
-  return getDailySummaryByDate(userId, today);
+  return getDailySummaryByDate(userId, today, type);
 }

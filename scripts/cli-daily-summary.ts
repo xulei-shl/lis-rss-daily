@@ -3,6 +3,8 @@
  *
  * 使用方式:
  *   tsx scripts/cli-daily-summary.ts --user-id 1 [--date 2025-02-11] [--limit 30] [--api-key SECRET]
+ *   tsx scripts/cli-daily-summary.ts --user-id 1 --type journal  # 仅生成期刊类总结
+ *   tsx scripts/cli-daily-summary.ts --user-id 1 --all          # 生成两类总结
  *
  * 环境变量:
  *   CLI_API_KEY - CLI API 密钥（可通过 --api-key 参数覆盖）
@@ -11,10 +13,13 @@
 
 export {};
 
+type SummaryType = 'journal' | 'blog_news' | 'all';
+
 interface CliResponse {
   status: 'success' | 'empty' | 'error';
   message?: string;
   data?: any;
+  results?: any[];  // 用于 --all 模式
   error?: string;
 }
 
@@ -23,6 +28,8 @@ function parseArgs(args: string[]): {
   userId: number;
   date?: string;
   limit?: number;
+  type?: SummaryType;
+  generateAll: boolean;
   apiKey: string;
   baseUrl: string;
   json: boolean;
@@ -32,6 +39,7 @@ function parseArgs(args: string[]): {
     baseUrl: process.env.BASE_URL || 'http://localhost:8007',
     json: false,
     pretty: false,
+    generateAll: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -56,6 +64,19 @@ function parseArgs(args: string[]): {
         if (!nextArg) throw new Error('--limit 需要一个值');
         result.limit = parseInt(nextArg, 10);
         i++;
+        break;
+      case '--type':
+      case '-t':
+        if (!nextArg) throw new Error('--type 需要一个值');
+        if (!['journal', 'blog_news', 'all'].includes(nextArg)) {
+          throw new Error('--type 必须是 journal, blog_news 或 all');
+        }
+        result.type = nextArg;
+        i++;
+        break;
+      case '--all':
+      case '-a':
+        result.generateAll = true;
         break;
       case '--api-key':
       case '-k':
@@ -113,6 +134,8 @@ function printHelp() {
 可选参数:
   --date, -d        日期 (YYYY-MM-DD 格式，默认今天)
   --limit, -l       文章数量限制 (默认 30)
+  --type, -t        总结类型: journal(期刊) | blog_news(博客资讯) | all(综合)
+  --all, -a         同时生成期刊和博客资讯两类总结
   --base-url        服务地址 (默认 http://localhost:8007)
   --json            输出纯 JSON 格式
   --pretty          美化输出（带颜色和格式）
@@ -125,6 +148,8 @@ function printHelp() {
 示例:
   tsx scripts/cli-daily-summary.ts --user-id 1 --api-key mykey
   tsx scripts/cli-daily-summary.ts -u 1 -d 2025-02-11 -l 50 --json
+  tsx scripts/cli-daily-summary.ts -u 1 --type journal          # 仅期刊类总结
+  tsx scripts/cli-daily-summary.ts -u 1 --all                   # 生成两类总结
   `);
 }
 
@@ -140,6 +165,8 @@ async function main() {
     const body: any = {};
     if (args.date) body.date = args.date;
     if (args.limit) body.limit = args.limit;
+    if (args.type) body.type = args.type;
+    if (args.generateAll) body.generateAll = true;
 
     // 发送请求
     const response = await fetch(url.toString(), {
@@ -166,7 +193,11 @@ async function main() {
     if (args.json) {
       console.log(JSON.stringify(data, null, 2));
     } else if (args.pretty) {
-      printPrettyResult(data);
+      if (args.generateAll && data.results) {
+        printPrettyResults(data);
+      } else {
+        printPrettyResult(data);
+      }
     } else {
       console.log(JSON.stringify(data, null, 2));
     }
@@ -174,6 +205,39 @@ async function main() {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`错误: ${message}`);
     process.exit(1);
+  }
+}
+
+function printPrettyResults(data: CliResponse): void {
+  const RESET = '\x1b[0m';
+  const GREEN = '\x1b[32m';
+  const YELLOW = '\x1b[33m';
+  const BLUE = '\x1b[34m';
+  const GRAY = '\x1b[90m';
+  const BOLD = '\x1b[1m';
+
+  if (!data.results) return;
+
+  const typeLabels: Record<string, string> = {
+    journal: '期刊精选',
+    blog_news: '博客资讯',
+    all: '综合',
+  };
+
+  console.log(`${GREEN}${BOLD}✓ 每日总结生成完成${RESET}\n`);
+
+  for (const result of data.results) {
+    const label = typeLabels[result.type] || result.type;
+    console.log(`${BOLD}【${label}】${result.cached ? '(缓存)' : '(新生成)'}${RESET}`);
+    
+    if (result.data.totalArticles === 0) {
+      console.log(`${YELLOW}  无相关文章${RESET}\n`);
+      continue;
+    }
+
+    console.log(`${BLUE}  文章数:${RESET} ${result.data.totalArticles}`);
+    console.log(`${BLUE}  生成时间:${RESET} ${new Date(result.data.generatedAt).toLocaleString('zh-CN')}`);
+    console.log();
   }
 }
 
@@ -198,10 +262,18 @@ function printPrettyResult(data: CliResponse): void {
 
   // Success
   const result = data.data!;
+  const typeLabels: Record<string, string> = {
+    journal: '期刊精选',
+    blog_news: '博客资讯',
+    all: '综合',
+  };
+  const typeLabel = typeLabels[result.type] || '综合';
+
   console.log(`${GREEN}${BOLD}✓ 每日总结生成成功${RESET}\n`);
 
   // Meta info
   console.log(`${BLUE}日期:${RESET} ${result.date}`);
+  console.log(`${BLUE}类型:${RESET} ${typeLabel}`);
   console.log(`${BLUE}文章数:${RESET} ${result.totalArticles}`);
   console.log(
     `${BLUE}生成时间:${RESET} ${new Date(result.generatedAt).toLocaleString('zh-CN')}`
@@ -216,13 +288,13 @@ function printPrettyResult(data: CliResponse): void {
   console.log();
 
   // Articles by type
-  const typeLabels: Record<string, string> = {
+  const articleTypeLabels: Record<string, string> = {
     journal: '期刊精选',
     blog: '博客推荐',
     news: '资讯动态',
   };
 
-  for (const [type, label] of Object.entries(typeLabels)) {
+  for (const [type, label] of Object.entries(articleTypeLabels)) {
     const articles = result.articlesByType[type];
     if (!articles || articles.length === 0) continue;
 
