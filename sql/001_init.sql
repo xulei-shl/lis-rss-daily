@@ -254,8 +254,11 @@ CREATE TABLE IF NOT EXISTS daily_summaries (
   UNIQUE(user_id, summary_date, summary_type)
 );
 
--- 复合索引：支持按用户、日期、类型查询
-CREATE INDEX IF NOT EXISTS idx_daily_summaries_user_date_type ON daily_summaries(user_id, summary_date DESC, summary_type);
+-- 唯一复合索引：支持按用户、日期、类型查询，同时保证同一用户同一天同一类型只有一条记录
+CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_summaries_user_date_type ON daily_summaries(user_id, summary_date, summary_type);
+
+-- 日期排序索引：支持按日期降序查询
+CREATE INDEX IF NOT EXISTS idx_daily_summaries_user_date ON daily_summaries(user_id, summary_date DESC);
 
 -- 类型筛选索引
 CREATE INDEX IF NOT EXISTS idx_daily_summaries_type ON daily_summaries(summary_type);

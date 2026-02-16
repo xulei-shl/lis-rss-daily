@@ -58,59 +58,56 @@ async function runMigrations() {
       console.log(`   - ${file}`);
 
       // ============================================================
-      // 009: 添加 summary_type 字段（当前版本增量迁移）
+      // 001: 初始化脚本（新数据库时执行）
+      // ============================================================
+      if (file === '001_init.sql') {
+        const hasUsers = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
+        if (!hasUsers) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log('      → Initialized database');
+        } else {
+          console.log('      → Skipped (already initialized)');
+        }
+        continue;
+      }
+
+      // ============================================================
+      // 009: 添加 summary_type 字段
       // ============================================================
       if (file === '009_add_summary_type.sql') {
-        // 检查 summary_type 字段是否存在
         const hasSummaryType = hasColumn(db, 'daily_summaries', 'summary_type');
         if (!hasSummaryType) {
           db.exec('ALTER TABLE daily_summaries ADD COLUMN summary_type TEXT DEFAULT \'all\';');
           console.log('      → Added summary_type column');
         }
-        
-        // 更新现有数据
         db.exec('UPDATE daily_summaries SET summary_type = \'all\' WHERE summary_type IS NULL;');
-        console.log('      → Updated existing records');
-        
-        // 删除旧的唯一索引并创建新的复合索引
         db.exec('DROP INDEX IF EXISTS idx_daily_summaries_user_date;');
         db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_summaries_user_date_type ON daily_summaries(user_id, summary_date, summary_type);');
-        console.log('      → Created new composite index');
-        
-        // 创建类型筛选索引
         db.exec('CREATE INDEX IF NOT EXISTS idx_daily_summaries_type ON daily_summaries(summary_type);');
-        console.log('      → Created type filter index');
+        console.log('      → Migration completed');
         continue;
       }
 
       // ============================================================
-      // 001: 初始化脚本（新数据库时执行）
+      // 010: 修复 daily_summaries 表的唯一约束
       // ============================================================
-      if (file === '001_init.sql') {
-        // 检查是否是新数据库（没有 users 表）
-        const hasUsers = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
-        if (!hasUsers) {
+      if (file === '010_fix_daily_summary_unique.sql') {
+        const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='daily_summaries'").get() as { sql: string } | undefined;
+        const needsFix = tableInfo?.sql.includes('UNIQUE(user_id, summary_date)') && !tableInfo?.sql.includes('UNIQUE(user_id, summary_date, summary_type)');
+
+        if (needsFix) {
           const sql = fs.readFileSync(fullPath, 'utf-8');
           db.exec(sql);
-          console.log('      → Initialized database with 001_init.sql');
+          console.log('      → Fixed unique constraint');
         } else {
-          console.log('      → Skipped (database already initialized)');
+          console.log('      → Skipped (already correct)');
         }
         continue;
       }
 
-      // ============================================================
-      // 008: 添加 is_read 字段（历史迁移，跳过）
-      // ============================================================
-      if (file === '008_add_is_read.sql') {
-        console.log('      → Skipped (handled in 001_init.sql for new databases)');
-        continue;
-      }
-
-      // ============================================================
-      // 其他迁移脚本（002-007）：已包含在 001_init.sql 中，跳过
-      // ============================================================
-      console.log('      → Skipped (already included in 001_init.sql)');
+      // 其他迁移脚本已包含在 001_init.sql 中
+      console.log('      → Skipped (included in 001_init.sql)');
     }
 
     console.log('\n✅ Migration completed successfully!\n');
