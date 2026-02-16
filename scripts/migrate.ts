@@ -31,6 +31,12 @@ async function runMigrations() {
     console.log(`📁 Created data directory: ${dbDir}`);
   }
 
+  // Auto-backup database before migration
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+  const backupPath = config.databasePath.replace('.db', `.backup-${timestamp}.db`);
+  fs.copyFileSync(config.databasePath, backupPath);
+  console.log(`💾 Database backed up to: ${backupPath}\n`);
+
   // Connect to database
   const db = new Database(config.databasePath);
   console.log(`📦 Connected to database: ${config.databasePath}\n`);
@@ -43,9 +49,13 @@ async function runMigrations() {
       .filter((file) => /^\d+_.*\.sql$/.test(file))
       .sort((a, b) => a.localeCompare(b, 'en'));
 
+    // Skip dangerous reset files - these should NEVER be run in production
+    const dangerousFiles = ['002_reset_articles.sql', '004_update_system_prompts.sql'];
+    const safeFiles = migrationFiles.filter(f => !dangerousFiles.includes(f));
+
     // Execute migrations
     console.log('📜 Executing migration scripts...');
-    for (const file of migrationFiles) {
+    for (const file of safeFiles) {
       const fullPath = path.join(sqlDir, file);
       console.log(`   - ${file}`);
 

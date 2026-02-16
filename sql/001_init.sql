@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS articles (
   process_stages TEXT,
   processed_at DATETIME,
   published_at DATETIME,
+  is_read INTEGER DEFAULT 0,
   error_message TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -73,6 +74,7 @@ CREATE TABLE IF NOT EXISTS articles (
 CREATE INDEX IF NOT EXISTS idx_articles_rss_source_id ON articles(rss_source_id);
 CREATE INDEX IF NOT EXISTS idx_articles_filter_status ON articles(filter_status);
 CREATE INDEX IF NOT EXISTS idx_articles_process_status ON articles(process_status);
+CREATE INDEX IF NOT EXISTS idx_articles_is_read ON articles(is_read);
 CREATE INDEX IF NOT EXISTS idx_articles_created_at ON articles(created_at);
 CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at);
 
