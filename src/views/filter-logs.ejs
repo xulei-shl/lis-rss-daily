@@ -1,343 +1,94 @@
-<%- include('layout', { pageTitle: pageTitle, pageStyles: '', body: `
-<style>
-  .logs-container {
-    max-width: 1200px;
-  }
+<div class="filters">
+  <label>领域:</label>
+  <select id="domainFilter" onchange="applyFilters()">
+    <option value="">全部领域</option>
+  </select>
 
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--border);
-  }
+  <label>结果:</label>
+  <select id="resultFilter" onchange="applyFilters()">
+    <option value="">全部</option>
+    <option value="passed">通过</option>
+    <option value="rejected">拒绝</option>
+  </select>
+</div>
 
-  .section-header h2 {
-    font-size: 1.5rem;
-    font-weight: 600;
-  }
+<table class="logs-table" id="logsTable">
+  <thead>
+    <tr>
+      <th class="expand-cell"></th>
+      <th>文章标题</th>
+      <th>领域</th>
+      <th>结果</th>
+      <th>相关性</th>
+      <th>原因</th>
+      <th>时间</th>
+    </tr>
+  </thead>
+  <tbody id="logsBody">
+    <!-- Dynamic content -->
+  </tbody>
+</table>
 
-  .filters {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
+<div id="emptyState" class="empty-state" style="display: none;">
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </svg>
+  <p>暂无过滤日志</p>
+</div>
 
-  .filters label {
-    font-size: 0.9rem;
-    color: var(--dim);
-  }
-
-  .filters select {
-    padding: 6px 12px;
-    min-width: 120px;
-  }
-
-  .logs-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: var(--surface);
-    border-radius: 8px;
-    overflow: hidden;
-  }
-
-  .logs-table th,
-  .logs-table td {
-    text-align: left;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
-    font-size: 0.9rem;
-  }
-
-  .logs-table th {
-    background: var(--bg);
-    font-weight: 600;
-    color: var(--dim);
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .logs-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  .logs-table tr.expanded {
-    background: var(--bg);
-  }
-
-  .article-title {
-    font-weight: 500;
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .article-title a {
-    color: var(--text);
-  }
-
-  .article-title a:hover {
-    color: var(--accent);
-  }
-
-  .status-badge {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-  }
-
-  .status-badge.passed {
-    background: rgba(42, 157, 110, 0.15);
-    color: var(--green);
-  }
-
-  .status-badge.rejected {
-    background: rgba(231, 76, 60, 0.15);
-    color: var(--red);
-  }
-
-  /* 结果列 - 防止换行 */
-  .logs-table td:nth-child(4) {
-    white-space: nowrap;
-  }
-
-  /* 领域列 - 文本省略 */
-  .domain-cell {
-    max-width: 120px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .relevance-score {
-    text-align: center;
-    font-weight: 500;
-    min-width: 80px;
-  }
-
-  .filter-reason {
-    max-width: 250px;
-    font-size: 0.85rem;
-    color: var(--dim);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .timestamp {
-    color: var(--dim);
-    font-size: 0.85rem;
-    white-space: nowrap;
-  }
-
-  .expand-row {
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .expand-row:hover {
-    background: var(--bg);
-  }
-
-  .expand-cell {
-    text-align: center;
-    padding: 0 !important;
-    width: 40px;
-  }
-
-  .expand-icon {
-    display: inline-block;
-    transition: transform 0.2s;
-    color: var(--dim);
-  }
-
-  .expand-row.expanded .expand-icon {
-    transform: rotate(90deg);
-  }
-
-  .detail-row {
-    display: none;
-    background: var(--bg);
-  }
-
-  .detail-row.show {
-    display: table-row;
-  }
-
-  .detail-cell {
-    padding: 16px !important;
-  }
-
-  .detail-content {
-    font-size: 0.9rem;
-    line-height: 1.6;
-  }
-
-  .detail-content h4 {
-    margin-bottom: 8px;
-    font-weight: 600;
-  }
-
-  .detail-content pre {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 12px;
-    overflow-x: auto;
-    font-size: 0.85rem;
-    margin-top: 8px;
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 48px 24px;
-    color: var(--dim);
-  }
-
-  .empty-state svg {
-    width: 64px;
-    height: 64px;
-    margin-bottom: 16px;
-    opacity: 0.5;
-  }
-
-  .pagination {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: var(--space-3);
-    margin-top: var(--space-10);
-    padding-top: var(--space-6);
-    border-top: 2px solid var(--border);
-  }
-
-  .pagination a,
-  .pagination span {
-    font-family: var(--font-meta);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--border);
-    min-width: 40px;
-    text-align: center;
-    text-decoration: none;
-    color: var(--text);
-  }
-
-  .pagination a:hover {
-    background: var(--bg-elevated);
-    border-color: var(--border-strong);
-  }
-
-  .pagination .current {
-    background: var(--accent);
-    color: white;
-    border-color: var(--accent);
-  }
-</style>
-
-<div class="logs-container">
-  <div class="section-header">
-    <h2>过滤日志</h2>
-  </div>
-
-  <div class="filters">
-    <label>领域:</label>
-    <select id="domainFilter" onchange="applyFilters()">
-      <option value="">全部领域</option>
-    </select>
-
-    <label>结果:</label>
-    <select id="resultFilter" onchange="applyFilters()">
-      <option value="">全部</option>
-      <option value="passed">通过</option>
-      <option value="rejected">拒绝</option>
-    </select>
-  </div>
-
-  <table class="logs-table" id="logsTable">
-    <thead>
-      <tr>
-        <th class="expand-cell"></th>
-        <th>文章标题</th>
-        <th>领域</th>
-        <th>结果</th>
-        <th>相关性</th>
-        <th>原因</th>
-        <th>时间</th>
-      </tr>
-    </thead>
-    <tbody id="logsBody">
-      <!-- Dynamic content -->
-    </tbody>
-  </table>
-
-  <div id="emptyState" class="empty-state" style="display: none;">
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-    </svg>
-    <p>暂无过滤日志</p>
-  </div>
-
-  <div class="pagination" id="pagination" style="display: none;">
-  </div>
+<div class="pagination" id="pagination" style="display: none;">
+</div>
 </div>
 
 <script>
-let currentPage = 1;
-let totalPages = 1;
-const pageSize = 20;
-let domains = [];
-let currentDomainFilter = '';
-let currentResultFilter = '';
+  let currentPage = 1;
+  let totalPages = 1;
+  const pageSize = 20;
+  let domains = [];
+  let currentDomainFilter = '';
+  let currentResultFilter = '';
 
-// Load data on page load
-document.addEventListener('DOMContentLoaded', () => {
-  loadDomains();
-  loadLogs(1);
-});
+  // Load data on page load
+  document.addEventListener('DOMContentLoaded', () => {
+    loadDomains();
+    loadLogs(1);
+  });
 
-async function loadDomains() {
-  try {
-    const res = await fetch('/api/topic-domains?isActive=true');
-    const data = await res.json();
-    domains = data.domains || [];
+  async function loadDomains() {
+    try {
+      const res = await fetch('/api/topic-domains?isActive=true');
+      const data = await res.json();
+      domains = data.domains || [];
 
-    const select = document.getElementById('domainFilter');
-    domains.forEach(domain => {
-      const option = document.createElement('option');
-      option.value = domain.id;
-      option.textContent = domain.name;
-      select.appendChild(option);
-    });
-  } catch (err) {
-    console.error('Failed to load domains:', err);
+      const select = document.getElementById('domainFilter');
+      domains.forEach(domain => {
+        const option = document.createElement('option');
+        option.value = domain.id;
+        option.textContent = domain.name;
+        select.appendChild(option);
+      });
+    } catch (err) {
+      console.error('Failed to load domains:', err);
+      toast.error('加载领域列表失败: ' + (err.message || '网络错误'));
+    }
   }
-}
 
-async function loadLogs(page = 1) {
-  try {
-    const params = new URLSearchParams({
-      page: page.toString(),
-      limit: pageSize.toString()
-    });
+  async function loadLogs(page = 1) {
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: pageSize.toString()
+      });
 
-    if (currentDomainFilter) {
-      params.append('domainId', currentDomainFilter);
-    }
-    if (currentResultFilter) {
-      params.append('isPassed', currentResultFilter === 'passed' ? 'true' : 'false');
-    }
+      if (currentDomainFilter) {
+        params.append('domainId', currentDomainFilter);
+      }
+      if (currentResultFilter) {
+        params.append('isPassed', currentResultFilter === 'passed' ? 'true' : 'false');
+      }
 
-    const res = await fetch(\`/api/filter/logs?\${params}\`);
+      const res = await fetch(\`/api/filter/logs?\${params}\`);
     const data = await res.json();
 
     currentPage = data.page || 1;
@@ -346,6 +97,7 @@ async function loadLogs(page = 1) {
     renderLogs(data.logs || [], data.total || 0);
   } catch (err) {
     console.error('Failed to load logs:', err);
+    toast.error('加载日志失败: ' + (err.message || '网络错误'));
     showEmptyState();
   }
 }

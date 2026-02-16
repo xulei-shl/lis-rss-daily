@@ -1,498 +1,132 @@
-<%- include('layout', { pageTitle: pageTitle, pageStyles: '', body: `
-<style>
-  /* ============================================
-     ARTICLE DETAIL PAGE STYLES
-     ============================================ */
+<%- include('layout', { pageTitle: pageTitle, pageStyles: '<link rel="stylesheet" href="/css/pages/article-detail.css">'
+  , body: ` <!-- Back Navigation -->
+  <nav class="back-nav">
+    <a href="/articles" class="back-link">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2">
+        <path d="M19 12H5M12 19l-7-7 7-7" />
+      </svg>
+      返回文章列表
+    </a>
+  </nav>
 
-  /* Back Navigation */
-  .back-nav {
-    margin-bottom: var(--space-5);
-  }
+  <!-- Loading State -->
+  <div id="loadingState" class="loading">加载中...</div>
 
-  .back-link {
-    font-family: var(--font-meta);
-    font-size: var(--text-sm);
-    font-weight: 500;
-    color: var(--text-secondary);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-
-  .back-link:hover {
-    color: var(--accent-primary);
-  }
-
-  /* Main Layout */
-  .article-detail-layout {
-    display: grid;
-    grid-template-columns: 1fr 320px;
-    gap: var(--space-6);
-  }
-
-  /* Article Content */
-  .article-content {
-    min-width: 0;
-  }
-
-  .article-header {
-    margin-bottom: var(--space-8);
-    padding-bottom: var(--space-5);
-    border-bottom: 3px solid var(--border);
-  }
-
-  .article-title {
-    font-family: var(--font-heading);
-    font-size: var(--text-3xl);
-    font-weight: 700;
-    line-height: 1.3;
-    margin-bottom: var(--space-4);
-    color: var(--text-primary);
-  }
-
-  .article-meta-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-4);
-    font-family: var(--font-meta);
-    font-size: var(--text-xs);
-    color: var(--text-tertiary);
-  }
-
-  .article-meta-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-
-  .article-meta-item a {
-    color: var(--text-tertiary);
-  }
-
-  .article-meta-item a:hover {
-    color: var(--accent-primary);
-  }
-
-  /* Section */
-  .article-section {
-    margin-bottom: var(--space-8);
-  }
-
-  .section-header {
-    font-family: var(--font-heading);
-    font-size: var(--text-xl);
-    font-weight: 700;
-    padding: var(--space-4) 0;
-    border-top: 3px solid var(--border);
-    border-bottom: 1px solid var(--divider);
-    margin-top: var(--space-6);
-    margin-bottom: var(--space-4);
-  }
-
-  .section-header:first-child {
-    border-top: none;
-    margin-top: 0;
-  }
-
-  /* AI 摘要 */
-  .ai-summary {
-    font-size: var(--text-base);
-    line-height: 1.8;
-    color: var(--text-primary);
-    background: var(--bg-elevated);
-    padding: var(--space-5);
-    border-left: 4px solid var(--accent-primary);
-  }
-
-  .ai-summary p {
-    margin-bottom: var(--space-3);
-  }
-
-  .ai-summary p:last-child {
-    margin-bottom: 0;
-  }
-
-  /* 过滤匹配 */
-  .insights-list {
-    list-style: none;
-  }
-
-  .insight-item {
-    position: relative;
-    padding-left: var(--space-5);
-    margin-bottom: var(--space-4);
-    font-size: var(--text-base);
-    line-height: 1.7;
-    color: var(--text-primary);
-  }
-
-  .insight-item::before {
-    content: attr(data-index);
-    position: absolute;
-    left: 0;
-    top: 0;
-    font-family: var(--font-heading);
-    font-size: var(--text-sm);
-    font-weight: 700;
-    color: var(--accent-primary);
-  }
-
-  /* 过滤匹配 */
-  .filter-list {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-
-  .filter-item {
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: var(--space-4);
-  }
-
-  .filter-domain {
-    font-family: var(--font-heading);
-    font-size: var(--text-sm);
-    font-weight: 700;
-    color: var(--accent-primary);
-    margin-bottom: var(--space-2);
-  }
-
-  .filter-keywords {
-    font-size: var(--text-sm);
-    line-height: 1.6;
-    margin-bottom: var(--space-2);
-  }
-
-  .filter-keywords-label {
-    color: var(--text-secondary);
-    font-weight: 500;
-  }
-
-  .filter-keywords-list {
-    color: var(--text-primary);
-  }
-
-  .filter-reason {
-    font-size: var(--text-sm);
-    line-height: 1.6;
-  }
-
-  .filter-reason-label {
-    color: var(--text-secondary);
-    font-weight: 500;
-  }
-
-  .filter-reason-text {
-    color: var(--text-primary);
-  }
-
-  /* Full Content */
-  .article-full-content {
-    font-size: var(--text-base);
-    line-height: 1.8;
-    color: var(--text-primary);
-  }
-
-  .article-full-content h1,
-  .article-full-content h2,
-  .article-full-content h3,
-  .article-full-content h4 {
-    font-family: var(--font-heading);
-    font-weight: 700;
-    margin-top: var(--space-5);
-    margin-bottom: var(--space-3);
-  }
-
-  .article-full-content h2 {
-    font-size: var(--text-2xl);
-    padding-bottom: var(--space-2);
-    border-bottom: 2px solid var(--border);
-  }
-
-  .article-full-content h3 {
-    font-size: var(--text-xl);
-  }
-
-  .article-full-content p {
-    margin-bottom: var(--space-4);
-  }
-
-  .article-full-content a {
-    color: var(--accent-primary);
-    text-decoration: underline;
-  }
-
-  .article-full-content code {
-    font-family: var(--font-mono);
-    font-size: 0.9em;
-    background: var(--bg-elevated);
-    padding: 2px 6px;
-  }
-
-  .article-full-content pre {
-    background: var(--bg-elevated);
-    padding: var(--space-4);
-    overflow-x: auto;
-    margin-bottom: var(--space-4);
-  }
-
-  .article-full-content pre code {
-    background: none;
-    padding: 0;
-  }
-
-  .article-full-content ul,
-  .article-full-content ol {
-    margin-bottom: var(--space-4);
-    padding-left: var(--space-5);
-  }
-
-  .article-full-content li {
-    margin-bottom: var(--space-2);
-  }
-
-  /* Sidebar */
-  .article-sidebar {
-    min-width: 0;
-  }
-
-  .sidebar-card {
-    background: var(--bg-surface);
-    border: 2px solid var(--border);
-    padding: var(--space-4);
-    margin-bottom: var(--space-4);
-  }
-
-  .sidebar-title {
-    font-family: var(--font-heading);
-    font-size: var(--text-base);
-    font-weight: 700;
-    margin-bottom: var(--space-3);
-    padding-bottom: var(--space-2);
-    border-bottom: 2px solid var(--divider);
-  }
-
-  /* Related Articles */
-  .related-articles-list {
-    list-style: none;
-  }
-
-  .related-article-item {
-    padding: var(--space-3) 0;
-    border-bottom: 1px solid var(--divider);
-  }
-
-  .related-article-item:last-child {
-    border-bottom: none;
-    padding-bottom: 0;
-  }
-
-  .related-article-link {
-    font-family: var(--font-body);
-    font-size: var(--text-sm);
-    font-weight: 500;
-    line-height: 1.4;
-    color: var(--text-primary);
-    display: block;
-  }
-
-  .related-article-link:hover {
-    color: var(--accent-primary);
-  }
-
-  .related-article-meta {
-    font-family: var(--font-meta);
-    font-size: var(--text-2xs);
-    color: var(--text-tertiary);
-    margin-top: var(--space-1);
-  }
-
-  /* Action Buttons */
-  .action-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-
-  .action-buttons .btn {
-    flex: 1;
-    min-width: 120px;
-  }
-
-  /* Loading */
-  .loading {
-    text-align: center;
-    padding: var(--space-10);
-    color: var(--text-tertiary);
-  }
-
-  /* Error State */
-  .error-state {
-    text-align: center;
-    padding: var(--space-10);
-  }
-
-  .error-title {
-    font-family: var(--font-heading);
-    font-size: var(--text-2xl);
-    font-weight: 700;
-    margin-bottom: var(--space-3);
-  }
-
-  .error-message {
-    color: var(--text-tertiary);
-    margin-bottom: var(--space-4);
-  }
-
-  /* Empty Section */
-  .empty-section {
-    color: var(--text-tertiary);
-    font-style: italic;
-    padding: var(--space-4);
-    text-align: center;
-  }
-
-  /* Responsive */
-  @media (max-width: 900px) {
-    .article-detail-layout {
-      grid-template-columns: 1fr;
-    }
-
-    .sidebar-card {
-      order: -1;
-    }
-
-    .action-buttons {
-      flex-direction: column;
-    }
-  }
-</style>
-
-<!-- Back Navigation -->
-<nav class="back-nav">
-  <a href="/articles" class="back-link">
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M19 12H5M12 19l-7-7 7-7"/>
-    </svg>
-    返回文章列表
-  </a>
-</nav>
-
-<!-- Loading State -->
-<div id="loadingState" class="loading">加载中...</div>
-
-<!-- Vector Config Warning (Hidden by default) -->
-<div id="vectorConfigWarning" style="display: none;" class="sidebar-card" style="margin-bottom: var(--space-6); max-width: 800px; margin-left: auto; margin-right: auto;">
-  <div style="display: flex; align-items: start; gap: var(--space-3);">
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-warning); flex-shrink: 0;">
-      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-      <line x1="12" y1="9" x2="12" y2="13"></line>
-      <line x1="12" y1="17" x2="12.01" y2="17"></line>
-    </svg>
-    <div style="flex: 1;">
-      <h3 style="font-family: var(--font-heading); font-size: var(--text-base); font-weight: 700; margin-bottom: var(--space-2); color: var(--color-warning);">向量化功能未就绪</h3>
-      <ul id="vectorConfigWarnings" style="margin: 0; padding-left: var(--space-5); font-size: var(--text-sm); color: var(--text-primary);"></ul>
+  <!-- Vector Config Warning (Hidden by default) -->
+  <div id="vectorConfigWarning" style="display: none;" class="sidebar-card"
+    style="margin-bottom: var(--space-6); max-width: 800px; margin-left: auto; margin-right: auto;">
+    <div style="display: flex; align-items: start; gap: var(--space-3);">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" style="color: var(--color-warning); flex-shrink: 0;">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+        <line x1="12" y1="9" x2="12" y2="13"></line>
+        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+      </svg>
+      <div style="flex: 1;">
+        <h3
+          style="font-family: var(--font-heading); font-size: var(--text-base); font-weight: 700; margin-bottom: var(--space-2); color: var(--color-warning);">
+          向量化功能未就绪</h3>
+        <ul id="vectorConfigWarnings"
+          style="margin: 0; padding-left: var(--space-5); font-size: var(--text-sm); color: var(--text-primary);"></ul>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- Error State (Hidden by default) -->
-<div id="errorState" class="error-state" style="display: none;">
-  <div class="error-title">文章未找到</div>
-  <div class="error-message">该文章可能已被删除或您没有访问权限</div>
-  <a href="/articles" class="btn btn-secondary">返回文章列表</a>
-</div>
-
-<!-- Article Detail (Hidden until loaded) -->
-<div id="articleDetail" style="display: none;">
-  <div class="article-detail-layout">
-    <!-- Main Content -->
-    <div class="article-content">
-      <!-- Article Header -->
-      <header class="article-header">
-        <h1 class="article-title" id="articleTitle"></h1>
-        <div class="article-meta-row" id="articleMeta">
-          <!-- Dynamic content -->
-        </div>
-      </header>
-
-      <!-- AI 摘要 -->
-      <section class="article-section" id="summarySection" style="display: none;">
-        <h2 class="section-header">AI 摘要</h2>
-        <div class="ai-summary" id="rssSummary"></div>
-      </section>
-
-      <!-- 中文翻译 -->
-      <section class="article-section" id="translationSection" style="display: none;">
-        <h2 class="section-header">中文翻译</h2>
-        <div class="ai-summary" id="translationContent"></div>
-      </section>
-
-      <!-- 过滤匹配 -->
-      <section class="article-section" id="filterSection" style="display: none;">
-        <h2 class="section-header">过滤匹配</h2>
-        <ul class="filter-list" id="filterList"></ul>
-      </section>
-
-      <!-- 正文 -->
-      <section class="article-section" id="rssContentSection" style="display: none;">
-        <h2 class="section-header">正文</h2>
-        <div class="article-full-content" id="rssContent"></div>
-      </section>
-    </div>
-
-    <!-- Sidebar -->
-    <aside class="article-sidebar">
-      <!-- Action Buttons -->
-      <div class="sidebar-card">
-        <h3 class="sidebar-title">操作</h3>
-        <div class="action-buttons">
-          <button id="readBtn" class="btn btn-secondary">标记已读</button>
-          <a id="originalLink" href="" target="_blank" rel="noopener" class="btn btn-secondary">查看原文</a>
-          <button id="exportBtn" class="btn btn-secondary" onclick="exportMarkdown()">导出 Markdown</button>
-          <button id="processBtn" class="btn btn-secondary" onclick="processArticle()">重新处理</button>
-          <button id="deleteBtn" class="btn btn-danger" onclick="deleteArticle()">删除文章</button>
-        </div>
-      </div>
-
-      <!-- Related Articles -->
-      <div class="sidebar-card" id="relatedCard" style="display: none;">
-        <h3 class="sidebar-title">相关文章</h3>
-        <ul class="related-articles-list" id="relatedList"></ul>
-      </div>
-
-      <!-- Article Info -->
-      <div class="sidebar-card">
-        <h3 class="sidebar-title">文章信息</h3>
-        <div style="font-family: var(--font-meta); font-size: var(--text-xs); color: var(--text-tertiary);">
-          <div style="margin-bottom: var(--space-2);">
-            <span style="color: var(--text-secondary);">过滤状态:</span>
-            <span id="filterStatus"></span>
-          </div>
-          <div style="margin-bottom: var(--space-2);">
-            <span style="color: var(--text-secondary);">处理状态:</span>
-            <span id="processStatus"></span>
-          </div>
-          <div style="margin-bottom: var(--space-2);">
-            <span style="color: var(--text-secondary);">已读状态:</span>
-            <span id="readStatus"></span>
-          </div>
-          <div style="margin-bottom: var(--space-2);">
-            <span style="color: var(--text-secondary);">发布时间:</span>
-            <span id="publishedAt"></span>
-          </div>
-          <div>
-            <span style="color: var(--text-secondary);">抓取时间:</span>
-            <span id="createdAt"></span>
-          </div>
-        </div>
-      </div>
-    </aside>
+  <!-- Error State (Hidden by default) -->
+  <div id="errorState" class="error-state" style="display: none;">
+    <div class="error-title">文章未找到</div>
+    <div class="error-message">该文章可能已被删除或您没有访问权限</div>
+    <a href="/articles" class="btn btn-secondary">返回文章列表</a>
   </div>
-</div>
 
-<script src="/js/article-detail.js"></script>
-` }) %>
+  <!-- Article Detail (Hidden until loaded) -->
+  <div id="articleDetail" style="display: none;">
+    <div class="article-detail-layout">
+      <!-- Main Content -->
+      <div class="article-content">
+        <!-- Article Header -->
+        <header class="article-header">
+          <h1 class="article-title" id="articleTitle"></h1>
+          <div class="article-meta-row" id="articleMeta">
+            <!-- Dynamic content -->
+          </div>
+        </header>
+
+        <!-- AI 摘要 -->
+        <section class="article-section" id="summarySection" style="display: none;">
+          <h2 class="section-header">AI 摘要</h2>
+          <div class="ai-summary" id="rssSummary"></div>
+        </section>
+
+        <!-- 中文翻译 -->
+        <section class="article-section" id="translationSection" style="display: none;">
+          <h2 class="section-header">中文翻译</h2>
+          <div class="ai-summary" id="translationContent"></div>
+        </section>
+
+        <!-- 过滤匹配 -->
+        <section class="article-section" id="filterSection" style="display: none;">
+          <h2 class="section-header">过滤匹配</h2>
+          <ul class="filter-list" id="filterList"></ul>
+        </section>
+
+        <!-- 正文 -->
+        <section class="article-section" id="rssContentSection" style="display: none;">
+          <h2 class="section-header">正文</h2>
+          <div class="article-full-content" id="rssContent"></div>
+        </section>
+      </div>
+
+      <!-- Sidebar -->
+      <aside class="article-sidebar">
+        <!-- Action Buttons -->
+        <div class="sidebar-card">
+          <h3 class="sidebar-title">操作</h3>
+          <div class="action-buttons">
+            <button id="readBtn" class="btn btn-secondary">标记已读</button>
+            <a id="originalLink" href="" target="_blank" rel="noopener" class="btn btn-secondary">查看原文</a>
+            <button id="exportBtn" class="btn btn-secondary" onclick="exportMarkdown()">导出 Markdown</button>
+            <button id="processBtn" class="btn btn-secondary" onclick="processArticle()">重新处理</button>
+            <button id="deleteBtn" class="btn btn-danger" onclick="deleteArticle()">删除文章</button>
+          </div>
+        </div>
+
+        <!-- Related Articles -->
+        <div class="sidebar-card" id="relatedCard" style="display: none;">
+          <h3 class="sidebar-title">相关文章</h3>
+          <ul class="related-articles-list" id="relatedList"></ul>
+        </div>
+
+        <!-- Article Info -->
+        <div class="sidebar-card">
+          <h3 class="sidebar-title">文章信息</h3>
+          <div style="font-family: var(--font-meta); font-size: var(--text-xs); color: var(--text-tertiary);">
+            <div style="margin-bottom: var(--space-2);">
+              <span style="color: var(--text-secondary);">过滤状态:</span>
+              <span id="filterStatus"></span>
+            </div>
+            <div style="margin-bottom: var(--space-2);">
+              <span style="color: var(--text-secondary);">处理状态:</span>
+              <span id="processStatus"></span>
+            </div>
+            <div style="margin-bottom: var(--space-2);">
+              <span style="color: var(--text-secondary);">已读状态:</span>
+              <span id="readStatus"></span>
+            </div>
+            <div style="margin-bottom: var(--space-2);">
+              <span style="color: var(--text-secondary);">发布时间:</span>
+              <span id="publishedAt"></span>
+            </div>
+            <div>
+              <span style="color: var(--text-secondary);">抓取时间:</span>
+              <span id="createdAt"></span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="/js/article-detail.js"></script>
+  ` }) %>

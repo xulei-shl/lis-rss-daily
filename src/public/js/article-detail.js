@@ -428,6 +428,6 @@ async function toggleReadStatus(isRead) {
     }
   } catch (err) {
     console.error('Failed to toggle read status:', err);
-    alert('操作失败，请稍后重试');
+    window.toast.error('操作失败，请稍后重试');
   }
 }

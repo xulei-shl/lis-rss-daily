@@ -1,495 +1,147 @@
-<%- include('layout', { pageTitle: pageTitle, pageStyles: '', body: `
-<style>
-  /* ============================================
-     SEARCH PAGE STYLES
-     ============================================ */
-
-  /* Page Header */
-  .page-header {
-    text-align: center;
-    margin-bottom: var(--space-8);
-  }
-
-  .page-title {
-    font-family: var(--font-heading);
-    font-size: var(--text-4xl);
-    font-weight: 700;
-    margin-bottom: var(--space-4);
-  }
-
-  /* Search Box */
-  .search-container {
-    max-width: 700px;
-    margin: 0 auto var(--space-10);
-  }
-
-  .search-box {
-    position: relative;
-  }
-
-  .search-input {
-    width: 100%;
-    padding: 20px 104px 20px 24px;
-    border: 3px solid var(--border);
-    border-radius: 0;
-    background: var(--bg-surface);
-    color: var(--text-primary);
-    font-family: var(--font-body);
-    font-size: var(--text-xl);
-    transition: all 0.15s ease;
-  }
-
-  .search-input:focus {
-    outline: none;
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 4px var(--accent-subtle);
-  }
-
-  .search-input::placeholder {
-    color: var(--text-tertiary);
-  }
-
-  .search-button {
-    position: absolute;
-    right: 3px;
-    top: 3px;
-    bottom: 3px;
-    background: var(--accent-primary);
-    color: white;
-    border: none;
-    border-radius: 0;
-    padding: 0 20px;
-    font-family: var(--font-meta);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .search-button:hover {
-    background: var(--accent-hover);
-    transform: translate(-1px, -1px);
-    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.15);
-  }
-
-  .search-button:active {
-    transform: translate(0, 0);
-    box-shadow: none;
-  }
-
-  /* Search Tips */
-  .search-tips {
-    text-align: center;
-    margin-top: var(--space-3);
-    margin-bottom: var(--space-6);
-    font-family: var(--font-meta);
-    font-size: var(--text-sm);
-    color: var(--text-tertiary);
-  }
-
-  .search-tips code {
-    background: var(--bg-elevated);
-    padding: 2px 8px;
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    color: var(--accent-primary);
-  }
-
-  /* Results Header */
-  .results-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-bottom: var(--space-4);
-    border-bottom: 3px solid var(--border);
-    margin-bottom: var(--space-6);
-  }
-
-  .results-count {
-    font-family: var(--font-heading);
-    font-size: var(--text-xl);
-    font-weight: 600;
-  }
-
-  .results-query {
-    font-family: var(--font-meta);
-    font-size: var(--text-sm);
-    color: var(--text-tertiary);
-  }
-
-  .results-query em {
-    font-style: normal;
-    color: var(--accent-primary);
-    font-weight: 600;
-  }
-
-  /* Search Result Card */
-  .search-result {
-    background: var(--bg-surface);
-    border: 2px solid var(--border);
-    border-radius: 0;
-    padding: var(--space-5);
-    margin-bottom: var(--space-4);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-  }
-
-  .search-result:hover {
-    transform: translate(-2px, -2px);
-    box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.08);
-  }
-
-  .search-result-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: var(--space-4);
-    margin-bottom: var(--space-3);
-  }
-
-  .search-result-title {
-    font-family: var(--font-body);
-    font-size: var(--text-xl);
-    font-weight: 600;
-    line-height: 1.4;
-    margin: 0;
-  }
-
-  .search-result-title a {
-    color: var(--text-primary);
-  }
-
-  .search-result-title a:hover {
-    color: var(--accent-primary);
-  }
-
-  .search-result-title mark {
-    background: rgba(26, 77, 122, 0.15);
-    color: var(--accent-primary);
-    padding: 0 2px;
-  }
-
-  .relevance-score {
-    flex-shrink: 0;
-    font-family: var(--font-meta);
-    font-size: var(--text-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 6px 12px;
-    border: 1px solid;
-  }
-
-  .relevance-score.high {
-    color: var(--green);
-    border-color: var(--green);
-  }
-
-  .relevance-score.medium {
-    color: var(--amber);
-    border-color: var(--amber);
-  }
-
-  .relevance-score.low {
-    color: var(--text-tertiary);
-    border-color: var(--border);
-  }
-
-  .search-result-meta {
-    font-family: var(--font-meta);
-    font-size: var(--text-xs);
-    color: var(--text-tertiary);
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-bottom: var(--space-3);
-  }
-
-  .search-result-meta a {
-    color: var(--text-tertiary);
-  }
-
-  .search-result-meta a:hover {
-    color: var(--accent-primary);
-  }
-
-  .search-result-excerpt {
-    color: var(--text-secondary);
-    font-size: var(--text-base);
-    line-height: 1.6;
-  }
-
-  .search-result-excerpt mark {
-    background: rgba(26, 77, 122, 0.15);
-    color: var(--accent-primary);
-    padding: 0 2px;
-  }
-
-  .search-result-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin-top: var(--space-3);
-  }
-
-  .search-result-tag {
-    font-family: var(--font-meta);
-    font-size: var(--text-2xs);
-    font-weight: 500;
-    color: var(--accent-primary);
-  }
-
-  /* Empty States */
-  .empty-state {
-    text-align: center;
-    padding: var(--space-12) var(--space-5);
-  }
-
-  .empty-state-icon {
-    width: 64px;
-    height: 64px;
-    margin: 0 auto var(--space-4);
-    opacity: 0.3;
-  }
-
-  .empty-state-title {
-    font-family: var(--font-heading);
-    font-size: var(--text-2xl);
-    font-weight: 600;
-    margin-bottom: var(--space-2);
-  }
-
-  .empty-state-desc {
-    color: var(--text-tertiary);
-    max-width: 400px;
-    margin: 0 auto;
-  }
-
-  /* Loading */
-  .loading {
-    text-align: center;
-    padding: var(--space-10);
-    color: var(--text-tertiary);
-    font-family: var(--font-meta);
-    font-size: var(--text-sm);
-  }
-
-  .loading::after {
-    content: '';
-    display: inline-block;
-    width: 16px;
-    height: 16px;
-    margin-left: var(--space-2);
-    border: 2px solid var(--border);
-    border-top-color: var(--accent-primary);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  /* Pagination */
-  .pagination {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: var(--space-3);
-    margin-top: var(--space-10);
-    padding-top: var(--space-6);
-    border-top: 2px solid var(--border);
-  }
-
-  .pagination a,
-  .pagination span {
-    font-family: var(--font-meta);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--border);
-    min-width: 40px;
-    text-align: center;
-  }
-
-  .pagination a:hover {
-    background: var(--bg-elevated);
-    border-color: var(--border-strong);
-  }
-
-  .pagination .current {
-    background: var(--accent-primary);
-    color: white;
-    border-color: var(--accent-primary);
-  }
-
-  /* Responsive */
-  @media (max-width: 768px) {
-    .page-title {
-      font-size: var(--text-2xl);
-    }
-
-    .search-input {
-      font-size: var(--text-base);
-      padding: 14px 50px 14px 16px;
-    }
-
-    .search-result-header {
-      flex-direction: column;
-    }
-
-    .relevance-score {
-      align-self: flex-start;
-    }
-  }
-</style>
-
-<!-- Page Header -->
-<div class="page-header">
-  <h1 class="page-title">语义搜索</h1>
-</div>
-
-<!-- Search Box -->
-<div class="search-container">
-  <div class="search-box">
-    <input
-      type="text"
-      id="searchInput"
-      class="search-input"
-      placeholder="输入问题或关键词..."
-      autocomplete="off"
-    >
-    <button id="searchButton" class="search-button">搜索</button>
+<%- include('layout', { pageTitle: pageTitle, pageStyles: '<link rel="stylesheet" href="/css/pages/search.css">' , body:
+  ` <!-- Page Header -->
+  <div class="page-header">
+    <h1 class="page-title">语义搜索</h1>
   </div>
-  <p class="search-tips">
-    提示: 尝试 <code>LLM 在代码生成中的应用</code> 或 <code>多智能体系统最新进展</code>
-  </p>
-</div>
 
-<!-- Results Container -->
-<div id="resultsContainer">
-  <!-- Initial State -->
-  <div class="empty-state" id="initialState">
-    <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-    </svg>
-    <div class="empty-state-title">搜索文章</div>
-    <div class="empty-state-desc">
-      输入关键词或问题，查找相关的学术文章。<br>
-      支持语义搜索和关键词匹配。
+  <!-- Search Box -->
+  <div class="search-container">
+    <div class="search-box">
+      <input type="text" id="searchInput" class="search-input" placeholder="输入问题或关键词..." autocomplete="off">
+      <button id="searchButton" class="search-button">搜索</button>
+    </div>
+    <p class="search-tips">
+      提示: 尝试 <code>LLM 在代码生成中的应用</code> 或 <code>多智能体系统最新进展</code>
+    </p>
+  </div>
+
+  <!-- Results Container -->
+  <div id="resultsContainer">
+    <!-- Initial State -->
+    <div class="empty-state" id="initialState">
+      <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+        stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+      <div class="empty-state-title">搜索文章</div>
+      <div class="empty-state-desc">
+        输入关键词或问题，查找相关的学术文章。<br>
+        支持语义搜索和关键词匹配。
+      </div>
+    </div>
+
+    <!-- Loading State (Hidden) -->
+    <div class="loading" id="loadingState" style="display: none;">
+      搜索中
+    </div>
+
+    <!-- Results Area (Hidden) -->
+    <div id="resultsArea" style="display: none;">
+      <div class="results-header">
+        <div class="results-count" id="resultsCount"></div>
+        <div class="results-query" id="resultsQuery"></div>
+      </div>
+      <div id="resultsList"></div>
+      <div class="pagination" id="pagination" style="display: none;"></div>
+    </div>
+
+    <!-- No Results State (Hidden) -->
+    <div class="empty-state" id="noResultsState" style="display: none;">
+      <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+        stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div class="empty-state-title">未找到相关文章</div>
+      <div class="empty-state-desc">
+        尝试调整搜索词或使用更通用的关键词
+      </div>
     </div>
   </div>
 
-  <!-- Loading State (Hidden) -->
-  <div class="loading" id="loadingState" style="display: none;">
-    搜索中
-  </div>
+  <script>
+    // ============================================
+    // SEARCH PAGE LOGIC
+    // ============================================
 
-  <!-- Results Area (Hidden) -->
-  <div id="resultsArea" style="display: none;">
-    <div class="results-header">
-      <div class="results-count" id="resultsCount"></div>
-      <div class="results-query" id="resultsQuery"></div>
-    </div>
-    <div id="resultsList"></div>
-    <div class="pagination" id="pagination" style="display: none;"></div>
-  </div>
+    let currentQuery = '';
+    let currentPage = 1;
+    let totalPages = 1;
+    const perPage = 10;
+    let searchTimeout = null;
 
-  <!-- No Results State (Hidden) -->
-  <div class="empty-state" id="noResultsState" style="display: none;">
-    <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-    <div class="empty-state-title">未找到相关文章</div>
-    <div class="empty-state-desc">
-      尝试调整搜索词或使用更通用的关键词
-    </div>
-  </div>
-</div>
+    // Load on page ready
+    document.addEventListener('DOMContentLoaded', () => {
+      const searchInput = document.getElementById('searchInput');
+      const searchButton = document.getElementById('searchButton');
 
-<script>
-// ============================================
-// SEARCH PAGE LOGIC
-// ============================================
+      // Focus search input
+      searchInput.focus();
 
-let currentQuery = '';
-let currentPage = 1;
-let totalPages = 1;
-const perPage = 10;
-let searchTimeout = null;
+      // Search on Enter
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          performSearch();
+        }
+      });
 
-// Load on page ready
-document.addEventListener('DOMContentLoaded', () => {
-  const searchInput = document.getElementById('searchInput');
-  const searchButton = document.getElementById('searchButton');
+      // Search on button click
+      searchButton.addEventListener('click', performSearch);
 
-  // Focus search input
-  searchInput.focus();
+      // Auto-search with debounce
+      searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        const query = searchInput.value.trim();
 
-  // Search on Enter
-  searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      performSearch();
-    }
-  });
+        if (query.length >= 2) {
+          searchTimeout = setTimeout(() => {
+            performSearch();
+          }, 500);
+        } else if (query.length === 0) {
+          showInitialState();
+        }
+      });
 
-  // Search on button click
-  searchButton.addEventListener('click', performSearch);
-
-  // Auto-search with debounce
-  searchInput.addEventListener('input', () => {
-    clearTimeout(searchTimeout);
-    const query = searchInput.value.trim();
-
-    if (query.length >= 2) {
-      searchTimeout = setTimeout(() => {
+      // Check for query in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlQuery = urlParams.get('q');
+      if (urlQuery) {
+        searchInput.value = urlQuery;
         performSearch();
-      }, 500);
-    } else if (query.length === 0) {
-      showInitialState();
-    }
-  });
-
-  // Check for query in URL
-  const urlParams = new URLSearchParams(window.location.search);
-  const urlQuery = urlParams.get('q');
-  if (urlQuery) {
-    searchInput.value = urlQuery;
-    performSearch();
-  }
-});
-
-// Perform search
-async function performSearch(page = 1) {
-  const searchInput = document.getElementById('searchInput');
-  const query = searchInput.value.trim();
-
-  if (!query) {
-    showInitialState();
-    return;
-  }
-
-  currentQuery = query;
-  currentPage = page;
-
-  // Update URL without reloading
-  const url = new URL(window.location);
-  url.searchParams.set('q', query);
-  if (page > 1) url.searchParams.set('page', page);
-  window.history.replaceState({}, '', url);
-
-  // Show loading
-  showLoading();
-
-  try {
-    const params = new URLSearchParams({
-      q: query,
-      page: currentPage,
-      limit: perPage
+      }
     });
 
-    const res = await fetch(\`/api/search?\${params}\`);
+    // Perform search
+    async function performSearch(page = 1) {
+      const searchInput = document.getElementById('searchInput');
+      const query = searchInput.value.trim();
+
+      if (!query) {
+        showInitialState();
+        return;
+      }
+
+      currentQuery = query;
+      currentPage = page;
+
+      // Update URL without reloading
+      const url = new URL(window.location);
+      url.searchParams.set('q', query);
+      if (page > 1) url.searchParams.set('page', page);
+      window.history.replaceState({}, '', url);
+
+      // Show loading
+      showLoading();
+
+      try {
+        const params = new URLSearchParams({
+          q: query,
+          page: currentPage,
+          limit: perPage
+        });
+
+        const res = await fetch(\`/api/search?\${params}\`);
     const data = await res.json();
 
     if (data.results && data.results.length > 0) {
@@ -700,5 +352,5 @@ function formatTime(dateStr) {
     year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
   });
 }
-</script>
-` }) %>
+  </script>
+  ` }) %>

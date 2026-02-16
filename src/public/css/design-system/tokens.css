@@ -5,26 +5,42 @@
 /* Spacing Scale (Golden Ratio Approximation) */
 :root {
   --space-0: 0;
-  --space-1: 0.25rem;   /* 4px */
-  --space-2: 0.5rem;    /* 8px */
-  --space-3: 0.75rem;   /* 12px */
-  --space-4: 1rem;      /* 16px */
-  --space-5: 1.5rem;    /* 24px */
-  --space-6: 2rem;      /* 32px */
-  --space-8: 3rem;      /* 48px */
-  --space-10: 4rem;     /* 64px */
-  --space-12: 6rem;     /* 96px */
+  --space-1: 0.25rem;
+  /* 4px */
+  --space-2: 0.5rem;
+  /* 8px */
+  --space-3: 0.75rem;
+  /* 12px */
+  --space-4: 1rem;
+  /* 16px */
+  --space-5: 1.5rem;
+  /* 24px */
+  --space-6: 2rem;
+  /* 32px */
+  --space-8: 3rem;
+  /* 48px */
+  --space-10: 4rem;
+  /* 64px */
+  --space-12: 6rem;
+  /* 96px */
 }
 
 /* Typography Scale */
 :root {
-  --text-2xs: 0.625rem;   /* 10px */
-  --text-xs: 0.75rem;     /* 12px */
-  --text-sm: 0.875rem;    /* 14px */
-  --text-base: 1rem;      /* 16px */
-  --text-xl: 1.25rem;     /* 20px */
-  --text-2xl: 1.5rem;     /* 24px */
-  --text-3xl: 1.75rem;    /* 28px */
+  --text-2xs: 0.625rem;
+  /* 10px */
+  --text-xs: 0.75rem;
+  /* 12px */
+  --text-sm: 0.875rem;
+  /* 14px */
+  --text-base: 1rem;
+  /* 16px */
+  --text-xl: 1.25rem;
+  /* 20px */
+  --text-2xl: 1.5rem;
+  /* 24px */
+  --text-3xl: 1.75rem;
+  /* 28px */
   --text-4xl: clamp(2rem, 4vw + 0.5rem, 3rem);
   --text-5xl: clamp(2.5rem, 5vw + 1rem, 4rem);
 }
@@ -37,55 +53,81 @@
   --font-meta: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-/* Light Mode - Academic Brutalist */
+/* Light Mode - Premium Minimalism */
 :root {
   /* Backgrounds */
-  --bg-primary: #fafaf8;
+  --bg-primary: #f8f9fa;
+  /* Slightly cooler/cleaner than fafaf8 */
   --bg-surface: #ffffff;
-  --bg-elevated: #f5f5f0;
+  --bg-elevated: #ffffff;
+  /* Panels usually white on light gray bg */
+  --bg-subtle: #f3f4f6;
 
   /* Text */
-  --text-primary: #0a0a0a;
-  --text-secondary: #404040;
-  --text-tertiary: #808080;
+  --text-primary: #111827;
+  /* Near black */
+  --text-secondary: #4b5563;
+  --text-tertiary: #9ca3af;
 
-  /* Accent - Academic Blue */
+  /* Accent - Academic Blue (Refined) */
   --accent-primary: #1a4d7a;
   --accent-hover: #2d6da8;
   --accent-subtle: rgba(26, 77, 122, 0.08);
 
   /* Functional Colors */
-  --green: #1a5c3a;
-  --red: #b82a2a;
-  --amber: #b8712a;
+  --green: #059669;
+  --red: #dc2626;
+  --amber: #d97706;
 
-  /* Structure - Bold Borders */
-  --border: #d0d0d0;
-  --border-strong: #a0a0a0;
-  --divider: #e0e0e0;
+  /* Structure */
+  --border: #e2e8f0;
+  /* Softer border */
+  --border-strong: #cbd5e1;
+  --divider: #f1f5f9;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  /* Apps specific inputs */
+  --radius-lg: 12px;
+  /* Panels */
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-elevated: 0 4px 20px -4px rgba(0, 0, 0, 0.08);
+  /* Premium shadow */
 }
 
-/* Dark Mode - Inverted Contrast */
+/* Dark Mode - Premium Dark */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-primary: #0a0a0a;
-    --bg-surface: #141414;
-    --bg-elevated: #1a1a1a;
+    --bg-primary: #0f1115;
+    /* Rich dark */
+    --bg-surface: #181b21;
+    --bg-elevated: #22252b;
+    --bg-subtle: #1a1d23;
 
-    --text-primary: #f5f5f0;
-    --text-secondary: #b0b0b0;
-    --text-tertiary: #707070;
+    --text-primary: #d1d5db;
+    /* Softer white, less eye strain */
+    --text-secondary: #9ca3af;
+    --text-tertiary: #6b7280;
 
-    --accent-primary: #4a9fe0;
-    --accent-hover: #6bb3f0;
-    --accent-subtle: rgba(74, 159, 224, 0.15);
+    --accent-primary: #60a5fa;
+    --accent-hover: #93c5fd;
+    --accent-subtle: rgba(96, 165, 250, 0.15);
 
-    --green: #3dc891;
-    --red: #ff6b5b;
-    --amber: #ffb84d;
+    --green: #34d399;
+    --red: #f87171;
+    --amber: #fbbf24;
 
-    --border: #303030;
-    --border-strong: #404040;
-    --divider: #252525;
+    --border: #2e333d;
+    --border-strong: #454b59;
+    --divider: #1f2937;
+
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+    --shadow-elevated: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
   }
 }

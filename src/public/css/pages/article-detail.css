@@ -1,0 +1,362 @@
+/* ============================================
+   ARTICLE DETAIL PAGE STYLES
+   ============================================ */
+
+/* Back Navigation */
+.back-nav {
+    margin-bottom: var(--space-5);
+}
+
+.back-link {
+    font-family: var(--font-meta);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.back-link:hover {
+    color: var(--accent-primary);
+}
+
+/* Main Layout */
+.article-detail-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: var(--space-8);
+}
+
+/* Article Content */
+.article-content {
+    min-width: 0;
+}
+
+.article-header {
+    margin-bottom: var(--space-8);
+    padding-bottom: var(--space-5);
+    border-bottom: 1px solid var(--divider);
+}
+
+.article-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-3xl);
+    font-weight: 700;
+    line-height: 1.3;
+    margin: 0 0 var(--space-4) 0;
+    color: var(--text-primary);
+}
+
+.article-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    font-family: var(--font-meta);
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    line-height: 1.5;
+}
+
+.article-meta-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.article-meta-item a {
+    color: var(--text-tertiary);
+    text-decoration: none;
+}
+
+.article-meta-item a:hover {
+    color: var(--accent-primary);
+    text-decoration: underline;
+}
+
+/* Section */
+.article-section {
+    margin-bottom: var(--space-10);
+}
+
+.section-header {
+    font-family: var(--font-heading);
+    font-size: var(--text-xl);
+    font-weight: 700;
+    padding-bottom: var(--space-3);
+    border-bottom: 2px solid var(--border);
+    margin-bottom: var(--space-4);
+    color: var(--text-primary);
+}
+
+/* AI Summary & Translation */
+.ai-summary {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    line-height: 1.7;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    /* Slight contrast from surface */
+    padding: var(--space-6);
+    border-radius: var(--radius-lg);
+    border-left: 4px solid var(--accent-primary);
+}
+
+.ai-summary p {
+    margin-bottom: var(--space-3);
+}
+
+.ai-summary p:last-child {
+    margin-bottom: 0;
+}
+
+/* Filter List */
+.filter-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.filter-item {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    box-shadow: var(--shadow-sm);
+}
+
+.filter-domain {
+    font-family: var(--font-heading);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    color: var(--accent-primary);
+    margin-bottom: var(--space-2);
+}
+
+.filter-keywords,
+.filter-reason {
+    font-size: var(--text-sm);
+    line-height: 1.6;
+    margin-bottom: var(--space-2);
+}
+
+.filter-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-right: var(--space-1);
+}
+
+/* Full Content */
+.article-full-content {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    line-height: 1.8;
+    color: var(--text-secondary);
+    /* Softer reading color */
+}
+
+.article-full-content h1,
+.article-full-content h2,
+.article-full-content h3,
+.article-full-content h4 {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-top: var(--space-8);
+    margin-bottom: var(--space-4);
+    line-height: 1.3;
+}
+
+.article-full-content h2 {
+    font-size: var(--text-2xl);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--divider);
+}
+
+.article-full-content h3 {
+    font-size: var(--text-xl);
+}
+
+.article-full-content p {
+    margin-bottom: var(--space-4);
+}
+
+.article-full-content a {
+    color: var(--accent-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.article-full-content code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--bg-subtle);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    color: var(--accent-primary);
+}
+
+.article-full-content pre {
+    background: var(--bg-elevated);
+    padding: var(--space-5);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+    margin-bottom: var(--space-6);
+    border: 1px solid var(--border);
+}
+
+.article-full-content pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+}
+
+.article-full-content ul,
+.article-full-content ol {
+    margin-bottom: var(--space-6);
+    padding-left: var(--space-6);
+}
+
+.article-full-content li {
+    margin-bottom: var(--space-2);
+}
+
+.article-full-content blockquote {
+    border-left: 4px solid var(--accent-subtle);
+    padding-left: var(--space-4);
+    margin: var(--space-6) 0;
+    color: var(--text-tertiary);
+    font-style: italic;
+}
+
+/* Sidebar */
+.article-sidebar {
+    min-width: 0;
+}
+
+.sidebar-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    margin-bottom: var(--space-6);
+    box-shadow: var(--shadow-sm);
+}
+
+.sidebar-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-base);
+    font-weight: 700;
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--divider);
+    color: var(--text-primary);
+}
+
+/* Related Articles */
+.related-articles-list {
+    list-style: none;
+}
+
+.related-article-item {
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--divider);
+}
+
+.related-article-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.related-article-link {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--text-primary);
+    display: block;
+    text-decoration: none;
+}
+
+.related-article-link:hover {
+    color: var(--accent-primary);
+}
+
+.related-article-meta {
+    font-family: var(--font-meta);
+    font-size: var(--text-2xs);
+    color: var(--text-tertiary);
+    margin-top: var(--space-1);
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.action-buttons .btn {
+    width: 100%;
+    justify-content: center;
+}
+
+/* Article Info List */
+.info-list {
+    font-family: var(--font-meta);
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+}
+
+.info-item {
+    margin-bottom: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.info-label {
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+/* Loading */
+.loading {
+    text-align: center;
+    padding: var(--space-10);
+    color: var(--text-tertiary);
+}
+
+/* Error State */
+.error-state {
+    text-align: center;
+    padding: var(--space-12) var(--space-5);
+    background: var(--bg-subtle);
+    border-radius: var(--radius-lg);
+}
+
+.error-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    margin-bottom: var(--space-3);
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .article-detail-layout {
+        grid-template-columns: 1fr;
+        gap: var(--space-6);
+    }
+
+    .article-sidebar {
+        display: flex;
+        flex-direction: column-reverse;
+        /* Put actions at bottom on mobile? Or keep standard order? */
+        /* Keeping standard order for now */
+        flex-direction: column;
+    }
+}

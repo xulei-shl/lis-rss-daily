@@ -1,136 +1,5 @@
-<%- include('layout', { pageTitle: pageTitle, pageStyles: '', body: `
-<style>
-  .stats-container {
-    max-width: 1200px;
-  }
-
-  .section-header {
-    margin-bottom: 24px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .section-header h2 {
-    font-size: 1.5rem;
-    font-weight: 600;
-  }
-
-  .stats-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 32px;
-  }
-
-  .stat-card {
-    background: var(--surface);
-    border-radius: 8px;
-    padding: 20px;
-    border: 1px solid var(--border);
-    text-align: center;
-  }
-
-  .stat-card .label {
-    font-size: 0.85rem;
-    color: var(--dim);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 8px;
-  }
-
-  .stat-card .value {
-    font-size: 2rem;
-    font-weight: 600;
-    color: var(--accent);
-  }
-
-  .stat-card .value.pass-rate {
-    color: var(--green);
-  }
-
-  .stat-card .value.avg-score {
-    color: var(--text);
-  }
-
-  .stats-section {
-    background: var(--surface);
-    border-radius: 8px;
-    padding: 20px;
-    border: 1px solid var(--border);
-    margin-bottom: 24px;
-  }
-
-  .stats-section h3 {
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin-bottom: 16px;
-  }
-
-  .stats-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .stats-table th,
-  .stats-table td {
-    text-align: left;
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border);
-    font-size: 0.9rem;
-  }
-
-  .stats-table th {
-    background: var(--bg);
-    font-weight: 600;
-    color: var(--dim);
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .stats-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  .progress-bar-bg {
-    width: 100%;
-    height: 8px;
-    background: var(--border);
-    border-radius: 4px;
-    overflow: hidden;
-  }
-
-  .progress-bar-fill {
-    height: 100%;
-    background: var(--green);
-    transition: width 0.3s;
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 48px 24px;
-    color: var(--dim);
-  }
-
-  .empty-state svg {
-    width: 64px;
-    height: 64px;
-    margin-bottom: 16px;
-    opacity: 0.5;
-  }
-
-  .chart-placeholder {
-    height: 200px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--bg);
-    border-radius: 8px;
-    color: var(--dim);
-  }
-</style>
-
-<div class="stats-container">
+<%- include('layout', { pageTitle: pageTitle, pageStyles: '<link rel="stylesheet" href="/css/pages/stats.css">' , body:
+  ` <div class="stats-container">
   <div class="section-header">
     <h2>过滤统计</h2>
   </div>
@@ -188,51 +57,51 @@
       <p>图表功能待实现</p>
     </div>
   </div>
-</div>
+  </div>
 
-<script>
-// Load stats on page load
-loadStats();
+  <script>
+    // Load stats on page load
+    loadStats();
 
-async function loadStats() {
-  try {
-    const res = await fetch('/api/filter/stats');
-    const stats = await res.json();
-    renderStats(stats);
-  } catch (err) {
-    console.error('Failed to load stats:', err);
-    showEmptyState();
-  }
-}
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/filter/stats');
+        const stats = await res.json();
+        renderStats(stats);
+      } catch (err) {
+        console.error('Failed to load stats:', err);
+        showEmptyState();
+      }
+    }
 
-function showEmptyState() {
-  document.getElementById('totalFiltered').textContent = '0';
-  document.getElementById('totalPassed').textContent = '0';
-  document.getElementById('totalRejected').textContent = '0';
-  document.getElementById('passRate').textContent = '0%';
-  document.getElementById('avgScore').textContent = '-';
-  document.getElementById('domainStatsTable').style.display = 'none';
-  document.getElementById('domainStatsEmpty').style.display = 'block';
-}
+    function showEmptyState() {
+      document.getElementById('totalFiltered').textContent = '0';
+      document.getElementById('totalPassed').textContent = '0';
+      document.getElementById('totalRejected').textContent = '0';
+      document.getElementById('passRate').textContent = '0%';
+      document.getElementById('avgScore').textContent = '-';
+      document.getElementById('domainStatsTable').style.display = 'none';
+      document.getElementById('domainStatsEmpty').style.display = 'block';
+    }
 
-function renderStats(stats) {
-  // Summary cards
-  document.getElementById('totalFiltered').textContent = stats.totalFiltered.toLocaleString();
-  document.getElementById('totalPassed').textContent = stats.totalPassed.toLocaleString();
-  document.getElementById('totalRejected').textContent = stats.totalRejected.toLocaleString();
-  document.getElementById('passRate').textContent = (stats.passRate * 100).toFixed(1) + '%';
-  document.getElementById('avgScore').textContent = stats.avgRelevanceScore.toFixed(2);
+    function renderStats(stats) {
+      // Summary cards
+      document.getElementById('totalFiltered').textContent = stats.totalFiltered.toLocaleString();
+      document.getElementById('totalPassed').textContent = stats.totalPassed.toLocaleString();
+      document.getElementById('totalRejected').textContent = stats.totalRejected.toLocaleString();
+      document.getElementById('passRate').textContent = (stats.passRate * 100).toFixed(1) + '%';
+      document.getElementById('avgScore').textContent = stats.avgRelevanceScore.toFixed(2);
 
-  // Domain stats
-  const tbody = document.getElementById('domainStatsBody');
-  const emptyState = document.getElementById('domainStatsEmpty');
-  const table = document.getElementById('domainStatsTable');
+      // Domain stats
+      const tbody = document.getElementById('domainStatsBody');
+      const emptyState = document.getElementById('domainStatsEmpty');
+      const table = document.getElementById('domainStatsTable');
 
-  if (stats.byDomain && stats.byDomain.length > 0) {
-    table.style.display = 'table';
-    emptyState.style.display = 'none';
+      if (stats.byDomain && stats.byDomain.length > 0) {
+        table.style.display = 'table';
+        emptyState.style.display = 'none';
 
-    tbody.innerHTML = stats.byDomain.map(domain => \`
+        tbody.innerHTML = stats.byDomain.map(domain => \`
       <tr>
         <td><strong>\${escapeHtml(domain.domainName)}</strong></td>
         <td>\${domain.totalFiltered.toLocaleString()}</td>
@@ -261,5 +130,5 @@ function escapeHtml(str) {
   div.textContent = str;
   return div.innerHTML;
 }
-</script>
-` }) %>
+  </script>
+  ` }) %>

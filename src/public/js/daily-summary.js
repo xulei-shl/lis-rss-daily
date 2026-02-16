@@ -12,9 +12,6 @@
   const refreshBtn = document.getElementById('refreshBtn');
   const historyBtn = document.getElementById('historyBtn');
   const generateBtn = document.getElementById('generateBtn');
-  const copySummaryBtn = document.getElementById('copySummaryBtn');
-  const downloadSummaryBtn = document.getElementById('downloadSummaryBtn');
-  const regenerateBtn = document.getElementById('regenerateBtn');
   const historyModal = document.getElementById('historyModal');
   const closeHistoryModal = document.getElementById('closeHistoryModal');
 
@@ -43,52 +40,6 @@
   // Generate button
   generateBtn.addEventListener('click', async () => {
     await generateDailySummary();
-  });
-
-  // Regenerate button
-  regenerateBtn.addEventListener('click', async () => {
-    await generateDailySummary();
-  });
-
-  // Copy button
-  copySummaryBtn.addEventListener('click', async () => {
-    const summaryTextEl = document.getElementById('summaryText');
-    // Use full content if available (summary + articles list), otherwise use innerText
-    const textToCopy = summaryTextEl.dataset.fullContent || summaryTextEl.innerText;
-    try {
-      await navigator.clipboard.writeText(textToCopy);
-      const originalText = copySummaryBtn.innerHTML;
-      copySummaryBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="20 6 9 17 4 12"></polyline>
-        </svg>
-        已复制!
-      `;
-      setTimeout(() => {
-        copySummaryBtn.innerHTML = originalText;
-      }, 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  });
-
-  // Download button
-  downloadSummaryBtn.addEventListener('click', () => {
-    const summaryTextEl = document.getElementById('summaryText');
-    const textToDownload = summaryTextEl.dataset.fullContent || summaryTextEl.innerText;
-    const date = document.querySelector('.summary-meta-item span')?.textContent || 'summary';
-    const filename = `daily-summary-${date}.md`;
-
-    // Create blob and download
-    const blob = new Blob([textToDownload], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   });
 
   // Close history modal
@@ -172,7 +123,7 @@
     document.getElementById('summaryError').style.display = 'none';
     document.getElementById('summaryResult').style.display = 'block';
 
-    // Render meta
+    // Render meta with action buttons
     document.getElementById('summaryMeta').innerHTML = `
       <div class="summary-meta-item">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -196,7 +147,33 @@
         </svg>
         <span>生成于 ${new Date(generatedAt).toLocaleTimeString('zh-CN')}</span>
       </div>
+      <button class="summary-meta-action" id="copySummaryBtn" title="复制内容">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        <span>复制</span>
+      </button>
+      <button class="summary-meta-action" id="downloadSummaryBtn" title="下载内容">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        <span>下载</span>
+      </button>
+      <button class="summary-meta-action" id="regenerateBtn" title="重新生成">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 4v6h-6"></path>
+          <path d="M1 20v-6h6"></path>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        <span>重生成</span>
+      </button>
     `;
+
+    // Re-attach event listeners to new buttons
+    attachButtonListeners();
 
     // Render summary content
     const summaryHtml = renderMarkdown(summary);
@@ -204,6 +181,52 @@
 
     // Load and render articles list
     await loadAndRenderArticlesList(date, summary);
+  }
+
+  // Attach event listeners to action buttons
+  function attachButtonListeners() {
+    const copyBtn = document.getElementById('copySummaryBtn');
+    const downloadBtn = document.getElementById('downloadSummaryBtn');
+    const regenerateBtn = document.getElementById('regenerateBtn');
+
+    if (copyBtn) {
+      copyBtn.onclick = async () => {
+        const summaryTextEl = document.getElementById('summaryText');
+        const textToCopy = summaryTextEl.dataset.fullContent || summaryTextEl.innerText;
+        try {
+          await navigator.clipboard.writeText(textToCopy);
+          window.toast.success('已复制到剪贴板');
+        } catch (err) {
+          console.error('Failed to copy:', err);
+          window.toast.error('复制失败，请重试');
+        }
+      };
+    }
+
+    if (downloadBtn) {
+      downloadBtn.onclick = () => {
+        const summaryTextEl = document.getElementById('summaryText');
+        const textToDownload = summaryTextEl.dataset.fullContent || summaryTextEl.innerText;
+        const date = document.querySelector('.summary-meta-item span')?.textContent || 'summary';
+        const filename = `daily-summary-${date}.md`;
+
+        const blob = new Blob([textToDownload], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      };
+    }
+
+    if (regenerateBtn) {
+      regenerateBtn.onclick = async () => {
+        await generateDailySummary();
+      };
+    }
   }
 
   // Show error state

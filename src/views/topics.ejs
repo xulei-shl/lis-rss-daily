@@ -1,130 +1,5 @@
-<%- include('layout', { pageTitle: pageTitle, pageStyles: '', body: `
-<style>
-  .topics-container {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    max-width: 1400px;
-  }
-
-  .topics-panel {
-    background: var(--surface);
-    border-radius: 8px;
-    padding: 20px;
-    border: 1px solid var(--border);
-  }
-
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .section-header h2 {
-    font-size: 1.25rem;
-    font-weight: 600;
-  }
-
-  .data-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .data-table th,
-  .data-table td {
-    text-align: left;
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border);
-    font-size: 0.85rem;
-  }
-
-  .data-table th {
-    background: var(--bg);
-    font-weight: 600;
-    color: var(--dim);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .data-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  .status-badge {
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-transform: uppercase;
-  }
-
-  .status-badge.active {
-    background: rgba(42, 157, 110, 0.15);
-    color: var(--green);
-  }
-
-  .status-badge.inactive {
-    background: rgba(231, 76, 60, 0.15);
-    color: var(--red);
-  }
-
-  .action-buttons {
-    display: flex;
-    gap: 4px;
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 32px 16px;
-    color: var(--dim);
-  }
-
-  .empty-state svg {
-    width: 48px;
-    height: 48px;
-    margin-bottom: 12px;
-    opacity: 0.5;
-  }
-
-  .domain-description {
-    max-width: 150px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--dim);
-  }
-
-  .keyword-count {
-    font-size: 0.75rem;
-    color: var(--dim);
-  }
-
-  .keyword-domain-badge {
-    font-size: 0.7rem;
-    padding: 2px 6px;
-    background: var(--bg);
-    border-radius: 3px;
-    color: var(--dim);
-    white-space: nowrap;
-  }
-
-  textarea {
-    min-height: 80px;
-    resize: vertical;
-  }
-
-  @media (max-width: 900px) {
-    .topics-container {
-      grid-template-columns: 1fr;
-    }
-  }
-</style>
-
-<div class="topics-container">
+<%- include('layout', { pageTitle: pageTitle, pageStyles: '<link rel="stylesheet" href="/css/pages/topics.css">' , body:
+  ` <div class="topics-container">
   <!-- Domains Panel -->
   <div class="topics-panel">
     <div class="section-header">
@@ -148,7 +23,8 @@
 
     <div id="domainsEmpty" class="empty-state" style="display: none;">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
       </svg>
       <p>暂无主题领域</p>
     </div>
@@ -177,138 +53,139 @@
 
     <div id="keywordsEmpty" class="empty-state" style="display: none;">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
       </svg>
       <p>暂无关键词</p>
     </div>
   </div>
 
-</div>
-
-<!-- Domain Modal -->
-<div class="modal-overlay" id="domainModal">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 id="domainModalTitle">添加主题领域</h3>
-      <button class="modal-close" onclick="closeDomainModal()">&times;</button>
-    </div>
-    <form id="domainForm">
-      <input type="hidden" id="domainId">
-      <div class="form-group">
-        <label for="domainName">名称 *</label>
-        <input type="text" id="domainName" required placeholder="例如: 机器学习">
-      </div>
-      <div class="form-group">
-        <label for="domainDescription">描述</label>
-        <textarea id="domainDescription" placeholder="简要描述这个研究领域..."></textarea>
-      </div>
-      <div class="form-group">
-        <label for="domainPriority">优先级</label>
-        <input type="number" id="domainPriority" value="0" min="0" max="100" style="width: 100px;">
-        <small style="color: var(--dim);">数值越大优先级越高</small>
-      </div>
-      <div class="form-group">
-        <label for="domainActive">状态</label>
-        <select id="domainActive">
-          <option value="true">启用</option>
-          <option value="false">禁用</option>
-        </select>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="closeDomainModal()">取消</button>
-        <button type="submit" class="btn btn-primary">保存</button>
-      </div>
-    </form>
   </div>
-</div>
 
-<!-- Keyword Modal -->
-<div class="modal-overlay" id="keywordModal">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 id="keywordModalTitle">添加关键词</h3>
-      <button class="modal-close" onclick="closeKeywordModal()">&times;</button>
+  <!-- Domain Modal -->
+  <div class="modal-overlay" id="domainModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="domainModalTitle">添加主题领域</h3>
+        <button class="modal-close" onclick="closeDomainModal()">&times;</button>
+      </div>
+      <form id="domainForm">
+        <input type="hidden" id="domainId">
+        <div class="form-group">
+          <label for="domainName">名称 *</label>
+          <input type="text" id="domainName" required placeholder="例如: 机器学习">
+        </div>
+        <div class="form-group">
+          <label for="domainDescription">描述</label>
+          <textarea id="domainDescription" placeholder="简要描述这个研究领域..."></textarea>
+        </div>
+        <div class="form-group">
+          <label for="domainPriority">优先级</label>
+          <input type="number" id="domainPriority" value="0" min="0" max="100" style="width: 100px;">
+          <small style="color: var(--dim);">数值越大优先级越高</small>
+        </div>
+        <div class="form-group">
+          <label for="domainActive">状态</label>
+          <select id="domainActive">
+            <option value="true">启用</option>
+            <option value="false">禁用</option>
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeDomainModal()">取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
     </div>
-    <form id="keywordForm">
-      <input type="hidden" id="keywordId">
-      <div class="form-group">
-        <label for="keywordDomainId">所属领域 *</label>
-        <select id="keywordDomainId" required>
-          <option value="">请选择领域</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label for="keywordName">关键词 *</label>
-        <input type="text" id="keywordName" required placeholder="例如: 深度学习">
-      </div>
-      <div class="form-group">
-        <label for="keywordDescription">描述</label>
-        <textarea id="keywordDescription" placeholder="简要描述这个关键词..."></textarea>
-      </div>
-      <div class="form-group">
-        <label for="keywordWeight">权重</label>
-        <input type="number" id="keywordWeight" value="1.0" min="0" max="10" step="0.1" style="width: 100px;">
-        <small style="color: var(--dim);">0-10，数值越大权重越高</small>
-      </div>
-      <div class="form-group">
-        <label for="keywordActive">状态</label>
-        <select id="keywordActive">
-          <option value="true">启用</option>
-          <option value="false">禁用</option>
-        </select>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="closeKeywordModal()">取消</button>
-        <button type="submit" class="btn btn-primary">保存</button>
-      </div>
-    </form>
   </div>
-</div>
 
-<script>
-let domains = [];
-let keywords = [];
+  <!-- Keyword Modal -->
+  <div class="modal-overlay" id="keywordModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="keywordModalTitle">添加关键词</h3>
+        <button class="modal-close" onclick="closeKeywordModal()">&times;</button>
+      </div>
+      <form id="keywordForm">
+        <input type="hidden" id="keywordId">
+        <div class="form-group">
+          <label for="keywordDomainId">所属领域 *</label>
+          <select id="keywordDomainId" required>
+            <option value="">请选择领域</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="keywordName">关键词 *</label>
+          <input type="text" id="keywordName" required placeholder="例如: 深度学习">
+        </div>
+        <div class="form-group">
+          <label for="keywordDescription">描述</label>
+          <textarea id="keywordDescription" placeholder="简要描述这个关键词..."></textarea>
+        </div>
+        <div class="form-group">
+          <label for="keywordWeight">权重</label>
+          <input type="number" id="keywordWeight" value="1.0" min="0" max="10" step="0.1" style="width: 100px;">
+          <small style="color: var(--dim);">0-10，数值越大权重越高</small>
+        </div>
+        <div class="form-group">
+          <label for="keywordActive">状态</label>
+          <select id="keywordActive">
+            <option value="true">启用</option>
+            <option value="false">禁用</option>
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeKeywordModal()">取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
-// Load domains and keywords on page load
-loadDomains();
-loadKeywords();
+  <script>
+    let domains = [];
+    let keywords = [];
 
-async function loadDomains() {
-  try {
-    const res = await fetch('/api/topic-domains/with-keyword-count');
-    domains = await res.json() || [];
-    renderDomains();
-    updateDomainSelect();
-  } catch (err) {
-    console.error('Failed to load domains:', err);
-  }
-}
+    // Load domains and keywords on page load
+    loadDomains();
+    loadKeywords();
 
-async function loadKeywords() {
-  try {
-    const res = await fetch('/api/topic-keywords/all');
-    keywords = await res.json() || [];
-    renderKeywords();
-  } catch (err) {
-    console.error('Failed to load keywords:', err);
-  }
-}
+    async function loadDomains() {
+      try {
+        const res = await fetch('/api/topic-domains/with-keyword-count');
+        domains = await res.json() || [];
+        renderDomains();
+        updateDomainSelect();
+      } catch (err) {
+        console.error('Failed to load domains:', err);
+      }
+    }
 
-function renderDomains() {
-  const tbody = document.getElementById('domainsBody');
-  const emptyState = document.getElementById('domainsEmpty');
-  const table = document.getElementById('domainsTable');
+    async function loadKeywords() {
+      try {
+        const res = await fetch('/api/topic-keywords/all');
+        keywords = await res.json() || [];
+        renderKeywords();
+      } catch (err) {
+        console.error('Failed to load keywords:', err);
+      }
+    }
 
-  if (domains.length === 0) {
-    table.style.display = 'none';
-    emptyState.style.display = 'block';
-    return;
-  }
+    function renderDomains() {
+      const tbody = document.getElementById('domainsBody');
+      const emptyState = document.getElementById('domainsEmpty');
+      const table = document.getElementById('domainsTable');
 
-  table.style.display = 'table';
-  emptyState.style.display = 'none';
+      if (domains.length === 0) {
+        table.style.display = 'none';
+        emptyState.style.display = 'block';
+        return;
+      }
 
-  tbody.innerHTML = domains.map(domain => \`
+      table.style.display = 'table';
+      emptyState.style.display = 'none';
+
+      tbody.innerHTML = domains.map(domain => \`
     <tr class="domain-row">
       <td>
         <div style="font-weight: 500;">\${escapeHtml(domain.name)}</div>
@@ -628,5 +505,5 @@ document.addEventListener('keydown', function(e) {
     closeKeywordModal();
   }
 });
-</script>
-` }) %>
+  </script>
+  ` }) %>

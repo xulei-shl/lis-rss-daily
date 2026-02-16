@@ -1,182 +1,77 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><%= pageTitle %></title>
-  <style>
-    :root {
-      --bg: #f5f5f5;
-      --surface: #ffffff;
-      --border: #e0e0e0;
-      --text: #1a1a1a;
-      --dim: #666666;
-      --accent: #2075b0;
-      --accent-hover: #1a5d8c;
-      --red: #e74c3c;
-    }
+  <title>
+    <%= pageTitle %>
+  </title>
 
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #1a1a1a;
-        --surface: #2d2d2d;
-        --border: #404040;
-        --text: #e0e0e0;
-        --dim: #999999;
-        --accent: #4a9fe0;
-        --accent-hover: #6bb3f0;
-        --red: #ff6b5b;
-      }
-    }
+  <!-- Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap"
+    rel="stylesheet">
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .login-container {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 32px;
-      width: 100%;
-      max-width: 360px;
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      margin-bottom: 24px;
-      text-align: center;
-    }
-
-    .form-group {
-      margin-bottom: 16px;
-    }
-
-    .form-group label {
-      display: block;
-      margin-bottom: 6px;
-      font-weight: 500;
-      color: var(--dim);
-      font-size: 0.9rem;
-    }
-
-    input[type="text"],
-    input[type="password"] {
-      padding: 10px 12px;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      background: var(--surface);
-      color: var(--text);
-      width: 100%;
-      font-size: 1rem;
-    }
-
-    input:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
-
-    .btn {
-      width: 100%;
-      padding: 10px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1rem;
-      font-weight: 500;
-      transition: all 0.2s;
-    }
-
-    .btn-primary {
-      background: var(--accent);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      background: var(--accent-hover);
-    }
-
-    .error {
-      color: var(--red);
-      font-size: 0.9rem;
-      margin-top: 16px;
-      padding: 10px;
-      background: rgba(231, 76, 60, 0.1);
-      border-radius: 4px;
-      display: none;
-    }
-
-    .error.show {
-      display: block;
-    }
-
-    .login-footer {
-      margin-top: 24px;
-      text-align: center;
-      font-size: 0.85rem;
-      color: var(--dim);
-    }
-  </style>
+  <!-- CSS -->
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/pages/login.css">
 </head>
-<body>
-  <div class="login-container">
-    <h1>📚 LIS-RSS Literature Tracker</h1>
 
-    <form id="loginForm">
+<body class="login-page">
+
+  <div class="login-container panel-style">
+    <div class="login-header">
+      <h1>📚 LIS-RSS Tracker</h1>
+      <p>Literature Intelligence System</p>
+    </div>
+
+    <form id="loginForm" class="login-form">
       <div class="form-group">
-        <label for="username">用户名</label>
-        <input
-          type="text"
-          id="username"
-          name="username"
-          required
-          autocomplete="username"
-          placeholder="输入用户名"
-        >
+        <label for="username">用户名 / Username</label>
+        <div class="input-wrapper">
+          <input type="text" id="username" name="username" required autocomplete="username" placeholder="输入您的用户名"
+            autofocus>
+        </div>
       </div>
 
       <div class="form-group">
-        <label for="password">密码</label>
-        <input
-          type="password"
-          id="password"
-          name="password"
-          required
-          autocomplete="current-password"
-          placeholder="输入密码"
-        >
+        <label for="password">密码 / Password</label>
+        <div class="input-wrapper">
+          <input type="password" id="password" name="password" required autocomplete="current-password"
+            placeholder="输入您的密码">
+        </div>
       </div>
 
-      <button type="submit" class="btn btn-primary">登录</button>
+      <button type="submit" class="btn btn-primary">登 录 / Login</button>
 
-      <div id="error" class="error"></div>
+      <div id="error" class="error-message" style="display: none;"></div>
     </form>
 
     <div class="login-footer">
-      默认用户: <code>admin</code> / 密码: <code>admin123</code>
+      <p>默认凭证 / Default Credentials</p>
+      <div class="credentials">
+        <code>admin</code> / <code>admin123</code>
+      </div>
     </div>
   </div>
 
+  <script src="/js/confirm-dialog.js"></script>
   <script>
     const loginForm = document.getElementById('loginForm');
     const errorDiv = document.getElementById('error');
+    const submitBtn = loginForm.querySelector('button[type="submit"]');
 
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+
+      // Clear previous specific errors
+      errorDiv.style.display = 'none';
+      errorDiv.textContent = '';
+      submitBtn.disabled = true;
+      submitBtn.textContent = '登录中...';
 
       const formData = new FormData(loginForm);
       const data = Object.fromEntries(formData);
@@ -195,14 +90,20 @@
         if (res.ok && result.success) {
           window.location.href = '/';
         } else {
-          errorDiv.textContent = result.error || '登录失败';
-          errorDiv.classList.add('show');
+          errorDiv.textContent = result.error || '登录失败，请检查用户名或密码';
+          errorDiv.style.display = 'flex'; // Uses flex from CSS
+          submitBtn.disabled = false;
+          submitBtn.textContent = '登 录 / Login';
         }
       } catch (err) {
-        errorDiv.textContent = '网络错误，请稍后重试';
-        errorDiv.classList.add('show');
+        console.error(err);
+        errorDiv.textContent = '网络错误，请检查您的连接';
+        errorDiv.style.display = 'flex';
+        submitBtn.disabled = false;
+        submitBtn.textContent = '登 录 / Login';
       }
     });
   </script>
 </body>
+
 </html>

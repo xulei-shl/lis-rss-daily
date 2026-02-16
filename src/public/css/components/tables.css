@@ -5,7 +5,9 @@
 .table-container {
   overflow-x: auto;
   background: var(--bg-surface);
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 table {
@@ -15,8 +17,8 @@ table {
 }
 
 thead {
-  background: var(--bg-elevated);
-  border-bottom: 2px solid var(--border);
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border);
 }
 
 th {
@@ -28,10 +30,7 @@ th {
   color: var(--text-secondary);
   padding: var(--space-3) var(--space-4);
   text-align: left;
-}
-
-th:not(:last-child) {
-  border-right: 1px solid var(--divider);
+  border-bottom: 1px solid var(--border);
 }
 
 td {
@@ -39,14 +38,19 @@ td {
   border-bottom: 1px solid var(--divider);
   color: var(--text-primary);
   font-size: var(--text-sm);
+  vertical-align: middle;
 }
 
 tr:last-child td {
   border-bottom: none;
 }
 
+tbody tr {
+  transition: background-color 0.1s ease;
+}
+
 tbody tr:hover {
-  background: var(--bg-elevated);
+  background: var(--bg-subtle);
 }
 
 /* Actions column */
@@ -55,18 +59,17 @@ td.table-actions {
   white-space: nowrap;
 }
 
-.table-actions .btn-icon {
-  margin-left: var(--space-2);
+.table-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-  th, td {
-    padding: var(--space-2) var(--space-3);
-  }
 
-  .table-actions .btn-icon {
-    padding: var(--space-1) var(--space-2);
-    font-size: var(--text-2xs);
+  th,
+  td {
+    padding: var(--space-2) var(--space-3);
   }
 }

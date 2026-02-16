@@ -1,0 +1,52 @@
+/* ============================================
+   ERROR PAGE STYLES
+   ============================================ */
+
+body.error-page {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.error-container {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-8);
+    width: 100%;
+    max-width: 480px;
+    text-align: center;
+    box-shadow: var(--shadow-elevated);
+}
+
+.error-icon {
+    font-size: 48px;
+    margin-bottom: var(--space-4);
+    line-height: 1;
+}
+
+.error-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    margin-bottom: var(--space-3);
+    color: var(--red);
+}
+
+.error-message {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-8);
+}
+
+.error-actions {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-4);
+}

@@ -5,131 +5,215 @@
 .filters-bar {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-6);
-  padding: var(--space-4);
+  gap: 20px;
+  padding: 24px;
   background: var(--bg-elevated);
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.08);
+  /* Premium shadow */
+  width: 100%;
+  box-sizing: border-box;
 }
 
-/* Filter Row - horizontal alignment */
+/* ============================================
+   GRID LAYOUT SYSTEM
+   ============================================ */
+
 .filter-row {
-  display: flex;
-  gap: var(--space-3);
-  align-items: flex-end;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: grid;
+  gap: 20px;
+  width: 100%;
+  align-items: end;
+  /* Aligns labels and inputs vertically */
 }
 
-/* Filter Section - visually grouped */
-.filter-section {
-  display: flex;
-  gap: var(--space-3);
-  align-items: flex-end;
-  flex-wrap: wrap;
+/* 
+  ROW 1: Source + Date Range 
+  Logic: Source takes 1/3 width, Date takes 2/3 width.
+  Aligns with Status+Process (1/3) and Read+Search (2/3) roughly, 
+  ensuring a clean vertical rhythm.
+*/
+.filter-row:first-child {
+  grid-template-columns: 1fr 2fr;
 }
 
-.filter-section + .filter-section {
-  margin-left: var(--space-2);
-  padding-left: var(--space-4);
-  border-left: 1px solid var(--divider);
+/* 
+  ROW 2: Status, Process, Read, Search
+  Logic: 1:1:1:3 ratio.
+  Status(1) + Process(1) = 2 parts (Matches Source's 1 part if scaled, wait... 1fr vs 1fr is tricky across grids.
+  Let's do precise percentages for perfect alignment or use consistent fractions)
+  
+  Grid 1: 1fr 2fr (Total 3 units) -> Source 33.3%, Date 66.6%
+  Grid 2: 1fr 1fr 1fr 3fr (Total 6 units) -> 16.6%, 16.6%, 16.6%, 50%
+  
+  Alignment Check:
+  - Source (33.3%) aligns perfectly with Status (16.6%) + Process (16.6%)
+  - Date (66.6%) aligns perfectly with Read (16.6%) + Search (50%)
+*/
+.filter-row:nth-child(2) {
+  grid-template-columns: 1fr 1fr 1fr 3fr;
 }
 
+/* Filter Groups */
 .filter-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 8px;
+  width: 100%;
 }
 
 .filter-label {
   font-family: var(--font-meta);
-  font-size: var(--text-2xs);
-  font-weight: 600;
+  font-size: var(--text-xs);
+  /* Slightly clearer labels */
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
+/* ============================================
+   FORM CONTROLS & AESTHETICS
+   ============================================ */
+
+/* Unified Height & Styling for all inputs */
+/* Unified Height & Styling for all inputs */
 .filter-select,
 .filter-date {
-  padding: 8px 32px 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 0;
+  height: 42px;
+  width: 100%;
+  padding: 0 12px;
   background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  /* Modern sleek radius */
   color: var(--text-primary);
-  font-family: var(--font-meta);
+  font-family: var(--font-body);
   font-size: var(--text-sm);
   font-weight: 500;
-  cursor: pointer;
-  min-width: 140px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.filter-select {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='currentColor' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
+  color-scheme: light dark;
+  /* Enables native dark mode for calendar popup */
 }
 
-.filter-date {
-  padding: 8px 12px;
-  min-width: 175px;
-  color-scheme: light;
+/* Specific styling for search input to ensure consistency and override potential global resets */
+.filters-bar .search-input {
+  height: 42px;
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px !important;
+  /* Force rounded corners */
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+  appearance: none;
+  padding: 0 12px 0 42px;
+  /* Top Right Bottom Left - Make space for icon */
 }
 
-/* Dark mode date picker */
-@media (prefers-color-scheme: dark) {
-  .filter-date {
-    color-scheme: dark;
-  }
+/* Hover & Focus States - Premium Interaction */
+.filter-select:hover,
+.filter-date:hover,
+.search-input:hover,
+.date-range-group:hover .filter-date {
+  border-color: var(--text-tertiary);
+  /* Gentle hover state */
 }
 
 .filter-select:focus,
-.filter-date:focus {
+.filter-date:focus,
+.search-input:focus {
   outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+  z-index: 10;
+}
+
+/* ============================================
+   SPECIFIC COMPONENT STYLING
+   ============================================ */
+
+/* Select Dropdown Arrows */
+.filter-select {
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  cursor: pointer;
+}
+
+/* Date Range Group - Cohesive Unit */
+.date-range-group {
+  display: flex;
+  align-items: center;
+  /* We use the group to manage the layout, but inputs keep their borders 
+     for a "split" look which is popular in modern UIs, or we can merge them.
+     Let's merge them for a premium "Range" feel. */
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  overflow: hidden;
+  height: 42px;
+  transition: all 0.2s ease;
+}
+
+/* Interaction for the whole group */
+.date-range-group:focus-within {
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px var(--accent-subtle);
 }
 
-.filter-select:hover,
-.filter-date:hover {
-  border-color: var(--border-strong);
+.date-range-group .filter-date {
+  border: none;
+  border-radius: 0;
+  height: 100%;
+  box-shadow: none !important;
+  /* Remove focus ring here, handled by group */
+  background: transparent;
 }
 
-/* Date Range Group */
-.date-range-group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.date-range-group .filter-date:first-child {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
-  border-right: none;
-}
-
-.date-range-group .filter-date:last-child {
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
+.date-range-group .filter-date:focus {
+  background: var(--bg-subtle);
+  /* Highlight active input slightly */
 }
 
 .date-separator {
+  padding: 0 8px;
   color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  padding: 0 4px;
-  user-select: none;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
+  height: 100%;
+  border-left: 1px solid var(--divider);
+  border-right: 1px solid var(--divider);
 }
 
-/* Date picker icon styling */
+/* Make inner borders transparent to avoid double borders? 
+   Actually, let's keep it simple: No vertical dividers, just the dash. 
+   Looks cleaner. */
+.date-range-group .date-separator {
+  border: none;
+}
+
+/* Custom Date Picker Icon - Replacing native black icon with a neutral gray custom SVG */
 .filter-date::-webkit-calendar-picker-indicator {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 16px;
   cursor: pointer;
-  opacity: 0.5;
-  filter: var(--text-tertiary);
-  transition: opacity 0.15s ease;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
 }
 
 .filter-date::-webkit-calendar-picker-indicator:hover {
@@ -138,31 +222,12 @@
 
 /* Search Box */
 .search-box {
-  width: 800px;
-  max-width: 100%;
   position: relative;
+  width: 100%;
 }
 
 .search-input {
-  width: 100%;
-  padding: 10px 14px 10px 44px;
-  border: 1px solid var(--border);
-  border-radius: 0;
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-family: var(--font-body);
-  font-size: var(--text-sm);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.search-input::placeholder {
-  color: var(--text-tertiary);
-}
-
-.search-input:focus {
-  outline: none;
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px var(--accent-subtle);
+  /* padding-left controlled by specific rule above */
 }
 
 .search-icon {
@@ -170,72 +235,49 @@
   left: 14px;
   top: 50%;
   transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   color: var(--text-tertiary);
   pointer-events: none;
+  transition: color 0.2s ease;
 }
 
-/* Active Filter Indicator */
-.filter-select:not([value=""]) {
-  border-color: var(--accent-primary);
-}
-
-.filter-date:not(:placeholder-shown) {
-  border-color: var(--accent-primary);
-}
-
-/* Date range group active state - restore right border */
-.date-range-group .filter-date:first-child:not(:placeholder-shown) {
-  border-right: 1px solid var(--accent-primary);
-}
-
-/* Clear Filters Button */
-.clear-filters {
-  padding: 8px 16px;
-  font-family: var(--font-meta);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.clear-filters:hover {
+.search-input:focus+.search-icon,
+.search-input:not(:placeholder-shown)+.search-icon {
   color: var(--accent-primary);
-  border-color: var(--accent-primary);
-  background: var(--accent-subtle);
 }
 
-/* Responsive */
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+
+@media (max-width: 1024px) {
+
+  /* Tablet: Stack closer */
+  .filter-row:first-child {
+    grid-template-columns: 1fr 1fr;
+    /* 50/50 */
+  }
+
+  .filter-row:nth-child(2) {
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    /* Equal */
+  }
+}
+
 @media (max-width: 768px) {
   .filters-bar {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  /* Force everything to single column flow or 2-col grid */
+  .filter-row,
+  .filter-row:first-child,
+  .filter-row:nth-child(2) {
+    display: flex;
     flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-3);
-  }
-
-  .filter-section {
-    width: 100%;
-  }
-
-  .filter-section + .filter-section {
-    margin-left: 0;
-    padding-left: 0;
-    border-left: none;
-    border-top: 1px solid var(--divider);
-    padding-top: var(--space-3);
-  }
-
-  .filter-group {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .search-box {
-    min-width: 0;
-    margin-left: 0;
+    gap: 16px;
+    grid-template-columns: none;
   }
 }

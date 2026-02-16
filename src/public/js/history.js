@@ -322,27 +322,25 @@
             </svg>
             <span>生成于 ${new Date(summaryData.created_at).toLocaleString('zh-CN')}</span>
           </div>
-        </div>
-        <div class="summary-detail-content" data-full-content="${escapeHtml(fullContent)}">
-          ${renderMarkdown(summary)}
-          ${articlesData ? buildArticlesListHtml(articlesData) : ''}
-        </div>
-        <div class="summary-detail-actions">
-          <button class="btn btn-secondary" onclick="window.historyPage.copySummary()">
+          <button class="summary-meta-action" onclick="window.historyPage.copySummary()" title="复制内容">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
             </svg>
-            复制
+            <span>复制</span>
           </button>
-          <button class="btn btn-secondary" onclick="window.historyPage.downloadSummary()">
+          <button class="summary-meta-action" onclick="window.historyPage.downloadSummary()" title="下载内容">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="7 10 12 15 17 10"></polyline>
               <line x1="12" y1="15" x2="12" y2="3"></line>
             </svg>
-            下载
+            <span>下载</span>
           </button>
+        </div>
+        <div class="summary-detail-content" data-full-content="${escapeHtml(fullContent)}">
+          ${renderMarkdown(summary)}
+          ${articlesData ? buildArticlesListHtml(articlesData) : ''}
         </div>
       </div>
     `;
@@ -483,9 +481,10 @@
 
     try {
       await navigator.clipboard.writeText(textToCopy);
-      alert('已复制到剪贴板');
+      window.toast.success('已复制到剪贴板');
     } catch (err) {
       console.error('Failed to copy:', err);
+      window.toast.error('复制失败，请重试');
     }
   }
 

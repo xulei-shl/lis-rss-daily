@@ -1,66 +1,67 @@
-<%- include('layout', { pageTitle: pageTitle, pageStyles: '<link rel="stylesheet" href="/css/components/history.css">', body: `
-<!-- Page Header -->
-<div class="page-header">
-  <h1 class="page-title">历史总结</h1>
-</div>
-
-<!-- Search & Filters -->
-<div class="filters-bar">
-  <div class="search-box">
-    <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-    </svg>
-    <input type="text" id="searchInput" class="search-input" placeholder="搜索日期（YYYY-MM-DD）...">
+<%- include('layout', { pageTitle: pageTitle, pageStyles: '<link rel="stylesheet" href="/css/pages/history.css">' ,
+  body: ` <!-- Page Header -->
+  <div class="page-header">
+    <h1 class="page-title">历史总结</h1>
   </div>
-  <div class="filter-group">
-    <span class="filter-label">年份</span>
-    <select id="yearFilter" class="filter-select">
-      <option value="">全部年份</option>
-    </select>
-  </div>
-  <div class="filter-group">
-    <span class="filter-label">月份</span>
-    <select id="monthFilter" class="filter-select">
-      <option value="">全部月份</option>
-      <option value="1">一月</option>
-      <option value="2">二月</option>
-      <option value="3">三月</option>
-      <option value="4">四月</option>
-      <option value="5">五月</option>
-      <option value="6">六月</option>
-      <option value="7">七月</option>
-      <option value="8">八月</option>
-      <option value="9">九月</option>
-      <option value="10">十月</option>
-      <option value="11">十一月</option>
-      <option value="12">十二月</option>
-    </select>
-  </div>
-</div>
 
-<!-- Results Count -->
-<div class="results-count" id="resultsCount"></div>
-
-<!-- History List -->
-<div id="historyContainer">
-  <div class="loading">加载中...</div>
-</div>
-
-<!-- Pagination -->
-<div class="pagination" id="pagination" style="display: none;"></div>
-
-<!-- Summary Detail Modal -->
-<div class="modal-overlay" id="summaryModal">
-  <div class="modal modal-large">
-    <div class="modal-header">
-      <h3 id="modalTitle">每日总结</h3>
-      <button class="modal-close" id="closeSummaryModal">×</button>
+  <!-- Search & Filters -->
+  <div class="filters-bar">
+    <div class="search-box">
+      <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+        stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+      <input type="text" id="searchInput" class="search-input" placeholder="搜索日期（YYYY-MM-DD）...">
     </div>
-    <div class="modal-body" id="modalBody">
-      <div class="loading">加载中...</div>
+    <div class="filter-group">
+      <span class="filter-label">年份</span>
+      <select id="yearFilter" class="filter-select">
+        <option value="">全部年份</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">月份</span>
+      <select id="monthFilter" class="filter-select">
+        <option value="">全部月份</option>
+        <option value="1">一月</option>
+        <option value="2">二月</option>
+        <option value="3">三月</option>
+        <option value="4">四月</option>
+        <option value="5">五月</option>
+        <option value="6">六月</option>
+        <option value="7">七月</option>
+        <option value="8">八月</option>
+        <option value="9">九月</option>
+        <option value="10">十月</option>
+        <option value="11">十一月</option>
+        <option value="12">十二月</option>
+      </select>
     </div>
   </div>
-</div>
 
-<script src="/js/history.js"></script>
-` }) %>
+  <!-- Results Count -->
+  <div class="results-count" id="resultsCount"></div>
+
+  <!-- History List -->
+  <div id="historyContainer">
+    <div class="loading">加载中...</div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" id="pagination" style="display: none;"></div>
+
+  <!-- Summary Detail Modal -->
+  <div class="modal-overlay" id="summaryModal">
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h3 id="modalTitle">每日总结</h3>
+        <button class="modal-close" id="closeSummaryModal">×</button>
+      </div>
+      <div class="modal-body" id="modalBody">
+        <div class="loading">加载中...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/history.js"></script>
+  ` }) %>

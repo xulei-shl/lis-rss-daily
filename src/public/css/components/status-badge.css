@@ -3,49 +3,70 @@
    ============================================ */
 
 .status-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 4px 10px;
   font-family: var(--font-meta);
   font-size: var(--text-2xs);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  border: 1px solid currentColor;
-  border-radius: 0;
+  letter-spacing: 0.05em;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  white-space: nowrap;
 }
 
 /* Filter status variants */
 .status-badge.passed {
   color: var(--green);
+  background: rgba(5, 150, 105, 0.1);
+  border-color: rgba(5, 150, 105, 0.2);
 }
 
 .status-badge.rejected {
   color: var(--red);
+  background: rgba(220, 38, 38, 0.1);
+  border-color: rgba(220, 38, 38, 0.2);
 }
 
 .status-badge.pending {
   color: var(--amber);
+  background: rgba(217, 119, 6, 0.1);
+  border-color: rgba(217, 119, 6, 0.2);
 }
 
 /* Process status variants */
 .status-badge.active {
   color: var(--accent-primary);
+  background: var(--accent-subtle);
+  border-color: rgba(26, 77, 122, 0.2);
 }
 
 .status-badge.inactive {
   color: var(--text-tertiary);
+  background: var(--bg-elevated);
+  border-color: var(--border);
 }
 
 .status-badge.processing {
   color: var(--amber);
+  background: rgba(217, 119, 6, 0.1);
+  border-color: rgba(217, 119, 6, 0.2);
 }
 
 .status-badge.completed {
   color: var(--green);
+  background: rgba(5, 150, 105, 0.1);
+  border-color: rgba(5, 150, 105, 0.2);
 }
 
 .status-badge.failed {
   color: var(--red);
+  background: rgba(220, 38, 38, 0.1);
+  border-color: rgba(220, 38, 38, 0.2);
 }
 
 /* Size variants */

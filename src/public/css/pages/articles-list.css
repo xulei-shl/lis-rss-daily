@@ -1,0 +1,46 @@
+/* ============================================
+   ARTICLES LIST PAGE
+   ============================================ */
+
+/* Page Header */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-6);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--border);
+}
+
+.page-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-3xl);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.page-actions {
+    display: flex;
+    gap: var(--space-3);
+}
+
+/* Filters Bar Override */
+/* In the list context, we might want the filters to feel more integrated */
+.filters-bar {
+    background: var(--bg-surface);
+    box-shadow: none;
+    /* Flatter look on the list page? Or keep consistency? */
+    border: 1px solid var(--border);
+}
+
+/* Results Count */
+.results-count {
+    font-family: var(--font-meta);
+    font-size: var(--text-sm);
+    color: var(--text-tertiary);
+    text-align: center;
+    padding: var(--space-4) 0;
+    border-bottom: 1px solid var(--divider);
+    margin-bottom: var(--space-4);
+}

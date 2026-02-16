@@ -2,39 +2,77 @@
    FORM ELEMENTS
    ============================================ */
 
+/* Common Input Styles */
 input[type="text"],
 input[type="password"],
 input[type="url"],
 input[type="number"],
 input[type="email"],
+input[type="search"],
 textarea,
 select {
+  height: 42px;
+  /* Core vertical rhythm */
   width: 100%;
-  padding: 10px 14px;
-  border: 2px solid var(--border);
-  border-radius: 0;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  /* 8px */
   background: var(--bg-surface);
   color: var(--text-primary);
   font-family: var(--font-body);
-  font-size: var(--text-base);
-  transition: all 0.15s ease;
+  font-size: var(--text-sm);
+  /* 14px */
+  font-weight: 500;
+  appearance: none;
+  box-sizing: border-box;
+  color-scheme: light dark;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+textarea {
+  height: auto;
+  padding: 12px;
+  min-height: 100px;
+  resize: vertical;
+}
+
+/* Hover State */
+input:hover,
+textarea:hover,
+select:hover {
+  border-color: var(--text-tertiary);
+}
+
+/* Focus State */
 input:focus,
 textarea:focus,
 select:focus {
   outline: none;
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px var(--accent-subtle);
+  z-index: 2;
 }
 
+/* Placeholder */
 input::placeholder,
 textarea::placeholder {
   color: var(--text-tertiary);
+  opacity: 0.8;
 }
 
+/* Custom Select Arrow */
+select {
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  cursor: pointer;
+}
+
+/* Form Groups */
 .form-group {
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-5);
 }
 
 .form-group label {
@@ -42,26 +80,38 @@ textarea::placeholder {
   margin-bottom: var(--space-2);
   font-family: var(--font-meta);
   font-size: var(--text-sm);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-weight: 500;
   color: var(--text-secondary);
+  /* Less aggressive than before */
+  letter-spacing: 0.01em;
 }
 
-.error {
+/* Helper Text */
+.form-text {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+/* Feedback States */
+.error-message {
   color: var(--red);
-  font-size: var(--text-sm);
-  margin-top: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  background: rgba(184, 42, 42, 0.1);
-  border-left: 3px solid var(--red);
+  font-size: var(--text-xs);
+  margin-top: var(--space-1);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.success {
-  color: var(--green);
-  font-size: var(--text-sm);
-  margin-top: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  background: rgba(26, 92, 58, 0.1);
-  border-left: 3px solid var(--green);
+input.is-invalid,
+select.is-invalid,
+textarea.is-invalid {
+  border-color: var(--red);
+}
+
+input.is-invalid:focus,
+select.is-invalid:focus,
+textarea.is-invalid:focus {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+  border-color: var(--red);
 }
