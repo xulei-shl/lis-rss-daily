@@ -453,6 +453,9 @@ window.addEventListener('popstate', () => {
 
 // Toggle article read status
 async function toggleReadStatus(articleId, currentIsRead) {
+  const card = document.querySelector(\`[data-article-id="\${articleId}"]\`);
+  if (!card) return;
+
   try {
     const res = await fetch(\`/api/articles/\${articleId}/read\`, {
       method: 'PATCH',
@@ -462,9 +465,12 @@ async function toggleReadStatus(articleId, currentIsRead) {
 
     if (!res.ok) throw new Error('Failed to update');
 
-    // 只更新当前卡片状态，不刷新整个列表以保持滚动位置
-    updateCardReadStatus(articleId, !currentIsRead);
-    // 只更新统计数据
+    // 标记为已读时，淡出并移除卡片
+    if (!currentIsRead) {
+      fadeOutAndRemoveCard(card);
+    }
+
+    // 更新统计数据
     loadStats();
   } catch (err) {
     console.error('Failed to toggle read status:', err);
@@ -472,36 +478,34 @@ async function toggleReadStatus(articleId, currentIsRead) {
   }
 }
 
-// 更新单个卡片的已读状态
-function updateCardReadStatus(articleId, newIsRead) {
-  const card = document.querySelector(\`[data-article-id="\${articleId}"]\`);
-  if (!card) return;
+// 淡出并移除卡片
+function fadeOutAndRemoveCard(card) {
+  // 添加淡出动画
+  card.style.transition = 'opacity 0.3s ease, transform 0.3s ease, max-height 0.3s ease, margin 0.3s ease';
+  card.style.opacity = '0';
+  card.style.transform = 'translateX(20px)';
+  card.style.maxHeight = '0';
+  card.style.margin = '0';
+  card.style.overflow = 'hidden';
 
-  // 更新卡片 class
-  if (newIsRead) {
-    card.classList.add('is-read');
-  } else {
-    card.classList.remove('is-read');
-  }
+  // 动画结束后移除DOM
+  setTimeout(() => {
+    card.remove();
+    // 检查是否需要移除日期分组标题
+    checkAndRemoveEmptyDayHeaders();
+  }, 300);
+}
 
-  // 更新按钮文本
-  const button = card.querySelector('.article-actions button');
-  if (button) {
-    button.textContent = newIsRead ? '未读' : '已读';
-    // 更新 onclick 参数
-    button.setAttribute('onclick', \`toggleReadStatus(\${articleId}, \${newIsRead})\`);
-  }
-
-  // 更新标题旁的已读图标
-  const title = card.querySelector('.article-title');
-  if (title) {
-    const existingIcon = title.querySelector('.article-read-icon');
-    if (newIsRead && !existingIcon) {
-      title.insertAdjacentHTML('afterbegin', '<span class="article-read-icon">✅</span>');
-    } else if (!newIsRead && existingIcon) {
-      existingIcon.remove();
+// 检查并移除没有文章的日期分组标题
+function checkAndRemoveEmptyDayHeaders() {
+  const dayHeaders = document.querySelectorAll('.day-header');
+  dayHeaders.forEach(header => {
+    const nextElement = header.nextElementSibling;
+    // 如果下一个元素不是文章卡片或者是另一个日期标题，则移除当前日期标题
+    if (!nextElement || !nextElement.classList.contains('article-card')) {
+      header.remove();
     }
-  }
+  });
 }
 
   </script>
