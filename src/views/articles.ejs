@@ -492,10 +492,43 @@ async function toggleReadStatus(articleId, currentIsRead) {
 
     if (!res.ok) throw new Error('Failed to update');
 
-    loadArticles();
+    // 只更新当前卡片状态，不刷新整个列表以保持滚动位置
+    updateCardReadStatus(articleId, !currentIsRead);
   } catch (err) {
     console.error('Failed to toggle read status:', err);
     alert('操作失败，请稍后重试');
+  }
+}
+
+// 更新单个卡片的已读状态
+function updateCardReadStatus(articleId, newIsRead) {
+  const card = document.querySelector(\`[data-article-id="\${articleId}"]\`);
+  if (!card) return;
+
+  // 更新卡片 class
+  if (newIsRead) {
+    card.classList.add('is-read');
+  } else {
+    card.classList.remove('is-read');
+  }
+
+  // 更新按钮文本
+  const button = card.querySelector('.article-actions button');
+  if (button) {
+    button.textContent = newIsRead ? '未读' : '已读';
+    // 更新 onclick 参数
+    button.setAttribute('onclick', \`toggleReadStatus(\${articleId}, \${newIsRead})\`);
+  }
+
+  // 更新标题旁的已读图标
+  const title = card.querySelector('.article-title');
+  if (title) {
+    const existingIcon = title.querySelector('.article-read-icon');
+    if (newIsRead && !existingIcon) {
+      title.insertAdjacentHTML('afterbegin', '<span class="article-read-icon">✅</span>');
+    } else if (!newIsRead && existingIcon) {
+      existingIcon.remove();
+    }
   }
 }
 
