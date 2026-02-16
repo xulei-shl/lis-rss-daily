@@ -128,6 +128,18 @@ function renderArticle(article) {
   document.getElementById('publishedAt').textContent = formatDateTime(article.published_at);
   document.getElementById('createdAt').textContent = formatDateTime(article.created_at);
 
+  // 已读状态显示
+  const readStatusEl = document.getElementById('readStatus');
+  if (readStatusEl) {
+    const isRead = article.is_read === 1;
+    readStatusEl.textContent = isRead ? '已读' : '未读';
+    readStatusEl.style.color = isRead ? 'var(--accent-primary)' : 'var(--text-tertiary)';
+  }
+
+  // 已读状态
+  const isRead = article.is_read === 1;
+  updateReadButton(isRead);
+
   // 处理按钮可见性
   const processBtn = document.getElementById('processBtn');
   processBtn.style.display = (article.process_status === 'pending' || article.process_status === 'failed') ? 'inline-block' : 'none';
@@ -381,4 +393,41 @@ function formatTime(dateStr) {
     month: 'short',
     day: 'numeric'
   });
+}
+
+// 更新已读按钮状态
+function updateReadButton(isRead) {
+  const readBtn = document.getElementById('readBtn');
+  if (readBtn) {
+    readBtn.textContent = isRead ? '标记未读' : '标记已读';
+    readBtn.onclick = function() { toggleReadStatus(!isRead); };
+  }
+}
+
+// 切换已读状态
+async function toggleReadStatus(isRead) {
+  if (!articleData) return;
+
+  try {
+    const res = await fetch('/api/articles/' + articleData.id + '/read', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_read: isRead })
+    });
+
+    if (!res.ok) throw new Error('Failed to update');
+
+    articleData.is_read = isRead ? 1 : 0;
+    updateReadButton(isRead);
+
+    // 更新已读状态显示
+    const readStatusEl = document.getElementById('readStatus');
+    if (readStatusEl) {
+      readStatusEl.textContent = isRead ? '已读' : '未读';
+      readStatusEl.style.color = isRead ? 'var(--accent-primary)' : 'var(--text-tertiary)';
+    }
+  } catch (err) {
+    console.error('Failed to toggle read status:', err);
+    alert('操作失败，请稍后重试');
+  }
 }

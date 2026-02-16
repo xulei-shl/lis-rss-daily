@@ -46,6 +46,7 @@ export interface ArticleWithSource {
   processed_at: string | null;
   published_at: string | null;
   error_message: string | null;
+  is_read: number;  // 0 = 未读, 1 = 已读
   created_at: string;
   updated_at: string;
 }
@@ -292,6 +293,7 @@ export async function getArticleById(
       'articles.processed_at',
       'articles.published_at',
       'articles.error_message',
+      'articles.is_read',
       'articles.created_at',
       'articles.updated_at',
       'rss_sources.name as rss_source_name',
@@ -421,6 +423,8 @@ export async function getUserArticles(
     createdBefore?: string; // ISO date string (YYYY-MM-DD)
     /** 搜索时是否跳过时间过滤（搜索在全量数据中进行，结果显示不受时间限制） */
     skipDaysFilterForSearch?: boolean;
+    /** 已读状态过滤 */
+    isRead?: boolean;
   } = {}
 ): Promise<PaginatedArticlesResult> {
   const db = getDb();
@@ -451,6 +455,10 @@ export async function getUserArticles(
 
   if (options.processStatus !== undefined) {
     query = query.where('articles.process_status', '=', options.processStatus);
+  }
+
+  if (options.isRead !== undefined) {
+    query = query.where('articles.is_read', '=', options.isRead ? 1 : 0);
   }
 
   if (options.search !== undefined && options.search.trim() !== '') {
@@ -504,6 +512,9 @@ export async function getUserArticles(
   if (options.processStatus !== undefined) {
     articlesQuery = articlesQuery.where('articles.process_status', '=', options.processStatus);
   }
+  if (options.isRead !== undefined) {
+    articlesQuery = articlesQuery.where('articles.is_read', '=', options.isRead ? 1 : 0);
+  }
   if (options.search !== undefined && options.search.trim() !== '') {
     const searchTerm = `%${options.search.trim()}%`;
     articlesQuery = articlesQuery.where((eb) => eb.or([
@@ -548,6 +559,7 @@ export async function getUserArticles(
       'articles.processed_at',
       'articles.published_at',
       'articles.error_message',
+      'articles.is_read',
       'articles.created_at',
       'articles.updated_at',
       'rss_sources.name as rss_source_name',
@@ -704,5 +716,161 @@ export async function refreshRelatedArticles(
     rss_source_name: r.metadata?.rss_source_name,
     score: r.score,
   }));
+}
+
+/**
+ * 更新文章已读状态
+ * @param articleId - Article ID
+ * @param userId - User ID (for permission check)
+ * @param isRead - Read status
+ */
+export async function updateArticleReadStatus(
+  articleId: number,
+  userId: number,
+  isRead: boolean
+): Promise<void> {
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  const result = await db
+    .updateTable('articles')
+    .set({
+      is_read: isRead ? 1 : 0,
+      updated_at: now,
+    })
+    .where('id', '=', articleId)
+    .where('rss_source_id', 'in', (eb) =>
+      eb
+        .selectFrom('rss_sources')
+        .select('id')
+        .where('user_id', '=', userId)
+    )
+    .executeTakeFirst();
+
+  if (result.numUpdatedRows === 0n) {
+    throw new Error('Article not found');
+  }
+
+  log.info({ articleId, userId, isRead }, 'Article read status updated');
+}
+
+/**
+ * 批量更新文章已读状态
+ * @param userId - User ID
+ * @param articleIds - Article IDs to update
+ * @param isRead - Read status
+ * @returns Number of updated articles
+ */
+export async function batchUpdateArticleReadStatus(
+  userId: number,
+  articleIds: number[],
+  isRead: boolean
+): Promise<number> {
+  if (articleIds.length === 0) return 0;
+
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  const result = await db
+    .updateTable('articles')
+    .set({
+      is_read: isRead ? 1 : 0,
+      updated_at: now,
+    })
+    .where('id', 'in', articleIds)
+    .where('rss_source_id', 'in', (eb) =>
+      eb
+        .selectFrom('rss_sources')
+        .select('id')
+        .where('user_id', '=', userId)
+    )
+    .executeTakeFirst();
+
+  const count = Number(result.numUpdatedRows);
+  log.info({ count, userId, isRead }, 'Batch updated article read status');
+  return count;
+}
+
+/**
+ * 批量标记所有未读文章为已读
+ * @param userId - User ID
+ * @param options - Filter options (filterStatus, daysAgo, etc.)
+ * @returns Number of updated articles
+ */
+export async function markAllAsRead(
+  userId: number,
+  options: {
+    filterStatus?: 'pending' | 'passed' | 'rejected';
+    daysAgo?: number;
+  } = {}
+): Promise<number> {
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  let query = db
+    .updateTable('articles')
+    .set({
+      is_read: 1,
+      updated_at: now,
+    })
+    .where('rss_source_id', 'in', (eb) =>
+      eb
+        .selectFrom('rss_sources')
+        .select('id')
+        .where('user_id', '=', userId)
+    )
+    .where('is_read', '=', 0);
+
+  if (options.filterStatus !== undefined) {
+    query = query.where('filter_status', '=', options.filterStatus);
+  }
+
+  if (options.daysAgo !== undefined) {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - options.daysAgo);
+    query = query.where('created_at', '>=', cutoffDate.toISOString());
+  }
+
+  const result = await query.executeTakeFirst();
+  const count = Number(result.numUpdatedRows);
+  log.info({ count, userId, options }, 'Marked all articles as read');
+  return count;
+}
+
+/**
+ * 获取未读文章数量
+ * @param userId - User ID
+ * @param options - Filter options
+ */
+export async function getUnreadCount(
+  userId: number,
+  options: {
+    filterStatus?: 'pending' | 'passed' | 'rejected';
+    daysAgo?: number;
+  } = {}
+): Promise<number> {
+  const db = getDb();
+
+  let query = db
+    .selectFrom('articles')
+    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .where('rss_sources.user_id', '=', userId)
+    .where('articles.is_read', '=', 0);
+
+  if (options.filterStatus !== undefined) {
+    query = query.where('articles.filter_status', '=', options.filterStatus);
+  }
+
+  if (options.daysAgo !== undefined) {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - options.daysAgo);
+    query = query.where('articles.created_at', '>=', cutoffDate.toISOString());
+  }
+
+  const result = await query
+    .select((eb) => eb.fn.count('articles.id').as('count'))
+    .executeTakeFirst();
+
+  return Number(result?.count || 0);
 }
 

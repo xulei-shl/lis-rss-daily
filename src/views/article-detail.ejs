@@ -450,6 +450,7 @@
       <div class="sidebar-card">
         <h3 class="sidebar-title">操作</h3>
         <div class="action-buttons">
+          <button id="readBtn" class="btn btn-secondary">标记已读</button>
           <a id="originalLink" href="" target="_blank" rel="noopener" class="btn btn-secondary">查看原文</a>
           <button id="exportBtn" class="btn btn-secondary" onclick="exportMarkdown()">导出 Markdown</button>
           <button id="processBtn" class="btn btn-secondary" onclick="processArticle()">重新处理</button>
@@ -474,6 +475,10 @@
           <div style="margin-bottom: var(--space-2);">
             <span style="color: var(--text-secondary);">处理状态:</span>
             <span id="processStatus"></span>
+          </div>
+          <div style="margin-bottom: var(--space-2);">
+            <span style="color: var(--text-secondary);">已读状态:</span>
+            <span id="readStatus"></span>
           </div>
           <div style="margin-bottom: var(--space-2);">
             <span style="color: var(--text-secondary);">发布时间:</span>

@@ -146,6 +146,18 @@ async function runMigrations() {
         continue;
       }
 
+      if (file === '008_add_is_read.sql') {
+        // Check if is_read column exists in articles
+        const hasIsRead = hasColumn(db, 'articles', 'is_read');
+        if (!hasIsRead) {
+          db.exec('ALTER TABLE articles ADD COLUMN is_read INTEGER DEFAULT 0;');
+          console.log('      → Added is_read column');
+        }
+        db.exec('CREATE INDEX IF NOT EXISTS idx_articles_is_read ON articles(is_read);');
+        console.log('      → Created index for is_read');
+        continue;
+      }
+
       const sql = fs.readFileSync(fullPath, 'utf-8');
       db.exec(sql);
     }

@@ -65,6 +65,7 @@ export interface ArticlesTable {
   processed_at: string | null;
   published_at: string | null;
   error_message: string | null;
+  is_read: number;  // 0 = 未读, 1 = 已读
   created_at: string;
   updated_at: string;
 }

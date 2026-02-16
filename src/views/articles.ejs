@@ -218,6 +218,20 @@
     gap: var(--space-2);
   }
 
+  /* Article Read Status */
+  .article-card.is-read .article-title a {
+    color: var(--text-tertiary);
+  }
+
+  .article-card.is-rejected .article-title a {
+    color: var(--text-tertiary);
+  }
+
+  .article-read-icon {
+    font-size: var(--text-sm);
+    margin-right: var(--space-1);
+  }
+
   /* Empty State */
   .empty-state {
     text-align: center;
@@ -560,11 +574,17 @@ function renderArticleCard(article, index) {
   // 优先显示翻译摘要，否则显示 RSS 摘要
 const summary = article.summary_zh || article.content || article.markdown_content?.substring(0, 300) || '';
 
+  // 已读状态
+  const isRead = article.is_read === 1;
+  const isRejected = article.filter_status === 'rejected';
+  const cardClass = isRead ? 'article-card fade-in-up is-read' : isRejected ? 'article-card fade-in-up is-rejected' : 'article-card fade-in-up';
+  const readIcon = isRead ? '<span class="article-read-icon">✅</span>' : '';
+
   return \`
-    <div class="article-card fade-in-up" style="animation-delay: \${index * 30}ms">
+    <div class="\${cardClass}" style="animation-delay: \${index * 30}ms" data-article-id="\${article.id}">
       <div class="article-card-header">
         <h3 class="article-title">
-          <a href="/articles/\${article.id}">\${escapeHtml(article.title)}</a>
+          \${readIcon}<a href="/articles/\${article.id}">\${escapeHtml(article.title)}</a>
         </h3>
         <span class="badge \${article.filter_status}">\${statusLabel[article.filter_status] || '未知'}</span>
       </div>
@@ -585,6 +605,9 @@ const summary = article.summary_zh || article.content || article.markdown_conten
           ).join('') : ''}
         </div>
         <div class="article-actions">
+          <button class="btn-icon" onclick="toggleReadStatus(\${article.id}, \${isRead})">
+            \${isRead ? '未读' : '已读'}
+          </button>
           \${article.process_status === 'pending' || article.process_status === 'failed'
             ? \`<button class="btn-icon" onclick="processArticle(\${article.id})">处理</button>\`
             : ''
@@ -787,6 +810,24 @@ function formatTime(dateStr) {
     hour: '2-digit',
     minute: '2-digit'
   });
+}
+
+// Toggle article read status
+async function toggleReadStatus(articleId, currentIsRead) {
+  try {
+    const res = await fetch(\`/api/articles/\${articleId}/read\`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_read: !currentIsRead })
+    });
+
+    if (!res.ok) throw new Error('Failed to update');
+
+    loadArticles();
+  } catch (err) {
+    console.error('Failed to toggle read status:', err);
+    alert('操作失败，请稍后重试');
+  }
 }
 </script>
 ` }) %>

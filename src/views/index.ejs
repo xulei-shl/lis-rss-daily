@@ -7,7 +7,7 @@
   /* Stats Grid */
   .stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: var(--space-4);
     margin-bottom: var(--space-10);
   }
@@ -173,6 +173,36 @@
     color: var(--accent-primary);
   }
 
+  /* Article Read Status */
+  .article-card.is-read .article-title a {
+    color: var(--text-tertiary);
+  }
+
+  .article-card.is-rejected .article-title a {
+    color: var(--text-tertiary);
+  }
+
+  .article-read-icon {
+    font-size: var(--text-sm);
+    margin-right: var(--space-1);
+  }
+
+  .article-actions {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+
+  .article-actions .btn-sm {
+    font-size: var(--text-xs);
+    padding: var(--space-1) var(--space-2);
+  }
+
+  /* Mark All Read Button */
+  .mark-all-read-btn {
+    margin-bottom: var(--space-4);
+  }
+
   /* Empty State */
   .empty-state {
     text-align: center;
@@ -285,6 +315,10 @@
     <div class="stat-value" id="passRate">-</div>
     <div class="stat-label">通过率</div>
   </div>
+  <div class="stat-card">
+    <div class="stat-value" id="unreadCount">-</div>
+    <div class="stat-label">未读</div>
+  </div>
 </div>
 
 <!-- Daily Summary Panel -->
@@ -385,6 +419,9 @@
 </div>
 
 <!-- Articles Timeline -->
+<div class="mark-all-read-btn">
+  <button class="btn btn-secondary" onclick="markAllAsRead()">全部标记已读</button>
+</div>
 <div id="articlesContainer">
   <div class="loading">加载中...</div>
 </div>
@@ -435,6 +472,7 @@ async function loadStats() {
     document.getElementById('passRate').textContent = stats.passRate
       ? (stats.passRate * 100).toFixed(0) + '%'
       : '-';
+    document.getElementById('unreadCount').textContent = stats.unread || 0;
   } catch (err) {
     clearTimeout(timeoutId);
     console.error('Failed to load stats:', err);
@@ -466,7 +504,7 @@ async function loadArticles(page = 1) {
   }, 10500);
 
   try {
-    const res = await fetch(\`/api/articles?page=\${page}&limit=\${perPage}&filterStatus=passed&daysAgo=7\`, {
+    const res = await fetch(\`/api/articles?page=\${page}&limit=\${perPage}&filterStatus=passed&daysAgo=7&isRead=false\`, {
       signal: controller.signal
     });
     clearTimeout(timeoutId);
@@ -554,11 +592,17 @@ function renderArticleCard(article, index) {
   const TRUNCATE_LENGTH = 400;
   const needsTruncate = content.length > TRUNCATE_LENGTH;
 
+  // 已读状态
+  const isRead = article.is_read === 1;
+  const isRejected = article.filter_status === 'rejected';
+  const cardClass = isRead ? 'article-card fade-in-up is-read' : isRejected ? 'article-card fade-in-up is-rejected' : 'article-card fade-in-up';
+  const readIcon = isRead ? '<span class="article-read-icon">✅</span>' : '';
+
   return \`
-    <div class="article-card fade-in-up" style="animation-delay: \${index * 30}ms">
+    <div class="\${cardClass}" style="animation-delay: \${index * 30}ms" data-article-id="\${article.id}">
       <div class="article-card-header">
         <h3 class="article-title">
-          <a href="/articles/\${article.id}">\${escapeHtml(article.title)}</a>
+          \${readIcon}<a href="/articles/\${article.id}">\${escapeHtml(article.title)}</a>
         </h3>
         <span class="badge \${article.filter_status}">\${statusLabel[article.filter_status] || '未知'}</span>
       </div>
@@ -583,6 +627,11 @@ function renderArticleCard(article, index) {
           \${article.tags.split(',').map(tag => \`<span class="article-tag">#\${escapeHtml(tag.trim())}</span>\`).join('')}
         </div>
       \` : ''}
+      <div class="article-actions">
+        <button class="btn btn-secondary btn-sm" onclick="toggleReadStatus(\${article.id}, \${isRead})">
+          \${isRead ? '标记未读' : '标记已读'}
+        </button>
+      </div>
     </div>
   \`;
 }
@@ -720,6 +769,51 @@ window.addEventListener('popstate', () => {
   const page = parseInt(params.get('page')) || 1;
   loadArticles(page);
 });
+
+// Toggle article read status
+async function toggleReadStatus(articleId, currentIsRead) {
+  try {
+    const res = await fetch(\`/api/articles/\${articleId}/read\`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_read: !currentIsRead })
+    });
+
+    if (!res.ok) throw new Error('Failed to update');
+
+    // Reload articles and stats
+    loadArticles(currentPage);
+    loadStats();
+  } catch (err) {
+    console.error('Failed to toggle read status:', err);
+    alert('操作失败，请稍后重试');
+  }
+}
+
+// Mark all articles as read
+async function markAllAsRead() {
+  if (!confirm('确定要将所有未读文章标记为已读吗？')) return;
+
+  try {
+    const res = await fetch('/api/articles/mark-all-read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filterStatus: 'passed', daysAgo: 7 })
+    });
+
+    if (!res.ok) throw new Error('Failed to mark all as read');
+
+    const result = await res.json();
+    alert(\`已将 \${result.count} 篇文章标记为已读\`);
+
+    // Reload articles and stats
+    loadArticles(currentPage);
+    loadStats();
+  } catch (err) {
+    console.error('Failed to mark all as read:', err);
+    alert('操作失败，请稍后重试');
+  }
+}
 </script>
 
 <!-- Daily Summary Script -->
