@@ -52,6 +52,8 @@ tsx scripts/cli-daily-summary.ts --user-id 1 --api-key your-key
 | `--api-key` | `-k` | CLI API 密钥 | 是 |
 | `--date` | `-d` | 日期 (YYYY-MM-DD) | 否 |
 | `--limit` | `-l` | 文章数量限制 | 否 |
+| `--type` | `-t` | 总结类型：`journal`(期刊) 或 `blog_news`(博客资讯) | 否 |
+| `--all` | | 同时生成两类总结 | 否 |
 | `--base-url` | | 服务地址 | 否 |
 | `--json` | | 输出纯 JSON | 否 |
 | `--pretty` | | 美化输出 | 否 |
@@ -60,21 +62,30 @@ tsx scripts/cli-daily-summary.ts --user-id 1 --api-key your-key
 ### 使用示例
 
 ```bash
-# 基本调用
+# 基本调用（生成默认类型总结）
 tsx scripts/cli-daily-summary.ts --user-id 1 --api-key mykey
 
-# 指定日期和文章数量
-tsx scripts/cli-daily-summary.ts -u 1 -d 2025-02-11 -l 50 --api-key mykey
+# 生成期刊类总结
+tsx scripts/cli-daily-summary.ts -u 1 --type journal --api-key mykey
+
+# 生成博客资讯类总结
+tsx scripts/cli-daily-summary.ts -u 1 -t blog_news --api-key mykey
+
+# 同时生成两类总结
+tsx scripts/cli-daily-summary.ts -u 1 --all --api-key mykey
+
+# 指定日期、文章数量和类型
+tsx scripts/cli-daily-summary.ts -u 1 -d 2025-02-11 -l 50 --type journal --api-key mykey
 
 # 输出 JSON 格式
-tsx scripts/cli-daily-summary.ts -u 1 --api-key mykey --json
+tsx scripts/cli-daily-summary.ts -u 1 --type blog_news --api-key mykey --json
 
 # 使用环境变量中的 API Key
 export CLI_API_KEY=mykey
-tsx scripts/cli-daily-summary.ts --user-id 1
+tsx scripts/cli-daily-summary.ts --user-id 1 --type journal
 
 # 美化输出（带颜色和格式）
-tsx scripts/cli-daily-summary.ts --user-id 1 --api-key mykey --pretty
+tsx scripts/cli-daily-summary.ts --user-id 1 --type journal --api-key mykey --pretty
 ```
 
 ---
@@ -96,8 +107,10 @@ POST /api/daily-summary/cli
 **请求体**：
 ```json
 {
-  "date": "2025-02-11",  // 可选，默认今天
-  "limit": 30            // 可选，默认 30
+  "date": "2025-02-11",      // 可选，默认今天
+  "limit": 30,               // 可选，默认 30
+  "type": "journal",         // 可选，总结类型：`journal`(期刊) 或 `blog_news`(博客资讯)
+  "generateAll": false       // 可选，是否同时生成两类总结
 }
 ```
 
@@ -110,6 +123,7 @@ POST /api/daily-summary/cli
   "cached": false,           // true=已存在缓存，false=新生成
   "data": {
     "date": "2025-02-11",
+    "type": "journal",       // 总结类型：`journal` 或 `blog_news`
     "totalArticles": 15,
     "articlesByType": {
       "journal": [...],
@@ -150,10 +164,23 @@ POST /api/daily-summary/cli
 ### cURL 示例
 
 ```bash
+# 生成期刊类总结
 curl "http://localhost:8007/api/daily-summary/cli?user_id=1&api_key=mykey" \
   -X POST \
   -H "Content-Type: application/json" \
-  -d '{"limit": 30}'
+  -d '{"limit": 30, "type": "journal"}'
+
+# 生成博客资讯类总结
+curl "http://localhost:8007/api/daily-summary/cli?user_id=1&api_key=mykey" \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"limit": 30, "type": "blog_news"}'
+
+# 同时生成两类总结
+curl "http://localhost:8007/api/daily-summary/cli?user_id=1&api_key=mykey" \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"generateAll": true}'
 ```
 
 ---
@@ -165,10 +192,11 @@ curl "http://localhost:8007/api/daily-summary/cli?user_id=1&api_key=mykey" \
 ```python
 import requests
 
+# 生成期刊类总结
 response = requests.post(
     "http://localhost:8007/api/daily-summary/cli",
     params={"user_id": 1, "api_key": "mykey"},
-    json={"limit": 30}
+    json={"limit": 30, "type": "journal"}
 )
 result = response.json()
 
@@ -178,21 +206,36 @@ elif result["status"] == "empty":
     print("无新文章")
 else:
     print("错误:", result["error"])
+
+# 同时生成两类总结
+response = requests.post(
+    "http://localhost:8007/api/daily-summary/cli",
+    params={"user_id": 1, "api_key": "mykey"},
+    json={"generateAll": true}
+)
 ```
 
 ### JavaScript/Node.js
 
 ```javascript
+// 生成期刊类总结
 const response = await fetch('http://localhost:8007/api/daily-summary/cli?user_id=1&api_key=mykey', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ limit: 30 })
+  body: JSON.stringify({ limit: 30, type: 'journal' })
 });
 const result = await response.json();
 
 if (result.status === 'success') {
   console.log(result.data.summary);
 }
+
+// 同时生成两类总结
+const response = await fetch('http://localhost:8007/api/daily-summary/cli?user_id=1&api_key=mykey', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ generateAll: true })
+});
 ```
 
 ### Go
@@ -214,7 +257,12 @@ func main() {
     params.Add("api_key", "mykey")
     baseURL.RawQuery = params.Encode()
 
-    body, _ := json.Marshal(map[string]int{"limit": 30})
+    // 生成期刊类总结
+    body, _ := json.Marshal(map[string]interface{}{"limit": 30, "type": "journal"})
+    resp, _ := http.Post(baseURL.String(), "application/json", bytes.NewBuffer(body))
+
+    // 同时生成两类总结
+    body, _ := json.Marshal(map[string]interface{}{"generateAll": true})
     resp, _ := http.Post(baseURL.String(), "application/json", bytes.NewBuffer(body))
 
     var result map[string]interface{}
