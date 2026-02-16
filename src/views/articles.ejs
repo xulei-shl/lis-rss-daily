@@ -185,25 +185,25 @@
 
       try {
         const res = await fetch(\`/api/articles?\${params}\`);
-    if (!res.ok) throw new Error('Failed to fetch');
+        if (!res.ok) throw new Error('Failed to fetch');
 
-    const data = await res.json();
-    currentPage = data.page || 1;
-    totalPages = data.totalPages || 1;
+        const data = await res.json();
+        currentPage = data.page || 1;
+        totalPages = data.totalPages || 1;
 
-    renderArticles(data.articles || []);
-    renderResultsCount(data.total || 0);
-    renderPagination();
-  } catch (err) {
-    console.error('Failed to load articles:', err);
-    container.innerHTML = \`
-      <div class="empty-state">
-        <div class="empty-state-title">加载失败</div>
-        <div class="empty-state-desc">请稍后重试</div>
-      </div>
-    \`;
-  }
-}
+        renderArticles(data.articles || []);
+        renderResultsCount(data.total || 0);
+        renderPagination();
+      } catch (err) {
+        console.error('Failed to load articles:', err);
+        container.innerHTML = \`
+          <div class="empty-state">
+            <div class="empty-state-title">加载失败</div>
+            <div class="empty-state-desc">请稍后重试</div>
+          </div>
+        \`;
+      }
+    }
 
 // Render articles
 function renderArticles(articles) {
