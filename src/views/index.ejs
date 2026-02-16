@@ -299,7 +299,7 @@ function renderArticleCard(article, index) {
           \${needsTruncate ? \`
             <span class="summary-short">\${truncate(content, TRUNCATE_LENGTH)}</span>
             <span class="summary-full" style="display: none;">\${escapeHtml(content)}</span>
-            <button class="summary-toggle" onclick="toggleSummary(this)">[展开]</button>
+            <button class="summary-toggle" onclick="toggleSummary(this)">展开</button>
           \` : escapeHtml(content)}
         </div>
       \` : ''}
@@ -375,12 +375,12 @@ function toggleSummary(btn) {
     // 展开
     shortText.style.display = 'none';
     fullText.style.display = 'inline';
-    btn.textContent = '[收起]';
+    btn.textContent = '收起';
   } else {
     // 收起
     fullText.style.display = 'none';
     shortText.style.display = 'inline';
-    btn.textContent = '[展开]';
+    btn.textContent = '展开';
   }
 }
 
