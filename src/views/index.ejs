@@ -303,15 +303,15 @@ function renderArticleCard(article, index) {
           \` : escapeHtml(content)}
         </div>
       \` : ''}
-      \${article.tags ? \`
+      <div class="article-footer">
         <div class="article-tags">
-          \${article.tags.split(',').map(tag => \`<span class="article-tag">#\${escapeHtml(tag.trim())}</span>\`).join('')}
+          \${article.tags ? article.tags.split(',').map(tag => \`<span class="article-tag">#\${escapeHtml(tag.trim())}</span>\`).join('') : ''}
         </div>
-      \` : ''}
-      <div class="article-actions">
-        <button class="btn-icon" onclick="toggleReadStatus(\${article.id}, false)">
-          已读
-        </button>
+        <div class="article-actions">
+          <button class="btn-icon" onclick="toggleReadStatus(\${article.id}, false)">
+            已读
+          </button>
+        </div>
       </div>
     </div>
   \`;
