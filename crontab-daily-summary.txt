@@ -1,0 +1,6 @@
+# LIS-RSS-Daily 每日总结定时任务
+# 每天早上5:30生成期刊总结
+30 5 * * * /opt/lis-rss-daily/scripts/auto-daily-summary.sh journal >> /opt/lis-rss-daily/logs/cron-journal.log 2>&1
+
+# 每天早上5:35生成博客资讯总结
+35 5 * * * /opt/lis-rss-daily/scripts/auto-daily-summary.sh blog_news >> /opt/lis-rss-daily/logs/cron-blog-news.log 2>&1
