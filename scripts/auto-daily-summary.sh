@@ -20,6 +20,12 @@ if [ -z "$TYPE" ]; then
     exit 1
 fi
 
+# 验证 TYPE 参数值
+if [[ "$TYPE" != "journal" && "$TYPE" != "blog_news" ]]; then
+    echo "错误: TYPE 必须是 'journal' 或 'blog_news'，当前值: '$TYPE'" >&2
+    exit 1
+fi
+
 if [ -z "$CLI_API_KEY" ]; then
     echo "错误: 必须设置 CLI_API_KEY 环境变量" >&2
     exit 1
@@ -50,13 +56,18 @@ if [ "$HTTP_CODE" = "200" ]; then
     # 解析响应
     STATUS=$(echo "$BODY" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
 
+    if [ -z "$STATUS" ]; then
+        log "❌ 响应格式错误，无法解析 status 字段: $BODY"
+        exit 1
+    fi
+
     if [ "$STATUS" = "success" ]; then
         TOTAL=$(echo "$BODY" | grep -o '"totalArticles":[0-9]*' | cut -d':' -f2)
         log "✅ 生成成功，共 $TOTAL 篇文章"
     elif [ "$STATUS" = "empty" ]; then
         log "⚠️  当日无通过的文章"
     else
-        log "❌ 生成失败: $BODY"
+        log "❌ 生成失败 (status=$STATUS): $BODY"
     fi
 else
     log "❌ API 调用失败 (HTTP $HTTP_CODE): $BODY"
