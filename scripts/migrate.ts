@@ -60,48 +60,64 @@ async function runMigrations() {
       // ============================================================
       // 001: 初始化脚本（新数据库时执行）
       // ============================================================
-      if (file === '001_init.sql') {
-        const hasUsers = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
-        if (!hasUsers) {
-          const sql = fs.readFileSync(fullPath, 'utf-8');
-          db.exec(sql);
-          console.log('      → Initialized database');
-        } else {
-          console.log('      → Skipped (already initialized)');
-        }
-        continue;
-      }
+      // if (file === '001_init.sql') {
+      //   const hasUsers = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
+      //   if (!hasUsers) {
+      //     const sql = fs.readFileSync(fullPath, 'utf-8');
+      //     db.exec(sql);
+      //     console.log('      → Initialized database');
+      //   } else {
+      //     console.log('      → Skipped (already initialized)');
+      //   }
+      //   continue;
+      // }
 
       // ============================================================
       // 009: 添加 summary_type 字段
       // ============================================================
-      if (file === '009_add_summary_type.sql') {
-        const hasSummaryType = hasColumn(db, 'daily_summaries', 'summary_type');
-        if (!hasSummaryType) {
-          db.exec('ALTER TABLE daily_summaries ADD COLUMN summary_type TEXT DEFAULT \'all\';');
-          console.log('      → Added summary_type column');
-        }
-        db.exec('UPDATE daily_summaries SET summary_type = \'all\' WHERE summary_type IS NULL;');
-        db.exec('DROP INDEX IF EXISTS idx_daily_summaries_user_date;');
-        db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_summaries_user_date_type ON daily_summaries(user_id, summary_date, summary_type);');
-        db.exec('CREATE INDEX IF NOT EXISTS idx_daily_summaries_type ON daily_summaries(summary_type);');
-        console.log('      → Migration completed');
-        continue;
-      }
+      // if (file === '009_add_summary_type.sql') {
+      //   const hasSummaryType = hasColumn(db, 'daily_summaries', 'summary_type');
+      //   if (!hasSummaryType) {
+      //     db.exec('ALTER TABLE daily_summaries ADD COLUMN summary_type TEXT DEFAULT \'all\';');
+      //     console.log('      → Added summary_type column');
+      //   }
+      //   db.exec('UPDATE daily_summaries SET summary_type = \'all\' WHERE summary_type IS NULL;');
+      //   db.exec('DROP INDEX IF EXISTS idx_daily_summaries_user_date;');
+      //   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_summaries_user_date_type ON daily_summaries(user_id, summary_date, summary_type);');
+      //   db.exec('CREATE INDEX IF NOT EXISTS idx_daily_summaries_type ON daily_summaries(summary_type);');
+      //   console.log('      → Migration completed');
+      //   continue;
+      // }
 
       // ============================================================
       // 010: 修复 daily_summaries 表的唯一约束
       // ============================================================
-      if (file === '010_fix_daily_summary_unique.sql') {
-        const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='daily_summaries'").get() as { sql: string } | undefined;
-        const needsFix = tableInfo?.sql.includes('UNIQUE(user_id, summary_date)') && !tableInfo?.sql.includes('UNIQUE(user_id, summary_date, summary_type)');
+      // if (file === '010_fix_daily_summary_unique.sql') {
+      //   const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='daily_summaries'").get() as { sql: string } | undefined;
+      //   const needsFix = tableInfo?.sql.includes('UNIQUE(user_id, summary_date)') && !tableInfo?.sql.includes('UNIQUE(user_id, summary_date, summary_type)');
 
-        if (needsFix) {
+      //   if (needsFix) {
+      //     const sql = fs.readFileSync(fullPath, 'utf-8');
+      //     db.exec(sql);
+      //     console.log('      → Fixed unique constraint');
+      //   } else {
+      //     console.log('      → Skipped (already correct)');
+      //   }
+      //   continue;
+      // }
+
+      // ============================================================
+      // 011: 将历史数据中拒绝的文章标记为已读
+      // ============================================================
+      if (file === '011_mark_rejected_as_read.sql') {
+        const hasIsReadColumn = hasColumn(db, 'articles', 'is_read');
+        if (!hasIsReadColumn) {
+          console.log('      → Skipped (is_read column not found, run 008_add_is_read.sql first)');
+        } else {
           const sql = fs.readFileSync(fullPath, 'utf-8');
           db.exec(sql);
-          console.log('      → Fixed unique constraint');
-        } else {
-          console.log('      → Skipped (already correct)');
+          const changes = db.prepare('SELECT changes() as count').get() as { count: number };
+          console.log(`      → Marked ${changes.count} rejected articles as read`);
         }
         continue;
       }

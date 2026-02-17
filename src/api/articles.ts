@@ -594,6 +594,9 @@ export async function batchUpdateFilterStatus(
   const now = new Date().toISOString();
 
   for (const update of updates) {
+    // 当文章被拒绝时，自动标记为已读
+    const isRead = update.status === 'rejected' ? 1 : undefined;
+
     await db
       .updateTable('articles')
       .set({
@@ -601,6 +604,7 @@ export async function batchUpdateFilterStatus(
         filter_score: update.score ?? null,
         filtered_at: now,
         updated_at: now,
+        ...(isRead !== undefined && { is_read: isRead }),
       })
       .where('id', '=', update.articleId)
       .execute();
