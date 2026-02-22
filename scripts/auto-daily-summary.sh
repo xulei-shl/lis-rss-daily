@@ -6,6 +6,22 @@
 
 set -e
 
+# 获取脚本所在目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# 加载 .env 文件（跳过无效的 shell 语法行）
+if [ -f "$PROJECT_DIR/.env" ]; then
+    while IFS='=' read -r key value; do
+        # 跳过注释行和空行
+        [[ "$key" =~ ^#.*$ ]] && continue
+        [[ -z "$key" ]] && continue
+        # 跳过包含特殊字符的值（如 cron 表达式）
+        [[ "$value" =~ ^[0-9\*\s]+$ ]] && continue
+        export "$key=$value"
+    done < "$PROJECT_DIR/.env"
+fi
+
 # 配置
 BASE_URL="${BASE_URL:-http://localhost:8007}"
 USER_ID="${USER_ID:-1}"
