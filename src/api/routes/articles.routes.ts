@@ -230,6 +230,72 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
 });
 
 /**
+ * GET /api/articles/vector-check
+ * 检查向量化配置是否完整
+ */
+router.get('/articles/vector-check', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId!;
+
+    // 检查 embedding 配置
+    const embeddingConfig = await getActiveConfigByType(userId, 'embedding');
+    const hasEmbedding = !!embeddingConfig;
+
+    // 检查 Chroma 配置和服务
+    const chromaSettings = await getChromaSettings(userId);
+    let chromaStatus = 'unknown';
+    try {
+      const client = await getClient(userId);
+      await client.heartbeat();
+      chromaStatus = 'available';
+    } catch {
+      chromaStatus = 'unavailable';
+    }
+
+    const embeddingMessage = hasEmbedding
+      ? 'Embedding 配置正常'
+      : '缺少 Embedding 配置。请在"LLM 配置"中添加一个 config_type 为 "embedding" 的配置。';
+
+    const chromaMessage = chromaStatus === 'available'
+      ? 'Chroma 服务正常'
+      : `Chroma 服务不可用 (${chromaSettings.host}:${chromaSettings.port})。请检查 Chroma 服务是否运行，或在"设置"中配置正确的 host 和 port。`;
+
+    res.json({
+      embedding: {
+        configured: hasEmbedding,
+        message: embeddingMessage,
+      },
+      chroma: {
+        configured: true,
+        status: chromaStatus,
+        host: chromaSettings.host,
+        port: chromaSettings.port,
+        message: chromaMessage,
+      },
+      ready: hasEmbedding && chromaStatus === 'available',
+    });
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    log.error({ error, userId: req.userId }, 'Failed to check vector config');
+    res.status(500).json({ error: errMsg });
+  }
+});
+
+/**
+ * GET /api/articles/sources
+ * Get merged sources list (RSS sources and journals combined by name)
+ */
+router.get('/articles/sources', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const sources = await articleService.getMergedSources(req.userId!);
+    res.json({ sources });
+  } catch (error) {
+    log.error({ error, userId: req.userId }, 'Failed to get merged sources');
+    res.status(500).json({ error: 'Failed to get merged sources' });
+  }
+});
+
+/**
  * GET /api/articles/:id
  * Get single article by ID
  */
@@ -323,58 +389,6 @@ router.get('/articles/:id/related', requireAuth, async (req: AuthRequest, res) =
 });
 
 /**
- * GET /api/articles/vector-check
- * 检查向量化配置是否完整
- */
-router.get('/articles/vector-check', requireAuth, async (req: AuthRequest, res) => {
-  try {
-    const userId = req.userId!;
-
-    // 检查 embedding 配置
-    const embeddingConfig = await getActiveConfigByType(userId, 'embedding');
-    const hasEmbedding = !!embeddingConfig;
-
-    // 检查 Chroma 配置和服务
-    const chromaSettings = await getChromaSettings(userId);
-    let chromaStatus = 'unknown';
-    try {
-      const client = await getClient(userId);
-      await client.heartbeat();
-      chromaStatus = 'available';
-    } catch {
-      chromaStatus = 'unavailable';
-    }
-
-    const embeddingMessage = hasEmbedding
-      ? 'Embedding 配置正常'
-      : '缺少 Embedding 配置。请在"LLM 配置"中添加一个 config_type 为 "embedding" 的配置。';
-
-    const chromaMessage = chromaStatus === 'available'
-      ? 'Chroma 服务正常'
-      : `Chroma 服务不可用 (${chromaSettings.host}:${chromaSettings.port})。请检查 Chroma 服务是否运行，或在"设置"中配置正确的 host 和 port。`;
-
-    res.json({
-      embedding: {
-        configured: hasEmbedding,
-        message: embeddingMessage,
-      },
-      chroma: {
-        configured: true,
-        status: chromaStatus,
-        host: chromaSettings.host,
-        port: chromaSettings.port,
-        message: chromaMessage,
-      },
-      ready: hasEmbedding && chromaStatus === 'available',
-    });
-  } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error);
-    log.error({ error, userId: req.userId }, 'Failed to check vector config');
-    res.status(500).json({ error: errMsg });
-  }
-});
-
-/**
  * PATCH /api/articles/:id/read
  * Update article read status
  */
@@ -442,31 +456,34 @@ router.post('/articles/batch-read', requireAuth, async (req: AuthRequest, res) =
  */
 router.post('/articles/mark-all-read', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const { filterStatus, daysAgo } = req.body;
+    const {
+      filterStatus,
+      daysAgo,
+      rssSourceId,
+      journalId,
+      processStatus,
+      isRead,
+      search,
+      createdAfter,
+      createdBefore,
+    } = req.body;
 
     const count = await articleService.markAllAsRead(req.userId!, {
       filterStatus,
       daysAgo,
+      rssSourceId: rssSourceId ? parseInt(rssSourceId) : undefined,
+      journalId: journalId ? parseInt(journalId) : undefined,
+      processStatus,
+      isRead,
+      search,
+      createdAfter,
+      createdBefore,
     });
 
     res.json({ success: true, count });
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to mark all articles as read');
     res.status(500).json({ error: 'Failed to mark all articles as read' });
-  }
-});
-
-/**
- * GET /api/articles/sources
- * Get merged sources list (RSS sources and journals combined by name)
- */
-router.get('/articles/sources', requireAuth, async (req: AuthRequest, res) => {
-  try {
-    const sources = await articleService.getMergedSources(req.userId!);
-    res.json({ sources });
-  } catch (error) {
-    log.error({ error, userId: req.userId }, 'Failed to get merged sources');
-    res.status(500).json({ error: 'Failed to get merged sources' });
   }
 });
 

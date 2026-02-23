@@ -133,19 +133,39 @@
     let sources = [];  // Store merged sources with type info
 
     async function loadSources() {
-      try {
-        const res = await fetch('/api/articles/sources');
-        const data = await res.json();
-        sources = data.sources || [];
+      const select = document.getElementById('filterSource');
+      if (!select) {
+        console.error('filterSource element not found');
+        return;
+      }
 
-        const select = document.getElementById('filterSource');
+      try {
+        console.log('Loading sources...');
+        const res = await fetch('/api/articles/sources', { credentials: 'same-origin' });
+        const text = await res.text();
+        console.log('Response status:', res.status, 'body:', text);
+        if (!res.ok) {
+          console.error('Failed to load sources:', res.status, res.statusText);
+          return;
+        }
+        const data = JSON.parse(text);
+        console.log('Sources loaded:', data);
+        sources = data.sources || [];
+        console.log('Sources array length:', sources.length);
+
+        // 清空现有选项（保留第一个"全部来源"）
+        while (select.options.length > 1) {
+          select.remove(1);
+        }
+
         sources.forEach(source => {
           const option = document.createElement('option');
           option.value = source.id;
-          option.textContent = source.name;
+          option.textContent = source.name || '(no name)';
           option.dataset.type = source.type;
           select.appendChild(option);
         });
+        console.log('Options added to select:', select.options.length - 1, 'new options');
       } catch (err) {
         console.error('Failed to load sources:', err);
       }
@@ -173,10 +193,10 @@
       // 日期范围优先于默认的 daysAgo
       const hasDateRange = dateFrom || dateTo;
 
-      // 解析来源 ID（格式: "rss:{id}" 或 "journal:{id}"）
+      // 解析来源 ID（格式: "rss:{id}" 或 "journal:{id}" 或 "mixed:{id}"）
       if (sourceId) {
         const [type, id] = sourceId.split(':');
-        if (type === 'rss') {
+        if (type === 'rss' || type === 'mixed') {
           // 可能是单个 RSS 或混合类型
           const source = sources.find(s => s.id === sourceId);
           if (source && source.rssIds && source.rssIds.length > 0) {
@@ -185,7 +205,8 @@
           } else {
             params.append('rssSourceId', id);
           }
-        } else if (type === 'journal') {
+        } 
+        if (type === 'journal' || type === 'mixed') {
           const source = sources.find(s => s.id === sourceId);
           if (source && source.journalIds && source.journalIds.length > 0) {
             params.append('journalId', source.journalIds[0].toString());
@@ -616,17 +637,18 @@ async function markAllAsRead() {
     const dateTo = document.getElementById('dateTo').value;
 
     const body = { filterStatus: 'passed', daysAgo: 30 };
-    // 解析来源 ID（格式: "rss:{id}" 或 "journal:{id}"）
+    // 解析来源 ID（格式: "rss:{id}" 或 "journal:{id}" 或 "mixed:{id}"）
     if (sourceId) {
       const [type, id] = sourceId.split(':');
-      if (type === 'rss') {
+      if (type === 'rss' || type === 'mixed') {
         const source = sources.find(s => s.id === sourceId);
         if (source && source.rssIds && source.rssIds.length > 0) {
           body.rssSourceId = source.rssIds[0];
         } else {
           body.rssSourceId = parseInt(id);
         }
-      } else if (type === 'journal') {
+      }
+      if (type === 'journal' || type === 'mixed') {
         const source = sources.find(s => s.id === sourceId);
         if (source && source.journalIds && source.journalIds.length > 0) {
           body.journalId = source.journalIds[0];

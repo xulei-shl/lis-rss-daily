@@ -502,11 +502,24 @@ export async function getUserArticles(
     ]));
 
   // 来源筛选：支持 RSS 源或期刊
-  if (options.rssSourceId !== undefined) {
-    query = query.where('articles.rss_source_id', '=', options.rssSourceId);
-  }
-  if (options.journalId !== undefined) {
-    query = query.where('articles.journal_id', '=', options.journalId);
+  // 如果同时提供了 rssSourceId 和 journalId（混合类型），使用 OR 条件
+  const hasSourceFilter = options.rssSourceId !== undefined || options.journalId !== undefined;
+  if (hasSourceFilter) {
+    if (options.rssSourceId !== undefined && options.journalId !== undefined) {
+      // 同时筛选 RSS 和期刊（混合类型），使用 OR
+      const rssId = options.rssSourceId;
+      const journalId = options.journalId;
+      query = query.where((eb) => eb.or([
+        eb('articles.rss_source_id', '=', rssId),
+        eb('articles.journal_id', '=', journalId),
+      ]));
+    } else if (options.rssSourceId !== undefined) {
+      // 仅筛选 RSS
+      query = query.where('articles.rss_source_id', '=', options.rssSourceId);
+    } else if (options.journalId !== undefined) {
+      // 仅筛选期刊
+      query = query.where('articles.journal_id', '=', options.journalId);
+    }
   }
 
   if (options.filterStatus !== undefined) {
@@ -573,11 +586,22 @@ export async function getUserArticles(
     ]));
 
   // Re-apply filters (same logic as above)
-  if (options.rssSourceId !== undefined) {
-    articlesQuery = articlesQuery.where('articles.rss_source_id', '=', options.rssSourceId);
-  }
-  if (options.journalId !== undefined) {
-    articlesQuery = articlesQuery.where('articles.journal_id', '=', options.journalId);
+  if (hasSourceFilter) {
+    if (options.rssSourceId !== undefined && options.journalId !== undefined) {
+      // 同时筛选 RSS 和期刊（混合类型），使用 OR
+      const rssId = options.rssSourceId;
+      const journalId = options.journalId;
+      articlesQuery = articlesQuery.where((eb) => eb.or([
+        eb('articles.rss_source_id', '=', rssId),
+        eb('articles.journal_id', '=', journalId),
+      ]));
+    } else if (options.rssSourceId !== undefined) {
+      // 仅筛选 RSS
+      articlesQuery = articlesQuery.where('articles.rss_source_id', '=', options.rssSourceId);
+    } else if (options.journalId !== undefined) {
+      // 仅筛选期刊
+      articlesQuery = articlesQuery.where('articles.journal_id', '=', options.journalId);
+    }
   }
   if (options.filterStatus !== undefined) {
     articlesQuery = articlesQuery.where('articles.filter_status', '=', options.filterStatus);
@@ -1044,9 +1068,9 @@ export async function getUnreadCount(
  * 合并来源选项接口
  */
 export interface MergedSourceOption {
-  id: string;           // 格式: "rss:{id}" 或 "journal:{id}"
+  id: string;           // 格式: "rss:{id}" 或 "journal:{id}" 或 "mixed:{id}"
   name: string;         // 来源名称
-  type: 'rss' | 'journal';
+  type: 'rss' | 'journal' | 'mixed';
   rssIds?: number[];    // 当 name 相同时，包含多个 RSS ID
   journalIds?: number[]; // 当 name 相同时，包含多个期刊 ID
 }
@@ -1085,9 +1109,12 @@ export async function getMergedSources(userId: number): Promise<MergedSourceOpti
         existing.rssIds = existing.rssIds || [];
         existing.rssIds.push(source.id);
       } else {
-        // 已有期刊，需要转换
+        // 已有期刊，需要转换为混合类型
         existing.journalIds = existing.journalIds || [];
-        existing.rssIds = [source.id];
+        existing.rssIds = existing.rssIds || [];
+        existing.rssIds.push(source.id);
+        existing.type = 'mixed';
+        existing.id = `mixed:${existing.journalIds[0]}`;
       }
     } else {
       sourceMap.set(source.name, {
@@ -1109,7 +1136,8 @@ export async function getMergedSources(userId: number): Promise<MergedSourceOpti
       } else {
         // 已有 RSS，需要转换
         existing.rssIds = existing.rssIds || [];
-        existing.journalIds = [journal.id];
+        existing.journalIds = existing.journalIds || [];
+        existing.journalIds.push(journal.id);
         existing.type = 'mixed'; // 混合类型
         existing.id = `mixed:${journal.id}`; // 更新 ID
       }

@@ -60,11 +60,23 @@ router.get('/filter/logs', requireAuth, async (req: AuthRequest, res) => {
     const domainId = req.query.domainId ? parseInt(req.query.domainId as string) : undefined;
     const isPassed = req.query.isPassed;
 
+    // Build base query - handle both RSS and journal articles
+    // Join with journals for journal articles, or rss_sources for RSS articles
     let query = db
       .selectFrom('article_filter_logs')
       .innerJoin('articles', 'articles.id', 'article_filter_logs.article_id')
-      .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-      .where('rss_sources.user_id', '=', req.userId!);
+      .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+      .leftJoin('journals', 'journals.id', 'articles.journal_id')
+      .where((eb) =>
+        // Match articles where user owns either the RSS source OR the journal
+        eb.or([
+          eb('rss_sources.user_id', '=', req.userId!),
+          eb.and([
+            eb('articles.journal_id', 'is not', null),
+            eb('journals.user_id', '=', req.userId!)
+          ])
+        ])
+      );
 
     if (domainId !== undefined && !isNaN(domainId)) {
       query = query.where('article_filter_logs.domain_id', '=', domainId);

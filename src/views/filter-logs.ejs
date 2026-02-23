@@ -378,7 +378,7 @@
       <tr>
         <th>时间</th>
         <th>期刊</th>
-        <th>年/期</th>
+        <th>年/卷/期</th>
         <th>结果</th>
         <th>新增</th>
         <th>耗时</th>
@@ -410,7 +410,7 @@ let domains = [];
 let currentDomainFilter = '';
 let currentResultFilter = '';
 
-// Tab switching
+// Tab switching and initial data loading
 document.addEventListener('DOMContentLoaded', () => {
   const tabs = document.querySelectorAll('.logs-tab');
   tabs.forEach(tab => {
@@ -495,7 +495,7 @@ function renderCrawlLogs(logs, total) {
     return '<tr>' +
       '<td class="timestamp">' + formatDate(log.created_at) + '</td>' +
       '<td>' + escapeHtml(log.journal_name || '-') + '</td>' +
-      '<td>' + log.crawl_year + '-' + log.crawl_issue + '</td>' +
+      '<td>' + formatYearVolumeIssue(log.crawl_year, log.crawl_volume, log.crawl_issue) + '</td>' +
       '<td>' + (statusMap[log.status] || log.status) + '</td>' +
       '<td>' + (log.new_articles_count !== null ? log.new_articles_count : '-') + '</td>' +
       '<td>' + duration + '</td>' +
@@ -572,11 +572,7 @@ function applyCrawlFilters() {
   loadCrawlLogs(1);
 }
 
-/* ===== Filter Logs (original code) ===== */
-document.addEventListener('DOMContentLoaded', () => {
-  loadDomains();
-  loadLogs(1);
-});
+/* ===== Filter Logs ===== */
 
 async function loadDomains() {
   try {
@@ -781,6 +777,12 @@ function formatDate(dateStr) {
     hour: '2-digit',
     minute: '2-digit'
   });
+}
+
+function formatYearVolumeIssue(year, volume, issue) {
+  if (!year) return '-';
+  if (!volume) return year + '-' + (issue || '-');
+  return year + '-Vol.' + volume + '-Issue.' + issue;
 }
 </script>
 ` }) %>
