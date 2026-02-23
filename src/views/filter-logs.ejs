@@ -1,5 +1,39 @@
 <%- include('layout', { pageTitle: pageTitle, pageStyles: '', body: `
 <style>
+  /* Tab navigation */
+  .logs-tabs {
+    max-width: 1200px;
+    margin: 16px auto 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .logs-tab {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--dim);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .logs-tab.active {
+    color: var(--text);
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 1px rgba(26, 77, 122, 0.2);
+  }
+
+  /* Tab panels */
+  .logs-tab-panel {
+    display: none;
+  }
+
+  .logs-tab-panel.active {
+    display: block;
+  }
+
   .logs-container {
     max-width: 1200px;
   }
@@ -88,7 +122,7 @@
   }
 
   .article-title a:hover {
-    color: var(--accent);
+    color: var(--accent-primary);
   }
 
   .status-badge {
@@ -235,7 +269,7 @@
     min-width: 40px;
     text-align: center;
     text-decoration: none;
-    color: var(--text);
+    color: var(--accent-primary);
   }
 
   .pagination a:hover {
@@ -244,12 +278,31 @@
   }
 
   .pagination .current {
-    background: var(--accent);
+    background: var(--accent-primary);
     color: white;
-    border-color: var(--accent);
+    border-color: var(--accent-primary);
+  }
+
+  .pagination .disabled {
+    color: var(--dim);
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .pagination .disabled:hover {
+    background: transparent;
+    border-color: var(--border);
   }
 </style>
 
+<!-- Tab navigation -->
+<div class="logs-tabs">
+  <button class="logs-tab active" data-tab="filter">过滤日志</button>
+  <button class="logs-tab" data-tab="crawl">爬取日志</button>
+</div>
+
+<!-- Filter Logs Panel -->
+<div class="logs-tab-panel active" id="filterLogsPanel">
 <div class="logs-container">
   <div class="section-header">
     <h2>过滤日志</h2>
@@ -299,8 +352,57 @@
   <div class="pagination" id="pagination" style="display: none;">
   </div>
 </div>
+</div>
+
+<!-- Crawl Logs Panel -->
+<div class="logs-tab-panel" id="crawlLogsPanel">
+<div class="logs-container">
+  <div class="section-header">
+    <h2>爬取日志</h2>
+  </div>
+
+  <div class="filters">
+    <div class="filter-group">
+      <label>结果:</label>
+      <select id="crawlResultFilter" onchange="applyCrawlFilters()">
+        <option value="">全部</option>
+        <option value="success">成功</option>
+        <option value="failed">失败</option>
+        <option value="partial">部分成功</option>
+      </select>
+    </div>
+  </div>
+
+  <table class="logs-table" id="crawlLogsTable">
+    <thead>
+      <tr>
+        <th>时间</th>
+        <th>期刊</th>
+        <th>年/期</th>
+        <th>结果</th>
+        <th>新增</th>
+        <th>耗时</th>
+      </tr>
+    </thead>
+    <tbody id="crawlLogsBody">
+      <!-- Dynamic content -->
+    </tbody>
+  </table>
+
+  <div id="crawlEmptyState" class="empty-state" style="display: none;">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+    <p>暂无爬取日志</p>
+  </div>
+
+  <div class="pagination" id="crawlPagination" style="display: none;">
+  </div>
+</div>
+</div>
 
 <script>
+// Filter logs variables
 let currentPage = 1;
 let totalPages = 1;
 const pageSize = 20;
@@ -308,7 +410,169 @@ let domains = [];
 let currentDomainFilter = '';
 let currentResultFilter = '';
 
-// Load data on page load
+// Tab switching
+document.addEventListener('DOMContentLoaded', () => {
+  const tabs = document.querySelectorAll('.logs-tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      // Remove active from all tabs and panels
+      document.querySelectorAll('.logs-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.logs-tab-panel').forEach(p => p.classList.remove('active'));
+
+      // Add active to clicked tab and corresponding panel
+      tab.classList.add('active');
+      const tabName = tab.dataset.tab;
+      document.getElementById(tabName + 'LogsPanel').classList.add('active');
+    });
+  });
+
+  loadDomains();
+  loadLogs(1);
+  loadCrawlLogs(1);
+});
+
+// Crawl logs variables and functions
+let crawlCurrentPage = 1;
+let crawlTotalPages = 1;
+const crawlPageSize = 20;
+let crawlCurrentResultFilter = '';
+
+async function loadCrawlLogs(page = 1) {
+  try {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: crawlPageSize.toString()
+    });
+
+    if (crawlCurrentResultFilter) {
+      params.append('result', crawlCurrentResultFilter);
+    }
+
+    const res = await fetch('/api/journals/logs?' + params.toString());
+    const data = await res.json();
+
+    crawlCurrentPage = data.page || 1;
+    crawlTotalPages = data.totalPages || 1;
+
+    renderCrawlLogs(data.logs || [], data.total || 0);
+  } catch (err) {
+    console.error('Failed to load crawl logs:', err);
+    toast.error('加载爬取日志失败: ' + (err.message || '网络错误'));
+    showCrawlEmptyState();
+  }
+}
+
+function showCrawlEmptyState() {
+  document.getElementById('crawlLogsTable').style.display = 'none';
+  document.getElementById('crawlEmptyState').style.display = 'block';
+  document.getElementById('crawlPagination').style.display = 'none';
+}
+
+function renderCrawlLogs(logs, total) {
+  const tbody = document.getElementById('crawlLogsBody');
+  const emptyState = document.getElementById('crawlEmptyState');
+  const table = document.getElementById('crawlLogsTable');
+  const pagination = document.getElementById('crawlPagination');
+
+  if (logs.length === 0) {
+    table.style.display = 'none';
+    emptyState.style.display = 'block';
+    pagination.style.display = 'none';
+    return;
+  }
+
+  table.style.display = 'table';
+  emptyState.style.display = 'none';
+
+  const statusMap = {
+    'success': '<span class="status-badge passed">成功</span>',
+    'failed': '<span class="status-badge rejected">失败</span>',
+    'partial': '<span class="status-badge" style="background: rgba(251, 191, 36, 0.15); color: #f59e0b;">部分成功</span>'
+  };
+
+  tbody.innerHTML = logs.map(log => {
+    const duration = log.duration_ms ? Math.round(log.duration_ms / 1000) + 's' : '-';
+    return '<tr>' +
+      '<td class="timestamp">' + formatDate(log.created_at) + '</td>' +
+      '<td>' + escapeHtml(log.journal_name || '-') + '</td>' +
+      '<td>' + log.crawl_year + '-' + log.crawl_issue + '</td>' +
+      '<td>' + (statusMap[log.result] || log.result) + '</td>' +
+      '<td>' + (log.new_articles_count !== null ? log.new_articles_count : '-') + '</td>' +
+      '<td>' + duration + '</td>' +
+    '</tr>';
+  }).join('');
+
+  renderCrawlPagination();
+}
+
+function renderCrawlPagination() {
+  const pagination = document.getElementById('crawlPagination');
+
+  if (crawlTotalPages <= 1) {
+    pagination.style.display = 'none';
+    return;
+  }
+
+  pagination.style.display = 'flex';
+
+  let html = '';
+
+  // Previous button
+  if (crawlCurrentPage > 1) {
+    html += '<a href="#" onclick="goToCrawlPage(' + (crawlCurrentPage - 1) + '); return false;">&laquo; 上一页</a>';
+  } else {
+    html += '<span class="disabled">&laquo; 上一页</span>';
+  }
+
+  // Page numbers (show max 5 pages)
+  const startPage = Math.max(1, crawlCurrentPage - 2);
+  const endPage = Math.min(crawlTotalPages, startPage + 4);
+
+  // Always show first page
+  if (startPage > 1) {
+    html += '<a href="#" onclick="goToCrawlPage(1); return false;">1</a>';
+    if (startPage > 2) {
+      html += '<span>...</span>';
+    }
+  }
+
+  // Page range
+  for (let i = startPage; i <= endPage; i++) {
+    if (i === crawlCurrentPage) {
+      html += '<span class="current">' + i + '</span>';
+    } else {
+      html += '<a href="#" onclick="goToCrawlPage(' + i + '); return false;">' + i + '</a>';
+    }
+  }
+
+  // Always show last page
+  if (endPage < crawlTotalPages) {
+    if (endPage < crawlTotalPages - 1) {
+      html += '<span>...</span>';
+    }
+    html += '<a href="#" onclick="goToCrawlPage(' + crawlTotalPages + '); return false;">' + crawlTotalPages + '</a>';
+  }
+
+  // Next button
+  if (crawlCurrentPage < crawlTotalPages) {
+    html += '<a href="#" onclick="goToCrawlPage(' + (crawlCurrentPage + 1) + '); return false;">下一页 &raquo;</a>';
+  } else {
+    html += '<span class="disabled">下一页 &raquo;</span>';
+  }
+
+  pagination.innerHTML = html;
+}
+
+function goToCrawlPage(page) {
+  loadCrawlLogs(page);
+}
+
+function applyCrawlFilters() {
+  crawlCurrentResultFilter = document.getElementById('crawlResultFilter').value;
+  loadCrawlLogs(1);
+}
+
+/* ===== Filter Logs (original code) ===== */
 document.addEventListener('DOMContentLoaded', () => {
   loadDomains();
   loadLogs(1);
@@ -443,20 +707,26 @@ function renderPagination() {
 
   let html = '';
 
-  // Previous
-  html += currentPage > 1
-    ? '<a href="#" onclick="goToPage(' + (currentPage - 1) + '); return false;">← 上一页</a>'
-    : '<span>← 上一页</span>';
-
-  // Page numbers
-  const startPage = Math.max(1, currentPage - 2);
-  const endPage = Math.min(totalPages, currentPage + 2);
-
-  if (startPage > 1) {
-    html += '<a href="#" onclick="goToPage(1); return false;">1</a>';
-    if (startPage > 2) html += '<span>...</span>';
+  // Previous button
+  if (currentPage > 1) {
+    html += '<a href="#" onclick="goToPage(' + (currentPage - 1) + '); return false;">&laquo; 上一页</a>';
+  } else {
+    html += '<span class="disabled">&laquo; 上一页</span>';
   }
 
+  // Page numbers (show max 5 pages)
+  const startPage = Math.max(1, currentPage - 2);
+  const endPage = Math.min(totalPages, startPage + 4);
+
+  // Always show first page
+  if (startPage > 1) {
+    html += '<a href="#" onclick="goToPage(1); return false;">1</a>';
+    if (startPage > 2) {
+      html += '<span>...</span>';
+    }
+  }
+
+  // Page range
   for (let i = startPage; i <= endPage; i++) {
     if (i === currentPage) {
       html += '<span class="current">' + i + '</span>';
@@ -465,15 +735,20 @@ function renderPagination() {
     }
   }
 
+  // Always show last page
   if (endPage < totalPages) {
-    if (endPage < totalPages - 1) html += '<span>...</span>';
+    if (endPage < totalPages - 1) {
+      html += '<span>...</span>';
+    }
     html += '<a href="#" onclick="goToPage(' + totalPages + '); return false;">' + totalPages + '</a>';
   }
 
-  // Next
-  html += currentPage < totalPages
-    ? '<a href="#" onclick="goToPage(' + (currentPage + 1) + '); return false;">下一页 →</a>'
-    : '<span>下一页 →</span>';
+  // Next button
+  if (currentPage < totalPages) {
+    html += '<a href="#" onclick="goToPage(' + (currentPage + 1) + '); return false;">下一页 &raquo;</a>';
+  } else {
+    html += '<span class="disabled">下一页 &raquo;</span>';
+  }
 
   pagination.innerHTML = html;
 }

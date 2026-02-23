@@ -49,17 +49,21 @@ router.get('/topic-domains/:domainId/keywords', requireAuth, async (req: AuthReq
 
 /**
  * GET /api/topic-keywords/all
- * Get all keywords with domain names
+ * Get all keywords with domain names (paginated)
  */
 router.get('/topic-keywords/all', requireAuth, async (req: AuthRequest, res) => {
   try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
     const isActive = req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
 
-    const keywords = await topicKeywordService.getAllKeywordsWithDomain(req.userId!, {
+    const result = await topicKeywordService.getAllKeywordsWithDomain(req.userId!, {
+      page,
+      limit,
       isActive,
     });
 
-    res.json(keywords);
+    res.json(result);
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to get all topic keywords');
     res.status(500).json({ error: 'Failed to get topic keywords' });

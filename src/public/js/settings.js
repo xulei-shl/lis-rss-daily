@@ -469,8 +469,7 @@ function renderPagination(type) {
   const paginationMap = {
     'rss': rssPagination,
     'llm': llmPagination,
-    'journals': journalsPagination,
-    'crawlLogs': crawlLogsPagination
+    'journals': journalsPagination
   };
   const pagination = paginationMap[type];
   if (!pagination) return;
@@ -1334,17 +1333,8 @@ let journalsPagination = {
   totalPages: 0
 };
 
-let crawlLogs = [];
-let crawlLogsPagination = {
-  page: 1,
-  limit: 10,
-  total: 0,
-  totalPages: 0
-};
-
 // Load journals on page load
 loadJournals();
-loadCrawlLogs();
 
 async function loadJournals(page = 1) {
   try {
@@ -1359,22 +1349,6 @@ async function loadJournals(page = 1) {
     renderPagination('journals');
   } catch (err) {
     console.error('Failed to load journals:', err);
-  }
-}
-
-async function loadCrawlLogs(page = 1) {
-  try {
-    const res = await fetch(`/api/journals/logs?page=${page}&limit=${crawlLogsPagination.limit}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('加载失败');
-    const data = await res.json();
-    crawlLogs = data.logs || [];
-    crawlLogsPagination.page = data.page || 1;
-    crawlLogsPagination.total = data.total || 0;
-    crawlLogsPagination.totalPages = data.totalPages || 0;
-    renderCrawlLogsTable();
-    renderPagination('crawlLogs');
-  } catch (err) {
-    console.error('Failed to load crawl logs:', err);
   }
 }
 
@@ -1427,41 +1401,6 @@ function renderJournalsTable() {
           '<button class="btn-icon" onclick="deleteJournal(' + journal.id + ')">删除</button>' +
         '</div>' +
       '</td>' +
-    '</tr>';
-  }).join('');
-}
-
-function renderCrawlLogsTable() {
-  const tbody = document.getElementById('crawlLogsBody');
-  const emptyState = document.getElementById('crawlLogsEmptyState');
-  const table = document.getElementById('crawlLogsTable');
-
-  if (!tbody) return;
-
-  if (crawlLogs.length === 0) {
-    table.style.display = 'none';
-    emptyState.style.display = 'block';
-    return;
-  }
-
-  table.style.display = 'table';
-  emptyState.style.display = 'none';
-
-  const statusLabels = {
-    'success': '<span class="status-badge active">成功</span>',
-    'failed': '<span class="status-badge inactive">失败</span>',
-    'partial': '<span class="status-badge" style="background: rgba(251, 191, 36, 0.15); color: #f59e0b;">部分成功</span>'
-  };
-
-  tbody.innerHTML = crawlLogs.map(function(log) {
-    const duration = log.duration_ms ? Math.round(log.duration_ms / 1000) + 's' : '-';
-    return '<tr>' +
-      '<td>' + formatDate(log.created_at) + '</td>' +
-      '<td class="rss-name">' + escapeHtml(log.journal_name || '-') + '</td>' +
-      '<td>' + log.crawl_year + '-' + log.crawl_issue + '</td>' +
-      '<td>' + (statusLabels[log.status] || log.status) + '</td>' +
-      '<td>' + (log.new_articles_count || 0) + '</td>' +
-      '<td>' + duration + '</td>' +
     '</tr>';
   }).join('');
 }
@@ -1677,7 +1616,6 @@ document.getElementById('crawlJournalForm')?.addEventListener('submit', async fu
 
       // Reload data
       loadJournals(journalsPagination.page);
-      loadCrawlLogs(1);
     } else {
       resultDiv.className = 'test-result error';
       resultDiv.textContent = '✗ 爬取失败: ' + (result.error || '未知错误');
@@ -1701,13 +1639,11 @@ document.getElementById('crawlJournalModal')?.addEventListener('click', function
   }
 });
 
-// Update goToPage to handle journals and crawlLogs
+// Update goToPage to handle journals
 const originalGoToPage = goToPage;
 goToPage = function(type, page) {
   if (type === 'journals') {
     loadJournals(page);
-  } else if (type === 'crawlLogs') {
-    loadCrawlLogs(page);
   } else {
     originalGoToPage(type, page);
   }

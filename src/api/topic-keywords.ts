@@ -384,13 +384,17 @@ export async function getAllActiveKeywords(
  * Get all keywords with domain names (for display)
  * @param userId - User ID
  * @param options - Query options
- * @returns Array of keywords with domain names
+ * @returns Paginated keywords with domain names
  */
 export async function getAllKeywordsWithDomain(
   userId: number,
   options: QueryOptions = {}
-): Promise<KeywordWithDomain[]> {
+): Promise<PaginatedTopicKeywords & { keywords: KeywordWithDomain[] }> {
   const db = getDb();
+
+  const page = options.page ?? 1;
+  const limit = options.limit ?? 10;
+  const offset = (page - 1) * limit;
 
   let query = db
     .selectFrom('topic_keywords')
@@ -403,13 +407,29 @@ export async function getAllKeywordsWithDomain(
     query = query.where('topic_keywords.is_active', '=', options.isActive ? 1 : 0);
   }
 
+  // Get total count
+  const totalCountResult = await query
+    .select((eb) => eb.fn.count('topic_keywords.id').as('count'))
+    .executeTakeFirst();
+
+  const total = Number(totalCountResult?.count ?? 0);
+
+  // Get paginated results
   const keywords = await query
     .orderBy('topic_domains.priority', 'desc')
     .orderBy('topic_keywords.weight', 'desc')
     .orderBy('topic_keywords.created_at', 'desc')
+    .limit(limit)
+    .offset(offset)
     .execute();
 
-  return keywords as KeywordWithDomain[];
+  return {
+    keywords: keywords as KeywordWithDomain[],
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+  };
 }
 
 /**

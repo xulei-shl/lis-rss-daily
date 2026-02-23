@@ -58,6 +58,8 @@
       </svg>
       <p>暂无关键词</p>
     </div>
+
+    <div id="keywordsPagination"></div>
   </div>
 
   </div>
@@ -145,6 +147,12 @@
   <script>
     let domains = [];
     let keywords = [];
+    let keywordsPagination = {
+      page: 1,
+      limit: 10,
+      total: 0,
+      totalPages: 0
+    };
 
     // Load domains and keywords on page load
     loadDomains();
@@ -161,11 +169,16 @@
       }
     }
 
-    async function loadKeywords() {
+    async function loadKeywords(page = 1) {
       try {
-        const res = await fetch('/api/topic-keywords/all');
-        keywords = await res.json() || [];
+        const res = await fetch('/api/topic-keywords/all?page=' + page + '&limit=' + keywordsPagination.limit);
+        const data = await res.json();
+        keywords = data.keywords || [];
+        keywordsPagination.page = data.page || 1;
+        keywordsPagination.total = data.total || 0;
+        keywordsPagination.totalPages = data.totalPages || 0;
         renderKeywords();
+        renderKeywordsPagination();
       } catch (err) {
         console.error('Failed to load keywords:', err);
       }
@@ -356,7 +369,7 @@ document.getElementById('domainForm').addEventListener('submit', async function(
     if (res.ok) {
       closeDomainModal();
       await loadDomains();
-      await loadKeywords();
+      await loadKeywords(keywordsPagination.page);
     } else {
       const result = await res.json();
       await showConfirm(result.error || '保存失败', {
@@ -400,7 +413,7 @@ document.getElementById('keywordForm').addEventListener('submit', async function
     if (res.ok) {
       closeKeywordModal();
       await loadDomains();
-      await loadKeywords();
+      await loadKeywords(keywordsPagination.page);
     } else {
       const result = await res.json();
       await showConfirm(result.error || '保存失败', {
@@ -432,7 +445,7 @@ async function deleteDomain(id) {
     const res = await fetch(\`/api/topic-domains/\${id}\`, { method: 'DELETE' });
     if (res.ok) {
       await loadDomains();
-      await loadKeywords();
+      await loadKeywords(keywordsPagination.page);
     } else {
       const result = await res.json();
       await showConfirm(result.error || '删除失败', {
@@ -463,8 +476,12 @@ async function deleteKeyword(id) {
   try {
     const res = await fetch(\`/api/topic-keywords/\${id}\`, { method: 'DELETE' });
     if (res.ok) {
+      // If current page is now empty (after delete), go to previous page
+      const newPage = keywords.length === 1 && keywordsPagination.page > 1
+        ? keywordsPagination.page - 1
+        : keywordsPagination.page;
       await loadDomains();
-      await loadKeywords();
+      await loadKeywords(newPage);
     } else {
       const result = await res.json();
       await showConfirm(result.error || '删除失败', {
@@ -480,6 +497,72 @@ async function deleteKeyword(id) {
       okButtonType: 'btn-secondary'
     });
   }
+}
+
+// Render pagination controls for keywords
+function renderKeywordsPagination() {
+  const container = document.getElementById('keywordsPagination');
+  if (!container) return;
+  const pagination = keywordsPagination;
+
+  // Only show pagination if there's more than one page
+  if (pagination.totalPages <= 1) {
+    container.innerHTML = '';
+    return;
+  }
+
+  let html = '<div class="pagination">';
+
+  // Previous button
+  if (pagination.page > 1) {
+    html += '<a href="#" onclick="goToKeywordsPage(' + (pagination.page - 1) + '); return false;">&laquo; 上一页</a>';
+  } else {
+    html += '<span class="disabled">&laquo; 上一页</span>';
+  }
+
+  // Page numbers (show max 5 pages)
+  const startPage = Math.max(1, pagination.page - 2);
+  const endPage = Math.min(pagination.totalPages, startPage + 4);
+
+  // Always show first page
+  if (startPage > 1) {
+    html += '<a href="#" onclick="goToKeywordsPage(1); return false;">1</a>';
+    if (startPage > 2) {
+      html += '<span>...</span>';
+    }
+  }
+
+  // Page range
+  for (let i = startPage; i <= endPage; i++) {
+    if (i === pagination.page) {
+      html += '<span class="current">' + i + '</span>';
+    } else {
+      html += '<a href="#" onclick="goToKeywordsPage(' + i + '); return false;">' + i + '</a>';
+    }
+  }
+
+  // Always show last page
+  if (endPage < pagination.totalPages) {
+    if (endPage < pagination.totalPages - 1) {
+      html += '<span>...</span>';
+    }
+    html += '<a href="#" onclick="goToKeywordsPage(' + pagination.totalPages + '); return false;">' + pagination.totalPages + '</a>';
+  }
+
+  // Next button
+  if (pagination.page < pagination.totalPages) {
+    html += '<a href="#" onclick="goToKeywordsPage(' + (pagination.page + 1) + '); return false;">下一页 &raquo;</a>';
+  } else {
+    html += '<span class="disabled">下一页 &raquo;</span>';
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+// Navigate to specific page for keywords
+function goToKeywordsPage(page) {
+  loadKeywords(page);
 }
 
 // Utility functions
