@@ -140,18 +140,13 @@
       }
 
       try {
-        console.log('Loading sources...');
         const res = await fetch('/api/articles/sources', { credentials: 'same-origin' });
-        const text = await res.text();
-        console.log('Response status:', res.status, 'body:', text);
         if (!res.ok) {
           console.error('Failed to load sources:', res.status, res.statusText);
           return;
         }
-        const data = JSON.parse(text);
-        console.log('Sources loaded:', data);
+        const data = await res.json();
         sources = data.sources || [];
-        console.log('Sources array length:', sources.length);
 
         // 清空现有选项（保留第一个"全部来源"）
         while (select.options.length > 1) {
@@ -161,11 +156,10 @@
         sources.forEach(source => {
           const option = document.createElement('option');
           option.value = source.id;
-          option.textContent = source.name || '(no name)';
+          option.textContent = source.name;
           option.dataset.type = source.type;
           select.appendChild(option);
         });
-        console.log('Options added to select:', select.options.length - 1, 'new options');
       } catch (err) {
         console.error('Failed to load sources:', err);
       }
