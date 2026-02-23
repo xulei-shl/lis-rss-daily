@@ -30,8 +30,11 @@ export interface CreateArticleInput {
  */
 export interface ArticleWithSource {
   id: number;
-  rss_source_id: number;
+  rss_source_id: number | null;
+  journal_id: number | null;
   rss_source_name?: string;
+  journal_name?: string;
+  source_name?: string;  // 合并后的来源名称
   title: string;
   url: string;
   summary: string | null;
@@ -45,8 +48,12 @@ export interface ArticleWithSource {
   process_stages: string | null;  // 步骤状态 JSON
   processed_at: string | null;
   published_at: string | null;
+  published_year: number | null;    // 年份（期刊文章使用）
+  published_issue: number | null;   // 期号（期刊文章使用）
+  published_volume: number | null;  // 卷号（期刊文章使用）
   error_message: string | null;
   is_read: number;  // 0 = 未读, 1 = 已读
+  source_origin: 'rss' | 'journal';  // 文章来源
   created_at: string;
   updated_at: string;
 }
@@ -91,6 +98,10 @@ export interface RelatedArticle {
   url: string;
   summary: string | null;
   published_at: string | null;
+  published_year: number | null;
+  published_issue: number | null;
+  published_volume: number | null;
+  source_origin: 'rss' | 'journal';
   rss_source_name?: string;
   score: number;
 }
@@ -275,12 +286,23 @@ export async function getArticleById(
 
   const article = await db
     .selectFrom('articles')
-    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .where('articles.id', '=', id)
-    .where('rss_sources.user_id', '=', userId)
+    .where((eb) => eb.or([
+      eb.and([
+        eb('articles.rss_source_id', 'is not', null),
+        eb('rss_sources.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.journal_id', 'is not', null),
+        eb('journals.user_id', '=', userId),
+      ]),
+    ]))
     .select([
       'articles.id',
       'articles.rss_source_id',
+      'articles.journal_id',
       'articles.title',
       'articles.url',
       'articles.summary',
@@ -292,15 +314,26 @@ export async function getArticleById(
       'articles.process_status',
       'articles.processed_at',
       'articles.published_at',
+      'articles.published_year',
+      'articles.published_issue',
+      'articles.published_volume',
       'articles.error_message',
       'articles.is_read',
+      'articles.source_origin',
       'articles.created_at',
       'articles.updated_at',
       'rss_sources.name as rss_source_name',
+      'journals.name as journal_name',
     ])
     .executeTakeFirst();
 
-  return article as ArticleWithSource | undefined;
+  if (!article) return undefined;
+
+  // 合并来源名称
+  return {
+    ...article,
+    source_name: (article as any).journal_name || (article as any).rss_source_name || 'Unknown',
+  } as ArticleWithSource;
 }
 
 
@@ -316,10 +349,20 @@ export async function getArticleFilterMatches(
   const rows = await db
     .selectFrom('article_filter_logs')
     .innerJoin('articles', 'articles.id', 'article_filter_logs.article_id')
-    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .leftJoin('topic_domains', 'topic_domains.id', 'article_filter_logs.domain_id')
     .where('article_filter_logs.article_id', '=', articleId)
-    .where('rss_sources.user_id', '=', userId)
+    .where((eb) => eb.or([
+      eb.and([
+        eb('articles.rss_source_id', 'is not', null),
+        eb('rss_sources.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.journal_id', 'is not', null),
+        eb('journals.user_id', '=', userId),
+      ]),
+    ]))
     .where('article_filter_logs.is_passed', '=', 1)
     .select([
       'article_filter_logs.domain_id as domainId',
@@ -412,6 +455,7 @@ export async function getUserArticles(
   userId: number,
   options: {
     rssSourceId?: number;
+    journalId?: number;
     filterStatus?: 'pending' | 'passed' | 'rejected';
     processStatus?: 'pending' | 'processing' | 'completed' | 'failed';
     search?: string;
@@ -440,13 +484,29 @@ export async function getUserArticles(
     !hasDateRange &&
     !(options.skipDaysFilterForSearch && options.search && options.search.trim() !== '');
 
+  // 使用左连接和条件来同时支持 RSS 和期刊文章
+  // (rss_source_id IS NOT NULL AND rss_source.user_id = :userId) OR (journal_id IS NOT NULL AND journal.user_id = :userId)
   let query = db
     .selectFrom('articles')
-    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-    .where('rss_sources.user_id', '=', userId);
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .where((eb) => eb.or([
+      eb.and([
+        eb('articles.rss_source_id', 'is not', null),
+        eb('rss_sources.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.journal_id', 'is not', null),
+        eb('journals.user_id', '=', userId),
+      ]),
+    ]));
 
+  // 来源筛选：支持 RSS 源或期刊
   if (options.rssSourceId !== undefined) {
     query = query.where('articles.rss_source_id', '=', options.rssSourceId);
+  }
+  if (options.journalId !== undefined) {
+    query = query.where('articles.journal_id', '=', options.journalId);
   }
 
   if (options.filterStatus !== undefined) {
@@ -498,13 +558,26 @@ export async function getUserArticles(
   // Build a fresh query for articles with translation left join
   let articlesQuery = db
     .selectFrom('articles')
-    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .leftJoin('article_translations', 'article_translations.article_id', 'articles.id')
-    .where('rss_sources.user_id', '=', userId);
+    .where((eb) => eb.or([
+      eb.and([
+        eb('articles.rss_source_id', 'is not', null),
+        eb('rss_sources.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.journal_id', 'is not', null),
+        eb('journals.user_id', '=', userId),
+      ]),
+    ]));
 
   // Re-apply filters (same logic as above)
   if (options.rssSourceId !== undefined) {
     articlesQuery = articlesQuery.where('articles.rss_source_id', '=', options.rssSourceId);
+  }
+  if (options.journalId !== undefined) {
+    articlesQuery = articlesQuery.where('articles.journal_id', '=', options.journalId);
   }
   if (options.filterStatus !== undefined) {
     articlesQuery = articlesQuery.where('articles.filter_status', '=', options.filterStatus);
@@ -547,6 +620,7 @@ export async function getUserArticles(
     .select([
       'articles.id',
       'articles.rss_source_id',
+      'articles.journal_id',
       'articles.title',
       'articles.url',
       'articles.summary',
@@ -558,11 +632,16 @@ export async function getUserArticles(
       'articles.process_status',
       'articles.processed_at',
       'articles.published_at',
+      'articles.published_year',
+      'articles.published_issue',
+      'articles.published_volume',
       'articles.error_message',
       'articles.is_read',
+      'articles.source_origin',
       'articles.created_at',
       'articles.updated_at',
       'rss_sources.name as rss_source_name',
+      'journals.name as journal_name',
       'article_translations.summary_zh',
     ])
     .orderBy('articles.created_at', 'desc')
@@ -570,8 +649,14 @@ export async function getUserArticles(
     .offset(offset)
     .execute();
 
+  // 合并来源名称
+  const articlesWithSourceName = articles.map((article: any) => ({
+    ...article,
+    source_name: article.journal_name || article.rss_source_name || 'Unknown',
+  }));
+
   return {
-    articles: articles as ArticleWithSource[],
+    articles: articlesWithSourceName as ArticleWithSource[],
     total,
     page,
     limit,
@@ -650,12 +735,20 @@ export async function deleteArticle(id: number, userId: number): Promise<void> {
   const result = await db
     .deleteFrom('articles')
     .where('id', '=', id)
-    .where('rss_source_id', 'in', (eb) =>
-      eb
-        .selectFrom('rss_sources')
-        .select('id')
-        .where('user_id', '=', userId)
-    )
+    .where((eb) => eb.or([
+      eb.and([
+        eb('articles.rss_source_id', 'is not', null),
+        eb('articles.rss_source_id', 'in', (eb) =>
+          eb.selectFrom('rss_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.journal_id', 'is not', null),
+        eb('articles.journal_id', 'in', (eb) =>
+          eb.selectFrom('journals').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+    ]))
     .executeTakeFirst();
 
   if (result.numDeletedRows === 0n) {
@@ -743,12 +836,20 @@ export async function updateArticleReadStatus(
       updated_at: now,
     })
     .where('id', '=', articleId)
-    .where('rss_source_id', 'in', (eb) =>
-      eb
-        .selectFrom('rss_sources')
-        .select('id')
-        .where('user_id', '=', userId)
-    )
+    .where((eb) => eb.or([
+      eb.and([
+        eb('articles.rss_source_id', 'is not', null),
+        eb('articles.rss_source_id', 'in', (eb) =>
+          eb.selectFrom('rss_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.journal_id', 'is not', null),
+        eb('articles.journal_id', 'in', (eb) =>
+          eb.selectFrom('journals').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+    ]))
     .executeTakeFirst();
 
   if (result.numUpdatedRows === 0n) {
@@ -782,12 +883,20 @@ export async function batchUpdateArticleReadStatus(
       updated_at: now,
     })
     .where('id', 'in', articleIds)
-    .where('rss_source_id', 'in', (eb) =>
-      eb
-        .selectFrom('rss_sources')
-        .select('id')
-        .where('user_id', '=', userId)
-    )
+    .where((eb) => eb.or([
+      eb.and([
+        eb('articles.rss_source_id', 'is not', null),
+        eb('articles.rss_source_id', 'in', (eb) =>
+          eb.selectFrom('rss_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.journal_id', 'is not', null),
+        eb('articles.journal_id', 'in', (eb) =>
+          eb.selectFrom('journals').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+    ]))
     .executeTakeFirst();
 
   const count = Number(result.numUpdatedRows);
@@ -798,7 +907,7 @@ export async function batchUpdateArticleReadStatus(
 /**
  * 批量标记所有未读文章为已读
  * @param userId - User ID
- * @param options - Filter options (filterStatus, daysAgo, etc.)
+ * @param options - Filter options (filterStatus, daysAgo, rssSourceId, journalId, etc.)
  * @returns Number of updated articles
  */
 export async function markAllAsRead(
@@ -806,27 +915,55 @@ export async function markAllAsRead(
   options: {
     filterStatus?: 'pending' | 'passed' | 'rejected';
     daysAgo?: number;
+    rssSourceId?: number;
+    journalId?: number;
+    processStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+    isRead?: boolean;
+    search?: string;
+    createdAfter?: string;
+    createdBefore?: string;
   } = {}
 ): Promise<number> {
   const db = getDb();
   const now = new Date().toISOString();
 
+  // 使用左连接同时支持 RSS 和期刊文章
   let query = db
     .updateTable('articles')
     .set({
       is_read: 1,
       updated_at: now,
     })
-    .where('rss_source_id', 'in', (eb) =>
-      eb
-        .selectFrom('rss_sources')
-        .select('id')
-        .where('user_id', '=', userId)
-    )
+    .where((eb) => eb.or([
+      eb.and([
+        eb('articles.rss_source_id', 'is not', null),
+        eb('articles.rss_source_id', 'in', (eb) =>
+          eb.selectFrom('rss_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.journal_id', 'is not', null),
+        eb('articles.journal_id', 'in', (eb) =>
+          eb.selectFrom('journals').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+    ]))
     .where('is_read', '=', 0);
 
   if (options.filterStatus !== undefined) {
     query = query.where('filter_status', '=', options.filterStatus);
+  }
+
+  if (options.rssSourceId !== undefined) {
+    query = query.where('rss_source_id', '=', options.rssSourceId);
+  }
+
+  if (options.journalId !== undefined) {
+    query = query.where('journal_id', '=', options.journalId);
+  }
+
+  if (options.processStatus !== undefined) {
+    query = query.where('process_status', '=', options.processStatus);
   }
 
   if (options.daysAgo !== undefined) {
@@ -834,6 +971,21 @@ export async function markAllAsRead(
     cutoffDate.setDate(cutoffDate.getDate() - options.daysAgo);
     query = query.where('created_at', '>=', cutoffDate.toISOString());
   }
+
+  if (options.createdAfter) {
+    const startDate = new Date(options.createdAfter);
+    startDate.setHours(0, 0, 0, 0);
+    query = query.where('created_at', '>=', startDate.toISOString());
+  }
+
+  if (options.createdBefore) {
+    const endDate = new Date(options.createdBefore);
+    endDate.setHours(23, 59, 59, 999);
+    query = query.where('created_at', '<=', endDate.toISOString());
+  }
+
+  // 注意：搜索功能暂时不支持，因为 UPDATE 语句不支持 LIKE 查询
+  // 如果需要，可以先查询出符合条件的文章 ID，再批量更新
 
   const result = await query.executeTakeFirst();
   const count = Number(result.numUpdatedRows);
@@ -857,8 +1009,18 @@ export async function getUnreadCount(
 
   let query = db
     .selectFrom('articles')
-    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-    .where('rss_sources.user_id', '=', userId)
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .where((eb) => eb.or([
+      eb.and([
+        eb('articles.rss_source_id', 'is not', null),
+        eb('rss_sources.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.journal_id', 'is not', null),
+        eb('journals.user_id', '=', userId),
+      ]),
+    ]))
     .where('articles.is_read', '=', 0);
 
   if (options.filterStatus !== undefined) {
@@ -876,5 +1038,92 @@ export async function getUnreadCount(
     .executeTakeFirst();
 
   return Number(result?.count || 0);
+}
+
+/**
+ * 合并来源选项接口
+ */
+export interface MergedSourceOption {
+  id: string;           // 格式: "rss:{id}" 或 "journal:{id}"
+  name: string;         // 来源名称
+  type: 'rss' | 'journal';
+  rssIds?: number[];    // 当 name 相同时，包含多个 RSS ID
+  journalIds?: number[]; // 当 name 相同时，包含多个期刊 ID
+}
+
+/**
+ * 获取合并后的来源列表（RSS 源和期刊按名称合并）
+ * @param userId - User ID
+ */
+export async function getMergedSources(userId: number): Promise<MergedSourceOption[]> {
+  const db = getDb();
+
+  // 获取 RSS 源列表
+  const rssSources = await db
+    .selectFrom('rss_sources')
+    .select(['id', 'name'])
+    .where('user_id', '=', userId)
+    .where('status', '=', 'active')
+    .execute();
+
+  // 获取期刊列表
+  const journals = await db
+    .selectFrom('journals')
+    .select(['id', 'name'])
+    .where('user_id', '=', userId)
+    .where('status', '=', 'active')
+    .execute();
+
+  // 按名称分组
+  const sourceMap = new Map<string, MergedSourceOption>();
+
+  // 添加 RSS 源
+  for (const source of rssSources) {
+    const existing = sourceMap.get(source.name);
+    if (existing) {
+      if (existing.type === 'rss') {
+        existing.rssIds = existing.rssIds || [];
+        existing.rssIds.push(source.id);
+      } else {
+        // 已有期刊，需要转换
+        existing.journalIds = existing.journalIds || [];
+        existing.rssIds = [source.id];
+      }
+    } else {
+      sourceMap.set(source.name, {
+        id: `rss:${source.id}`,
+        name: source.name,
+        type: 'rss',
+        rssIds: [source.id],
+      });
+    }
+  }
+
+  // 添加期刊
+  for (const journal of journals) {
+    const existing = sourceMap.get(journal.name);
+    if (existing) {
+      if (existing.type === 'journal') {
+        existing.journalIds = existing.journalIds || [];
+        existing.journalIds.push(journal.id);
+      } else {
+        // 已有 RSS，需要转换
+        existing.rssIds = existing.rssIds || [];
+        existing.journalIds = [journal.id];
+        existing.type = 'mixed'; // 混合类型
+        existing.id = `mixed:${journal.id}`; // 更新 ID
+      }
+    } else {
+      sourceMap.set(journal.name, {
+        id: `journal:${journal.id}`,
+        name: journal.name,
+        type: 'journal',
+        journalIds: [journal.id],
+      });
+    }
+  }
+
+  // 按名称排序
+  return Array.from(sourceMap.values()).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
 }
 

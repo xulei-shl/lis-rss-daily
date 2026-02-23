@@ -176,7 +176,7 @@ class LISSpider:
 
     def __init__(self, year: int, issues: Union[int, str, List[int]],
                  volume: Optional[int] = None,
-                 headless: bool = True, timeout: int = 30000):
+                 headless: bool = True, timeout: int = 180000, max_retries: int = 3):
         """
         初始化爬虫
 
@@ -188,11 +188,13 @@ class LISSpider:
                 - 列表: [3], [1, 2, 3], [1, 5, 7]
             volume: 卷号（可选，会根据年份自动校验）
             headless: 是否无头模式运行
-            timeout: 超时时间（毫秒）
+            timeout: 超时时间（毫秒），默认 3 分钟
+            max_retries: 最大重试次数，默认 3 次
         """
         self.year = year
         self.headless = headless
         self.timeout = timeout
+        self.max_retries = max_retries
         self.results = []
 
         # 校验年卷期参数并获取卷号
@@ -358,6 +360,8 @@ class LISSpider:
                 abstract = ""
                 if abstract_elem.count() > 0:
                     abstract = abstract_elem.inner_text().strip()
+                    # 清理摘要中的换行符和多余空白，避免 JSON 解析问题
+                    abstract = ' '.join(abstract.split())
 
                 paper = {
                     "year": parsed_year,
@@ -382,7 +386,7 @@ class LISSpider:
 
     def crawl_single_issue(self, issue: int) -> list:
         """
-        爬取单期论文
+        爬取单期论文（带重试机制）
 
         Args:
             issue: 期号
@@ -391,17 +395,44 @@ class LISSpider:
             论文列表
         """
         url = self.build_url(self.year, self.volume, issue)
+        last_error = None
+
+        for attempt in range(self.max_retries):
+            try:
+                return self._crawl_with_retry(url, issue)
+            except Exception as e:
+                last_error = e
+                if attempt < self.max_retries - 1:
+                    print(f"第 {attempt + 1} 次尝试失败: {e}，3秒后重试...", file=sys.stderr)
+                    import time
+                    time.sleep(3)
+                else:
+                    print(f"所有 {self.max_retries} 次尝试均失败", file=sys.stderr)
+
+        raise last_error
+
+    def _crawl_with_retry(self, url: str, issue: int) -> list:
+        """
+        执行爬取（带元素等待）
+
+        Args:
+            url: 期刊页面 URL
+            issue: 期号
+
+        Returns:
+            论文列表
+        """
+        print(f"正在访问: {url} (超时: {self.timeout}ms)", file=sys.stderr)
 
         with Camoufox(headless=self.headless) as browser:
             page = browser.new_page()
 
             try:
-                # 访问期刊页面
-                print(f"正在访问: {url}", file=sys.stderr)
+                # 访问期刊页面 - 先等待 domcontentloaded
                 page.goto(url, timeout=self.timeout, wait_until="domcontentloaded")
 
-                # 等待文章列表加载
-                page.wait_for_selector("li.noselectrow", timeout=10000)
+                # 等待文章列表元素出现（核心元素）
+                page.wait_for_selector("li.noselectrow", timeout=self.timeout)
 
                 # 提取论文列表
                 papers = self._extract_papers(page, issue)
@@ -467,8 +498,15 @@ def main():
     parser.add_argument(
         "-t", "--timeout",
         type=int,
-        default=30000,
-        help="页面加载超时时间（毫秒），默认 30000"
+        default=180000,
+        help="页面加载超时时间（毫秒），默认 180000 (3分钟)"
+    )
+
+    parser.add_argument(
+        "-r", "--retries",
+        type=int,
+        default=3,
+        help="最大重试次数，默认 3"
     )
 
     parser.add_argument(
@@ -495,9 +533,10 @@ def main():
             issues=issues,
             volume=args.volume,
             headless=not args.no_headless,
-            timeout=args.timeout
+            timeout=args.timeout,
+            max_retries=args.retries
         )
-        print(f"卷号: {spider.volume} (年份 {args.year})", file=sys.stderr)
+        print(f"卷号: {spider.volume} (年份 {args.year}), 超时: {args.timeout}ms, 重试: {args.retries}次", file=sys.stderr)
     except ValueError as e:
         print(f"错误: {e}", file=sys.stderr)
         sys.exit(1)

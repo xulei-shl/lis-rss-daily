@@ -496,7 +496,7 @@ function renderCrawlLogs(logs, total) {
       '<td class="timestamp">' + formatDate(log.created_at) + '</td>' +
       '<td>' + escapeHtml(log.journal_name || '-') + '</td>' +
       '<td>' + log.crawl_year + '-' + log.crawl_issue + '</td>' +
-      '<td>' + (statusMap[log.result] || log.result) + '</td>' +
+      '<td>' + (statusMap[log.status] || log.status) + '</td>' +
       '<td>' + (log.new_articles_count !== null ? log.new_articles_count : '-') + '</td>' +
       '<td>' + duration + '</td>' +
     '</tr>';

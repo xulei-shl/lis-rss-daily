@@ -28,6 +28,9 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
     const rssSourceId = req.query.rssSourceId
       ? parseInt(req.query.rssSourceId as string)
       : undefined;
+    const journalId = req.query.journalId
+      ? parseInt(req.query.journalId as string)
+      : undefined;
     const filterStatus = req.query.filterStatus as
       | 'pending'
       | 'passed'
@@ -56,6 +59,7 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
       page,
       limit,
       rssSourceId,
+      journalId,
       filterStatus,
       processStatus,
       search: searchQuery,
@@ -86,8 +90,18 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
     today.setUTCHours(0, 0, 0, 0);
     const todayCountResult = await db
       .selectFrom('articles')
-      .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-      .where('rss_sources.user_id', '=', req.userId!)
+      .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+      .leftJoin('journals', 'journals.id', 'articles.journal_id')
+      .where((eb) => eb.or([
+        eb.and([
+          eb('articles.rss_source_id', 'is not', null),
+          eb('rss_sources.user_id', '=', req.userId!),
+        ]),
+        eb.and([
+          eb('articles.journal_id', 'is not', null),
+          eb('journals.user_id', '=', req.userId!),
+        ]),
+      ]))
       .where('articles.created_at', '>=', today.toISOString())
       .select((eb) => eb.fn.count('articles.id').as('count'))
       .executeTakeFirst();
@@ -97,8 +111,18 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
     // Get pending articles count
     const pendingResult = await db
       .selectFrom('articles')
-      .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-      .where('rss_sources.user_id', '=', req.userId!)
+      .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+      .leftJoin('journals', 'journals.id', 'articles.journal_id')
+      .where((eb) => eb.or([
+        eb.and([
+          eb('articles.rss_source_id', 'is not', null),
+          eb('rss_sources.user_id', '=', req.userId!),
+        ]),
+        eb.and([
+          eb('articles.journal_id', 'is not', null),
+          eb('journals.user_id', '=', req.userId!),
+        ]),
+      ]))
       .where('articles.process_status', '=', 'pending')
       .where('articles.filter_status', '=', 'passed')
       .select((eb) => eb.fn.count('articles.id').as('count'))
@@ -109,8 +133,18 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
     // Get analyzed articles count
     const analyzedResult = await db
       .selectFrom('articles')
-      .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-      .where('rss_sources.user_id', '=', req.userId!)
+      .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+      .leftJoin('journals', 'journals.id', 'articles.journal_id')
+      .where((eb) => eb.or([
+        eb.and([
+          eb('articles.rss_source_id', 'is not', null),
+          eb('rss_sources.user_id', '=', req.userId!),
+        ]),
+        eb.and([
+          eb('articles.journal_id', 'is not', null),
+          eb('journals.user_id', '=', req.userId!),
+        ]),
+      ]))
       .where('articles.process_status', '=', 'completed')
       .select((eb) => eb.fn.count('articles.id').as('count'))
       .executeTakeFirst();
@@ -120,16 +154,36 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
     // Get pass rate
     const totalResult = await db
       .selectFrom('articles')
-      .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-      .where('rss_sources.user_id', '=', req.userId!)
+      .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+      .leftJoin('journals', 'journals.id', 'articles.journal_id')
+      .where((eb) => eb.or([
+        eb.and([
+          eb('articles.rss_source_id', 'is not', null),
+          eb('rss_sources.user_id', '=', req.userId!),
+        ]),
+        eb.and([
+          eb('articles.journal_id', 'is not', null),
+          eb('journals.user_id', '=', req.userId!),
+        ]),
+      ]))
       .where('articles.filter_status', '!=', 'pending')
       .select((eb) => eb.fn.count('articles.id').as('count'))
       .executeTakeFirst();
 
     const passedResult = await db
       .selectFrom('articles')
-      .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-      .where('rss_sources.user_id', '=', req.userId!)
+      .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+      .leftJoin('journals', 'journals.id', 'articles.journal_id')
+      .where((eb) => eb.or([
+        eb.and([
+          eb('articles.rss_source_id', 'is not', null),
+          eb('rss_sources.user_id', '=', req.userId!),
+        ]),
+        eb.and([
+          eb('articles.journal_id', 'is not', null),
+          eb('journals.user_id', '=', req.userId!),
+        ]),
+      ]))
       .where('articles.filter_status', '=', 'passed')
       .select((eb) => eb.fn.count('articles.id').as('count'))
       .executeTakeFirst();
@@ -141,8 +195,18 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
     // Get unread count for passed articles within 7 days
     const unreadCountResult = await db
       .selectFrom('articles')
-      .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-      .where('rss_sources.user_id', '=', req.userId!)
+      .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+      .leftJoin('journals', 'journals.id', 'articles.journal_id')
+      .where((eb) => eb.or([
+        eb.and([
+          eb('articles.rss_source_id', 'is not', null),
+          eb('rss_sources.user_id', '=', req.userId!),
+        ]),
+        eb.and([
+          eb('articles.journal_id', 'is not', null),
+          eb('journals.user_id', '=', req.userId!),
+        ]),
+      ]))
       .where('articles.filter_status', '=', 'passed')
       .where('articles.is_read', '=', 0)
       .select((eb) => eb.fn.count('articles.id').as('count'))
@@ -389,6 +453,20 @@ router.post('/articles/mark-all-read', requireAuth, async (req: AuthRequest, res
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to mark all articles as read');
     res.status(500).json({ error: 'Failed to mark all articles as read' });
+  }
+});
+
+/**
+ * GET /api/articles/sources
+ * Get merged sources list (RSS sources and journals combined by name)
+ */
+router.get('/articles/sources', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const sources = await articleService.getMergedSources(req.userId!);
+    res.json({ sources });
+  } catch (error) {
+    log.error({ error, userId: req.userId }, 'Failed to get merged sources');
+    res.status(500).json({ error: 'Failed to get merged sources' });
   }
 });
 

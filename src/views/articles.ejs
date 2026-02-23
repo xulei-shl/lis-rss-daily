@@ -97,7 +97,7 @@
 
     // Load on page ready
     document.addEventListener('DOMContentLoaded', () => {
-      loadRSSSources();
+      loadSources();
       loadArticles();
       setupEventListeners();
     });
@@ -129,22 +129,25 @@
       });
     }
 
-    // Load RSS sources for filter
-    async function loadRSSSources() {
+    // Load merged sources for filter (RSS sources + journals)
+    let sources = [];  // Store merged sources with type info
+
+    async function loadSources() {
       try {
-        const res = await fetch('/api/rss-sources');
+        const res = await fetch('/api/articles/sources');
         const data = await res.json();
-        rssSources = data.sources || [];
+        sources = data.sources || [];
 
         const select = document.getElementById('filterSource');
-        rssSources.forEach(source => {
+        sources.forEach(source => {
           const option = document.createElement('option');
           option.value = source.id;
           option.textContent = source.name;
+          option.dataset.type = source.type;
           select.appendChild(option);
         });
       } catch (err) {
-        console.error('Failed to load RSS sources:', err);
+        console.error('Failed to load sources:', err);
       }
     }
 
@@ -170,7 +173,27 @@
       // 日期范围优先于默认的 daysAgo
       const hasDateRange = dateFrom || dateTo;
 
-      if (sourceId) params.append('rssSourceId', sourceId);
+      // 解析来源 ID（格式: "rss:{id}" 或 "journal:{id}"）
+      if (sourceId) {
+        const [type, id] = sourceId.split(':');
+        if (type === 'rss') {
+          // 可能是单个 RSS 或混合类型
+          const source = sources.find(s => s.id === sourceId);
+          if (source && source.rssIds && source.rssIds.length > 0) {
+            // 如果有多个 RSS ID，使用第一个（或需要支持多选）
+            params.append('rssSourceId', source.rssIds[0].toString());
+          } else {
+            params.append('rssSourceId', id);
+          }
+        } else if (type === 'journal') {
+          const source = sources.find(s => s.id === sourceId);
+          if (source && source.journalIds && source.journalIds.length > 0) {
+            params.append('journalId', source.journalIds[0].toString());
+          } else {
+            params.append('journalId', id);
+          }
+        }
+      }
       if (filterStatus) params.append('filterStatus', filterStatus);
       if (processStatus) params.append('processStatus', processStatus);
       if (filterRead === 'read') params.append('isRead', 'true');
@@ -258,9 +281,9 @@ const summary = article.summary_zh || article.content || article.markdown_conten
         <span class="badge \${article.filter_status}">\${statusLabel[article.filter_status] || '未知'}</span>
       </div>
       <div class="article-meta">
-        <span>\${escapeHtml(article.rss_source_name || 'Unknown')}</span>
+        <span>\${escapeHtml(article.source_name || article.rss_source_name || 'Unknown')}</span>
         <span class="article-meta-divider">·</span>
-        <span>\${formatTime(article.published_at)}</span>
+        <span>\${getPublishTimeText(article)}</span>
         <span class="article-meta-divider">·</span>
         <span>处理状态: \${processStatusLabel[article.process_status] || article.process_status}</span>
         <span class="article-meta-divider">·</span>
@@ -481,6 +504,37 @@ function formatTime(dateStr) {
   });
 }
 
+/**
+ * 格式化期刊年卷期信息
+ * @param {Object} article - 文章对象
+ * @returns {string} 格式化后的年卷期字符串
+ */
+function formatJournalIssue(article) {
+  const parts = [];
+  if (article.published_year) {
+    parts.push(\`\${article.published_year}年\`);
+  }
+  if (article.published_issue) {
+    parts.push(\`第\${article.published_issue}期\`);
+  }
+  if (article.published_volume) {
+    parts.push(\`第\${article.published_volume}卷\`);
+  }
+  return parts.length > 0 ? parts.join(' ') : '';
+}
+
+/**
+ * 获取文章发布时间显示文本
+ * 期刊文章优先显示年卷期，RSS 文章显示 published_at
+ */
+function getPublishTimeText(article) {
+  if (article.source_origin === 'journal') {
+    const issueText = formatJournalIssue(article);
+    return issueText || formatTime(article.published_at);
+  }
+  return formatTime(article.published_at);
+}
+
 // Toggle article read status
 async function toggleReadStatus(articleId, currentIsRead) {
   try {
@@ -562,7 +616,25 @@ async function markAllAsRead() {
     const dateTo = document.getElementById('dateTo').value;
 
     const body = { filterStatus: 'passed', daysAgo: 30 };
-    if (sourceId) body.rssSourceId = sourceId;
+    // 解析来源 ID（格式: "rss:{id}" 或 "journal:{id}"）
+    if (sourceId) {
+      const [type, id] = sourceId.split(':');
+      if (type === 'rss') {
+        const source = sources.find(s => s.id === sourceId);
+        if (source && source.rssIds && source.rssIds.length > 0) {
+          body.rssSourceId = source.rssIds[0];
+        } else {
+          body.rssSourceId = parseInt(id);
+        }
+      } else if (type === 'journal') {
+        const source = sources.find(s => s.id === sourceId);
+        if (source && source.journalIds && source.journalIds.length > 0) {
+          body.journalId = source.journalIds[0];
+        } else {
+          body.journalId = parseInt(id);
+        }
+      }
+    }
     if (filterStatus) body.filterStatus = filterStatus;
     if (processStatus) body.processStatus = processStatus;
     // 已读筛选：如果是"全部"或"未读"，则批量标记未读文章

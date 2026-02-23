@@ -403,10 +403,20 @@ export class JournalScheduler {
 
     for (const article of articles) {
       try {
+        // 验证必填字段
+        if (!article.title || !article.title.trim()) {
+          log.warn({ url: article.url, journalId }, 'Article missing title, skipping');
+          continue;
+        }
+        if (!article.url || !article.url.trim()) {
+          log.warn({ title: article.title, journalId }, 'Article missing URL, skipping');
+          continue;
+        }
+
         // 检查文章是否已存在（通过 URL 去重）
         const existing = await db
           .selectFrom('articles')
-          .where('url', '=', article.url)
+          .where('url', '=', article.url.trim())
           .select('id')
           .executeTakeFirst();
 
@@ -420,15 +430,17 @@ export class JournalScheduler {
         await db
           .insertInto('articles')
           .values({
-            rss_source_id: null,
-            title: article.title,
-            url: article.url,
-            summary: article.abstract || null,
-            content: null,
+            title: article.title.trim(),
+            url: article.url.trim(),
+            summary: null,
+            content: article.abstract?.trim() || null,
             markdown_content: null,
             filter_status: 'pending',
             source_origin: 'journal',
             journal_id: journalId,
+            published_year: article.publishedYear || null,
+            published_issue: article.publishedIssue || null,
+            published_volume: article.publishedVolume || null,
             created_at: now,
             updated_at: now,
           } as any)
@@ -436,7 +448,15 @@ export class JournalScheduler {
 
         newCount++;
       } catch (error) {
-        log.warn({ url: article.url, error }, 'Failed to save article');
+        const errorInfo = error instanceof Error 
+          ? { message: error.message, stack: error.stack }
+          : { error };
+        log.warn({ 
+          url: article.url, 
+          title: article.title,
+          journalId,
+          ...errorInfo 
+        }, 'Failed to save article');
       }
     }
 
@@ -461,7 +481,7 @@ export class JournalScheduler {
       .selectFrom('articles')
       .where('journal_id', '=', journalId)
       .where('filter_status', '=', 'pending')
-      .select(['id', 'title', 'summary', 'url'])
+      .select(['id', 'title', 'content', 'url'])
       .execute();
 
     log.info({ journalId, count: articles.length }, 'Starting auto-filter for journal articles');
@@ -475,7 +495,7 @@ export class JournalScheduler {
           userId: 1, // 单用户系统
           url: article.url,
           title: article.title,
-          description: article.summary || '',
+          description: article.content || '',
           sourceType: 'journal',
         };
 

@@ -64,6 +64,9 @@ CREATE TABLE IF NOT EXISTS articles (
   process_stages TEXT,
   processed_at DATETIME,
   published_at DATETIME,
+  published_year INTEGER,    -- 年份（期刊文章使用）
+  published_issue INTEGER,   -- 期号（期刊文章使用）
+  published_volume INTEGER,  -- 卷号（期刊文章使用）
   is_read INTEGER DEFAULT 0,
   source_origin TEXT DEFAULT 'rss' CHECK(source_origin IN ('rss', 'journal')),  -- 文章来源
   journal_id INTEGER,  -- 期刊ID（RSS文章为 null）
@@ -82,6 +85,8 @@ CREATE INDEX IF NOT EXISTS idx_articles_created_at ON articles(created_at);
 CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at);
 CREATE INDEX IF NOT EXISTS idx_articles_source_origin ON articles(source_origin);
 CREATE INDEX IF NOT EXISTS idx_articles_journal_id ON articles(journal_id);
+CREATE INDEX IF NOT EXISTS idx_articles_published_year ON articles(published_year);
+CREATE INDEX IF NOT EXISTS idx_articles_published_issue ON articles(published_issue);
 
 -- ===========================================
 -- 4. Topic Domains Table

@@ -66,6 +66,9 @@ export interface ArticlesTable {
   process_stages: string | null;
   processed_at: string | null;
   published_at: string | null;
+  published_year: number | null;    // 年份（期刊文章使用）
+  published_issue: number | null;   // 期号（期刊文章使用）
+  published_volume: number | null;  // 卷号（期刊文章使用）
   error_message: string | null;
   is_read: number;  // 0 = 未读, 1 = 已读
   source_origin: 'rss' | 'journal';  // 文章来源

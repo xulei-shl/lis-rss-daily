@@ -169,12 +169,16 @@ export class PythonSpiderRunner {
 
       case 'lis':
         // LIS 爬虫参数
-        // python lis_spider.py -y YEAR -i ISSUE [-v VOLUME]
+        // python lis_spider.py -y YEAR -i ISSUE [-v VOLUME] [-t TIMEOUT] [-r RETRIES]
         args.push('-y', String(params.year));
         args.push('-i', String(params.issue));
         if (params.volume) {
           args.push('-v', String(params.volume));
         }
+        // 添加超时参数（3分钟）
+        args.push('-t', '180000');
+        // 添加重试次数
+        args.push('-r', '3');
         break;
     }
 
@@ -192,40 +196,83 @@ export class PythonSpiderRunner {
     // Python 脚本可能输出一些日志信息，需要找到 JSON 部分
     let jsonStr = stdout.trim();
 
-    // 如果输出包含多行，尝试找到 JSON 数组
-    const lines = jsonStr.split('\n');
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const line = lines[i].trim();
-      if (line.startsWith('[') || line.startsWith('{')) {
-        // 找到 JSON 开始位置
-        jsonStr = lines.slice(i).join('\n');
+    // 方法1：找到第一个 [ 或 { 作为 JSON 起点（从前往后找，避免误判内容中的 [）
+    let jsonStart = -1;
+    for (let i = 0; i < jsonStr.length; i++) {
+      if (jsonStr[i] === '[' || jsonStr[i] === '{') {
+        jsonStart = i;
         break;
       }
     }
+    if (jsonStart >= 0) {
+      jsonStr = jsonStr.substring(jsonStart);
+    }
 
-    // 尝试找到完整的 JSON 数组
-    const jsonMatch = jsonStr.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      jsonStr = jsonMatch[0];
+    // 方法2：尝试找到完整的 JSON 数组（使用括号匹配）
+    // 找到匹配的闭合括号
+    if (jsonStr.startsWith('[')) {
+      let depth = 0;
+      let inString = false;
+      let escape = false;
+      for (let i = 0; i < jsonStr.length; i++) {
+        const char = jsonStr[i];
+        if (escape) {
+          escape = false;
+          continue;
+        }
+        if (char === '\\') {
+          escape = true;
+          continue;
+        }
+        if (char === '"') {
+          inString = !inString;
+          continue;
+        }
+        if (!inString) {
+          if (char === '[') depth++;
+          else if (char === ']') {
+            depth--;
+            if (depth === 0) {
+              jsonStr = jsonStr.substring(0, i + 1);
+              break;
+            }
+          }
+        }
+      }
     }
 
     try {
       const data = JSON.parse(jsonStr);
       
-      // 转换为标准格式
-      const articles: CrawledArticle[] = (Array.isArray(data) ? data : []).map((item: any) => ({
-        title: item.title || '',
-        url: item.abstract_url || item.url || '',
-        author: item.author,
-        abstract: item.abstract,
-        keywords: item.keywords ? this.parseKeywords(item.keywords) : undefined,
-        publishedYear: item.year || 0,
-        publishedIssue: item.issue || 0,
-        publishedVolume: item.volume,
-        pages: item.pages,
-        doi: item.doi,
-      }));
+      // 转换为标准格式，过滤掉缺少必填字段的文章
+      const articles: CrawledArticle[] = (Array.isArray(data) ? data : [])
+        .filter((item: any) => {
+          // 必须有标题和 URL
+          if (!item || !item.title || !item.title.trim()) {
+            log.debug({ item }, 'Skipping article without title');
+            return false;
+          }
+          const url = item.abstract_url || item.url;
+          if (!url || !url.trim()) {
+            log.debug({ item }, 'Skipping article without URL');
+            return false;
+          }
+          return true;
+        })
+        .map((item: any) => ({
+          title: item.title.trim(),
+          url: (item.abstract_url || item.url).trim(),
+          author: item.author || undefined,
+          abstract: item.abstract || undefined,
+          keywords: item.keywords ? this.parseKeywords(item.keywords) : undefined,
+          publishedYear: item.year || 0,
+          publishedIssue: item.issue || 0,
+          publishedVolume: item.volume,
+          pages: item.pages,
+          doi: item.doi,
+        }));
 
+      log.info({ articleCount: articles.length }, 'Parsed articles from spider output');
       return {
         success: true,
         articles,

@@ -153,32 +153,44 @@ export async function getDailyPassedArticles(
 
   log.info({ userId, date: dateStr, timezone, startDate, endDate, type }, 'Daily article query date range');
 
+  // 使用 LEFT JOIN 同时支持 RSS 和期刊来源的文章
+  // - RSS 文章：通过 rss_source_id 关联 rss_sources 表
+  // - 期刊文章：rss_source_id 为 null，通过 journal_id 关联
   let query = db
     .selectFrom('articles')
-    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-    .where('rss_sources.user_id', '=', userId)
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .where('articles.filter_status', '=', 'passed')
+    .where((eb) => eb.or([
+      eb('rss_sources.user_id', '=', userId),  // RSS 文章的用户匹配
+      eb('journals.user_id', '=', userId),     // 期刊文章的用户匹配
+    ]))
     .where('articles.created_at', '>=', startDate)
     .where('articles.created_at', '<=', endDate);
 
   // 根据总结类型筛选文章来源
   if (type === 'journal') {
-    query = query.where('rss_sources.source_type', '=', 'journal');
+    // 只包含期刊来源的文章（source_origin = 'journal'）
+    query = query.where('articles.source_origin', '=', 'journal');
   } else if (type === 'blog_news') {
-    query = query.where('rss_sources.source_type', 'in', ['blog', 'news']);
+    // 只包含 RSS 来源的 blog/news 类型文章
+    query = query.where('articles.source_origin', '=', 'rss')
+      .where('rss_sources.source_type', 'in', ['blog', 'news']);
   }
-  // type 为 undefined 或 'all' 时不筛选
+  // type 为 undefined 或 'all' 时不筛选（包含所有来源）
 
   const articles = await query
-    .select([
+    .select((eb) => [
       'articles.id',
       'articles.title',
       'articles.url',
       'articles.summary',
       'articles.markdown_content',
       'articles.published_at',
-      'rss_sources.name as source_name',
-      'rss_sources.source_type',
+      // 优先使用 RSS 源名称，否则使用期刊名称
+      eb.fn.coalesce('rss_sources.name', 'journals.name').as('source_name'),
+      // 优先使用 RSS 源类型，期刊来源统一为 'journal'
+      eb.fn.coalesce('rss_sources.source_type', eb.val<'journal' | 'blog' | 'news'>('journal')).as('source_type'),
     ])
     .orderBy('articles.created_at', 'desc')
     .limit(limit)
@@ -191,7 +203,7 @@ export async function getDailyPassedArticles(
     url: row.url,
     summary: row.summary,
     markdown_content: row.markdown_content,
-    source_name: row.source_name,
+    source_name: row.source_name || '未知来源',
     source_type: row.source_type || 'blog',
     published_at: row.published_at,
   }));

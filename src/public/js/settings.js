@@ -1600,7 +1600,7 @@ document.getElementById('crawlJournalForm')?.addEventListener('submit', async fu
   // 立即关闭弹窗
   closeCrawlJournalModal();
 
-  // 发起爬取请求（不等待结果）
+  // 发起爬取请求（后台执行，不显示结果弹窗）
   fetch('/api/journals/' + id + '/crawl', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1608,28 +1608,12 @@ document.getElementById('crawlJournalForm')?.addEventListener('submit', async fu
   })
     .then(async (res) => {
       const result = await res.json();
-
-      if (res.ok && result.success) {
-        // 爬取成功，刷新数据并显示通知
-        await loadJournals(journalsPagination.page);
-        await showConfirm(
-          '爬取成功！新增 ' + (result.new_articles_count || 0) + ' 篇文章，耗时 ' + Math.round((result.duration_ms || 0) / 1000) + ' 秒',
-          { title: '爬取完成', okText: '知道了', okButtonType: 'btn-secondary' }
-        );
-      } else {
-        await showConfirm('爬取失败: ' + (result.error || '未知错误'), {
-          title: '错误',
-          okText: '知道了',
-          okButtonType: 'btn-secondary'
-        });
-      }
+      // 无论成功失败，都只刷新期刊列表
+      await loadJournals(journalsPagination.page);
     })
     .catch(async () => {
-      await showConfirm('爬取失败，请稍后重试', {
-        title: '错误',
-        okText: '知道了',
-        okButtonType: 'btn-secondary'
-      });
+      // 即使出错也刷新列表
+      await loadJournals(journalsPagination.page);
     });
 });
 

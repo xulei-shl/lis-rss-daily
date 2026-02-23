@@ -89,13 +89,13 @@ function renderArticle(article) {
   // 元信息
   const metaHtml =
     '<div class="article-meta-item">' +
-      '<span>' + escapeHtml(article.rss_source_name || 'Unknown') + '</span>' +
+      '<span>' + escapeHtml(article.source_name || article.rss_source_name || 'Unknown') + '</span>' +
     '</div>' +
     '<div class="article-meta-item">' +
       '<span>·</span>' +
     '</div>' +
     '<div class="article-meta-item">' +
-      '<span>' + formatDateTime(article.published_at) + '</span>' +
+      '<span>' + getPublishTimeText(article) + '</span>' +
     '</div>' +
     '<div class="article-meta-item">' +
       '<span>·</span>' +
@@ -230,9 +230,9 @@ function exportMarkdown() {
 
   // 构建简单的 Markdown 导出
   const md = '# ' + articleData.title + '\n\n' +
-    '**来源:** ' + (articleData.rss_source_name || 'Unknown') + '\n' +
+    '**来源:** ' + (articleData.source_name || articleData.rss_source_name || 'Unknown') + '\n' +
     '**URL:** ' + articleData.url + '\n' +
-    '**发布时间:** ' + formatDateTime(articleData.published_at) + '\n\n' +
+    '**发布时间:** ' + getPublishTimeText(articleData) + '\n\n' +
     '---\n\n' +
     (articleData.summary || '') + '\n\n' +
     '---\n\n' +
@@ -377,6 +377,35 @@ function formatDateTime(dateStr) {
     hour: '2-digit',
     minute: '2-digit'
   });
+}
+
+/**
+ * 格式化期刊年卷期信息
+ */
+function formatJournalIssue(article) {
+  const parts = [];
+  if (article.published_year) {
+    parts.push(article.published_year + '年');
+  }
+  if (article.published_issue) {
+    parts.push('第' + article.published_issue + '期');
+  }
+  if (article.published_volume) {
+    parts.push('第' + article.published_volume + '卷');
+  }
+  return parts.length > 0 ? parts.join(' ') : '';
+}
+
+/**
+ * 获取文章发布时间显示文本
+ * 期刊文章优先显示年卷期，RSS 文章显示 published_at
+ */
+function getPublishTimeText(article) {
+  if (article.source_origin === 'journal') {
+    const issueText = formatJournalIssue(article);
+    return issueText || formatDateTime(article.published_at);
+  }
+  return formatDateTime(article.published_at);
 }
 
 function formatTime(dateStr) {

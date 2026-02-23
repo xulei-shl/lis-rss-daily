@@ -266,6 +266,39 @@ CREATE TABLE IF NOT EXISTS journal_crawl_logs (
         continue;
       }
 
+      // ============================================================
+      // 013: 添加期刊年卷期字段
+      // ============================================================
+      if (file === '013_add_journal_issue_fields.sql') {
+        const hasPublishedYear = hasColumn(db, 'articles', 'published_year');
+        const hasPublishedIssue = hasColumn(db, 'articles', 'published_issue');
+        const hasPublishedVolume = hasColumn(db, 'articles', 'published_volume');
+
+        if (!hasPublishedYear) {
+          db.exec('ALTER TABLE articles ADD COLUMN published_year INTEGER;');
+          console.log('      → Added published_year column');
+        }
+        if (!hasPublishedIssue) {
+          db.exec('ALTER TABLE articles ADD COLUMN published_issue INTEGER;');
+          console.log('      → Added published_issue column');
+        }
+        if (!hasPublishedVolume) {
+          db.exec('ALTER TABLE articles ADD COLUMN published_volume INTEGER;');
+          console.log('      → Added published_volume column');
+        }
+
+        // 创建索引
+        db.exec('CREATE INDEX IF NOT EXISTS idx_articles_published_year ON articles(published_year);');
+        db.exec('CREATE INDEX IF NOT EXISTS idx_articles_published_issue ON articles(published_issue);');
+
+        if (!hasPublishedYear || !hasPublishedIssue || !hasPublishedVolume) {
+          console.log('      → Migration 013 completed');
+        } else {
+          console.log('      → Skipped (columns already exist)');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }
