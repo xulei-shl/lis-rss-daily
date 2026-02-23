@@ -1,0 +1,60 @@
+<section class="settings-panel" data-tab="journals">
+<div class="settings-container">
+  <div class="section-header">
+    <h2>期刊管理</h2>
+    <button class="btn btn-primary" onclick="showJournalAddModal()">+ 添加期刊</button>
+  </div>
+
+  <table class="rss-sources-table" id="journalsTable">
+    <thead>
+      <tr>
+        <th>名称</th>
+        <th>来源类型</th>
+        <th>发行周期</th>
+        <th>上次爬取</th>
+        <th>状态</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="journalsBody">
+      <!-- 动态加载 -->
+    </tbody>
+  </table>
+
+  <div id="journalsPagination"></div>
+
+  <div id="journalsEmptyState" class="empty-state" style="display: none;">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+    </svg>
+    <p>暂无期刊配置</p>
+    <p style="font-size: 0.9rem; margin-top: 8px;">点击上方按钮添加您的第一个期刊</p>
+  </div>
+
+  <!-- 爬取日志区域 -->
+  <div class="section-header" style="margin-top: 32px;">
+    <h3>爬取日志</h3>
+  </div>
+  <table class="rss-sources-table" id="crawlLogsTable">
+    <thead>
+      <tr>
+        <th>时间</th>
+        <th>期刊</th>
+        <th>年/期</th>
+        <th>结果</th>
+        <th>新增</th>
+        <th>耗时</th>
+      </tr>
+    </thead>
+    <tbody id="crawlLogsBody">
+      <!-- 动态加载 -->
+    </tbody>
+  </table>
+
+  <div id="crawlLogsPagination"></div>
+
+  <div id="crawlLogsEmptyState" class="empty-state" style="display: none;">
+    <p>暂无爬取日志</p>
+  </div>
+</div>
+</section>

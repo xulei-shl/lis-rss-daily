@@ -26,6 +26,8 @@ export interface DatabaseTable {
   settings: SettingsTable;
   system_prompts: SystemPromptsTable;
   daily_summaries: DailySummariesTable;
+  journals: JournalsTable;
+  journal_crawl_logs: JournalCrawlLogsTable;
 }
 
 export interface UsersTable {
@@ -51,7 +53,7 @@ export interface RssSourcesTable {
 
 export interface ArticlesTable {
   id: number;
-  rss_source_id: number;
+  rss_source_id: number | null;  // RSS来源（期刊文章为 null）
   title: string;
   url: string;
   summary: string | null;
@@ -66,6 +68,8 @@ export interface ArticlesTable {
   published_at: string | null;
   error_message: string | null;
   is_read: number;  // 0 = 未读, 1 = 已读
+  source_origin: 'rss' | 'journal';  // 文章来源
+  journal_id: number | null;  // 期刊ID（RSS文章为 null）
   created_at: string;
   updated_at: string;
 }
@@ -168,6 +172,38 @@ export interface DailySummariesTable {
   article_count: number;
   summary_content: string;
   articles_data: string;
+  created_at: string;
+}
+
+export interface JournalsTable {
+  id: number;
+  user_id: number;
+  name: string;
+  source_type: 'cnki' | 'rdfybk' | 'lis';
+  source_url: string | null;
+  journal_code: string | null;
+  publication_cycle: string;
+  issues_per_year: number;
+  volume_offset: number;
+  last_year: number | null;
+  last_issue: number | null;
+  last_volume: number | null;
+  status: 'active' | 'inactive';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JournalCrawlLogsTable {
+  id: number;
+  journal_id: number;
+  crawl_year: number;
+  crawl_issue: number;
+  crawl_volume: number | null;
+  articles_count: number;
+  new_articles_count: number;
+  status: 'success' | 'failed' | 'partial';
+  error_message: string | null;
+  duration_ms: number | null;
   created_at: string;
 }
 

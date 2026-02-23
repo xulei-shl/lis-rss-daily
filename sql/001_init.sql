@@ -51,7 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_rss_sources_source_type ON rss_sources(source_typ
 -- ===========================================
 CREATE TABLE IF NOT EXISTS articles (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  rss_source_id INTEGER NOT NULL,
+  rss_source_id INTEGER,  -- RSS来源（期刊文章为 null）
   title TEXT NOT NULL,
   url TEXT NOT NULL UNIQUE,
   summary TEXT,
@@ -65,10 +65,13 @@ CREATE TABLE IF NOT EXISTS articles (
   processed_at DATETIME,
   published_at DATETIME,
   is_read INTEGER DEFAULT 0,
+  source_origin TEXT DEFAULT 'rss' CHECK(source_origin IN ('rss', 'journal')),  -- 文章来源
+  journal_id INTEGER,  -- 期刊ID（RSS文章为 null）
   error_message TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (rss_source_id) REFERENCES rss_sources(id) ON DELETE CASCADE
+  FOREIGN KEY (rss_source_id) REFERENCES rss_sources(id) ON DELETE CASCADE,
+  FOREIGN KEY (journal_id) REFERENCES journals(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_articles_rss_source_id ON articles(rss_source_id);
@@ -77,6 +80,8 @@ CREATE INDEX IF NOT EXISTS idx_articles_process_status ON articles(process_statu
 CREATE INDEX IF NOT EXISTS idx_articles_is_read ON articles(is_read);
 CREATE INDEX IF NOT EXISTS idx_articles_created_at ON articles(created_at);
 CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at);
+CREATE INDEX IF NOT EXISTS idx_articles_source_origin ON articles(source_origin);
+CREATE INDEX IF NOT EXISTS idx_articles_journal_id ON articles(journal_id);
 
 -- ===========================================
 -- 4. Topic Domains Table
@@ -264,7 +269,57 @@ CREATE INDEX IF NOT EXISTS idx_daily_summaries_user_date ON daily_summaries(user
 CREATE INDEX IF NOT EXISTS idx_daily_summaries_type ON daily_summaries(summary_type);
 
 -- ===========================================
--- 13. Schema Metadata Table
+-- 13. Journals Table (期刊表)
+-- ===========================================
+-- 存储待爬取期刊的基本信息
+-- source_type 取值：'cnki'（CNKI期刊）、'rdfybk'（人大报刊）、'lis'（独立网站期刊）
+CREATE TABLE IF NOT EXISTS journals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL,                    -- 期刊名称
+  source_type TEXT NOT NULL CHECK(source_type IN ('cnki', 'rdfybk', 'lis')),  -- 期刊来源类型
+  source_url TEXT,                       -- 期刊 URL 或导航页 URL
+  journal_code TEXT,                     -- 期刊代码（人大报刊专用）
+  publication_cycle TEXT NOT NULL,       -- 发行周期：monthly/bimonthly/semimonthly/quarterly
+  issues_per_year INTEGER NOT NULL,      -- 每年期数
+  volume_offset INTEGER DEFAULT 1956,    -- 卷号计算偏移量: volume = year - volume_offset
+  last_year INTEGER,                     -- 上次爬取年份
+  last_issue INTEGER,                    -- 上次爬取期号
+  last_volume INTEGER,                   -- 上次爬取卷号（LIS期刊使用）
+  status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_journals_user_id ON journals(user_id);
+CREATE INDEX IF NOT EXISTS idx_journals_status ON journals(status);
+CREATE INDEX IF NOT EXISTS idx_journals_source_type ON journals(source_type);
+
+-- ===========================================
+-- 14. Journal Crawl Logs Table (爬取日志表)
+-- ===========================================
+-- 记录每次爬取的详细信息，用于追踪和排错
+CREATE TABLE IF NOT EXISTS journal_crawl_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  journal_id INTEGER NOT NULL,
+  crawl_year INTEGER NOT NULL,           -- 爬取年份
+  crawl_issue INTEGER NOT NULL,          -- 爬取期号
+  crawl_volume INTEGER,                  -- 爬取卷号（LIS期刊使用）
+  articles_count INTEGER DEFAULT 0,      -- 爬取文章数
+  new_articles_count INTEGER DEFAULT 0,  -- 新增文章数
+  status TEXT NOT NULL CHECK(status IN ('success', 'failed', 'partial')),
+  error_message TEXT,
+  duration_ms INTEGER,                   -- 爬取耗时（毫秒）
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (journal_id) REFERENCES journals(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_journal_crawl_logs_journal_id ON journal_crawl_logs(journal_id);
+CREATE INDEX IF NOT EXISTS idx_journal_crawl_logs_created_at ON journal_crawl_logs(created_at);
+
+-- ===========================================
+-- 15. Schema Metadata Table
 -- ===========================================
 -- 用于跟踪数据库 schema 版本和配置版本
 CREATE TABLE IF NOT EXISTS schema_metadata (
@@ -359,3 +414,34 @@ VALUES (
   '{"ARTICLE_TITLE": "文章标题", "ARTICLE_SOURCE": "文章来源", "ARTICLE_AUTHOR": "作者", "PUBLISHED_DATE": "发布时间", "ARTICLE_CONTENT": "正文内容"}',
   1
 );
+
+-- ===========================================
+-- Default Journal Data
+-- ===========================================
+-- CNKI 期刊
+INSERT OR IGNORE INTO journals (user_id, name, source_type, source_url, publication_cycle, issues_per_year, last_year, last_issue) VALUES
+(1, '中国图书馆学报', 'cnki', 'https://navi.cnki.net/knavi/journals/ZGTS/detail', 'bimonthly', 6, 2025, 6),
+(1, '图书情报知识', 'cnki', 'https://navi.cnki.net/knavi/journals/TSQC/detail', 'bimonthly', 6, 2025, 6),
+(1, '信息资源管理学报', 'cnki', 'https://navi.cnki.net/knavi/journals/XNZY/detail', 'bimonthly', 6, 2025, 4),
+(1, '图书馆论坛', 'cnki', 'https://navi.cnki.net/knavi/journals/TSGL/detail', 'monthly', 12, 2025, 12),
+(1, '大学图书馆学报', 'cnki', 'https://navi.cnki.net/knavi/journals/DXTS/detail', 'bimonthly', 6, 2025, 6),
+(1, '图书馆建设', 'cnki', 'https://navi.cnki.net/knavi/journals/TSGJ/detail', 'bimonthly', 6, 2025, 6),
+(1, '国家图书馆学刊', 'cnki', 'https://navi.cnki.net/knavi/journals/BJJG/detail', 'bimonthly', 6, 2025, 6),
+(1, '图书与情报', 'cnki', 'https://navi.cnki.net/knavi/journals/BOOK/detail', 'bimonthly', 6, 2025, 5),
+(1, '图书馆杂志', 'cnki', 'https://navi.cnki.net/knavi/journals/TNGZ/detail', 'monthly', 12, 2025, 12),
+(1, '图书馆学研究', 'cnki', 'https://navi.cnki.net/knavi/journals/TSSS/detail', 'monthly', 12, 2025, 12),
+(1, '图书馆工作与研究', 'cnki', 'https://navi.cnki.net/knavi/journals/TSGG/detail', 'monthly', 12, 2025, 12),
+(1, '图书馆', 'cnki', 'https://navi.cnki.net/knavi/journals/TSGT/detail', 'monthly', 12, NULL, NULL),
+(1, '图书馆理论与实践', 'cnki', 'https://navi.cnki.net/knavi/journals/LSGL/detail', 'monthly', 12, 2025, 12),
+(1, '文献与数据学报', 'cnki', 'https://navi.cnki.net/knavi/journals/BXJW/detail', 'quarterly', 4, 2025, 4),
+(1, '农业图书情报学报', 'cnki', 'https://navi.cnki.net/knavi/journals/LYTS/detail', 'monthly', 12, 2025, 12);
+
+-- 人大报刊期刊
+INSERT OR IGNORE INTO journals (user_id, name, source_type, journal_code, publication_cycle, issues_per_year, last_year, last_issue) VALUES
+(1, '图书馆学情报学', 'rdfybk', 'G9', 'monthly', 12, 2025, 12),
+(1, '档案学', 'rdfybk', 'G7', 'bimonthly', 6, NULL, NULL),
+(1, '出版业', 'rdfybk', 'Z1', 'monthly', 12, NULL, NULL);
+
+-- 独立网站期刊
+INSERT OR IGNORE INTO journals (user_id, name, source_type, source_url, publication_cycle, issues_per_year, volume_offset, last_year, last_issue, last_volume) VALUES
+(1, '图书情报工作', 'lis', 'https://www.lis.ac.cn', 'semimonthly', 24, 1956, 2026, 4, 70);

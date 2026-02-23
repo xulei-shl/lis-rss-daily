@@ -11,6 +11,7 @@ import { initDb, closeDb } from './db.js';
 import { initRSSParser } from './rss-parser.js';
 import { initRSSScheduler } from './rss-scheduler.js';
 import { initRelatedScheduler } from './related-scheduler.js';
+import { initJournalScheduler } from './journal-scheduler.js';
 import { config } from './config.js';
 import { createApp, startServer } from './api/web.js';
 import path from 'path';
@@ -80,6 +81,17 @@ async function main() {
     log.info('🔄 Related articles scheduler disabled');
   }
 
+  // Initialize and start Journal scheduler
+  const journalScheduler = initJournalScheduler();
+  const journalCrawlEnabled = process.env.JOURNAL_CRAWL_ENABLED !== 'false';
+  const journalCrawlSchedule = process.env.JOURNAL_CRAWL_SCHEDULE || '0 20 * * 6';
+  if (journalCrawlEnabled) {
+    journalScheduler.start();
+    log.info(`📚 Journal scheduler started (schedule: ${journalCrawlSchedule})`);
+  } else {
+    log.info('📚 Journal scheduler disabled');
+  }
+
   // Keep process running
   log.info('✅ Application ready. Press Ctrl+C to stop.');
 
@@ -94,6 +106,10 @@ async function main() {
     // Stop related articles scheduler
     await relatedScheduler.stop();
     log.info('🔄 Related articles scheduler stopped');
+
+    // Stop journal scheduler
+    await journalScheduler.stop();
+    log.info('📚 Journal scheduler stopped');
 
     server.close(() => {
       log.info('🌐 Web server closed');

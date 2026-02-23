@@ -466,10 +466,15 @@ function formatDate(dateStr) {
 
 // Render pagination controls
 function renderPagination(type) {
-  const pagination = type === 'rss' ? rssPagination : llmPagination;
-  const containerId = type === 'rss' ? 'rssPagination' : 'llmPagination';
-  const container = document.getElementById(containerId);
-
+  const paginationMap = {
+    'rss': rssPagination,
+    'llm': llmPagination,
+    'journals': journalsPagination,
+    'crawlLogs': crawlLogsPagination
+  };
+  const pagination = paginationMap[type];
+  if (!pagination) return;
+  const container = document.getElementById(type + 'Pagination');
   if (!container) return;
 
   // Only show pagination if there's more than one page
@@ -1316,3 +1321,394 @@ document.getElementById('chromaForm').addEventListener('submit', async function(
     setChromaStatus('保存失败，请稍后重试');
   }
 });
+
+// ============================================
+// Journal Management
+// ============================================
+
+let journals = [];
+let journalsPagination = {
+  page: 1,
+  limit: 10,
+  total: 0,
+  totalPages: 0
+};
+
+let crawlLogs = [];
+let crawlLogsPagination = {
+  page: 1,
+  limit: 10,
+  total: 0,
+  totalPages: 0
+};
+
+// Load journals on page load
+loadJournals();
+loadCrawlLogs();
+
+async function loadJournals(page = 1) {
+  try {
+    const res = await fetch(`/api/journals?page=${page}&limit=${journalsPagination.limit}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('加载失败');
+    const data = await res.json();
+    journals = data.journals || [];
+    journalsPagination.page = data.page || 1;
+    journalsPagination.total = data.total || 0;
+    journalsPagination.totalPages = data.totalPages || 0;
+    renderJournalsTable();
+    renderPagination('journals');
+  } catch (err) {
+    console.error('Failed to load journals:', err);
+  }
+}
+
+async function loadCrawlLogs(page = 1) {
+  try {
+    const res = await fetch(`/api/journals/logs?page=${page}&limit=${crawlLogsPagination.limit}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('加载失败');
+    const data = await res.json();
+    crawlLogs = data.logs || [];
+    crawlLogsPagination.page = data.page || 1;
+    crawlLogsPagination.total = data.total || 0;
+    crawlLogsPagination.totalPages = data.totalPages || 0;
+    renderCrawlLogsTable();
+    renderPagination('crawlLogs');
+  } catch (err) {
+    console.error('Failed to load crawl logs:', err);
+  }
+}
+
+function renderJournalsTable() {
+  const tbody = document.getElementById('journalsBody');
+  const emptyState = document.getElementById('journalsEmptyState');
+  const table = document.getElementById('journalsTable');
+
+  if (!tbody) return;
+
+  if (journals.length === 0) {
+    table.style.display = 'none';
+    emptyState.style.display = 'block';
+    return;
+  }
+
+  table.style.display = 'table';
+  emptyState.style.display = 'none';
+
+  const sourceTypeLabels = {
+    'cnki': 'CNKI',
+    'rdfybk': '人大报刊',
+    'lis': 'LIS'
+  };
+
+  const cycleLabels = {
+    'monthly': '月刊',
+    'bimonthly': '双月刊',
+    'semimonthly': '半月刊',
+    'quarterly': '季刊'
+  };
+
+  tbody.innerHTML = journals.map(function(journal) {
+    const lastCrawl = journal.last_year && journal.last_issue
+      ? journal.last_year + '-' + journal.last_issue
+      : '从未';
+
+    return '<tr>' +
+      '<td class="rss-name">' + escapeHtml(journal.name) + '</td>' +
+      '<td><span class="type-badge">' + (sourceTypeLabels[journal.source_type] || journal.source_type) + '</span></td>' +
+      '<td>' + (cycleLabels[journal.publication_cycle] || journal.publication_cycle) + '</td>' +
+      '<td>' + lastCrawl + '</td>' +
+      '<td>' +
+        '<span class="status-badge ' + journal.status + '">' + (journal.status === 'active' ? '启用' : '禁用') + '</span>' +
+      '</td>' +
+      '<td>' +
+        '<div class="action-buttons">' +
+          '<button class="btn-icon" onclick="showCrawlJournalModal(' + journal.id + ')">爬取</button>' +
+          '<button class="btn-icon" onclick="editJournal(' + journal.id + ')">编辑</button>' +
+          '<button class="btn-icon" onclick="deleteJournal(' + journal.id + ')">删除</button>' +
+        '</div>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function renderCrawlLogsTable() {
+  const tbody = document.getElementById('crawlLogsBody');
+  const emptyState = document.getElementById('crawlLogsEmptyState');
+  const table = document.getElementById('crawlLogsTable');
+
+  if (!tbody) return;
+
+  if (crawlLogs.length === 0) {
+    table.style.display = 'none';
+    emptyState.style.display = 'block';
+    return;
+  }
+
+  table.style.display = 'table';
+  emptyState.style.display = 'none';
+
+  const statusLabels = {
+    'success': '<span class="status-badge active">成功</span>',
+    'failed': '<span class="status-badge inactive">失败</span>',
+    'partial': '<span class="status-badge" style="background: rgba(251, 191, 36, 0.15); color: #f59e0b;">部分成功</span>'
+  };
+
+  tbody.innerHTML = crawlLogs.map(function(log) {
+    const duration = log.duration_ms ? Math.round(log.duration_ms / 1000) + 's' : '-';
+    return '<tr>' +
+      '<td>' + formatDate(log.created_at) + '</td>' +
+      '<td class="rss-name">' + escapeHtml(log.journal_name || '-') + '</td>' +
+      '<td>' + log.crawl_year + '-' + log.crawl_issue + '</td>' +
+      '<td>' + (statusLabels[log.status] || log.status) + '</td>' +
+      '<td>' + (log.new_articles_count || 0) + '</td>' +
+      '<td>' + duration + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function showJournalAddModal() {
+  document.getElementById('journalModalTitle').textContent = '添加期刊';
+  document.getElementById('journalId').value = '';
+  document.getElementById('journalName').value = '';
+  document.getElementById('journalSourceType').value = 'cnki';
+  document.getElementById('journalUrl').value = '';
+  document.getElementById('journalCode').value = '';
+  document.getElementById('journalPublicationCycle').value = 'monthly';
+  document.getElementById('journalIssuesPerYear').value = '12';
+  document.getElementById('journalStatus').value = 'active';
+  updateJournalSourceUI();
+  document.getElementById('journalModal').classList.add('active');
+  document.getElementById('journalName').focus();
+}
+
+function editJournal(id) {
+  const journal = journals.find(j => j.id === id);
+  if (!journal) return;
+
+  document.getElementById('journalModalTitle').textContent = '编辑期刊';
+  document.getElementById('journalId').value = journal.id;
+  document.getElementById('journalName').value = journal.name;
+  document.getElementById('journalSourceType').value = journal.source_type;
+  document.getElementById('journalUrl').value = journal.source_url || '';
+  document.getElementById('journalCode').value = journal.journal_code || '';
+  document.getElementById('journalPublicationCycle').value = journal.publication_cycle;
+  document.getElementById('journalIssuesPerYear').value = journal.issues_per_year;
+  document.getElementById('journalStatus').value = journal.status;
+  updateJournalSourceUI();
+  document.getElementById('journalModal').classList.add('active');
+}
+
+function closeJournalModal() {
+  document.getElementById('journalModal').classList.remove('active');
+}
+
+function updateJournalSourceUI() {
+  const sourceType = document.getElementById('journalSourceType').value;
+  const urlGroup = document.getElementById('journalUrlGroup');
+  const codeGroup = document.getElementById('journalCodeGroup');
+  const urlInput = document.getElementById('journalUrl');
+  const codeInput = document.getElementById('journalCode');
+
+  if (sourceType === 'rdfybk') {
+    urlGroup.style.display = 'none';
+    codeGroup.style.display = 'block';
+    urlInput.removeAttribute('required');
+    codeInput.setAttribute('required', 'required');
+  } else {
+    urlGroup.style.display = 'block';
+    codeGroup.style.display = 'none';
+    urlInput.setAttribute('required', 'required');
+    codeInput.removeAttribute('required');
+  }
+
+  // Update issues per year based on publication cycle
+  const cycle = document.getElementById('journalPublicationCycle').value;
+  const issuesMap = {
+    'monthly': 12,
+    'bimonthly': 6,
+    'semimonthly': 24,
+    'quarterly': 4
+  };
+  document.getElementById('journalIssuesPerYear').value = issuesMap[cycle] || 12;
+}
+
+// Sync issues per year when publication cycle changes
+document.getElementById('journalPublicationCycle')?.addEventListener('change', function() {
+  const cycle = this.value;
+  const issuesMap = {
+    'monthly': 12,
+    'bimonthly': 6,
+    'semimonthly': 24,
+    'quarterly': 4
+  };
+  document.getElementById('journalIssuesPerYear').value = issuesMap[cycle] || 12;
+});
+
+// Journal form submit
+document.getElementById('journalForm')?.addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const id = document.getElementById('journalId').value;
+  const sourceType = document.getElementById('journalSourceType').value;
+
+  const data = {
+    name: document.getElementById('journalName').value.trim(),
+    sourceType: sourceType,
+    sourceUrl: sourceType !== 'rdfybk' ? document.getElementById('journalUrl').value.trim() : null,
+    journalCode: sourceType === 'rdfybk' ? document.getElementById('journalCode').value.trim() : null,
+    publicationCycle: document.getElementById('journalPublicationCycle').value,
+    issuesPerYear: parseInt(document.getElementById('journalIssuesPerYear').value),
+    status: document.getElementById('journalStatus').value
+  };
+
+  try {
+    const url = id ? '/api/journals/' + id : '/api/journals';
+    const method = id ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (res.ok) {
+      closeJournalModal();
+      await loadJournals(journalsPagination.page);
+      await showConfirm('期刊已保存', {
+        title: '成功',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
+    } else {
+      const result = await res.json();
+      await showConfirm(result.error || '保存失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
+    }
+  } catch (err) {
+    await showConfirm('保存失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
+  }
+});
+
+async function deleteJournal(id) {
+  const confirmed = await showConfirm('确定要删除这个期刊吗？相关的爬取日志也会被删除。', {
+    title: '删除期刊',
+    okText: '删除',
+    cancelText: '取消'
+  });
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/journals/' + id, { method: 'DELETE' });
+    if (res.ok) {
+      const newPage = journals.length === 1 && journalsPagination.page > 1
+        ? journalsPagination.page - 1
+        : journalsPagination.page;
+      loadJournals(newPage);
+    } else {
+      const result = await res.json();
+      await showConfirm(result.error || '删除失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
+    }
+  } catch (err) {
+    await showConfirm('删除失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
+  }
+}
+
+// Crawl Journal Modal
+function showCrawlJournalModal(id) {
+  const journal = journals.find(j => j.id === id);
+  if (!journal) return;
+
+  document.getElementById('crawlJournalId').value = journal.id;
+  document.getElementById('crawlJournalNameDisplay').textContent = journal.name;
+
+  // Set default year and issue
+  const now = new Date();
+  document.getElementById('crawlYear').value = now.getFullYear();
+  document.getElementById('crawlIssue').value = 1;
+
+  document.getElementById('crawlResult').className = 'test-result';
+  document.getElementById('crawlResult').textContent = '';
+  document.getElementById('crawlJournalModal').classList.add('active');
+}
+
+function closeCrawlJournalModal() {
+  document.getElementById('crawlJournalModal').classList.remove('active');
+}
+
+// Crawl Journal form submit
+document.getElementById('crawlJournalForm')?.addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const id = document.getElementById('crawlJournalId').value;
+  const year = parseInt(document.getElementById('crawlYear').value);
+  const issue = parseInt(document.getElementById('crawlIssue').value);
+  const resultDiv = document.getElementById('crawlResult');
+
+  resultDiv.className = 'test-result checking';
+  resultDiv.textContent = '正在爬取，请稍候...';
+
+  try {
+    const res = await fetch('/api/journals/' + id + '/crawl', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year, issue })
+    });
+
+    const result = await res.json();
+
+    if (res.ok && result.success) {
+      resultDiv.className = 'test-result success';
+      resultDiv.textContent = '✓ 爬取成功！新增 ' + (result.new_articles_count || 0) + ' 篇文章，耗时 ' + Math.round((result.duration_ms || 0) / 1000) + ' 秒';
+
+      // Reload data
+      loadJournals(journalsPagination.page);
+      loadCrawlLogs(1);
+    } else {
+      resultDiv.className = 'test-result error';
+      resultDiv.textContent = '✗ 爬取失败: ' + (result.error || '未知错误');
+    }
+  } catch (err) {
+    resultDiv.className = 'test-result error';
+    resultDiv.textContent = '✗ 爬取失败，请稍后重试';
+  }
+});
+
+// Close modals on overlay click
+document.getElementById('journalModal')?.addEventListener('click', function(e) {
+  if (e.target === this) {
+    closeJournalModal();
+  }
+});
+
+document.getElementById('crawlJournalModal')?.addEventListener('click', function(e) {
+  if (e.target === this) {
+    closeCrawlJournalModal();
+  }
+});
+
+// Update goToPage to handle journals and crawlLogs
+const originalGoToPage = goToPage;
+goToPage = function(type, page) {
+  if (type === 'journals') {
+    loadJournals(page);
+  } else if (type === 'crawlLogs') {
+    loadCrawlLogs(page);
+  } else {
+    originalGoToPage(type, page);
+  }
+};

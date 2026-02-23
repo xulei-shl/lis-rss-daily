@@ -160,3 +160,92 @@
     </form>
   </div>
 </div>
+
+<!-- Add/Edit Journal Modal -->
+<div class="modal-overlay" id="journalModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="journalModalTitle">添加期刊</h3>
+      <button class="modal-close" onclick="closeJournalModal()">&times;</button>
+    </div>
+    <form id="journalForm">
+      <input type="hidden" id="journalId">
+      <div class="form-group">
+        <label for="journalName">期刊名称 *</label>
+        <input type="text" id="journalName" required placeholder="例如: 中国图书馆学报">
+      </div>
+      <div class="form-group">
+        <label for="journalSourceType">来源类型 *</label>
+        <select id="journalSourceType" required onchange="updateJournalSourceUI()">
+          <option value="cnki">CNKI (中国知网)</option>
+          <option value="rdfybk">人大报刊</option>
+          <option value="lis">LIS (图书情报工作)</option>
+        </select>
+      </div>
+      <div class="form-group" id="journalUrlGroup">
+        <label for="journalUrl">期刊 URL *</label>
+        <input type="url" id="journalUrl" placeholder="https://navi.cnki.net/knavi/journals/XXX/detail">
+        <small style="color: var(--dim); display: block; margin-top: 4px;">CNKI 期刊导航页 URL 或独立网站 URL</small>
+      </div>
+      <div class="form-group" id="journalCodeGroup" style="display: none;">
+        <label for="journalCode">期刊代码 *</label>
+        <input type="text" id="journalCode" placeholder="例如: G9">
+        <small style="color: var(--dim); display: block; margin-top: 4px;">人大报刊资料期刊代码</small>
+      </div>
+      <div class="form-group">
+        <label for="journalPublicationCycle">发行周期 *</label>
+        <select id="journalPublicationCycle" required>
+          <option value="monthly">月刊 (每年12期)</option>
+          <option value="bimonthly">双月刊 (每年6期)</option>
+          <option value="semimonthly">半月刊 (每年24期)</option>
+          <option value="quarterly">季刊 (每年4期)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="journalIssuesPerYear">每年期数 *</label>
+        <input type="number" id="journalIssuesPerYear" min="1" max="52" required value="12">
+      </div>
+      <div class="form-group">
+        <label for="journalStatus">状态</label>
+        <select id="journalStatus">
+          <option value="active">启用</option>
+          <option value="inactive">禁用</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeJournalModal()">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Crawl Journal Modal -->
+<div class="modal-overlay" id="crawlJournalModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>手动爬取期刊</h3>
+      <button class="modal-close" onclick="closeCrawlJournalModal()">&times;</button>
+    </div>
+    <form id="crawlJournalForm">
+      <input type="hidden" id="crawlJournalId">
+      <div class="form-group">
+        <label id="crawlJournalNameLabel">期刊名称</label>
+        <p style="font-weight: 500; margin-top: 4px;" id="crawlJournalNameDisplay"></p>
+      </div>
+      <div class="form-group">
+        <label for="crawlYear">年份 *</label>
+        <input type="number" id="crawlYear" min="2000" max="2100" required>
+      </div>
+      <div class="form-group">
+        <label for="crawlIssue">期号 *</label>
+        <input type="number" id="crawlIssue" min="1" max="52" required>
+      </div>
+      <div id="crawlResult" class="test-result"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeCrawlJournalModal()">取消</button>
+        <button type="submit" class="btn btn-primary">开始爬取</button>
+      </div>
+    </form>
+  </div>
+</div>

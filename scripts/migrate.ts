@@ -122,6 +122,150 @@ async function runMigrations() {
         continue;
       }
 
+      // ============================================================
+      // 012: 添加期刊表和相关字段
+      // ============================================================
+      if (file === '012_add_journals.sql') {
+        // 检查 journals 表是否已存在
+        const hasJournalsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='journals'").get();
+
+        if (!hasJournalsTable) {
+          // 1. 创建 journals 表
+          db.exec(`
+CREATE TABLE IF NOT EXISTS journals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  source_type TEXT NOT NULL CHECK(source_type IN ('cnki', 'rdfybk', 'lis')),
+  source_url TEXT,
+  journal_code TEXT,
+  publication_cycle TEXT NOT NULL,
+  issues_per_year INTEGER NOT NULL,
+  volume_offset INTEGER DEFAULT 1956,
+  last_year INTEGER,
+  last_issue INTEGER,
+  last_volume INTEGER,
+  status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);`);
+          db.exec('CREATE INDEX IF NOT EXISTS idx_journals_user_id ON journals(user_id);');
+          db.exec('CREATE INDEX IF NOT EXISTS idx_journals_status ON journals(status);');
+          db.exec('CREATE INDEX IF NOT EXISTS idx_journals_source_type ON journals(source_type);');
+          console.log('      → Created journals table');
+
+          // 2. 创建 journal_crawl_logs 表
+          db.exec(`
+CREATE TABLE IF NOT EXISTS journal_crawl_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  journal_id INTEGER NOT NULL,
+  crawl_year INTEGER NOT NULL,
+  crawl_issue INTEGER NOT NULL,
+  crawl_volume INTEGER,
+  articles_count INTEGER DEFAULT 0,
+  new_articles_count INTEGER DEFAULT 0,
+  status TEXT NOT NULL CHECK(status IN ('success', 'failed', 'partial')),
+  error_message TEXT,
+  duration_ms INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (journal_id) REFERENCES journals(id) ON DELETE CASCADE
+);`);
+          db.exec('CREATE INDEX IF NOT EXISTS idx_journal_crawl_logs_journal_id ON journal_crawl_logs(journal_id);');
+          db.exec('CREATE INDEX IF NOT EXISTS idx_journal_crawl_logs_created_at ON journal_crawl_logs(created_at);');
+          console.log('      → Created journal_crawl_logs table');
+
+          // 3. 检查并添加 articles 表的新字段
+          const hasSourceOrigin = hasColumn(db, 'articles', 'source_origin');
+          if (!hasSourceOrigin) {
+            db.exec("ALTER TABLE articles ADD COLUMN source_origin TEXT DEFAULT 'rss' CHECK(source_origin IN ('rss', 'journal'));");
+            console.log('      → Added source_origin column to articles');
+          }
+
+          const hasJournalId = hasColumn(db, 'articles', 'journal_id');
+          if (!hasJournalId) {
+            db.exec('ALTER TABLE articles ADD COLUMN journal_id INTEGER REFERENCES journals(id);');
+            console.log('      → Added journal_id column to articles');
+          }
+
+          // 创建索引
+          db.exec('CREATE INDEX IF NOT EXISTS idx_articles_source_origin ON articles(source_origin);');
+          db.exec('CREATE INDEX IF NOT EXISTS idx_articles_journal_id ON articles(journal_id);');
+          console.log('      → Created indexes for new columns');
+
+          // 4. 初始化期刊数据
+          // CNKI 期刊
+          const cnkiJournals = [
+            ['中国图书馆学报', 'cnki', 'https://navi.cnki.net/knavi/journals/ZGTS/detail', 'bimonthly', 6, 2025, 6],
+            ['图书情报知识', 'cnki', 'https://navi.cnki.net/knavi/journals/TSQC/detail', 'bimonthly', 6, 2025, 6],
+            ['信息资源管理学报', 'cnki', 'https://navi.cnki.net/knavi/journals/XNZY/detail', 'bimonthly', 6, 2025, 4],
+            ['图书馆论坛', 'cnki', 'https://navi.cnki.net/knavi/journals/TSGL/detail', 'monthly', 12, 2025, 12],
+            ['大学图书馆学报', 'cnki', 'https://navi.cnki.net/knavi/journals/DXTS/detail', 'bimonthly', 6, 2025, 6],
+            ['图书馆建设', 'cnki', 'https://navi.cnki.net/knavi/journals/TSGJ/detail', 'bimonthly', 6, 2025, 6],
+            ['国家图书馆学刊', 'cnki', 'https://navi.cnki.net/knavi/journals/BJJG/detail', 'bimonthly', 6, 2025, 6],
+            ['图书与情报', 'cnki', 'https://navi.cnki.net/knavi/journals/BOOK/detail', 'bimonthly', 6, 2025, 5],
+            ['图书馆杂志', 'cnki', 'https://navi.cnki.net/knavi/journals/TNGZ/detail', 'monthly', 12, 2025, 12],
+            ['图书馆学研究', 'cnki', 'https://navi.cnki.net/knavi/journals/TSSS/detail', 'monthly', 12, 2025, 12],
+            ['图书馆工作与研究', 'cnki', 'https://navi.cnki.net/knavi/journals/TSGG/detail', 'monthly', 12, 2025, 12],
+            ['图书馆', 'cnki', 'https://navi.cnki.net/knavi/journals/TSGT/detail', 'monthly', 12, null, null],
+            ['图书馆理论与实践', 'cnki', 'https://navi.cnki.net/knavi/journals/LSGL/detail', 'monthly', 12, 2025, 12],
+            ['文献与数据学报', 'cnki', 'https://navi.cnki.net/knavi/journals/BXJW/detail', 'quarterly', 4, 2025, 4],
+            ['农业图书情报学报', 'cnki', 'https://navi.cnki.net/knavi/journals/LYTS/detail', 'monthly', 12, 2025, 12],
+          ];
+
+          const insertJournal = db.prepare(`
+            INSERT OR IGNORE INTO journals (user_id, name, source_type, source_url, publication_cycle, issues_per_year, last_year, last_issue)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+          `);
+
+          for (const journal of cnkiJournals) {
+            insertJournal.run(...journal);
+          }
+          console.log(`      → Initialized ${cnkiJournals.length} CNKI journals`);
+
+          // 人大报刊期刊
+          const rdfybkJournals = [
+            ['图书馆学情报学', 'rdfybk', null, 'G9', 'monthly', 12, 2025, 12],
+            ['档案学', 'rdfybk', null, 'G7', 'bimonthly', 6, null, null],
+            ['出版业', 'rdfybk', null, 'Z1', 'monthly', 12, null, null],
+          ];
+
+          const insertRdfybkJournal = db.prepare(`
+            INSERT OR IGNORE INTO journals (user_id, name, source_type, source_url, journal_code, publication_cycle, issues_per_year, last_year, last_issue)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+
+          for (const journal of rdfybkJournals) {
+            insertRdfybkJournal.run(...journal);
+          }
+          console.log(`      → Initialized ${rdfybkJournals.length} RDFYBK journals`);
+
+          // 独立网站期刊
+          const lisJournals = [
+            ['图书情报工作', 'lis', 'https://www.lis.ac.cn', 'semimonthly', 24, 1956, 2026, 4, 70],
+          ];
+
+          const insertLisJournal = db.prepare(`
+            INSERT OR IGNORE INTO journals (user_id, name, source_type, source_url, publication_cycle, issues_per_year, volume_offset, last_year, last_issue, last_volume)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+
+          for (const journal of lisJournals) {
+            insertLisJournal.run(...journal);
+          }
+          console.log(`      → Initialized ${lisJournals.length} LIS journals`);
+
+          // 5. 为所有现有文章设置 source_origin = 'rss'
+          const updateResult = db.prepare("UPDATE articles SET source_origin = 'rss' WHERE source_origin IS NULL").run();
+          console.log(`      → Set source_origin='rss' for ${updateResult.changes} existing articles`);
+
+          console.log('      → Migration 012 completed');
+        } else {
+          console.log('      → Skipped (journals table already exists)');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

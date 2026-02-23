@@ -13,6 +13,7 @@ import settingsRoutes from './routes/settings.routes.js';
 import systemPromptRoutes from './routes/system-prompts.routes.js';
 import dailySummaryRoutes from './routes/daily-summary.routes.js';
 import typesRoutes from './routes/types.routes.js';
+import journalsRoutes from './routes/journals.routes.js';
 
 const router = express.Router();
 
@@ -30,5 +31,6 @@ router.use(settingsRoutes);
 router.use(systemPromptRoutes);
 router.use(dailySummaryRoutes);
 router.use(typesRoutes);
+router.use(journalsRoutes);
 
 export default router;
