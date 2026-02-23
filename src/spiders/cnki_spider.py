@@ -19,8 +19,8 @@ from pathlib import Path
 from typing import Optional, List, Union, Callable
 from urllib.parse import urlparse
 
-from playwright.async_api import async_playwright, TimeoutError as AsyncPlaywrightTimeoutError
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+from camoufox.sync_api import Camoufox
+from camoufox.async_api import AsyncCamoufox
 
 from paper_detail import PaperDetailSpider, AsyncPaperDetailSpider, ProgressReporter
 from json_sanitizer import JSONSanitizer
@@ -164,12 +164,8 @@ class CNKISpider:
 
         print(f"将爬取 {self.year} 年第 {self.issues[0]} 至 {self.issues[-1]} 期，共 {len(self.issues)} 期")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=self.headless)
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-            page = context.new_page()
+        with Camoufox() as browser:
+            page = browser.new_page()
 
             try:
                 # 1. 访问期刊导航页
@@ -206,14 +202,9 @@ class CNKISpider:
                         print(f"爬取 {self.year} 年第 {issue} 期时出错: {e}")
                         all_results[issue] = []
 
-            except PlaywrightTimeoutError as e:
-                print(f"页面加载超时: {e}")
-                raise
             except Exception as e:
                 print(f"爬取过程中发生错误: {e}")
                 raise
-            finally:
-                browser.close()
 
         return all_results
 
@@ -241,12 +232,8 @@ class CNKISpider:
 
         print(f"将爬取 {self.year} 年第 {self.issues[0]} 至 {self.issues[-1]} 期，共 {len(self.issues)} 期")
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=self.headless)
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-            page = await context.new_page()
+        async with AsyncCamoufox() as browser:
+            page = await browser.new_page()
 
             try:
                 # 1. 访问期刊导航页
@@ -274,7 +261,7 @@ class CNKISpider:
 
                         # 如果需要获取详情（异步并发）
                         if self.get_details and papers:
-                            papers = await self._get_paper_details_async(context, papers, concurrency)
+                            papers = await self._get_paper_details_async(browser, papers, concurrency)
 
                         all_results[issue] = papers
                         self.results.extend(papers)
@@ -283,14 +270,9 @@ class CNKISpider:
                         print(f"爬取 {self.year} 年第 {issue} 期时出错: {e}")
                         all_results[issue] = []
 
-            except AsyncPlaywrightTimeoutError as e:
-                print(f"页面加载超时: {e}")
-                raise
             except Exception as e:
                 print(f"爬取过程中发生错误: {e}")
                 raise
-            finally:
-                await browser.close()
 
         return all_results
 
@@ -305,12 +287,8 @@ class CNKISpider:
         Returns:
             论文列表
         """
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=self.headless)
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-            page = await context.new_page()
+        async with AsyncCamoufox() as browser:
+            page = await browser.new_page()
 
             try:
                 # 1. 访问期刊导航页
@@ -331,7 +309,7 @@ class CNKISpider:
 
                 # 6. 如果需要获取详情
                 if self.get_details and papers:
-                    papers = await self._get_paper_details_async(context, papers, concurrency)
+                    papers = await self._get_paper_details_async(browser, papers, concurrency)
 
                 self.results = papers
                 return papers
@@ -342,8 +320,6 @@ class CNKISpider:
             except Exception as e:
                 print(f"爬取过程中发生错误: {e}")
                 raise
-            finally:
-                await browser.close()
 
     async def _expand_year_async(self, page):
         """展开指定年份的列表（异步版本）"""
@@ -564,12 +540,8 @@ class CNKISpider:
         Returns:
             论文列表
         """
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=self.headless)
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-            page = context.new_page()
+        with Camoufox() as browser:
+            page = browser.new_page()
 
             try:
                 # 1. 访问期刊导航页
@@ -601,8 +573,6 @@ class CNKISpider:
             except Exception as e:
                 print(f"爬取过程中发生错误: {e}")
                 raise
-            finally:
-                browser.close()
 
     def _expand_year(self, page):
         """展开指定年份的列表"""

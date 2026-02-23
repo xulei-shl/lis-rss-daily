@@ -3,6 +3,7 @@ node_modules/
 期刊网页定时爬取/
 
 向量化参考/
+__pycache__/
 
 # Build output
 dist/

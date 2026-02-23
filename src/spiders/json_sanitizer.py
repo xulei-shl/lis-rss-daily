@@ -122,6 +122,28 @@ class JSONSanitizer:
         return [cls.sanitize_paper(paper) for paper in papers]
 
     @classmethod
+    def sanitize_to_json(cls, papers: List[Dict[str, Any]], **json_kwargs) -> str:
+        """
+        清理数据并转换为 JSON 字符串
+
+        Args:
+            papers: 论文记录列表
+            **json_kwargs: 传递给 json.dumps 的额外参数
+
+        Returns:
+            JSON 字符串
+        """
+        # 先清理数据
+        cleaned_papers = cls.sanitize_papers(papers)
+
+        # 设置默认参数
+        json_kwargs.setdefault('ensure_ascii', False)
+        json_kwargs.setdefault('indent', 2)
+
+        # 返回 JSON 字符串
+        return json.dumps(cleaned_papers, **json_kwargs)
+
+    @classmethod
     def sanitize_and_save(cls, papers: List[Dict[str, Any]], filepath: str, **json_kwargs) -> None:
         """
         清理并保存到 JSON 文件

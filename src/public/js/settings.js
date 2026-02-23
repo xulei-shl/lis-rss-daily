@@ -1596,34 +1596,41 @@ document.getElementById('crawlJournalForm')?.addEventListener('submit', async fu
   const id = document.getElementById('crawlJournalId').value;
   const year = parseInt(document.getElementById('crawlYear').value);
   const issue = parseInt(document.getElementById('crawlIssue').value);
-  const resultDiv = document.getElementById('crawlResult');
 
-  resultDiv.className = 'test-result checking';
-  resultDiv.textContent = '正在爬取，请稍候...';
+  // 立即关闭弹窗
+  closeCrawlJournalModal();
 
-  try {
-    const res = await fetch('/api/journals/' + id + '/crawl', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ year, issue })
+  // 发起爬取请求（不等待结果）
+  fetch('/api/journals/' + id + '/crawl', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ year, issue })
+  })
+    .then(async (res) => {
+      const result = await res.json();
+
+      if (res.ok && result.success) {
+        // 爬取成功，刷新数据并显示通知
+        await loadJournals(journalsPagination.page);
+        await showConfirm(
+          '爬取成功！新增 ' + (result.new_articles_count || 0) + ' 篇文章，耗时 ' + Math.round((result.duration_ms || 0) / 1000) + ' 秒',
+          { title: '爬取完成', okText: '知道了', okButtonType: 'btn-secondary' }
+        );
+      } else {
+        await showConfirm('爬取失败: ' + (result.error || '未知错误'), {
+          title: '错误',
+          okText: '知道了',
+          okButtonType: 'btn-secondary'
+        });
+      }
+    })
+    .catch(async () => {
+      await showConfirm('爬取失败，请稍后重试', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     });
-
-    const result = await res.json();
-
-    if (res.ok && result.success) {
-      resultDiv.className = 'test-result success';
-      resultDiv.textContent = '✓ 爬取成功！新增 ' + (result.new_articles_count || 0) + ' 篇文章，耗时 ' + Math.round((result.duration_ms || 0) / 1000) + ' 秒';
-
-      // Reload data
-      loadJournals(journalsPagination.page);
-    } else {
-      resultDiv.className = 'test-result error';
-      resultDiv.textContent = '✗ 爬取失败: ' + (result.error || '未知错误');
-    }
-  } catch (err) {
-    resultDiv.className = 'test-result error';
-    resultDiv.textContent = '✗ 爬取失败，请稍后重试';
-  }
 });
 
 // Close modals on overlay click

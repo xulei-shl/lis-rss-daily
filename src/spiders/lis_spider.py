@@ -19,8 +19,8 @@ import time
 from pathlib import Path
 from typing import Optional, List, Union
 
-from playwright.async_api import async_playwright, TimeoutError as AsyncPlaywrightTimeoutError
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+from camoufox.sync_api import Camoufox
+from camoufox.async_api import AsyncCamoufox
 
 from json_sanitizer import JSONSanitizer
 
@@ -283,12 +283,7 @@ class LISSpider:
             print("警告: 没有有效的期号")
             return all_results
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=self.headless)
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-
+        async with AsyncCamoufox() as browser:
             try:
                 for i, issue in enumerate(self.issues):
                     print(f"\n{'='*50}")
@@ -296,7 +291,7 @@ class LISSpider:
                     print(f"{'='*50}")
 
                     try:
-                        papers = await self._crawl_single_issue_async(context, issue)
+                        papers = await self._crawl_single_issue_async(browser, issue)
                         all_results[issue] = papers
                         self.results.extend(papers)
                     except Exception as e:
@@ -304,7 +299,7 @@ class LISSpider:
                         all_results[issue] = []
 
             finally:
-                await browser.close()
+                pass  # Camoufox 会自动关闭
 
         return all_results
 
@@ -320,12 +315,8 @@ class LISSpider:
         """
         url = self.build_url(self.year, self.volume, issue)
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=self.headless)
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-            page = context.new_page()
+        with Camoufox() as browser:
+            page = browser.new_page()
 
             try:
                 # 访问期刊页面
@@ -344,8 +335,6 @@ class LISSpider:
             except Exception as e:
                 print(f"爬取过程中发生错误: {e}")
                 raise
-            finally:
-                browser.close()
 
     async def _crawl_single_issue_async(self, context, issue: int) -> list:
         """
@@ -794,16 +783,12 @@ def main():
             print("使用异步模式...", file=sys.stderr)
             if len(issues) == 1:
                 async def run_single():
-                    async with async_playwright() as p:
-                        browser = await p.chromium.launch(headless=spider.headless)
-                        context = await browser.new_context(
-                            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                        )
+                    async with AsyncCamoufox() as browser:
                         try:
-                            papers = await spider._crawl_single_issue_async(context, issues[0])
+                            papers = await spider._crawl_single_issue_async(browser, issues[0])
                             return papers
                         finally:
-                            await browser.close()
+                            pass  # Camoufox 会自动关闭
                 papers = asyncio.run(run_single())
             else:
                 all_results = asyncio.run(spider.run_all_issues_async())

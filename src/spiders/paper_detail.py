@@ -15,8 +15,8 @@ import sys
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-from playwright.async_api import Page, TimeoutError as AsyncPlaywrightTimeoutError
-from playwright.sync_api import Page as SyncPage, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Page
+from playwright.sync_api import Page as SyncPage
 
 
 class PaperDetailSpider:
