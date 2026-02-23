@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 图书情报知识 (lis.ac.cn) 期刊爬虫
-使用 Playwright 实现的图书情报知识期刊论文爬取工具
+使用 Camoufox 实现的图书情报知识期刊论文爬取工具
 
 功能：
 1. 爬取指定期刊的某一期论文列表
@@ -15,14 +15,11 @@ import asyncio
 import json
 import re
 import sys
-import time
 from pathlib import Path
 from typing import Optional, List, Union
 
 from camoufox.sync_api import Camoufox
 from camoufox.async_api import AsyncCamoufox
-
-from json_sanitizer import JSONSanitizer
 
 
 class LISSpider:
@@ -133,14 +130,7 @@ class LISSpider:
             issue: 期号（可选，用于校验）
 
         Returns:
-            包含校验结果的字典，格式为：
-            {
-                "valid": bool,
-                "year": int,
-                "volume": int,
-                "issue": Optional[int],
-                "error": Optional[str]
-            }
+            包含校验结果的字典
 
         Raises:
             ValueError: 参数无效时抛出
@@ -224,160 +214,14 @@ class LISSpider:
         else:
             raise TypeError(f"不支持的期号类型: {type(issues)}")
 
-    def run(self, issue: Optional[int] = None) -> list:
-        """
-        运行爬虫（单期）
-
-        Args:
-            issue: 期号，如果为 None 则使用第一期
-
-        Returns:
-            论文列表
-        """
-        target_issue = issue if issue is not None else self.issues[0]
-        return self._crawl_single_issue(target_issue)
-
-    def run_all_issues(self) -> dict:
-        """
-        运行爬虫（多期）
-
-        Returns:
-            字典，键为期号，值为论文列表
-        """
-        all_results = {}
-
-        if not self.issues:
-            print("警告: 没有有效的期号")
-            return all_results
-
-        for i, issue in enumerate(self.issues):
-            print(f"\n{'='*50}")
-            print(f"正在爬取 {self.year} 年第 {issue} 期 ({i+1}/{len(self.issues)})")
-            print(f"{'='*50}")
-
-            try:
-                papers = self._crawl_single_issue(issue)
-                all_results[issue] = papers
-                self.results.extend(papers)
-            except Exception as e:
-                print(f"爬取 {self.year} 年第 {issue} 期时出错: {e}")
-                all_results[issue] = []
-
-        return all_results
-
-    async def run_all_issues_async(self, concurrency: int = 3) -> dict:
-        """
-        异步运行爬虫（多期）
-
-        注意：lis.ac.cn 的每次请求需要独立处理，这里使用串行方式
-
-        Args:
-            concurrency: 并发数（此爬虫暂不支持并发，每次只处理一页）
-
-        Returns:
-            字典，键为期号，值为论文列表
-        """
-        all_results = {}
-
-        if not self.issues:
-            print("警告: 没有有效的期号")
-            return all_results
-
-        async with AsyncCamoufox() as browser:
-            try:
-                for i, issue in enumerate(self.issues):
-                    print(f"\n{'='*50}")
-                    print(f"正在爬取 {self.year} 年第 {issue} 期 ({i+1}/{len(self.issues)})")
-                    print(f"{'='*50}")
-
-                    try:
-                        papers = await self._crawl_single_issue_async(browser, issue)
-                        all_results[issue] = papers
-                        self.results.extend(papers)
-                    except Exception as e:
-                        print(f"爬取 {self.year} 年第 {issue} 期时出错: {e}")
-                        all_results[issue] = []
-
-            finally:
-                pass  # Camoufox 会自动关闭
-
-        return all_results
-
-    def _crawl_single_issue(self, issue: int) -> list:
-        """
-        爬取单期论文
-
-        Args:
-            issue: 期号
-
-        Returns:
-            论文列表
-        """
-        url = self.build_url(self.year, self.volume, issue)
-
-        with Camoufox() as browser:
-            page = browser.new_page()
-
-            try:
-                # 访问期刊页面
-                print(f"正在访问: {url}")
-                page.goto(url, timeout=self.timeout, wait_until="domcontentloaded")
-
-                # 提取论文列表
-                papers = self._extract_papers(page, issue)
-
-                self.results = papers
-                return papers
-
-            except PlaywrightTimeoutError as e:
-                print(f"页面加载超时: {e}")
-                raise
-            except Exception as e:
-                print(f"爬取过程中发生错误: {e}")
-                raise
-
-    async def _crawl_single_issue_async(self, context, issue: int) -> list:
-        """
-        异步爬取单期论文
-
-        Args:
-            context: 浏览器上下文
-            issue: 期号
-
-        Returns:
-            论文列表
-        """
-        url = self.build_url(self.year, self.volume, issue)
-
-        page = await context.new_page()
-
-        try:
-            # 访问期刊页面
-            print(f"正在访问: {url}")
-            await page.goto(url, timeout=self.timeout, wait_until="domcontentloaded")
-
-            # 提取论文列表
-            papers = await self._extract_papers_async(page, issue)
-
-            self.results = papers
-            return papers
-
-        except AsyncPlaywrightTimeoutError as e:
-            print(f"页面加载超时: {e}")
-            raise
-        except Exception as e:
-            print(f"爬取过程中发生错误: {e}")
-            raise
-        finally:
-            await page.close()
-
     def _should_skip_title(self, title: str) -> bool:
         """
         判断是否应该跳过该标题
 
         跳过规则：
         1. 标题为 "目录"
-        2. 标题以 "专题：" 开头
+        2. 标题以 "专题：" 开头（但保留具体论文）
+        3. 标题包含 "优秀审稿专家"、"优秀编委"、"优秀论文" 等
 
         Args:
             title: 论文标题
@@ -394,11 +238,22 @@ class LISSpider:
         if title == "目录":
             return True
 
-        # 跳过以 "专题：" 开头的
-        if title.startswith("专题："):
+        # 跳过纯专题标题（不包含具体论文标题）
+        # 格式如 "专题：构建面向强国建设的科技文献资源保障发展体系 序"
+        # 但保留 "专题：xxx 论文标题" 格式中的论文
+        if title.startswith("专题：") and " 序" in title:
             return True
+        
+        # 跳过《图书情报工作》相关
         if title.startswith("《图书情报工作》"):
             return True
+        
+        # 跳过优秀审稿专家、优秀编委、优秀论文等非论文条目
+        skip_keywords = ["优秀审稿专家", "优秀编委", "优秀论文", "年度优秀"]
+        for keyword in skip_keywords:
+            if keyword in title:
+                return True
+            
         return False
 
     def _parse_volume_issue(self, text: str) -> tuple:
@@ -414,7 +269,7 @@ class LISSpider:
         Returns:
             (year, volume, issue, pages) 或 None
         """
-        # 匹配格式: 2025, 69(24): 4-15.
+        # 匹配格式: 2026, 70(1): 5-15.
         pattern = r'(\d+),\s*(\d+)\((\d+)\):\s*([\d\-\s]+)\.'
         match = re.search(pattern, text)
 
@@ -442,7 +297,7 @@ class LISSpider:
         paper_list = page.locator("li.noselectrow")
         count = paper_list.count()
 
-        print(f"正在提取论文信息 (共 {count} 条记录)...")
+        print(f"正在提取论文信息 (共 {count} 条记录)...", file=sys.stderr)
 
         skip_count = 0
 
@@ -484,7 +339,6 @@ class LISSpider:
                         parsed_year, parsed_volume, parsed_issue, pages = result
                     else:
                         # 如果解析失败，尝试单独提取页码
-                        # 格式可能只有 "4-15." 部分
                         page_match = re.search(r'([\d\-\s]+)\.', vol_text)
                         if page_match:
                             pages = page_match.group(1).strip()
@@ -520,148 +374,50 @@ class LISSpider:
                 papers.append(paper)
 
             except Exception as e:
-                print(f"提取第 {i+1} 条记录时出错: {e}")
+                print(f"提取第 {i+1} 条记录时出错: {e}", file=sys.stderr)
                 continue
 
-        print(f"已提取 {len(papers)} 篇论文 (跳过 {skip_count} 条非论文记录)")
+        print(f"已提取 {len(papers)} 篇论文 (跳过 {skip_count} 条非论文记录)", file=sys.stderr)
         return papers
 
-    async def _extract_papers_async(self, page, issue: int) -> list:
+    def crawl_single_issue(self, issue: int) -> list:
         """
-        提取论文列表（异步版本）
+        爬取单期论文
 
         Args:
-            page: Playwright 页面对象
             issue: 期号
 
         Returns:
             论文列表
         """
-        papers = []
-        paper_list = page.locator("li.noselectrow")
-        count = await paper_list.count()
+        url = self.build_url(self.year, self.volume, issue)
 
-        print(f"正在提取论文信息 (共 {count} 条记录)...")
+        with Camoufox(headless=self.headless) as browser:
+            page = browser.new_page()
 
-        skip_count = 0
-
-        for i in range(count):
             try:
-                row = paper_list.nth(i)
+                # 访问期刊页面
+                print(f"正在访问: {url}", file=sys.stderr)
+                page.goto(url, timeout=self.timeout, wait_until="domcontentloaded")
 
-                # 获取标题
-                title_elem = row.locator(".j-title-1 a")
-                title = ""
-                abstract_url = ""
+                # 等待文章列表加载
+                page.wait_for_selector("li.noselectrow", timeout=10000)
 
-                elem_count = await title_elem.count()
-                if elem_count > 0:
-                    title = await title_elem.inner_text()
-                    title = title.strip()
-                    abstract_url = await title_elem.get_attribute("href") or ""
+                # 提取论文列表
+                papers = self._extract_papers(page, issue)
 
-                # 检查是否需要跳过
-                if self._should_skip_title(title):
-                    skip_count += 1
-                    continue
-
-                # 获取作者
-                author_elem = row.locator(".j-author")
-                author = ""
-                author_count = await author_elem.count()
-                if author_count > 0:
-                    author = await author_elem.inner_text()
-                    author = author.strip()
-
-                # 获取卷期和页码
-                vol_elem = row.locator(".j-volumn")
-                pages = ""
-                parsed_year = self.year
-                parsed_volume = self.volume
-                parsed_issue = issue
-
-                vol_count = await vol_elem.count()
-                if vol_count > 0:
-                    vol_text = await vol_elem.inner_text()
-                    vol_text = vol_text.strip()
-                    result = self._parse_volume_issue(vol_text)
-                    if result:
-                        parsed_year, parsed_volume, parsed_issue, pages = result
-                    else:
-                        # 如果解析失败，尝试单独提取页码
-                        page_match = re.search(r'([\d\-\s]+)\.', vol_text)
-                        if page_match:
-                            pages = page_match.group(1).strip()
-
-                # 获取 DOI
-                doi_elem = row.locator(".j-doi")
-                doi = ""
-                doi_count = await doi_elem.count()
-                if doi_count > 0:
-                    doi = await doi_elem.inner_text()
-                    doi = doi.strip()
-                    # 或者从 href 获取
-                    doi_href = await doi_elem.get_attribute("href") or ""
-                    if doi_href and not doi:
-                        doi = doi_href
-
-                # 获取摘要（直接在列表页）
-                abstract_elem = row.locator(".j-abstract")
-                abstract = ""
-                abstract_count = await abstract_elem.count()
-                if abstract_count > 0:
-                    abstract = await abstract_elem.inner_text()
-                    abstract = abstract.strip()
-
-                paper = {
-                    "year": parsed_year,
-                    "volume": parsed_volume,
-                    "issue": parsed_issue,
-                    "title": title,
-                    "author": author,
-                    "pages": pages,
-                    "abstract_url": abstract_url,
-                    "doi": doi,
-                    "abstract": abstract
-                }
-
-                papers.append(paper)
+                self.results = papers
+                return papers
 
             except Exception as e:
-                print(f"提取第 {i+1} 条记录时出错: {e}")
-                continue
-
-        print(f"已提取 {len(papers)} 篇论文 (跳过 {skip_count} 条非论文记录)")
-        return papers
-
-    def save_results(self, filepath: str = "results.json"):
-        """保存结果到文件"""
-        output_path = Path(filepath)
-        # 使用 JSONSanitizer 清理数据后再保存
-        JSONSanitizer.sanitize_and_save(self.results, str(output_path))
-        print(f"结果已保存到: {output_path.absolute()}")
-
-    def print_results(self):
-        """打印结果到控制台"""
-        for i, paper in enumerate(self.results, 1):
-            print(f"\n[{i}] {paper['title']}")
-            print(f"    年份: {paper.get('year', 'N/A')}")
-            print(f"    卷期: {paper.get('volume', 'N/A')}({paper.get('issue', 'N/A')})")
-            print(f"    作者: {paper['author']}")
-            print(f"    页码: {paper['pages']}")
-            if paper.get('doi'):
-                print(f"    DOI: {paper['doi']}")
-            if paper.get('abstract'):
-                abstract = paper['abstract']
-                if len(abstract) > 200:
-                    abstract = abstract[:200] + "..."
-                print(f"    摘要: {abstract}")
+                print(f"爬取过程中发生错误: {e}", file=sys.stderr)
+                raise
 
 
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description="图书情报知识 (lis.ac.cn) 期刊论文爬虫 - 使用 Playwright",
+        description="图书情报知识 (lis.ac.cn) 期刊论文爬虫 - 使用 Camoufox",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
@@ -670,18 +426,6 @@ def main():
 
   # 爬取 2025 年第 1-3 期论文列表（范围格式）
   python lis_spider.py -y 2025 -i "1-3"
-
-  # 爬取 2025 年第 1,5,7 期论文列表（离散格式）
-  python lis_spider.py -y 2025 -i "1,5,7"
-
-  # 爬取 2025 年第 1-3,5,7-9 期论文列表（混合格式）
-  python lis_spider.py -y 2025 -i "1-3,5,7-9"
-
-  # 指定卷号（可选，会自动校验年份与卷号的对应关系）
-  python lis_spider.py -y 2025 -v 69 -i 24
-
-  # 非无头模式运行（显示浏览器）
-  python lis_spider.py -y 2025 -i 24 --no-headless
 
   # 保存到指定路径
   python lis_spider.py -y 2025 -i 24 -o outputs/图书情报知识/2025-24.json
@@ -731,13 +475,7 @@ def main():
         "-o", "--output",
         type=str,
         default="results.json",
-        help="输出文件路径，默认 results.json"
-    )
-
-    parser.add_argument(
-        "--sync",
-        action="store_true",
-        help="使用同步模式（默认为异步模式）"
+        help="输出文件路径，默认 results.json，使用 '-' 输出到 stdout"
     )
 
     args = parser.parse_args()
@@ -745,9 +483,9 @@ def main():
     # 解析期号字符串
     try:
         issues = LISSpider.parse_issue_string(args.issue)
-        print(f"解析期号: {args.issue} -> {issues}")
+        print(f"解析期号: {args.issue} -> {issues}", file=sys.stderr)
     except ValueError as e:
-        print(f"错误: {e}")
+        print(f"错误: {e}", file=sys.stderr)
         sys.exit(1)
 
     # 创建爬虫
@@ -759,58 +497,39 @@ def main():
             headless=not args.no_headless,
             timeout=args.timeout
         )
-        print(f"卷号: {spider.volume} (年份 {args.year})")
+        print(f"卷号: {spider.volume} (年份 {args.year})", file=sys.stderr)
     except ValueError as e:
-        print(f"错误: {e}")
+        print(f"错误: {e}", file=sys.stderr)
         sys.exit(1)
 
     # 确保输出目录存在
     output_path = Path(args.output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if args.output != '-':
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        # 根据参数选择同步或异步模式
-        if args.sync:
-            # 同步模式
-            print("使用同步模式...", file=sys.stderr)
-            if len(issues) == 1:
-                papers = spider.run()
-            else:
-                all_results = spider.run_all_issues()
-                papers = spider.results
-        else:
-            # 异步模式（默认）
-            print("使用异步模式...", file=sys.stderr)
-            if len(issues) == 1:
-                async def run_single():
-                    async with AsyncCamoufox() as browser:
-                        try:
-                            papers = await spider._crawl_single_issue_async(browser, issues[0])
-                            return papers
-                        finally:
-                            pass  # Camoufox 会自动关闭
-                papers = asyncio.run(run_single())
-            else:
-                all_results = asyncio.run(spider.run_all_issues_async())
-                papers = spider.results
+        # 只爬取第一期（单期模式）
+        papers = spider.crawl_single_issue(issues[0])
 
         if papers:
-            # 打印结果到 stderr（日志）
-            spider.print_results()
-
             # 输出 JSON 结果
             if args.output == '-':
                 # 输出到 stdout
-                print(JSONSanitizer.sanitize_to_json(papers))
+                # 使用 sys.stdout.write 确保完整输出
+                json_str = json.dumps(papers, ensure_ascii=False, indent=2)
+                sys.stdout.write(json_str)
+                sys.stdout.flush()
             else:
                 # 保存到文件
-                spider.save_results(args.output)
-                print(f"\n成功爬取 {len(papers)} 篇论文", file=sys.stderr)
+                with open(args.output, 'w', encoding='utf-8') as f:
+                    json.dump(papers, f, ensure_ascii=False, indent=2)
+                print(f"\n成功爬取 {len(papers)} 篇论文，保存到: {output_path.absolute()}", file=sys.stderr)
         else:
             print("\n未找到任何论文", file=sys.stderr)
             # 输出空数组
             if args.output == '-':
-                print('[]')
+                sys.stdout.write('[]')
+                sys.stdout.flush()
 
     except KeyboardInterrupt:
         print("\n\n用户中断执行", file=sys.stderr)
@@ -821,7 +540,9 @@ def main():
         traceback.print_exc(file=sys.stderr)
         # 输出错误 JSON
         if args.output == '-':
-            print(json.dumps({"error": str(e), "articles": []}))
+            error_json = json.dumps({"error": str(e), "articles": []}, ensure_ascii=False)
+            sys.stdout.write(error_json)
+            sys.stdout.flush()
         sys.exit(1)
 
 
