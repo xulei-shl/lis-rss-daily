@@ -182,6 +182,14 @@ ${input.content ? `内容预览: ${input.content.substring(0, 2000)}...` : ''}
     if ('evaluations' in parsed && Array.isArray(parsed.evaluations)) {
       // 标准格式：evaluations 数组
       for (const evaluation of parsed.evaluations) {
+        // 验证 domain_id 是否存在于数据库中
+        if (!domainNames.has(evaluation.domain_id)) {
+          log.warn(
+            { domainId: evaluation.domain_id, validIds: Array.from(domainNames.keys()) },
+            'LLM returned invalid domain_id, skipping'
+          );
+          continue;
+        }
         results.set(evaluation.domain_id, {
           domainId: evaluation.domain_id,
           passed: evaluation.is_relevant,
@@ -194,6 +202,14 @@ ${input.content ? `内容预览: ${input.content.substring(0, 2000)}...` : ''}
       const decision = parsed.decision;
       const isPassed = typeof decision === 'boolean' ? decision : decision === '通过' || decision === 'pass';
       for (const match of parsed.matched_domains) {
+        // 验证 domain_id 是否存在于数据库中
+        if (!domainNames.has(match.domain_id)) {
+          log.warn(
+            { domainId: match.domain_id, validIds: Array.from(domainNames.keys()) },
+            'LLM returned invalid domain_id, skipping'
+          );
+          continue;
+        }
         results.set(match.domain_id, {
           domainId: match.domain_id,
           passed: isPassed,
@@ -234,19 +250,57 @@ async function recordFilterLog(
 ): Promise<void> {
   const db = getDb();
 
-  await db
-    .insertInto('article_filter_logs')
-    .values({
-      article_id: articleId,
-      domain_id: domainId,
-      is_passed: isPassed ? 1 : 0,
-      relevance_score: relevanceScore,
-      matched_keywords: null,
-      filter_reason: filterReason,
-      llm_response: llmResponse,
-      created_at: new Date().toISOString(),
-    } as any)
-    .execute();
+  try {
+    // 验证 article 是否存在（避免外键约束错误）
+    const article = await db
+      .selectFrom('articles')
+      .select('id')
+      .where('id', '=', articleId)
+      .executeTakeFirst();
+
+    if (!article) {
+      log.warn({ articleId }, 'Article not found, skipping filter log');
+      return;
+    }
+
+    // 如果指定了 domainId，验证它是否存在
+    if (domainId !== null) {
+      const domain = await db
+        .selectFrom('topic_domains')
+        .select('id')
+        .where('id', '=', domainId)
+        .executeTakeFirst();
+
+      if (!domain) {
+        log.warn({ domainId }, 'Domain not found, skipping filter log');
+        return;
+      }
+    }
+
+    await db
+      .insertInto('article_filter_logs')
+      .values({
+        article_id: articleId,
+        domain_id: domainId,
+        is_passed: isPassed ? 1 : 0,
+        relevance_score: relevanceScore,
+        matched_keywords: null,
+        filter_reason: filterReason,
+        llm_response: llmResponse,
+      })
+      .execute();
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    log.error({
+      error: errMsg,
+      errorCode: (error as any).code,
+      articleId,
+      domainId,
+      isPassed,
+      relevanceScore,
+    }, 'Failed to record filter log');
+    // Don't throw - logging failure should not fail the filter operation
+  }
 }
 
 /**

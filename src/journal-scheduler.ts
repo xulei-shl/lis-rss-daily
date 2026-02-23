@@ -437,14 +437,15 @@ export class JournalScheduler {
             content: article.abstract?.trim() || null,
             markdown_content: null,
             filter_status: 'pending',
+            process_status: 'pending',
             source_origin: 'journal',
             journal_id: journalId,
             published_year: article.publishedYear || null,
             published_issue: article.publishedIssue || null,
             published_volume: article.publishedVolume || null,
-            created_at: now,
+            is_read: 0,
             updated_at: now,
-          } as any)
+          })
           .execute();
 
         newCount++;

@@ -156,9 +156,10 @@ export async function saveArticles(
           filter_status: 'pending',
           process_status: 'pending',
           published_at: item.pubDate ? new Date(item.pubDate).toISOString() : null,
-          created_at: now,
+          is_read: 0,
+          source_origin: 'rss',
           updated_at: now,
-        } as any)
+        })
         .returning('id')
         .executeTakeFirst();
 

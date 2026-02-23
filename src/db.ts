@@ -5,7 +5,20 @@
  */
 
 import Database from 'better-sqlite3';
-import { Kysely, SqliteDialect } from 'kysely';
+import { Kysely, SqliteDialect, Generated } from 'kysely';
+
+/**
+ * Unwrap Generated<T> to T for selection results
+ * Kysely returns unwrapped types from queries, but Generated<T> is needed for inserts
+ */
+type UnwrapGenerated<T> = T extends Generated<infer U> ? U : T;
+
+/**
+ * Convert a table type to its selection type (unwraps Generated fields)
+ */
+export type SelectionType<T> = {
+  [K in keyof T]: UnwrapGenerated<T[K]>;
+};
 import { logger } from './logger.js';
 import { config } from './config.js';
 import { type SourceType } from './constants/source-types.js';
@@ -52,7 +65,7 @@ export interface RssSourcesTable {
 }
 
 export interface ArticlesTable {
-  id: number;
+  id: Generated<number>;
   rss_source_id: number | null;  // RSS来源（期刊文章为 null）
   title: string;
   url: string;
@@ -73,7 +86,7 @@ export interface ArticlesTable {
   is_read: number;  // 0 = 未读, 1 = 已读
   source_origin: 'rss' | 'journal';  // 文章来源
   journal_id: number | null;  // 期刊ID（RSS文章为 null）
-  created_at: string;
+  created_at: Generated<string>;
   updated_at: string;
 }
 
@@ -100,7 +113,7 @@ export interface TopicKeywordsTable {
 }
 
 export interface ArticleFilterLogsTable {
-  id: number;
+  id: Generated<number>;
   article_id: number;
   domain_id: number | null;
   is_passed: number;
@@ -108,7 +121,7 @@ export interface ArticleFilterLogsTable {
   matched_keywords: string | null;
   filter_reason: string | null;
   llm_response: string | null;
-  created_at: string;
+  created_at: Generated<string>;
 }
 
 export interface ArticleRelatedTable {
@@ -168,18 +181,18 @@ export interface SystemPromptsTable {
 }
 
 export interface DailySummariesTable {
-  id: number;
+  id: Generated<number>;
   user_id: number;
   summary_date: string;
   summary_type: 'journal' | 'blog_news' | 'all';
   article_count: number;
   summary_content: string;
   articles_data: string;
-  created_at: string;
+  created_at: Generated<string>;
 }
 
 export interface JournalsTable {
-  id: number;
+  id: Generated<number>;
   user_id: number;
   name: string;
   source_type: 'cnki' | 'rdfybk' | 'lis';
@@ -192,12 +205,12 @@ export interface JournalsTable {
   last_issue: number | null;
   last_volume: number | null;
   status: 'active' | 'inactive';
-  created_at: string;
+  created_at: Generated<string>;
   updated_at: string;
 }
 
 export interface JournalCrawlLogsTable {
-  id: number;
+  id: Generated<number>;
   journal_id: number;
   crawl_year: number;
   crawl_issue: number;
@@ -207,10 +220,21 @@ export interface JournalCrawlLogsTable {
   status: 'success' | 'failed' | 'partial';
   error_message: string | null;
   duration_ms: number | null;
-  created_at: string;
+  created_at: Generated<string>;
 }
 
 export type DB = Kysely<DatabaseTable>;
+
+// Selection result types (unwraps Generated<T> to T)
+export type UsersSelection = SelectionType<UsersTable>;
+export type RssSourcesSelection = SelectionType<RssSourcesTable>;
+export type ArticlesSelection = SelectionType<ArticlesTable>;
+export type TopicDomainsSelection = SelectionType<TopicDomainsTable>;
+export type TopicKeywordsSelection = SelectionType<TopicKeywordsTable>;
+export type ArticleFilterLogsSelection = SelectionType<ArticleFilterLogsTable>;
+export type DailySummariesSelection = SelectionType<DailySummariesTable>;
+export type JournalsSelection = SelectionType<JournalsTable>;
+export type JournalCrawlLogsSelection = SelectionType<JournalCrawlLogsTable>;
 
 let _db: DB | null = null;
 

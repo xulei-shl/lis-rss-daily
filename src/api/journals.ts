@@ -3,7 +3,7 @@
  * 期刊管理服务
  */
 
-import { getDb, type JournalsTable, type JournalCrawlLogsTable } from '../db.js';
+import { getDb, type JournalsSelection, type JournalCrawlLogsSelection } from '../db.js';
 import { logger } from '../logger.js';
 import type { JournalSourceType, PublicationCycle, JournalInfo } from '../spiders/types.js';
 
@@ -51,7 +51,7 @@ export interface ListJournalsParams {
  * 期刊列表分页结果
  */
 export interface ListJournalsResult {
-  journals: JournalsTable[];
+  journals: JournalsSelection[];
   page: number;
   limit: number;
   total: number;
@@ -124,7 +124,7 @@ export async function listJournals(params: ListJournalsParams): Promise<ListJour
 /**
  * 获取单个期刊
  */
-export async function getJournal(userId: number, journalId: number): Promise<JournalsTable | null> {
+export async function getJournal(userId: number, journalId: number): Promise<JournalsSelection | null> {
   const db = getDb();
 
   const journal = await db
@@ -140,7 +140,7 @@ export async function getJournal(userId: number, journalId: number): Promise<Jou
 /**
  * 创建期刊
  */
-export async function createJournal(params: CreateJournalParams): Promise<JournalsTable> {
+export async function createJournal(params: CreateJournalParams): Promise<JournalsSelection> {
   const db = getDb();
 
   // 验证参数
@@ -160,9 +160,8 @@ export async function createJournal(params: CreateJournalParams): Promise<Journa
       issues_per_year: params.issuesPerYear,
       volume_offset: params.volumeOffset || 1956,
       status: 'active',
-      created_at: now,
       updated_at: now,
-    } as any)
+    })
     .returningAll()
     .executeTakeFirstOrThrow();
 
@@ -178,7 +177,7 @@ export async function updateJournal(
   userId: number,
   journalId: number,
   params: UpdateJournalParams
-): Promise<JournalsTable | null> {
+): Promise<JournalsSelection | null> {
   const db = getDb();
 
   // 检查期刊是否存在
@@ -266,7 +265,7 @@ export async function createCrawlLog(params: {
   status: 'success' | 'failed' | 'partial';
   errorMessage?: string;
   durationMs: number;
-}): Promise<JournalCrawlLogsTable> {
+}): Promise<JournalCrawlLogsSelection> {
   const db = getDb();
 
   const result = await db
@@ -281,8 +280,7 @@ export async function createCrawlLog(params: {
       status: params.status,
       error_message: params.errorMessage || null,
       duration_ms: params.durationMs,
-      created_at: new Date().toISOString(),
-    } as any)
+    })
     .returningAll()
     .executeTakeFirstOrThrow();
 
@@ -295,7 +293,7 @@ export async function createCrawlLog(params: {
  * 爬取日志列表分页结果
  */
 export interface ListCrawlLogsResult {
-  logs: Array<JournalCrawlLogsTable & { journal_name: string }>;
+  logs: Array<JournalCrawlLogsSelection & { journal_name: string }>;
   page: number;
   limit: number;
   total: number;
@@ -315,10 +313,26 @@ export async function getCrawlLogs(
 
   const offset = (page - 1) * limit;
 
-  let query = db
+  // 构建基础查询条件
+  let baseQuery = db
     .selectFrom('journal_crawl_logs')
     .innerJoin('journals', 'journals.id', 'journal_crawl_logs.journal_id')
-    .where('journals.user_id', '=', userId)
+    .where('journals.user_id', '=', userId);
+
+  if (journalId) {
+    baseQuery = baseQuery.where('journal_crawl_logs.journal_id', '=', journalId);
+  }
+
+  // 获取总数（独立查询，避免污染主查询）
+  const countResult = await baseQuery
+    .select((eb) => eb.fn.count('journal_crawl_logs.id').as('total'))
+    .executeTakeFirst();
+
+  const total = Number(countResult?.total || 0);
+  const totalPages = Math.ceil(total / limit);
+
+  // 获取分页数据
+  const logs = await baseQuery
     .select([
       'journal_crawl_logs.id',
       'journal_crawl_logs.journal_id',
@@ -332,23 +346,7 @@ export async function getCrawlLogs(
       'journal_crawl_logs.duration_ms',
       'journal_crawl_logs.created_at',
       'journals.name as journal_name',
-    ]);
-
-  if (journalId) {
-    query = query.where('journal_crawl_logs.journal_id', '=', journalId);
-  }
-
-  // 获取总数
-  const countResult = await query
-    .select((eb) => [eb.fn.count('journal_crawl_logs.id').as('total')])
-    .executeTakeFirst();
-
-  const total = Number(countResult?.total || 0);
-  const totalPages = Math.ceil(total / limit);
-
-  // 获取分页数据
-  const logs = await query
-    .selectAll()
+    ])
     .orderBy('journal_crawl_logs.created_at', 'desc')
     .limit(limit)
     .offset(offset)
@@ -397,7 +395,7 @@ function validateJournalParams(params: CreateJournalParams): void {
 /**
  * 将数据库记录映射为 JournalInfo
  */
-function mapToJournalInfo(row: JournalsTable): JournalInfo {
+function mapToJournalInfo(row: JournalsSelection): JournalInfo {
   return {
     id: row.id,
     name: row.name,

@@ -4,7 +4,7 @@
  * 负责查询当日通过的文章、按源类型排序、调用 LLM 生成总结、管理历史记录
  */
 
-import { getDb, type DailySummariesTable } from '../db.js';
+import { getDb, type DailySummariesSelection } from '../db.js';
 import { logger } from '../logger.js';
 import { getUserLLMProvider } from '../llm.js';
 import { resolveSystemPrompt } from './system-prompts.js';
@@ -356,14 +356,12 @@ export async function saveDailySummary(input: SaveDailySummaryInput): Promise<vo
       article_count: articleCount,
       summary_content: summaryContent,
       articles_data: articlesJson,
-      created_at: new Date().toISOString(),
-    } as any)
+    })
     .onConflict((oc) =>
       oc.columns(['user_id', 'summary_date', 'summary_type']).doUpdateSet({
         article_count: articleCount,
         summary_content: summaryContent,
         articles_data: articlesJson,
-        created_at: new Date().toISOString(),
       })
     )
     .execute();
@@ -379,7 +377,7 @@ export async function getDailySummaryByDate(
   userId: number,
   date: string,
   type?: SummaryType
-): Promise<DailySummariesTable | undefined> {
+): Promise<DailySummariesSelection | undefined> {
   const db = getDb();
   let query = db
     .selectFrom('daily_summaries')
@@ -434,7 +432,7 @@ export async function getDailySummaryHistory(
 export async function getTodaySummary(
   userId: number,
   type?: SummaryType
-): Promise<DailySummariesTable | undefined> {
+): Promise<DailySummariesSelection | undefined> {
   const today = new Date().toISOString().split('T')[0];
   return getDailySummaryByDate(userId, today, type);
 }

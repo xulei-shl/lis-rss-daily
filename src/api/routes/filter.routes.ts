@@ -60,9 +60,8 @@ router.get('/filter/logs', requireAuth, async (req: AuthRequest, res) => {
     const domainId = req.query.domainId ? parseInt(req.query.domainId as string) : undefined;
     const isPassed = req.query.isPassed;
 
-    // Build base query - handle both RSS and journal articles
-    // Join with journals for journal articles, or rss_sources for RSS articles
-    let query = db
+    // Build base query conditions
+    let baseQuery = db
       .selectFrom('article_filter_logs')
       .innerJoin('articles', 'articles.id', 'article_filter_logs.article_id')
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
@@ -79,23 +78,23 @@ router.get('/filter/logs', requireAuth, async (req: AuthRequest, res) => {
       );
 
     if (domainId !== undefined && !isNaN(domainId)) {
-      query = query.where('article_filter_logs.domain_id', '=', domainId);
+      baseQuery = baseQuery.where('article_filter_logs.domain_id', '=', domainId);
     }
 
     if (isPassed !== undefined) {
       const passed = isPassed === 'true';
-      query = query.where('article_filter_logs.is_passed', '=', passed ? 1 : 0);
+      baseQuery = baseQuery.where('article_filter_logs.is_passed', '=', passed ? 1 : 0);
     }
 
-    // Get total count
-    const totalCountResult = await query
+    // Get total count (separate query to avoid pollution)
+    const totalCountResult = await baseQuery
       .select((eb) => eb.fn.count('article_filter_logs.id').as('count'))
       .executeTakeFirst();
 
     const total = Number(totalCountResult?.count ?? 0);
 
     // Get paginated results with article title
-    const logs = await query
+    const logs = await baseQuery
       .selectAll('article_filter_logs')
       .select('articles.title as article_title')
       .orderBy('article_filter_logs.created_at', 'desc')
