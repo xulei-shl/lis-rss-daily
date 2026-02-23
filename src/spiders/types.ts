@@ -19,6 +19,7 @@ export type PublicationCycle = 'monthly' | 'bimonthly' | 'semimonthly' | 'quarte
 export interface SpiderRunParams {
   url?: string;       // CNKI 期刊 URL
   code?: string;      // 人大报刊期刊代码
+  journalName?: string; // 期刊名称（用于 CNKI 搜索）
   year: number;       // 年份
   issue: number;      // 期号
   volume?: number;    // 卷号（LIS 期刊使用）

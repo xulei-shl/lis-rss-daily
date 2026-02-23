@@ -141,16 +141,17 @@ export class PythonSpiderRunner {
     switch (type) {
       case 'cnki':
         // CNKI 爬虫参数
-        // python cnki_spider.py -u URL -y YEAR -i ISSUE
+        // python cnki_spider.py -u URL -n NAME -y YEAR -i ISSUE
         if (params.url) {
           args.push('-u', params.url);
+        }
+        if (params.journalName) {
+          args.push('-n', params.journalName);
         }
         args.push('-y', String(params.year));
         args.push('-i', String(params.issue));
         // 默认获取详情
         args.push('-d');
-        // 使用异步模式（更快）
-        args.push('-c', '3');
         break;
 
       case 'rdfybk':
@@ -163,8 +164,6 @@ export class PythonSpiderRunner {
         args.push('-i', String(params.issue));
         // 获取详情
         args.push('-d');
-        // 使用异步模式
-        args.push('-c', '3');
         break;
 
       case 'lis':

@@ -287,6 +287,7 @@ export class JournalScheduler {
       const spiderResult = await pythonSpiderRunner.runSpider(journal.source_type, {
         url: journal.source_url || undefined,
         code: journal.journal_code || undefined,
+        journalName: journal.name,
         year,
         issue,
         volume,

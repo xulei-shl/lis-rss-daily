@@ -88,7 +88,8 @@ class CNKISpider:
 
         return sorted(list(issues))
 
-    def __init__(self, url: str, year: int, issues: Union[int, str, List[int]], 
+    def __init__(self, url: str, year: int, issues: Union[int, str, List[int]],
+                 journal_name: Optional[str] = None,
                  get_details: bool = False, headless: bool = True, timeout: int = 30000):
         """
         初始化爬虫
@@ -100,12 +101,14 @@ class CNKISpider:
                 - 整数: 3 (单期)
                 - 字符串: "3", "1-3", "1,5,7", "1-3,5,7-9"
                 - 列表: [3], [1, 2, 3], [1, 5, 7]
+            journal_name: 期刊名称（可选，用于检索页面搜索）
             get_details: 是否获取论文摘要详情
             headless: 是否无头模式运行
             timeout: 超时时间（毫秒）
         """
         self.url = url
         self.year = year
+        self.journal_name = journal_name
         self.get_details = get_details
         self.headless = headless
         self.timeout = timeout
@@ -130,6 +133,13 @@ class CNKISpider:
         parsed = urlparse(url)
         if not parsed.scheme or not parsed.netloc:
             raise ValueError(f"无效的 URL: {url}")
+
+    def _goto_journal_page(self, page, url: str):
+        """直接导航到期刊页面"""
+        print(f"正在导航到期刊页面: {url}", file=sys.stderr)
+        page.goto(url, timeout=30000, wait_until="domcontentloaded")
+        time.sleep(2)
+        print("已到达期刊页面", file=sys.stderr)
 
     def _should_skip_title(self, title: str) -> bool:
         """
@@ -180,9 +190,91 @@ class CNKISpider:
             page = browser.new_page()
 
             try:
-                # 1. 访问期刊导航页
-                print(f"正在访问: {url}", file=sys.stderr)
-                page.goto(url, timeout=self.timeout, wait_until="domcontentloaded")
+                # 1. 访问 CNKI 首页
+                print("正在访问 CNKI 首页...", file=sys.stderr)
+                page.goto("https://www.cnki.net", timeout=30000, wait_until="domcontentloaded")
+                time.sleep(1)
+                print("首页加载完成", file=sys.stderr)
+
+                # 2. 点击"出版物检索"链接
+                print("正在点击'出版物检索'链接...", file=sys.stderr)
+                navi_link = page.locator("#naviSearch")
+                if navi_link.count() > 0:
+                    # 先获取链接的 href 属性，直接导航而不是点击
+                    href = navi_link.first.get_attribute("href")
+                    print(f"出版物检索链接: {href}", file=sys.stderr)
+                    if href:
+                        page.goto(href, timeout=30000, wait_until="domcontentloaded")
+                    else:
+                        navi_link.first.click()
+                    time.sleep(3)
+                    print(f"当前页面 URL: {page.url}", file=sys.stderr)
+                    print("已进入出版物检索页面，等待会话建立...", file=sys.stderr)
+                    # 在检索页面停留一段时间，建立会话
+                    time.sleep(5)
+                else:
+                    print("未找到'出版物检索'链接，直接导航到检索页面", file=sys.stderr)
+                    page.goto("https://navi.cnki.net/knavi/", timeout=30000, wait_until="domcontentloaded")
+                    time.sleep(5)
+
+                # 3. 如果提供了期刊名称，通过搜索进入期刊页面
+                if self.journal_name:
+                    print(f"正在搜索期刊: {self.journal_name}", file=sys.stderr)
+
+                    # 等待搜索输入框出现
+                    try:
+                        page.wait_for_selector("#txt_1_value1", timeout=10000)
+                        print("找到搜索输入框", file=sys.stderr)
+                    except Exception as e:
+                        print(f"等待搜索输入框超时: {e}", file=sys.stderr)
+                        print("当前页面 URL:", page.url, file=sys.stderr)
+                        self._goto_journal_page(page, url)
+
+                    # 输入期刊名称
+                    search_input = page.locator("#txt_1_value1")
+                    if search_input.count() > 0:
+                        search_input.first.fill(self.journal_name)
+                        time.sleep(0.5)
+                        # 点击搜索按钮
+                        search_btn = page.locator("#btnSearch")
+                        if search_btn.count() > 0:
+                            print("点击搜索按钮", file=sys.stderr)
+                            search_btn.first.click()
+                            time.sleep(3)
+                            # 点击第一个搜索结果
+                            result_link = page.locator(".re_brief h1 a")
+                            if result_link.count() > 0:
+                                print("找到搜索结果，点击进入", file=sys.stderr)
+                                # 获取链接的 href，直接导航而不是点击
+                                result_href = result_link.first.get_attribute("href")
+                                if result_href:
+                                    page.goto(result_href, timeout=30000, wait_until="domcontentloaded")
+                                else:
+                                    result_link.first.click()
+                                    # 等待页面跳转
+                                    try:
+                                        page.wait_for_load_state("networkidle", timeout=10000)
+                                    except:
+                                        pass
+                                time.sleep(3)
+                                print("已进入期刊页面", file=sys.stderr)
+                            else:
+                                print("未找到搜索结果，使用直接导航", file=sys.stderr)
+                                self._goto_journal_page(page, url)
+                        else:
+                            print("未找到搜索按钮，使用直接导航", file=sys.stderr)
+                            self._goto_journal_page(page, url)
+                    else:
+                        print("未找到搜索输入框，使用直接导航", file=sys.stderr)
+                        self._goto_journal_page(page, url)
+                else:
+                    # 直接导航到目标期刊页面
+                    self._goto_journal_page(page, url)
+
+                # 调试：打印页面内容
+                time.sleep(3)
+                body_text = page.inner_text("body")[:2000]
+                print(f"页面内容预览: {body_text}", file=sys.stderr)
 
                 # 2. 展开年份列表
                 self._expand_year(page)
@@ -369,16 +461,16 @@ class CNKISpider:
         return papers
 
     def _get_paper_details(self, page, papers: list) -> list:
-        """获取论文摘要详情"""
+        """获取论文摘要详情 - 在当前页面点击链接获取"""
         total = len(papers)
         print(f"\n正在获取 {total} 篇论文的详细信息...", file=sys.stderr)
-
-        # 使用独立的详情爬取模块
-        detail_spider = PaperDetailSpider(timeout=self.timeout, delay=0.3)
 
         success_count = 0
         fail_count = 0
         skip_count = 0
+
+        # 保存当前页面 URL，以便返回
+        journal_page_url = page.url
 
         for i, paper in enumerate(papers):
             if not paper.get("abstract_url"):
@@ -390,33 +482,90 @@ class CNKISpider:
                 title_short = paper['title'][:40] + "..." if len(paper['title']) > 40 else paper['title']
                 print(f"  [{i+1}/{total}] 获取: {title_short}", end=" ", file=sys.stderr)
 
-                # 在新标签页打开摘要页
-                context = page.context
-                detail_page = context.new_page()
-                detail_page.set_default_timeout(self.timeout)
+                # 在当前页面导航到摘要页
+                page.goto(paper["abstract_url"], timeout=self.timeout, wait_until="domcontentloaded")
+                time.sleep(1)
 
-                # 使用独立模块获取详情
-                detail = detail_spider.fetch_detail(detail_page, paper["abstract_url"])
+                # 获取摘要信息
+                abstract = ""
+                keywords = ""
+                doi = ""
 
-                if detail:
-                    paper["abstract"] = detail.get("abstract", "")
-                    paper["keywords"] = detail.get("keywords", "")
-                    paper["doi"] = detail.get("doi", "")
-                    paper["fund"] = detail.get("fund", "")
-                    paper["authors_detail"] = detail.get("authors", "")
+                try:
+                    # 尝试多种选择器获取摘要
+                    abstract_selectors = [
+                        "#ChDivSummary",
+                        ".abstract-text",
+                        "div[class*='abstract']",
+                        "#abstract"
+                    ]
+
+                    for selector in abstract_selectors:
+                        elem = page.locator(selector)
+                        if elem.count() > 0:
+                            text = elem.inner_text().strip()
+                            if text and len(text) > 10:
+                                abstract = text
+                                break
+
+                    # 获取关键词
+                    keyword_selectors = [
+                        "#ChDivKeywords",
+                        ".keywords",
+                        "div[class*='keyword']"
+                    ]
+
+                    for selector in keyword_selectors:
+                        elem = page.locator(selector)
+                        if elem.count() > 0:
+                            text = elem.inner_text().strip()
+                            if text:
+                                keywords = text
+                                break
+
+                    # 获取 DOI
+                    doi_selectors = [
+                        "span[class*='doi']",
+                        "div[class*='doi']",
+                        "#DOI"
+                    ]
+
+                    for selector in doi_selectors:
+                        elem = page.locator(selector)
+                        if elem.count() > 0:
+                            text = elem.inner_text().strip()
+                            if "doi" in text.lower():
+                                doi = text
+                                break
+
+                except Exception as e:
+                    print(f"提取详情时出错: {e}", file=sys.stderr)
+
+                if abstract:
+                    paper["abstract"] = abstract
+                    paper["keywords"] = keywords
+                    paper["doi"] = doi
                     print("成功", file=sys.stderr)
                     success_count += 1
                 else:
-                    paper["abstract"] = "获取失败"
+                    paper["abstract"] = "未找到摘要"
                     print("失败", file=sys.stderr)
                     fail_count += 1
 
-                detail_page.close()
+                # 返回期刊页面
+                page.goto(journal_page_url, timeout=30000, wait_until="domcontentloaded")
+                time.sleep(1)
 
             except Exception as e:
                 print(f"错误: {e}", file=sys.stderr)
                 paper["abstract"] = f"获取失败: {str(e)}"
                 fail_count += 1
+                # 尝试返回期刊页面
+                try:
+                    page.goto(journal_page_url, timeout=30000, wait_until="domcontentloaded")
+                    time.sleep(1)
+                except:
+                    pass
 
         print(f"\n摘要获取完成: 成功 {success_count} 篇，失败 {fail_count} 篇，跳过 {skip_count} 篇", file=sys.stderr)
         return papers
@@ -471,6 +620,13 @@ def main():
     )
 
     parser.add_argument(
+        "-n", "--name",
+        type=str,
+        default=None,
+        help="期刊名称（可选，用于通过检索页面搜索进入期刊）"
+    )
+
+    parser.add_argument(
         "-d", "--details",
         action="store_true",
         default=False,
@@ -512,6 +668,7 @@ def main():
         url=args.url,
         year=args.year,
         issues=issues,
+        journal_name=args.name,
         get_details=args.details,
         headless=not args.no_headless,
         timeout=args.timeout
