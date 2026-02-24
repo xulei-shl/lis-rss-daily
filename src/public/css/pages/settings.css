@@ -1,0 +1,412 @@
+/* ============================================
+   SETTINGS PAGE STYLES - Premium Minimalism
+   ============================================ */
+
+.settings-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 0 var(--space-10);
+}
+
+.settings-tabs {
+    max-width: 1400px;
+    margin: var(--space-4) auto var(--space-6);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.settings-tab {
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    font-size: var(--text-sm);
+    font-family: var(--font-meta);
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.settings-tab:hover {
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+}
+
+.settings-tab.active {
+    color: var(--bg-surface);
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-sm);
+}
+
+.settings-panel {
+    display: none;
+}
+
+.settings-panel.active {
+    display: block;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-6);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--divider);
+}
+
+.section-header h2 {
+    font-family: var(--font-heading);
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+/* Common UI Elements in Settings */
+.rss-sources-table,
+.llm-table,
+.prompts-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-bottom: var(--space-4);
+}
+
+.rss-sources-table th,
+.rss-sources-table td,
+.llm-table th,
+.llm-table td,
+.prompts-table th,
+.prompts-table td {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--divider);
+    text-align: left;
+    font-size: var(--text-sm);
+}
+
+.rss-sources-table th,
+.llm-table th,
+.prompts-table th {
+    background: var(--bg-subtle);
+    font-family: var(--font-meta);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.rss-sources-table tr:last-child td,
+.llm-table tr:last-child td,
+.prompts-table tr:last-child td {
+    border-bottom: none;
+}
+
+.llm-table th,
+.llm-table td {
+    padding: var(--space-3) var(--space-3);
+    /* Slightly reduced horizontal padding for better fit */
+}
+
+.rss-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.rss-url {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+}
+
+.rss-url a {
+    color: var(--text-tertiary);
+    text-decoration: none;
+}
+
+.rss-url a:hover {
+    color: var(--accent-primary);
+}
+
+/* Status Badges in Settings */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.status-badge.active {
+    background: rgba(5, 150, 105, 0.1);
+    color: var(--green);
+}
+
+.status-badge.inactive {
+    background: rgba(220, 38, 38, 0.1);
+    color: var(--red);
+}
+
+.action-buttons {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--space-12) var(--space-4);
+    background: var(--bg-surface);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+    color: var(--text-tertiary);
+}
+
+.empty-state svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: var(--space-4);
+    opacity: 0.3;
+}
+
+/* LLM Specific Styles */
+.llm-section {
+    overflow-x: auto;
+    width: 100%;
+}
+
+.llm-table {
+    table-layout: fixed;
+}
+
+.llm-table th,
+.llm-table td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* LLM Column Widths - Optimized for content visibility */
+.llm-table th:nth-child(1),
+.llm-table td:nth-child(1) {
+    width: 140px;
+    /* 提供商 + 默认标识 */
+}
+
+.llm-table th:nth-child(2),
+.llm-table td:nth-child(2) {
+    width: 90px;
+    /* 配置类型 */
+}
+
+.llm-table th:nth-child(3),
+.llm-table td:nth-child(3) {
+    width: 110px;
+    /* 任务类型 */
+}
+
+.llm-table th:nth-child(4),
+.llm-table td:nth-child(4) {
+    width: 200px;
+    /* 模型名称 */
+}
+
+.llm-table th:nth-child(5),
+.llm-table td:nth-child(5) {
+    width: auto;
+    /* Base URL (Flexible) */
+    min-width: 160px;
+}
+
+.llm-table th:nth-child(6),
+.llm-table td:nth-child(6) {
+    width: 80px;
+    /* 优先级 */
+}
+
+.llm-table th:nth-child(7),
+.llm-table td:nth-child(7) {
+    width: 100px;
+    /* 状态 */
+}
+
+.llm-table th:nth-child(8),
+.llm-table td:nth-child(8) {
+    width: 220px;
+    /* 操作 */
+    text-align: right;
+}
+
+/* Alignment for Priority and Status */
+.llm-table th:nth-child(6),
+.llm-table td:nth-child(6),
+.llm-table th:nth-child(7),
+.llm-table td:nth-child(7) {
+    text-align: center;
+}
+
+.llm-table tr:hover td {
+    background: var(--bg-subtle);
+}
+
+/* 操作 (Right aligned) */
+
+/* Specific fix for action column to prevent truncation and improve spacing */
+.llm-table td:last-child {
+    overflow: visible;
+    text-overflow: clip;
+}
+
+.llm-table td:last-child .action-buttons {
+    justify-content: flex-end;
+    gap: var(--space-2);
+}
+
+/* Compact and premium buttons for action column */
+.llm-table td:last-child .btn-icon {
+    padding: 0 var(--space-3);
+    height: 28px;
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+}
+
+.llm-table td:last-child .btn-icon:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+    background: var(--accent-subtle);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.llm-provider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.type-badge {
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    background: var(--accent-subtle);
+    color: var(--accent-primary);
+    display: inline-block;
+}
+
+.provider-badge {
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    display: inline-block;
+}
+
+.provider-badge.openai {
+    background: rgba(16, 163, 127, 0.1);
+    color: #10a37f;
+}
+
+.provider-badge.gemini {
+    background: rgba(66, 133, 244, 0.1);
+    color: #4285f4;
+}
+
+.default-badge {
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    background: rgba(217, 119, 6, 0.1);
+    color: var(--amber);
+    margin-left: var(--space-2);
+    display: inline-block;
+}
+
+.llm-model {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.api-key-masked {
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+    letter-spacing: 1px;
+}
+
+/* Chroma Specific */
+.chroma-form {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-4);
+    background: var(--bg-surface);
+    padding: var(--space-6);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+}
+
+.chroma-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    margin-top: var(--space-2);
+}
+
+/* Prompts Variables Info */
+.variables-info-panel details {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-4);
+}
+
+.variables-info-panel summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    user-select: none;
+}
+
+.variables-table td:first-child {
+    font-family: var(--font-mono);
+    color: var(--accent-primary);
+    font-weight: 500;
+}
+
+/* Response for Mobile */
+@media (max-width: 768px) {
+    .chroma-form {
+        grid-template-columns: 1fr;
+    }
+}

@@ -1,57 +1,152 @@
 /* ============================================
-   LOGS PAGE STYLES
+   LOGS PAGE STYLES - Premium Minimalism
    ============================================ */
 
-.logs-container {
+.logs-page {
     max-width: 1400px;
     margin: 0 auto;
+    padding: var(--space-6) 0 var(--space-12);
 }
 
 .section-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    gap: var(--space-3);
     margin-bottom: var(--space-6);
-    padding-bottom: var(--space-4);
-    border-bottom: 1px solid var(--border);
 }
 
 .section-header h2 {
     font-family: var(--font-heading);
-    font-size: var(--text-2xl);
+    font-size: var(--text-3xl);
     font-weight: 700;
     color: var(--text-primary);
     margin: 0;
 }
 
-.filters {
+.logs-tabs {
+    margin: var(--space-5) 0 var(--space-4);
     display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.logs-tab {
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    font-size: var(--text-sm);
+    font-family: var(--font-meta);
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.logs-tab:hover {
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+}
+
+.logs-tab.active {
+    color: var(--bg-surface);
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-sm);
+}
+
+.logs-tab-panel {
+    display: none;
+}
+
+.logs-tab-panel.active {
+    display: block;
+}
+
+/* 筛选栏优化：2列布局 */
+.logs-filter-bar {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
     gap: var(--space-4);
     margin-bottom: var(--space-6);
-    flex-wrap: wrap;
-    align-items: center;
-    background: var(--bg-surface);
     padding: var(--space-4);
+    background: var(--bg-surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
 }
 
-.filters label {
-    font-family: var(--font-meta);
-    font-size: var(--text-sm);
+/* 如果只有一个过滤条件（如 crawl 标签页），保持靠左 */
+.logs-tab-panel[data-panel="crawl"] .logs-filter-bar {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.filter-group label {
+    font-size: var(--text-xs);
+    font-weight: 600;
     color: var(--text-secondary);
-    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
-.filters select {
-    min-width: 160px;
+.filter-select {
+    padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right var(--space-2) center;
+    background-size: 10px;
+    transition: all 0.15s ease;
+    width: 100%;
 }
 
-/* Table overrides/specifics */
+.filter-select:hover {
+    border-color: var(--border-strong);
+    background-color: var(--bg-surface);
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+/* 响应式：窄屏幕变回单列 */
+@media (max-width: 640px) {
+    .logs-filter-bar {
+        grid-template-columns: 1fr;
+        gap: var(--space-3);
+    }
+}
+
 .logs-table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+
+.logs-table th,
+.logs-table td {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--divider);
+    text-align: left;
+    font-size: var(--text-sm);
 }
 
 .logs-table th {
@@ -60,75 +155,21 @@
     font-size: var(--text-xs);
     font-weight: 600;
     text-transform: uppercase;
-    color: var(--text-secondary);
-    padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--border);
-    text-align: left;
-}
-
-.logs-table td {
-    padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--divider);
-    font-size: var(--text-sm);
-    vertical-align: middle;
-}
-
-.article-title {
-    font-family: var(--font-body);
-    font-weight: 500;
-    max-width: 320px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.article-title a {
-    color: var(--text-primary);
-    text-decoration: none;
-}
-
-.article-title a:hover {
-    color: var(--accent-primary);
-    text-decoration: underline;
-}
-
-.domain-cell {
-    max-width: 140px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    letter-spacing: 0.05em;
     color: var(--text-secondary);
 }
 
-.relevance-score {
-    font-family: var(--font-mono);
-    font-weight: 600;
-    color: var(--text-secondary);
+.logs-table tr:last-child td {
+    border-bottom: none;
 }
 
-.filter-reason {
-    max-width: 280px;
-    color: var(--text-secondary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.timestamp {
-    color: var(--text-tertiary);
-    font-family: var(--font-meta);
-    font-size: var(--text-xs);
-    white-space: nowrap;
-}
-
-/* Expansion logic */
 .expand-row {
     cursor: pointer;
     transition: background-color 0.15s ease;
 }
 
 .expand-row:hover {
-    background: var(--bg-subtle);
+    background: var(--bg-primary);
 }
 
 .expand-row.expanded {
@@ -136,7 +177,7 @@
 }
 
 .expand-cell {
-    width: 40px;
+    width: 48px;
     text-align: center;
     color: var(--text-tertiary);
 }
@@ -144,7 +185,7 @@
 .expand-icon {
     display: inline-block;
     transition: transform 0.2s ease;
-    font-size: 0.8em;
+    font-size: 0.75rem;
 }
 
 .expand-row.expanded .expand-icon {
@@ -161,22 +202,19 @@
 }
 
 .detail-cell {
-    background: var(--bg-subtle);
     padding: 0 !important;
-    /* Reset padding to handle inner content */
+    background: var(--bg-subtle);
 }
 
 .detail-content {
     padding: var(--space-6);
     border-bottom: 1px solid var(--divider);
-    font-size: var(--text-sm);
     line-height: 1.6;
-    color: var(--text-primary);
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
 }
 
 .detail-content h4 {
     font-family: var(--font-heading);
+    font-size: var(--text-lg);
     font-weight: 700;
     margin-bottom: var(--space-3);
     color: var(--text-primary);
@@ -185,10 +223,11 @@
 .detail-content p {
     margin-bottom: var(--space-2);
     display: flex;
+    font-size: var(--text-sm);
 }
 
 .detail-content p strong {
-    width: 100px;
+    width: 120px;
     flex-shrink: 0;
     color: var(--text-secondary);
     font-weight: 500;
@@ -199,21 +238,21 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     padding: var(--space-4);
-    margin-top: var(--space-4);
     overflow-x: auto;
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     color: var(--text-secondary);
+    margin-top: var(--space-2);
 }
 
-/* Empty State */
 .empty-state {
     text-align: center;
-    padding: var(--space-12) var(--space-5);
+    padding: var(--space-12) var(--space-4);
+    color: var(--text-tertiary);
     background: var(--bg-surface);
     border: 1px dashed var(--border);
     border-radius: var(--radius-lg);
-    margin-top: var(--space-6);
+    margin-top: var(--space-4);
 }
 
 .empty-state svg {
@@ -221,7 +260,111 @@
     height: 48px;
     margin-bottom: var(--space-4);
     opacity: 0.3;
+}
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-8);
+}
+
+.pagination a,
+.pagination span {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    min-width: 36px;
+    text-align: center;
+    font-size: var(--text-sm);
+    font-family: var(--font-meta);
+    text-decoration: none;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+}
+
+.pagination a:hover {
+    background: var(--bg-subtle);
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+}
+
+.pagination .current {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
+}
+
+.pagination .disabled {
+    color: var(--text-tertiary);
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.status-badge.passed {
+    background: rgba(5, 150, 105, 0.1);
+    color: var(--green);
+}
+
+.status-badge.rejected,
+.status-badge.failed {
+    background: rgba(220, 38, 38, 0.1);
+    color: var(--red);
+}
+
+.status-badge.partial {
+    background: rgba(217, 119, 6, 0.1);
+    color: var(--amber);
+}
+
+.status-badge.processing {
+    background: rgba(26, 77, 122, 0.1);
+    color: var(--accent-primary);
+}
+
+.status-badge.skipped {
+    background: var(--bg-subtle);
     color: var(--text-tertiary);
 }
 
-/* Pagination handled by component or shared styles */
+.article-title {
+    max-width: 380px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.domain-cell {
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-secondary);
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    font-size: var(--text-2xs);
+    color: var(--text-tertiary);
+    margin-left: var(--space-2);
+    vertical-align: middle;
+}
