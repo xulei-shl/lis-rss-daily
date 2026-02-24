@@ -13,8 +13,8 @@ import asyncio
 import time
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
-from playwright.async_api import Page
-from playwright.sync_api import Page as SyncPage
+from playwright.async_api import Page, TimeoutError as AsyncPlaywrightTimeoutError
+from playwright.sync_api import Page as SyncPage, TimeoutError as PlaywrightTimeoutError
 
 if TYPE_CHECKING:
     from paper_detail import PagePool, ProgressReporter

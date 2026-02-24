@@ -186,7 +186,7 @@ class RDFYBKSpider:
 
                 # 4. 如果需要获取详情
                 if self.get_details and papers:
-                    papers = self._get_paper_details(page, papers)
+                    papers = self._get_paper_details(browser, papers)
 
                 self.results = papers
                 return papers
@@ -276,8 +276,14 @@ class RDFYBKSpider:
         print(f"已提取 {len(papers)} 篇论文 (跳过 {skip_count} 条非论文记录)", file=sys.stderr)
         return papers
 
-    def _get_paper_details(self, page, papers: list) -> list:
-        """获取论文摘要详情"""
+    def _get_paper_details(self, browser, papers: list) -> list:
+        """
+        获取论文摘要详情
+
+        Args:
+            browser: Camoufox browser 实例
+            papers: 论文列表
+        """
         total = len(papers)
         print(f"\n正在获取 {total} 篇论文的详细信息...", file=sys.stderr)
 
@@ -294,13 +300,13 @@ class RDFYBKSpider:
                 skip_count += 1
                 continue
 
+            detail_page = None
             try:
                 title_short = paper['title'][:40] + "..." if len(paper['title']) > 40 else paper['title']
                 print(f"  [{i+1}/{total}] 获取: {title_short}", end=" ", file=sys.stderr)
 
-                # 在新标签页打开摘要页
-                context = page.context
-                detail_page = context.new_page()
+                # 使用 browser.new_page() 创建新页面（Camoufox 要求）
+                detail_page = browser.new_page()
                 detail_page.set_default_timeout(self.timeout)
 
                 # 使用独立模块获取详情
@@ -315,12 +321,13 @@ class RDFYBKSpider:
                     print("失败", file=sys.stderr)
                     fail_count += 1
 
-                detail_page.close()
-
             except Exception as e:
                 print(f"错误: {e}", file=sys.stderr)
                 paper["abstract"] = f"获取失败: {str(e)}"
                 fail_count += 1
+            finally:
+                if detail_page:
+                    detail_page.close()
 
         print(f"\n摘要获取完成: 成功 {success_count} 篇，失败 {fail_count} 篇，跳过 {skip_count} 篇", file=sys.stderr)
         return papers
