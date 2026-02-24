@@ -196,7 +196,7 @@ export interface JournalsTable {
   id: Generated<number>;
   user_id: number;
   name: string;
-  source_type: 'cnki' | 'rdfybk' | 'lis';
+  source_type: 'cnki' | 'rdfybk' | 'lis' | 'wanfang';
   source_url: string | null;
   journal_code: string | null;
   publication_cycle: string;

@@ -6,6 +6,7 @@
  */
 
 import OpenAI from 'openai';
+import type { ChatCompletionCreateParamsNonStreaming } from 'openai/resources/chat/completions.js';
 import { logger } from './logger.js';
 import { getActiveConfigListByType, getActiveConfigListByTypeAndTask, type LLMConfigRecord } from './api/llm-configs.js';
 import { decryptAPIKey } from './utils/crypto.js';
@@ -145,7 +146,7 @@ function createOpenAIProvider(llmConfig: LLMConfigOptions, configId?: number): L
       });
 
       try {
-        const requestConfig: Record<string, any> = {
+        const requestConfig: ChatCompletionCreateParamsNonStreaming = {
           model,
           temperature: options.temperature,
           messages: messages.map((m) => ({ role: m.role, content: m.content })),

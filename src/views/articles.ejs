@@ -132,6 +132,19 @@
     // Load merged sources for filter (RSS sources + journals)
     let sources = [];  // Store merged sources with type info
 
+    // 根据来源 ID 找到完整配置
+    function findSourceById(sourceId) {
+      if (!sourceId) return null;
+      return sources.find(source => source.id === sourceId) || null;
+    }
+
+    // 将一组 ID 追加到查询参数
+    function appendIdList(target, key, ids) {
+      if (!ids || ids.length === 0) return false;
+      ids.forEach(id => target.append(key, id.toString()));
+      return true;
+    }
+
     async function loadSources() {
       const select = document.getElementById('filterSource');
       if (!select) {
@@ -189,24 +202,16 @@
 
       // 解析来源 ID（格式: "rss:{id}" 或 "journal:{id}" 或 "mixed:{id}"）
       if (sourceId) {
-        const [type, id] = sourceId.split(':');
-        if (type === 'rss' || type === 'mixed') {
-          // 可能是单个 RSS 或混合类型
-          const source = sources.find(s => s.id === sourceId);
-          if (source && source.rssIds && source.rssIds.length > 0) {
-            // 如果有多个 RSS ID，使用第一个（或需要支持多选）
-            params.append('rssSourceId', source.rssIds[0].toString());
-          } else {
-            params.append('rssSourceId', id);
-          }
-        } 
-        if (type === 'journal' || type === 'mixed') {
-          const source = sources.find(s => s.id === sourceId);
-          if (source && source.journalIds && source.journalIds.length > 0) {
-            params.append('journalId', source.journalIds[0].toString());
-          } else {
-            params.append('journalId', id);
-          }
+        const [type, rawId] = sourceId.split(':');
+        const selectedSource = findSourceById(sourceId);
+        const hasRssIds = selectedSource ? appendIdList(params, 'rssSourceIds', selectedSource.rssIds) : false;
+        const hasJournalIds = selectedSource ? appendIdList(params, 'journalIds', selectedSource.journalIds) : false;
+
+        if (!hasRssIds && (type === 'rss' || type === 'mixed') && rawId) {
+          params.append('rssSourceIds', rawId);
+        }
+        if (!hasJournalIds && (type === 'journal' || type === 'mixed') && rawId) {
+          params.append('journalIds', rawId);
         }
       }
       if (filterStatus) params.append('filterStatus', filterStatus);
@@ -636,21 +641,30 @@ async function markAllAsRead() {
     const body = { filterStatus: 'passed', daysAgo: 30 };
     // 解析来源 ID（格式: "rss:{id}" 或 "journal:{id}" 或 "mixed:{id}"）
     if (sourceId) {
-      const [type, id] = sourceId.split(':');
-      if (type === 'rss' || type === 'mixed') {
-        const source = sources.find(s => s.id === sourceId);
-        if (source && source.rssIds && source.rssIds.length > 0) {
-          body.rssSourceId = source.rssIds[0];
-        } else {
-          body.rssSourceId = parseInt(id);
+      const [type, idValue] = sourceId.split(':');
+      const selectedSource = findSourceById(sourceId);
+      const rssIds = selectedSource && selectedSource.rssIds && selectedSource.rssIds.length > 0
+        ? selectedSource.rssIds
+        : undefined;
+      const journalIds = selectedSource && selectedSource.journalIds && selectedSource.journalIds.length > 0
+        ? selectedSource.journalIds
+        : undefined;
+
+      if (rssIds) {
+        body.rssSourceIds = rssIds;
+      } else if ((type === 'rss' || type === 'mixed') && idValue) {
+        const parsed = parseInt(idValue, 10);
+        if (!Number.isNaN(parsed)) {
+          body.rssSourceIds = [parsed];
         }
       }
-      if (type === 'journal' || type === 'mixed') {
-        const source = sources.find(s => s.id === sourceId);
-        if (source && source.journalIds && source.journalIds.length > 0) {
-          body.journalId = source.journalIds[0];
-        } else {
-          body.journalId = parseInt(id);
+
+      if (journalIds) {
+        body.journalIds = journalIds;
+      } else if ((type === 'journal' || type === 'mixed') && idValue) {
+        const parsed = parseInt(idValue, 10);
+        if (!Number.isNaN(parsed)) {
+          body.journalIds = [parsed];
         }
       }
     }

@@ -13,6 +13,40 @@ const log = logger.child({ module: 'api-routes/articles' });
 
 const router = express.Router();
 
+function normalizeQueryIds(param: string | string[] | undefined): number[] | undefined {
+  if (!param) return undefined;
+  const values = Array.isArray(param) ? param : [param];
+  const ids = values
+    .map((value) => parseInt(value, 10))
+    .filter((value) => !Number.isNaN(value));
+  return ids.length > 0 ? ids : undefined;
+}
+
+function normalizeBodyIds(input: unknown): number[] | undefined {
+  if (input === undefined || input === null) return undefined;
+  const values = Array.isArray(input) ? input : [input];
+  const ids = values
+    .map((value) => {
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (typeof value === 'string' && value.trim() !== '') {
+        const parsed = parseInt(value, 10);
+        return Number.isNaN(parsed) ? null : parsed;
+      }
+      return null;
+    })
+    .filter((value): value is number => typeof value === 'number' && !Number.isNaN(value));
+  return ids.length > 0 ? ids : undefined;
+}
+
+function parseOptionalNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = parseInt(value, 10);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+  return undefined;
+}
+
 // ============================================================================
 // Articles Routes
 // ============================================================================
@@ -54,12 +88,16 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
     // 已读状态过滤
     const isReadParam = req.query.isRead as string | undefined;
     const isRead = isReadParam === 'true' ? true : isReadParam === 'false' ? false : undefined;
+    const rssSourceIds = normalizeQueryIds(req.query.rssSourceIds as string | string[] | undefined);
+    const journalIds = normalizeQueryIds(req.query.journalIds as string | string[] | undefined);
 
     const result = await articleService.getUserArticles(req.userId!, {
       page,
       limit,
       rssSourceId,
+      rssSourceIds,
       journalId,
+      journalIds,
       filterStatus,
       processStatus,
       search: searchQuery,
@@ -460,7 +498,9 @@ router.post('/articles/mark-all-read', requireAuth, async (req: AuthRequest, res
       filterStatus,
       daysAgo,
       rssSourceId,
+      rssSourceIds: bodyRssSourceIds,
       journalId,
+      journalIds: bodyJournalIds,
       processStatus,
       isRead,
       search,
@@ -468,11 +508,18 @@ router.post('/articles/mark-all-read', requireAuth, async (req: AuthRequest, res
       createdBefore,
     } = req.body;
 
+    const normalizedRssSourceIds = normalizeBodyIds(bodyRssSourceIds);
+    const normalizedJournalIds = normalizeBodyIds(bodyJournalIds);
+    const singleRssSourceId = parseOptionalNumber(rssSourceId);
+    const singleJournalId = parseOptionalNumber(journalId);
+
     const count = await articleService.markAllAsRead(req.userId!, {
       filterStatus,
       daysAgo,
-      rssSourceId: rssSourceId ? parseInt(rssSourceId) : undefined,
-      journalId: journalId ? parseInt(journalId) : undefined,
+      rssSourceId: singleRssSourceId,
+      rssSourceIds: normalizedRssSourceIds,
+      journalId: singleJournalId,
+      journalIds: normalizedJournalIds,
       processStatus,
       isRead,
       search,

@@ -70,6 +70,10 @@ export interface SearchResult {
     summary: string | null;
     published_at: string | null;
     rss_source_name?: string;
+    published_year?: number | null;
+    published_issue?: number | null;
+    published_volume?: number | null;
+    source_origin?: 'rss' | 'journal';
   };
 }
 
