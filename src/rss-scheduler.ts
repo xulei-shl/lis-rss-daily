@@ -522,6 +522,9 @@ export class RSSScheduler {
 
     let feed = parseResult.feed;
 
+    // Save original article count for accurate logging
+    const originalArticleCount = feed.items.length;
+
     // Limit articles on first fetch or manual fetch to avoid overwhelming the system
     const shouldLimit = isFirstFetch || task.isManualFetch;
     if (shouldLimit && feed.items.length > config.rssFirstRunMaxArticles) {
@@ -565,7 +568,7 @@ export class RSSScheduler {
     }
 
     return {
-      articlesCount: feed.items.length,
+      articlesCount: originalArticleCount,
       newArticlesCount: newItems.length,
     };
   }

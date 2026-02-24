@@ -1,203 +1,148 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><%= pageTitle %></title>
-
-  <!-- Google Fonts Preload -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-
-  <!-- Main CSS Bundle -->
-  <% if (process.env.NODE_ENV === 'production') { %>
-    <link rel="stylesheet" href="/css/main.bundle.min.css">
-  <% } else { %>
-    <link rel="stylesheet" href="/css/main.css">
-  <% } %>
-
-  <!-- Page-Specific Styles -->
+<%- include('layout', { pageTitle: pageTitle, pageStyles: `
   <link rel="stylesheet" href="/css/pages/home.css">
   <link rel="stylesheet" href="/css/components/articles.css">
   <link rel="stylesheet" href="/css/components/daily-summary.css">
+`, body: `
+  <!-- Stats Section -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-value" id="todayNew">-</div>
+      <div class="stat-label">今日新增</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="pendingCount">-</div>
+      <div class="stat-label">待处理</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="analyzedCount">-</div>
+      <div class="stat-label">已完成</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="passRate">-</div>
+      <div class="stat-label">通过率</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="unreadCount">-</div>
+      <div class="stat-label">未读</div>
+    </div>
+  </div>
 
-  <script src="/js/time-utils.js"></script>
-</head>
-<body>
-  <header class="site-header">
-    <a href="/">📚 LIS-RSS Literature Tracker</a>
-    <nav class="site-nav">
-      <% if (user) { %>
-        <a href="/">首页</a>
-        <a href="/articles">文章</a>
-        <a href="/history">总结</a>
-        <a href="/search">搜索</a>
-        <a href="/filter-logs">日志</a>
-        <% if (user.role === 'admin') { %>
-          <a href="/settings">设置</a>
-          <a href="/topics">主题</a>
-        <% } %>
-        <form method="POST" action="/logout" style="display: inline;">
-          <button type="submit" class="btn-icon">登出</button>
-        </form>
-      <% } else { %>
-        <a href="/login">登录</a>
-      <% } %>
-    </nav>
-  </header>
-
-  <div class="page-body">
-    <!-- Stats Section -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-value" id="todayNew">-</div>
-        <div class="stat-label">今日新增</div>
+  <!-- Daily Summary Panel -->
+  <div class="daily-summary-panel" id="dailySummaryPanel">
+    <div class="summary-panel-header" id="summaryPanelHeader">
+      <div class="summary-header-left">
+        <svg class="panel-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="16" y1="13" x2="8" y2="13"></line>
+          <line x1="16" y1="17" x2="8" y2="17"></line>
+          <polyline points="10 9 9 9 8 9"></polyline>
+        </svg>
+        <h3>当日总结</h3>
+        <span class="panel-badge" id="todayBadge">今日</span>
       </div>
-      <div class="stat-card">
-        <div class="stat-value" id="pendingCount">-</div>
-        <div class="stat-label">待处理</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" id="analyzedCount">-</div>
-        <div class="stat-label">已完成</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" id="passRate">-</div>
-        <div class="stat-label">通过率</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" id="unreadCount">-</div>
-        <div class="stat-label">未读</div>
+      <div class="summary-header-right">
+        <button class="btn-icon btn-sm" id="refreshBtn" data-guest-hide title="刷新">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6"></path>
+            <path d="M1 20v-6h6"></path>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+        <button class="btn-icon btn-sm" id="historyBtn" title="历史记录">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+        </button>
+        <svg class="chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="panelChevron">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
       </div>
     </div>
 
-    <!-- Daily Summary Panel -->
-    <div class="daily-summary-panel" id="dailySummaryPanel">
-      <div class="summary-panel-header" id="summaryPanelHeader">
-        <div class="summary-header-left">
-          <svg class="panel-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+    <div class="summary-panel-content" id="summaryPanelContent">
+      <!-- Tab Navigation -->
+      <div class="summary-tabs">
+        <button class="summary-tab active" data-type="journal" id="tabJournal">
+          <svg class="tab-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+          <span class="tab-label">期刊精选</span>
+          <span class="tab-badge" id="journalBadge" style="display: none;">0</span>
+        </button>
+        <button class="summary-tab" data-type="blog_news" id="tabBlogNews">
+          <svg class="tab-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
             <polyline points="14 2 14 8 20 8"></polyline>
             <line x1="16" y1="13" x2="8" y2="13"></line>
             <line x1="16" y1="17" x2="8" y2="17"></line>
-            <polyline points="10 9 9 9 8 9"></polyline>
+            <line x1="10" y1="9" x2="8" y2="9"></line>
           </svg>
-          <h3>当日总结</h3>
-          <span class="panel-badge" id="todayBadge">今日</span>
-        </div>
-        <div class="summary-header-right">
-          <% if (user && user.role !== 'guest') { %>
-          <button class="btn-icon btn-sm" id="refreshBtn" title="刷新">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M23 4v6h-6"></path>
-              <path d="M1 20v-6h6"></path>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-            </svg>
-          </button>
-          <% } %>
-          <button class="btn-icon btn-sm" id="historyBtn" title="历史记录">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-          </button>
-          <svg class="chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="panelChevron">
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </div>
+          <span class="tab-label">博客资讯</span>
+          <span class="tab-badge" id="blogNewsBadge" style="display: none;">0</span>
+        </button>
       </div>
 
-      <div class="summary-panel-content" id="summaryPanelContent">
-        <!-- Tab Navigation -->
-        <div class="summary-tabs">
-          <button class="summary-tab active" data-type="journal" id="tabJournal">
-            <svg class="tab-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-            </svg>
-            <span class="tab-label">期刊精选</span>
-            <span class="tab-badge" id="journalBadge" style="display: none;">0</span>
-          </button>
-          <button class="summary-tab" data-type="blog_news" id="tabBlogNews">
-            <svg class="tab-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <line x1="10" y1="9" x2="8" y2="9"></line>
-            </svg>
-            <span class="tab-label">博客资讯</span>
-            <span class="tab-badge" id="blogNewsBadge" style="display: none;">0</span>
-          </button>
+      <!-- Tab Content -->
+      <div class="summary-tab-content" id="summaryTabContent">
+        <!-- Loading State -->
+        <div class="summary-loading" id="summaryLoading" style="display: none;">
+          <div class="loading-spinner"></div>
+          <p>正在生成当日总结...</p>
+          <p class="loading-hint">这可能需要 30-60 秒</p>
         </div>
 
-        <!-- Tab Content -->
-        <div class="summary-tab-content" id="summaryTabContent">
-          <!-- Loading State -->
-          <div class="summary-loading" id="summaryLoading" style="display: none;">
-            <div class="loading-spinner"></div>
-            <p>正在生成当日总结...</p>
-            <p class="loading-hint">这可能需要 30-60 秒</p>
-          </div>
-
-          <!-- Empty State -->
-          <div class="summary-empty" id="summaryEmpty" style="display: none;">
-            <p id="emptyMessage">点击下方按钮生成今日期刊总结</p>
-            <% if (user && user.role !== 'guest') { %>
-            <button class="btn btn-primary" id="generateBtn">生成总结</button>
-            <% } else { %>
-            <p style="color: var(--text-tertiary); font-size: var(--text-sm);">访客模式下无法生成总结</p>
-            <% } %>
-          </div>
-
-          <!-- Result State -->
-          <div class="summary-result" id="summaryResult" style="display: none;">
-            <div class="summary-meta" id="summaryMeta"></div>
-            <div class="summary-content markdown-content" id="summaryText"></div>
-          </div>
-
-          <!-- Error State -->
-          <div class="summary-error" id="summaryError" style="display: none;"></div>
+        <!-- Empty State -->
+        <div class="summary-empty" id="summaryEmpty" style="display: none;">
+          <p id="emptyMessage">点击下方按钮生成今日期刊总结</p>
+          <button class="btn btn-primary" id="generateBtn" data-guest-hide>生成总结</button>
+          <p class="guest-only" style="color: var(--text-tertiary); font-size: var(--text-sm); display: none;">访客模式下无法生成总结</p>
         </div>
+
+        <!-- Result State -->
+        <div class="summary-result" id="summaryResult" style="display: none;">
+          <div class="summary-meta" id="summaryMeta"></div>
+          <div class="summary-content markdown-content" id="summaryText"></div>
+        </div>
+
+        <!-- Error State -->
+        <div class="summary-error" id="summaryError" style="display: none;"></div>
       </div>
     </div>
-
-    <!-- History Modal -->
-    <div class="modal-overlay" id="historyModal">
-      <div class="modal">
-        <div class="modal-header">
-          <h3>历史总结</h3>
-          <button class="modal-close" id="closeHistoryModal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div id="historyList" class="history-list"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Articles Timeline -->
-    <div id="articlesContainer">
-      <div class="loading">加载中...</div>
-    </div>
-
-    <!-- Pagination -->
-    <div class="pagination" id="pagination" style="display: none;"></div>
   </div>
 
-  <!-- Common JavaScript Components -->
-  <script src="/js/confirm-dialog.js"></script>
-  <script src="/js/toast.js"></script>
+  <!-- History Modal -->
+  <div class="modal-overlay" id="historyModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>历史总结</h3>
+        <button class="modal-close" id="closeHistoryModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="historyList" class="history-list"></div>
+      </div>
+    </div>
+  </div>
 
-  <!-- User Role Data (for guest mode) -->
+  <!-- Articles Timeline -->
+  <div id="articlesContainer">
+    <div class="loading">加载中...</div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" id="pagination" style="display: none;"></div>
+
   <script>
-    window.userRole = <%- user ? `"${user.role}"` : '"guest"' %>;
+    // Hide guest-only elements
+    if (window.userRole === 'guest') {
+      document.querySelectorAll('[data-guest-hide]').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.guest-only').forEach(el => el.style.display = 'block');
+    }
   </script>
+` }) %>
 
-  <!-- Page Script -->
-  <script src="/js/home.js"></script>
-
-  <!-- Daily Summary Script -->
-  <script src="/js/daily-summary.js"></script>
-</body>
-</html>
+<!-- Page Script -->
+<script src="/js/home.js"></script>
+<script src="/js/daily-summary.js"></script>
