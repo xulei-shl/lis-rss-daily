@@ -19,6 +19,7 @@ import {
 } from './api/journals.js';
 import { filterArticle, type FilterInput } from './filter.js';
 import { processArticle } from './pipeline.js';
+import { generateNormalizedTitle } from './utils/title.js';
 import type { JournalInfo, CrawlResult, SpiderResult, CrawledArticle } from './spiders/types.js';
 
 const log = logger.child({ module: 'journal-scheduler' });
@@ -414,15 +415,24 @@ export class JournalScheduler {
           continue;
         }
 
-        // 检查文章是否已存在（通过 URL 去重）
-        const existing = await db
-          .selectFrom('articles')
-          .where('url', '=', article.url.trim())
-          .select('id')
-          .executeTakeFirst();
+        // 生成规范化标题用于去重
+        const titleNormalized = generateNormalizedTitle(article.title);
 
-        if (existing) {
-          continue;
+        // 检查标题是否已存在（标题去重）
+        if (titleNormalized) {
+          const existing = await db
+            .selectFrom('articles')
+            .where('title_normalized', '=', titleNormalized)
+            .select('id')
+            .executeTakeFirst();
+
+          if (existing) {
+            log.debug(
+              { url: article.url, title: article.title, existingId: existing.id, journalId },
+              'Article title already exists, skipping'
+            );
+            continue;
+          }
         }
 
         // 插入新文章
@@ -432,6 +442,7 @@ export class JournalScheduler {
           .insertInto('articles')
           .values({
             title: article.title.trim(),
+            title_normalized: titleNormalized,
             url: article.url.trim(),
             summary: null,
             content: article.abstract?.trim() || null,
@@ -450,14 +461,24 @@ export class JournalScheduler {
 
         newCount++;
       } catch (error) {
-        const errorInfo = error instanceof Error 
+        // 处理 UNIQUE 约束错误（可能是 URL 或 title_normalized）
+        if (error && typeof error === 'object' && 'code' in error) {
+          if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+            log.debug(
+              { url: article.url, title: article.title, journalId },
+              'Article already exists (URL or title), skipping'
+            );
+            continue;
+          }
+        }
+        const errorInfo = error instanceof Error
           ? { message: error.message, stack: error.stack }
           : { error };
-        log.warn({ 
-          url: article.url, 
+        log.warn({
+          url: article.url,
           title: article.title,
           journalId,
-          ...errorInfo 
+          ...errorInfo
         }, 'Failed to save article');
       }
     }

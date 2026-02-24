@@ -299,6 +299,39 @@ CREATE TABLE IF NOT EXISTS journal_crawl_logs (
         continue;
       }
 
+      // ============================================================
+      // 014: 添加 wanfang 来源类型支持
+      // ============================================================
+      if (file === '014_add_wanfang_source_type.sql') {
+        // 检查 journals 表的 source_type 约束是否包含 wanfang
+        const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='journals'").get() as { sql: string } | undefined;
+        const needsWanfang = tableInfo?.sql.includes("CHECK(source_type IN") && !tableInfo?.sql.includes("'wanfang'");
+
+        if (needsWanfang) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log('      → Added wanfang to source_type check constraint');
+        } else {
+          console.log('      → Skipped (wanfang already supported)');
+        }
+        continue;
+      }
+
+      // ============================================================
+      // 015: 添加 title_normalized 字段用于标题去重
+      // ============================================================
+      if (file === '015_add_title_normalized.sql') {
+        const hasTitleNormalized = hasColumn(db, 'articles', 'title_normalized');
+        if (!hasTitleNormalized) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log('      → Added title_normalized column and unique index');
+        } else {
+          console.log('      → Skipped (already exists)');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

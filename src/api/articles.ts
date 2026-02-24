@@ -9,6 +9,7 @@ import { getDb, type DatabaseTable } from '../db.js';
 import { logger } from '../logger.js';
 import type { RSSFeedItem } from '../rss-parser.js';
 import { toSimpleMarkdown } from '../utils/markdown.js';
+import { generateNormalizedTitle } from '../utils/title.js';
 import { search, SearchMode } from '../vector/search.js';
 
 const log = logger.child({ module: 'articles-service' });
@@ -122,16 +123,30 @@ export async function saveArticles(
 
   for (const item of items) {
     try {
-      // Check if already exists by (rss_source_id, title) combination
-      const exists = await db
-        .selectFrom('articles')
-        .where('rss_source_id', '=', rssSourceId)
-        .where('title', '=', item.title)
-        .select('id')
-        .executeTakeFirst();
-
-      if (exists) {
+      // Validate required fields
+      if (!item.title || !item.title.trim()) {
+        log.warn({ rssSourceId, url: item.link }, 'Article missing title, skipping');
         continue;
+      }
+
+      // Generate normalized title for deduplication
+      const titleNormalized = generateNormalizedTitle(item.title);
+
+      // Check if title already exists (title-based deduplication)
+      if (titleNormalized) {
+        const exists = await db
+          .selectFrom('articles')
+          .where('title_normalized', '=', titleNormalized)
+          .select('id')
+          .executeTakeFirst();
+
+        if (exists) {
+          log.debug(
+            { rssSourceId, title: item.title, url: item.link, existingId: exists.id },
+            'Article title already exists, skipping'
+          );
+          continue;
+        }
       }
 
       // Insert new article and return the inserted ID
@@ -147,6 +162,7 @@ export async function saveArticles(
         .values({
           rss_source_id: rssSourceId,
           title: item.title,
+          title_normalized: titleNormalized,
           url: item.link,
           // RSS 入库阶段不生成摘要（由后续 AI 分析生成）
           summary: null,

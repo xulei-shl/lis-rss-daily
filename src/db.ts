@@ -68,6 +68,7 @@ export interface ArticlesTable {
   id: Generated<number>;
   rss_source_id: number | null;  // RSS来源（期刊文章为 null）
   title: string;
+  title_normalized: string | null;  // 规范化标题用于去重
   url: string;
   summary: string | null;
   content: string | null;

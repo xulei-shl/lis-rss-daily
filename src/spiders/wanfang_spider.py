@@ -32,6 +32,8 @@ class WanfangSpider:
     """万方数据期刊爬虫类"""
 
     BASE_URL = "https://c.wanfangdata.com.cn/magazine"
+    LIST_WAIT_SELECTOR = ".magazine-paper-box"
+    DETAIL_WAIT_SELECTOR = ".summary.list, .detailTitle"
 
     # 期号范围（默认支持半月刊）
     MIN_ISSUE = 1
@@ -194,8 +196,9 @@ class WanfangSpider:
         try:
             # 1. 访问期刊页面
             print(f"正在访问: {url}", file=sys.stderr)
-            page.goto(url, wait_until="networkidle", timeout=self.timeout)
-            time.sleep(3)
+            if not self._safe_goto(page, url, wait_selector=self.LIST_WAIT_SELECTOR, retries=1):
+                raise RuntimeError("期刊页面加载失败")
+            time.sleep(1)
 
             # 2. 等待论文列表加载
             self._wait_for_papers(page)
@@ -297,8 +300,10 @@ class WanfangSpider:
                 # 构建下一页URL并导航
                 next_url = self._build_url(issue, current_page)
                 print(f"继续下一页: {next_url}", file=sys.stderr)
-                page.goto(next_url, wait_until="networkidle", timeout=self.timeout)
-                time.sleep(2)
+                if not self._safe_goto(page, next_url, wait_selector=self.LIST_WAIT_SELECTOR):
+                    print("分页加载失败，提前结束", file=sys.stderr)
+                    break
+                time.sleep(1)
             else:
                 print("已到达最后一页", file=sys.stderr)
                 break
@@ -381,6 +386,7 @@ class WanfangSpider:
         success_count = 0
         fail_count = 0
         skip_count = 0
+        max_detail_retries = 2
 
         for i, paper in enumerate(papers):
             if not paper.get("url"):
@@ -392,34 +398,50 @@ class WanfangSpider:
                 title_short = paper['title'][:40] + "..." if len(paper['title']) > 40 else paper['title']
                 print(f"  [{i+1}/{total}] 获取: {title_short}", end=" ", file=sys.stderr)
 
-                # 使用 context 创建新页面
-                detail_page = self.context.new_page()
+                success = False
+                last_error = ""
 
-                try:
-                    # 访问详情页
-                    detail_page.goto(paper["url"], wait_until="networkidle", timeout=self.timeout)
-                    
-                    # 等待详情页元素加载
+                for attempt in range(max_detail_retries + 1):
+                    detail_page = self.context.new_page()
                     try:
-                        detail_page.wait_for_selector(".detailTitle, .summary.list", timeout=10000)
-                    except PlaywrightTimeout:
-                        pass  # 继续尝试解析
+                        # 访问详情页并等待主要内容
+                        nav_ok = self._safe_goto(
+                            detail_page,
+                            paper["url"],
+                            wait_selector=self.DETAIL_WAIT_SELECTOR,
+                            wait_timeout=12000
+                        )
+                        if not nav_ok:
+                            raise RuntimeError("页面未及时就绪")
 
-                    # 提取详情
-                    detail = self._extract_detail(detail_page)
+                        # 提取详情
+                        detail = self._extract_detail(detail_page)
 
-                    if detail.get("abstract"):
-                        paper["abstract"] = detail.get("abstract", "")
-                        paper["publish_date"] = detail.get("publish_date", "")
-                        print("成功", file=sys.stderr)
-                        success_count += 1
-                    else:
-                        paper["abstract"] = "获取失败: 未找到摘要"
-                        print("失败 (未找到摘要)", file=sys.stderr)
-                        fail_count += 1
+                        if detail.get("abstract"):
+                            paper["abstract"] = detail.get("abstract", "")
+                            paper["publish_date"] = detail.get("publish_date", "")
+                            print("成功", file=sys.stderr)
+                            success_count += 1
+                            success = True
+                            break
 
-                finally:
-                    detail_page.close()
+                        last_error = "未找到摘要"
+                    except Exception as e:
+                        last_error = str(e)
+                    finally:
+                        detail_page.close()
+
+                    if attempt < max_detail_retries:
+                        print("重试...", file=sys.stderr)
+                        time.sleep(1)
+
+                if success:
+                    time.sleep(0.5)
+                    continue
+
+                paper["abstract"] = f"获取失败: {last_error or '未找到摘要'}"
+                print(f"失败 ({paper['abstract']})", file=sys.stderr)
+                fail_count += 1
 
                 time.sleep(0.5)  # 短暂等待，避免请求过快
 
@@ -480,6 +502,33 @@ class WanfangSpider:
             print(f"    解析详情页失败: {e}", file=sys.stderr)
 
         return detail
+
+    def _safe_goto(self, page: Page, url: str, wait_selector: Optional[str] = None,
+                   wait_timeout: int = 10000, retries: int = 1) -> bool:
+        """
+        更稳健的页面导航逻辑，避免长尾请求导致的 networkidle 阻塞
+        """
+        last_error = None
+        for attempt in range(retries + 1):
+            try:
+                page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
+                if wait_selector:
+                    try:
+                        page.wait_for_selector(wait_selector, timeout=wait_timeout)
+                    except PlaywrightTimeout:
+                        pass
+                return True
+            except PlaywrightTimeout as e:
+                last_error = e
+            except Exception as e:
+                last_error = e
+
+            if attempt < retries:
+                time.sleep(1)
+
+        if last_error:
+            print(f"页面加载失败: {url} ({last_error})", file=sys.stderr)
+        return False
 
 
 def main():

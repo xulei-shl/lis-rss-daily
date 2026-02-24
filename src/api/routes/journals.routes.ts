@@ -87,8 +87,8 @@ router.post('/journals', requireAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: '期刊名称是必填项' });
     }
 
-    if (!sourceType || !['cnki', 'rdfybk', 'lis'].includes(sourceType)) {
-      return res.status(400).json({ error: '来源类型必须是 cnki、rdfybk 或 lis' });
+    if (!sourceType || !['cnki', 'rdfybk', 'lis', 'wanfang'].includes(sourceType)) {
+      return res.status(400).json({ error: '来源类型必须是 cnki、rdfybk、lis 或 wanfang' });
     }
 
     if (!publicationCycle || !['monthly', 'bimonthly', 'semimonthly', 'quarterly'].includes(publicationCycle)) {
@@ -107,6 +107,11 @@ router.post('/journals', requireAuth, async (req: AuthRequest, res) => {
     // 人大报刊期刊必须有代码
     if (sourceType === 'rdfybk' && (!journalCode || typeof journalCode !== 'string')) {
       return res.status(400).json({ error: '人大报刊期刊必须提供期刊代码' });
+    }
+
+    // 万方期刊必须有代码
+    if (sourceType === 'wanfang' && (!journalCode || typeof journalCode !== 'string')) {
+      return res.status(400).json({ error: '万方期刊必须提供期刊代码' });
     }
 
     const journal = await journalsService.createJournal({

@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS articles (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   rss_source_id INTEGER,  -- RSS来源（期刊文章为 null）
   title TEXT NOT NULL,
+  title_normalized TEXT,  -- 规范化标题用于去重
   url TEXT NOT NULL UNIQUE,
   summary TEXT,
   content TEXT,
@@ -87,6 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_articles_source_origin ON articles(source_origin)
 CREATE INDEX IF NOT EXISTS idx_articles_journal_id ON articles(journal_id);
 CREATE INDEX IF NOT EXISTS idx_articles_published_year ON articles(published_year);
 CREATE INDEX IF NOT EXISTS idx_articles_published_issue ON articles(published_issue);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_title_normalized ON articles(title_normalized) WHERE title_normalized IS NOT NULL;
 
 -- ===========================================
 -- 4. Topic Domains Table
