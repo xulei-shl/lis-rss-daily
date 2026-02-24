@@ -87,6 +87,18 @@ export function createApp(): express.Express {
     }
   });
 
+  // Logout route (POST /logout)
+  app.post('/logout', async (req: Request, res: Response) => {
+    try {
+      const { handleLogout } = await import('../middleware/auth.js');
+      handleLogout(res);
+      res.redirect('/login');
+    } catch (error) {
+      log.error({ error }, 'Logout failed');
+      res.redirect('/login');
+    }
+  });
+
   app.get('/settings', optionalAuth, (req: any, res: Response) => {
     if (!req.userId) {
       return res.redirect('/login');

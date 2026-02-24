@@ -146,7 +146,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
 
     const todayNew = Number(todayCountResult?.count || 0);
 
-    // Get pending articles count
+    // Get pending articles count (filter_status=pending means waiting for AI analysis)
     const pendingResult = await db
       .selectFrom('articles')
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
@@ -161,8 +161,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
           eb('journals.user_id', '=', req.userId!),
         ]),
       ]))
-      .where('articles.process_status', '=', 'pending')
-      .where('articles.filter_status', '=', 'passed')
+      .where('articles.filter_status', '=', 'pending')
       .select((eb) => eb.fn.count('articles.id').as('count'))
       .executeTakeFirst();
 
