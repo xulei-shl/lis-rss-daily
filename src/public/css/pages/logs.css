@@ -368,3 +368,38 @@
     margin-left: var(--space-2);
     vertical-align: middle;
 }
+
+/* 过滤日志表格列宽优化 */
+#filterTable th:nth-child(2),
+#filterTable td:nth-child(2) {
+    width: 280px;
+}
+
+#filterTable th:nth-child(3),
+#filterTable td:nth-child(3) {
+    width: 120px;
+}
+
+#filterTable th:nth-child(4),
+#filterTable td:nth-child(4) {
+    width: 80px;
+}
+
+#filterTable th:nth-child(5),
+#filterTable td:nth-child(5) {
+    width: 85px;
+}
+
+#filterTable th:nth-child(6),
+#filterTable td:nth-child(6) {
+    max-width: 120px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#filterTable th:nth-child(7),
+#filterTable td:nth-child(7) {
+    width: 140px;
+    white-space: nowrap;
+}
