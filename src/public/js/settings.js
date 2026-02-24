@@ -206,30 +206,30 @@ function renderTable() {
 
   console.log('Rendering table with sources:', rssSources);
 
-  tbody.innerHTML = rssSources.map(function(source) {
+  tbody.innerHTML = rssSources.map(function (source) {
     const typeLabel = getSourceTypeLabel(source.source_type);
     console.log(`Source ${source.id}: source_type=${source.source_type}, label=${typeLabel}`);
     return '<tr>' +
       '<td class="rss-name">' + escapeHtml(source.name) + '</td>' +
       '<td class="rss-url">' +
-        '<a href="' + escapeHtml(source.url) + '" target="_blank" rel="noopener" title="' + escapeHtml(source.url) + '">' +
-          escapeHtml(truncate(source.url, 35)) +
-        '</a>' +
+      '<a href="' + escapeHtml(source.url) + '" target="_blank" rel="noopener" title="' + escapeHtml(source.url) + '">' +
+      escapeHtml(truncate(source.url, 35)) +
+      '</a>' +
       '</td>' +
       '<td><span class="type-badge">' + typeLabel + '</span></td>' +
       '<td>' +
-        '<span class="status-badge ' + source.status + '">' + (source.status === 'active' ? '启用' : '禁用') + '</span>' +
+      '<span class="status-badge ' + source.status + '">' + (source.status === 'active' ? '启用' : '禁用') + '</span>' +
       '</td>' +
       '<td>' + formatInterval(source.fetch_interval) + '</td>' +
       '<td>' + formatDate(source.last_fetched_at) + '</td>' +
       '<td>' +
-        '<div class="action-buttons">' +
-          '<button class="btn-icon" onclick="editSource(' + source.id + ')">编辑</button>' +
-          '<button class="btn-icon" onclick="fetchNow(' + source.id + ')">抓取</button>' +
-          '<button class="btn-icon" onclick="deleteSource(' + source.id + ')">删除</button>' +
-        '</div>' +
+      '<div class="action-buttons">' +
+      '<button class="btn-icon" onclick="editSource(' + source.id + ')">编辑</button>' +
+      '<button class="btn-icon" onclick="fetchNow(' + source.id + ')">抓取</button>' +
+      '<button class="btn-icon" onclick="deleteSource(' + source.id + ')">删除</button>' +
+      '</div>' +
       '</td>' +
-    '</tr>';
+      '</tr>';
   }).join('');
 }
 
@@ -240,7 +240,7 @@ function showAddModal() {
   document.getElementById('sourceUrl').value = '';
   document.getElementById('sourceType').value = getDefaultSourceType();
   document.getElementById('fetchInterval').value = '3600';
-  document.getElementById('sourceStatus').value = 'active';
+  document.getElementById('sourceStatus').checked = true;
   document.getElementById('validationResult').className = 'validation-result';
   document.getElementById('validationResult').textContent = '';
   document.getElementById('sourceModal').classList.add('active');
@@ -260,7 +260,7 @@ function editSource(id) {
   document.getElementById('sourceUrl').value = source.url;
   document.getElementById('sourceType').value = source.source_type || 'blog';
   document.getElementById('fetchInterval').value = source.fetch_interval.toString();
-  document.getElementById('sourceStatus').value = source.status;
+  document.getElementById('sourceStatus').checked = source.status === 'active';
   document.getElementById('validationResult').className = 'validation-result';
   document.getElementById('validationResult').textContent = '';
   document.getElementById('sourceModal').classList.add('active');
@@ -275,7 +275,7 @@ function closeModal() {
 
 // URL validation
 let validationTimeout;
-document.getElementById('sourceUrl').addEventListener('input', function() {
+document.getElementById('sourceUrl').addEventListener('input', function () {
   clearTimeout(validationTimeout);
   const url = this.value.trim();
   const resultDiv = document.getElementById('validationResult');
@@ -313,7 +313,7 @@ document.getElementById('sourceUrl').addEventListener('input', function() {
 });
 
 // Form submit
-document.getElementById('sourceForm').addEventListener('submit', async function(e) {
+document.getElementById('sourceForm').addEventListener('submit', async function (e) {
   e.preventDefault();
 
   const id = document.getElementById('sourceId').value;
@@ -322,7 +322,7 @@ document.getElementById('sourceForm').addEventListener('submit', async function(
     url: document.getElementById('sourceUrl').value.trim(),
     sourceType: document.getElementById('sourceType').value,
     fetchInterval: parseInt(document.getElementById('fetchInterval').value),
-    status: document.getElementById('sourceStatus').value
+    status: document.getElementById('sourceStatus').checked ? 'active' : 'inactive'
   };
 
   // Debug logging
@@ -544,14 +544,14 @@ function goToPage(type, page) {
 }
 
 // Close modal on overlay click
-document.getElementById('sourceModal').addEventListener('click', function(e) {
+document.getElementById('sourceModal').addEventListener('click', function (e) {
   if (e.target === this) {
     closeModal();
   }
 });
 
 // Close modal on Escape key
-document.addEventListener('keydown', function(e) {
+document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') {
     closeModal();
     closeLLMModal();
@@ -584,7 +584,7 @@ function getDefaultPromptVariablesJSON() {
 }
 
 // Wait for DOM to be ready
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   // 加载类型定义（优先加载，其他函数依赖它）
   loadTypeDefinitions();
 
@@ -644,17 +644,17 @@ function renderLLMTable() {
     'analysis': 'analysis'
   };
 
-  tbody.innerHTML = llmConfigs.map(function(config) {
+  tbody.innerHTML = llmConfigs.map(function (config) {
     const taskTypeDisplay = config.task_type
       ? '<span class="type-badge">' + escapeHtml(taskTypeLabels[config.task_type] || config.task_type) + '</span>'
       : '<span style="color: var(--dim);">—</span>';
 
     return '<tr>' +
       '<td>' +
-        '<div class="llm-provider">' +
-          '<span class="provider-badge ' + config.provider + '">' + config.provider + '</span>' +
-          (config.is_default ? '<span class="default-badge">默认</span>' : '') +
-        '</div>' +
+      '<div class="llm-provider">' +
+      '<span class="provider-badge ' + config.provider + '">' + config.provider + '</span>' +
+      (config.is_default ? '<span class="default-badge">默认</span>' : '') +
+      '</div>' +
       '</td>' +
       '<td><span class="type-badge">' + (config.config_type || 'llm') + '</span></td>' +
       '<td>' + taskTypeDisplay + '</td>' +
@@ -662,19 +662,19 @@ function renderLLMTable() {
       '<td><span class="rss-url">' + escapeHtml(truncate(config.base_url, 35)) + '</span></td>' +
       '<td>' + escapeHtml(String(config.priority ?? 100)) + '</td>' +
       '<td>' +
-        (config.enabled
-          ? '<span class="status-badge active">已启用</span>'
-          : '<span class="status-badge inactive">未启用</span>'
-        ) +
+      (config.enabled
+        ? '<span class="status-badge active">已启用</span>'
+        : '<span class="status-badge inactive">未启用</span>'
+      ) +
       '</td>' +
       '<td>' +
-        '<div class="action-buttons">' +
-          (!config.is_default ? '<button class="btn-icon" onclick="setDefaultLLMConfig(' + config.id + ')">设为默认</button>' : '') +
-          '<button class="btn-icon" onclick="editLLMConfig(' + config.id + ')">编辑</button>' +
-          '<button class="btn-icon" onclick="deleteLLMConfig(' + config.id + ')">删除</button>' +
-        '</div>' +
+      '<div class="action-buttons">' +
+      (!config.is_default ? '<button class="btn-icon" onclick="setDefaultLLMConfig(' + config.id + ')">设为默认</button>' : '') +
+      '<button class="btn-icon" onclick="editLLMConfig(' + config.id + ')">编辑</button>' +
+      '<button class="btn-icon" onclick="deleteLLMConfig(' + config.id + ')">删除</button>' +
+      '</div>' +
       '</td>' +
-    '</tr>';
+      '</tr>';
   }).join('');
 }
 
@@ -894,30 +894,30 @@ function renderSystemPromptsTable() {
   table.style.display = 'table';
   emptyState.style.display = 'none';
 
-  tbody.innerHTML = systemPrompts.map(function(prompt) {
+  tbody.innerHTML = systemPrompts.map(function (prompt) {
     return '<tr>' +
       '<td>' + escapeHtml(prompt.name || '') + '</td>' +
       '<td><span class="type-badge">' + escapeHtml(prompt.type || '') + '</span></td>' +
       '<td>' +
-        '<span class="status-badge ' + (prompt.is_active === 1 ? 'active' : 'inactive') + '">' +
-          (prompt.is_active === 1 ? '启用' : '禁用') +
-        '</span>' +
+      '<span class="status-badge ' + (prompt.is_active === 1 ? 'active' : 'inactive') + '">' +
+      (prompt.is_active === 1 ? '启用' : '禁用') +
+      '</span>' +
       '</td>' +
       '<td>' + formatDate(prompt.updated_at) + '</td>' +
       '<td>' +
-        '<div class="action-buttons">' +
-          '<button class="btn-icon" onclick="toggleSystemPromptActive(' + prompt.id + ', ' + (prompt.is_active === 1 ? 'false' : 'true') + ')">' +
-            (prompt.is_active === 1 ? '禁用' : '启用') +
-          '</button>' +
-          '<button class="btn-icon" onclick="editPrompt(' + prompt.id + ')">编辑</button>' +
-          '<button class="btn-icon" onclick="deleteSystemPrompt(' + prompt.id + ')">删除</button>' +
-        '</div>' +
+      '<div class="action-buttons">' +
+      '<button class="btn-icon" onclick="toggleSystemPromptActive(' + prompt.id + ', ' + (prompt.is_active === 1 ? 'false' : 'true') + ')">' +
+      (prompt.is_active === 1 ? '禁用' : '启用') +
+      '</button>' +
+      '<button class="btn-icon" onclick="editPrompt(' + prompt.id + ')">编辑</button>' +
+      '<button class="btn-icon" onclick="deleteSystemPrompt(' + prompt.id + ')">删除</button>' +
+      '</div>' +
       '</td>' +
-    '</tr>';
+      '</tr>';
   }).join('');
 }
 
-document.getElementById('systemPromptForm').addEventListener('submit', async function(e) {
+document.getElementById('systemPromptForm').addEventListener('submit', async function (e) {
   e.preventDefault();
 
   const id = document.getElementById('systemPromptId').value;
@@ -1028,7 +1028,7 @@ async function deleteSystemPrompt(id) {
   }
 }
 
-document.getElementById('systemPromptModal').addEventListener('click', function(e) {
+document.getElementById('systemPromptModal').addEventListener('click', function (e) {
   if (e.target === this) {
     closePromptModal();
   }
@@ -1158,7 +1158,7 @@ async function testLLMConnection() {
   }
 }
 
-document.getElementById('llmConfigForm').addEventListener('submit', async function(e) {
+document.getElementById('llmConfigForm').addEventListener('submit', async function (e) {
   e.preventDefault();
 
   const id = document.getElementById('llmConfigId').value;
@@ -1261,7 +1261,7 @@ async function setDefaultLLMConfig(id) {
   }
 }
 
-document.getElementById('llmConfigModal').addEventListener('click', function(e) {
+document.getElementById('llmConfigModal').addEventListener('click', function (e) {
   if (e.target === this) {
     closeLLMModal();
   }
@@ -1296,7 +1296,7 @@ function setChromaStatus(message) {
   el.textContent = message || '';
 }
 
-document.getElementById('chromaForm').addEventListener('submit', async function(e) {
+document.getElementById('chromaForm').addEventListener('submit', async function (e) {
   e.preventDefault();
 
   const payload = {
@@ -1385,7 +1385,7 @@ function renderJournalsTable() {
     'quarterly': '季刊'
   };
 
-  tbody.innerHTML = journals.map(function(journal) {
+  tbody.innerHTML = journals.map(function (journal) {
     const lastCrawl = journal.last_year && journal.last_issue
       ? journal.last_year + '-' + journal.last_issue
       : '从未';
@@ -1396,16 +1396,16 @@ function renderJournalsTable() {
       '<td>' + (cycleLabels[journal.publication_cycle] || journal.publication_cycle) + '</td>' +
       '<td>' + lastCrawl + '</td>' +
       '<td>' +
-        '<span class="status-badge ' + journal.status + '">' + (journal.status === 'active' ? '启用' : '禁用') + '</span>' +
+      '<span class="status-badge ' + journal.status + '">' + (journal.status === 'active' ? '启用' : '禁用') + '</span>' +
       '</td>' +
       '<td>' +
-        '<div class="action-buttons">' +
-          '<button class="btn-icon" onclick="showCrawlJournalModal(' + journal.id + ')">爬取</button>' +
-          '<button class="btn-icon" onclick="editJournal(' + journal.id + ')">编辑</button>' +
-          '<button class="btn-icon" onclick="deleteJournal(' + journal.id + ')">删除</button>' +
-        '</div>' +
+      '<div class="action-buttons">' +
+      '<button class="btn-icon" onclick="showCrawlJournalModal(' + journal.id + ')">爬取</button>' +
+      '<button class="btn-icon" onclick="editJournal(' + journal.id + ')">编辑</button>' +
+      '<button class="btn-icon" onclick="deleteJournal(' + journal.id + ')">删除</button>' +
+      '</div>' +
       '</td>' +
-    '</tr>';
+      '</tr>';
   }).join('');
 }
 
@@ -1418,7 +1418,7 @@ function showJournalAddModal() {
   document.getElementById('journalCode').value = '';
   document.getElementById('journalPublicationCycle').value = 'monthly';
   document.getElementById('journalIssuesPerYear').value = '12';
-  document.getElementById('journalStatus').value = 'active';
+  document.getElementById('journalStatus').checked = true;
   updateJournalSourceUI();
   document.getElementById('journalModal').classList.add('active');
   document.getElementById('journalName').focus();
@@ -1436,7 +1436,7 @@ function editJournal(id) {
   document.getElementById('journalCode').value = journal.journal_code || '';
   document.getElementById('journalPublicationCycle').value = journal.publication_cycle;
   document.getElementById('journalIssuesPerYear').value = journal.issues_per_year;
-  document.getElementById('journalStatus').value = journal.status;
+  document.getElementById('journalStatus').checked = journal.status === 'active';
   updateJournalSourceUI();
   document.getElementById('journalModal').classList.add('active');
 }
@@ -1477,7 +1477,7 @@ function updateJournalSourceUI() {
 }
 
 // Sync issues per year when publication cycle changes
-document.getElementById('journalPublicationCycle')?.addEventListener('change', function() {
+document.getElementById('journalPublicationCycle')?.addEventListener('change', function () {
   const cycle = this.value;
   const issuesMap = {
     'monthly': 12,
@@ -1489,7 +1489,7 @@ document.getElementById('journalPublicationCycle')?.addEventListener('change', f
 });
 
 // Journal form submit
-document.getElementById('journalForm')?.addEventListener('submit', async function(e) {
+document.getElementById('journalForm')?.addEventListener('submit', async function (e) {
   e.preventDefault();
 
   const id = document.getElementById('journalId').value;
@@ -1502,7 +1502,7 @@ document.getElementById('journalForm')?.addEventListener('submit', async functio
     journalCode: (sourceType === 'rdfybk' || sourceType === 'wanfang') ? document.getElementById('journalCode').value.trim() : null,
     publicationCycle: document.getElementById('journalPublicationCycle').value,
     issuesPerYear: parseInt(document.getElementById('journalIssuesPerYear').value),
-    status: document.getElementById('journalStatus').value
+    status: document.getElementById('journalStatus').checked ? 'active' : 'inactive'
   };
 
   try {
@@ -1595,7 +1595,7 @@ function closeCrawlJournalModal() {
 }
 
 // Crawl Journal form submit
-document.getElementById('crawlJournalForm')?.addEventListener('submit', async function(e) {
+document.getElementById('crawlJournalForm')?.addEventListener('submit', async function (e) {
   e.preventDefault();
 
   const id = document.getElementById('crawlJournalId').value;
@@ -1623,13 +1623,13 @@ document.getElementById('crawlJournalForm')?.addEventListener('submit', async fu
 });
 
 // Close modals on overlay click
-document.getElementById('journalModal')?.addEventListener('click', function(e) {
+document.getElementById('journalModal')?.addEventListener('click', function (e) {
   if (e.target === this) {
     closeJournalModal();
   }
 });
 
-document.getElementById('crawlJournalModal')?.addEventListener('click', function(e) {
+document.getElementById('crawlJournalModal')?.addEventListener('click', function (e) {
   if (e.target === this) {
     closeCrawlJournalModal();
   }
@@ -1637,7 +1637,7 @@ document.getElementById('crawlJournalModal')?.addEventListener('click', function
 
 // Update goToPage to handle journals
 const originalGoToPage = goToPage;
-goToPage = function(type, page) {
+goToPage = function (type, page) {
   if (type === 'journals') {
     loadJournals(page);
   } else {

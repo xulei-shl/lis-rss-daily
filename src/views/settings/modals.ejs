@@ -34,11 +34,8 @@
         </select>
       </div>
       <div class="form-group">
-        <label for="sourceStatus">状态</label>
-        <select id="sourceStatus">
-          <option value="active">启用</option>
-          <option value="inactive">禁用</option>
-        </select>
+        <label for="sourceStatus">启用</label>
+        <input type="checkbox" id="sourceStatus">
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
@@ -106,7 +103,8 @@
       </div>
       <div class="form-group">
         <label for="llmTaskType">任务类型</label>
-        <select id="llmTaskType" class="dynamic-type-select" data-type-category="task_types" onchange="updateTaskTypeChanged()">
+        <select id="llmTaskType" class="dynamic-type-select" data-type-category="task_types"
+          onchange="updateTaskTypeChanged()">
           <option value="">通用配置（默认）</option>
         </select>
         <small style="color: var(--dim); display: block; margin-top: 4px;">选择任务类型后，该配置将仅用于指定任务。通用配置可作为所有任务的兜底配置。</small>
@@ -121,7 +119,8 @@
       </div>
       <div class="form-group">
         <label for="llmBaseURL">Base URL *</label>
-        <input type="url" id="llmBaseURL" required placeholder="https://api.openai.com/v1" value="https://api.openai.com/v1">
+        <input type="url" id="llmBaseURL" required placeholder="https://api.openai.com/v1"
+          value="https://api.openai.com/v1">
       </div>
       <div class="form-group">
         <label for="llmApiKey">API 密钥 *</label>
@@ -207,11 +206,8 @@
         <input type="number" id="journalIssuesPerYear" min="1" max="52" required value="12">
       </div>
       <div class="form-group">
-        <label for="journalStatus">状态</label>
-        <select id="journalStatus">
-          <option value="active">启用</option>
-          <option value="inactive">禁用</option>
-        </select>
+        <label for="journalStatus">启用</label>
+        <input type="checkbox" id="journalStatus">
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeJournalModal()">取消</button>
