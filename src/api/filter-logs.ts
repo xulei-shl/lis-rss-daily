@@ -13,6 +13,8 @@ export interface FilterLogsQuery {
   limit?: number;
   domainId?: number;
   isPassed?: boolean;
+  fromDate?: string;
+  toDate?: string;
 }
 
 export interface FilterLogsResult {
@@ -54,6 +56,14 @@ export async function getFilterLogs(params: FilterLogsQuery): Promise<FilterLogs
 
   if (params.isPassed !== undefined) {
     baseQuery = baseQuery.where('article_filter_logs.is_passed', '=', params.isPassed ? 1 : 0);
+  }
+
+  if (params.fromDate) {
+    baseQuery = baseQuery.where('article_filter_logs.created_at', '>=', params.fromDate);
+  }
+
+  if (params.toDate) {
+    baseQuery = baseQuery.where('article_filter_logs.created_at', '<=', params.toDate);
   }
 
   const totalRow = await baseQuery

@@ -150,7 +150,52 @@ CREATE INDEX IF NOT EXISTS idx_article_filter_logs_domain_id ON article_filter_l
 CREATE INDEX IF NOT EXISTS idx_article_filter_logs_is_passed ON article_filter_logs(is_passed);
 
 -- ===========================================
--- 7. Article Related Table
+-- 7. RSS Fetch Logs
+-- ===========================================
+CREATE TABLE IF NOT EXISTS rss_fetch_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  rss_source_id INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('success', 'failed', 'partial')),
+  articles_count INTEGER DEFAULT 0,
+  new_articles_count INTEGER DEFAULT 0,
+  duration_ms INTEGER DEFAULT 0,
+  is_scheduled INTEGER DEFAULT 0,
+  error_message TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (rss_source_id) REFERENCES rss_sources(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_rss_fetch_logs_user_id ON rss_fetch_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_rss_fetch_logs_rss_source_id ON rss_fetch_logs(rss_source_id);
+CREATE INDEX IF NOT EXISTS idx_rss_fetch_logs_status ON rss_fetch_logs(status);
+CREATE INDEX IF NOT EXISTS idx_rss_fetch_logs_created_at ON rss_fetch_logs(created_at);
+
+-- ===========================================
+-- 8. Article Process Logs
+-- ===========================================
+CREATE TABLE IF NOT EXISTS article_process_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  article_id INTEGER NOT NULL,
+  stage TEXT NOT NULL CHECK(stage IN ('markdown', 'translate', 'vector', 'related', 'pipeline_complete')),
+  status TEXT NOT NULL CHECK(status IN ('processing', 'completed', 'failed', 'skipped')),
+  duration_ms INTEGER,
+  error_message TEXT,
+  details TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_article_process_logs_user_id ON article_process_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_article_process_logs_article_id ON article_process_logs(article_id);
+CREATE INDEX IF NOT EXISTS idx_article_process_logs_stage ON article_process_logs(stage);
+CREATE INDEX IF NOT EXISTS idx_article_process_logs_created_at ON article_process_logs(created_at);
+
+-- ===========================================
+-- 9. Article Related Table
 -- ===========================================
 CREATE TABLE IF NOT EXISTS article_related (
   article_id INTEGER NOT NULL,
@@ -168,7 +213,7 @@ CREATE INDEX IF NOT EXISTS idx_article_related_related_article_id ON article_rel
 CREATE INDEX IF NOT EXISTS idx_article_related_updated_at ON article_related(updated_at);
 
 -- ===========================================
--- 8. Article Translations Table
+-- 10. Article Translations Table
 -- ===========================================
 CREATE TABLE IF NOT EXISTS article_translations (
   article_id INTEGER PRIMARY KEY,
@@ -183,7 +228,7 @@ CREATE TABLE IF NOT EXISTS article_translations (
 CREATE INDEX IF NOT EXISTS idx_article_translations_article_id ON article_translations(article_id);
 
 -- ===========================================
--- 9. LLM Configs Table
+-- 11. LLM Configs Table
 -- ===========================================
 -- task_type 取值来自 config/types.yaml: task_types (filter, summary, keywords, translation, daily_summary, analysis)
 -- 新增类型需更新 YAML 配置并创建新的迁移脚本
@@ -213,7 +258,7 @@ CREATE INDEX IF NOT EXISTS idx_llm_configs_task_type ON llm_configs(task_type);
 CREATE INDEX IF NOT EXISTS idx_llm_configs_user_config_task ON llm_configs(user_id, config_type, task_type, is_default, priority);
 
 -- ===========================================
--- 10. Settings Table
+-- 12. Settings Table
 -- ===========================================
 CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -19,6 +19,7 @@ import { saveArticles, checkArticlesExistByTitle } from './api/articles.js';
 import { filterArticle, type FilterInput } from './filter.js';
 import { processArticle } from './pipeline.js';
 import { config } from './config.js';
+import { createRssFetchLog } from './api/rss-fetch-logs.js';
 
 const log = logger.child({ module: 'rss-scheduler' });
 
@@ -430,13 +431,25 @@ export class RSSScheduler {
       // Update last_fetched_at
       await this.updateSourceLastFetched(task.rssSourceId);
 
-      return {
+      const fetchResult: FetchResult = {
         rssSourceId: task.rssSourceId,
         success: true,
         articlesCount: result.articlesCount,
         newArticlesCount: result.newArticlesCount,
         duration,
       };
+
+      await createRssFetchLog({
+        userId: task.userId,
+        rssSourceId: task.rssSourceId,
+        status: 'success',
+        articlesCount: result.articlesCount,
+        newArticlesCount: result.newArticlesCount,
+        durationMs: duration,
+        isScheduled: !task.isManualFetch,
+      });
+
+      return fetchResult;
     } catch (error) {
       const duration = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -464,7 +477,7 @@ export class RSSScheduler {
         return this.executeFetchTask(task);
       }
 
-      return {
+      const failureResult: FetchResult = {
         rssSourceId: task.rssSourceId,
         success: false,
         articlesCount: 0,
@@ -472,6 +485,19 @@ export class RSSScheduler {
         error: errorMessage,
         duration,
       };
+
+      await createRssFetchLog({
+        userId: task.userId,
+        rssSourceId: task.rssSourceId,
+        status: 'failed',
+        articlesCount: 0,
+        newArticlesCount: 0,
+        durationMs: duration,
+        isScheduled: !task.isManualFetch,
+        errorMessage,
+      });
+
+      return failureResult;
     } finally {
       this.activeTasks.delete(task.rssSourceId);
     }

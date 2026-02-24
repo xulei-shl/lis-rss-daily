@@ -1,31 +1,101 @@
 <%- include('layout', { pageTitle: pageTitle, pageStyles: '', body: `
 <style>
-  /* Tab navigation */
-  .logs-tabs {
+  .logs-page {
     max-width: 1200px;
-    margin: 16px auto 12px;
+    margin: 0 auto;
+    padding: 16px 0 40px;
+  }
+
+  .section-header {
     display: flex;
-    gap: 8px;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .section-header h2 {
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .filters {
+    display: flex;
     flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 16px;
+  }
+
+  .filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .filter-group label {
+    font-size: 0.9rem;
+    color: var(--dim);
+  }
+
+  .filter-group select,
+  .filter-group input[type="date"] {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    min-width: 130px;
+  }
+
+  .filter-summary {
+    font-size: 0.9rem;
+    color: var(--dim);
+  }
+
+  .apply-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: var(--accent-primary);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+  }
+
+  .apply-btn:hover {
+    opacity: 0.9;
+  }
+
+  #customRangeGroup {
+    display: none;
+    flex-wrap: wrap;
+  }
+
+  .logs-tabs {
+    margin: 20px 0 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .logs-tab {
     border: 1px solid var(--border);
     background: var(--surface);
     color: var(--dim);
-    padding: 8px 14px;
+    padding: 8px 16px;
     border-radius: 999px;
-    font-size: 0.9rem;
     cursor: pointer;
+    font-size: 0.9rem;
   }
 
   .logs-tab.active {
     color: var(--text);
     border-color: var(--accent-primary);
-    box-shadow: 0 0 0 1px rgba(26, 77, 122, 0.2);
+    box-shadow: 0 0 0 1px rgba(26, 77, 122, 0.15);
   }
 
-  /* Tab panels */
   .logs-tab-panel {
     display: none;
   }
@@ -34,46 +104,12 @@
     display: block;
   }
 
-  .logs-container {
-    max-width: 1200px;
-  }
-
-  .section-header {
+  .panel-filter {
     display: flex;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 0;
     align-items: center;
-    margin-bottom: 24px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .section-header h2 {
-    font-size: 1.5rem;
-    font-weight: 600;
-  }
-
-  .filters {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 16px;
-    align-items: center;
-  }
-
-  .filters label {
-    font-size: 0.9rem;
-    color: var(--dim);
-    white-space: nowrap;
-  }
-
-  .filters select {
-    padding: 6px 12px;
-    min-width: 120px;
-  }
-
-  .filters .filter-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
   }
 
   .logs-table {
@@ -86,96 +122,18 @@
 
   .logs-table th,
   .logs-table td {
-    text-align: left;
     padding: 12px 16px;
     border-bottom: 1px solid var(--border);
+    text-align: left;
     font-size: 0.9rem;
   }
 
   .logs-table th {
     background: var(--bg);
-    font-weight: 600;
-    color: var(--dim);
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-  }
-
-  .logs-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  .logs-table tr.expanded {
-    background: var(--bg);
-  }
-
-  .article-title {
-    font-weight: 500;
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .article-title a {
-    color: var(--text);
-  }
-
-  .article-title a:hover {
-    color: var(--accent-primary);
-  }
-
-  .status-badge {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-  }
-
-  .status-badge.passed {
-    background: rgba(42, 157, 110, 0.15);
-    color: var(--green);
-  }
-
-  .status-badge.rejected {
-    background: rgba(231, 76, 60, 0.15);
-    color: var(--red);
-  }
-
-  /* 结果列 - 防止换行 */
-  .logs-table td:nth-child(4) {
-    white-space: nowrap;
-  }
-
-  /* 领域列 - 文本省略 */
-  .domain-cell {
-    max-width: 120px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .relevance-score {
-    text-align: center;
-    font-weight: 500;
-    min-width: 80px;
-  }
-
-  .filter-reason {
-    max-width: 250px;
-    font-size: 0.85rem;
     color: var(--dim);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .timestamp {
-    color: var(--dim);
-    font-size: 0.85rem;
-    white-space: nowrap;
   }
 
   .expand-row {
@@ -188,15 +146,14 @@
   }
 
   .expand-cell {
+    width: 36px;
     text-align: center;
-    padding: 0 !important;
-    width: 40px;
   }
 
   .expand-icon {
     display: inline-block;
-    transition: transform 0.2s;
     color: var(--dim);
+    transition: transform 0.2s ease;
   }
 
   .expand-row.expanded .expand-icon {
@@ -214,11 +171,7 @@
 
   .detail-cell {
     padding: 16px !important;
-  }
-
-  .detail-content {
-    font-size: 0.9rem;
-    line-height: 1.6;
+    background: var(--bg);
   }
 
   .detail-content h4 {
@@ -229,560 +182,1262 @@
   .detail-content pre {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 12px;
     overflow-x: auto;
     font-size: 0.85rem;
-    margin-top: 8px;
   }
 
   .empty-state {
+    display: none;
     text-align: center;
-    padding: 48px 24px;
+    padding: 32px 16px;
     color: var(--dim);
   }
 
   .empty-state svg {
-    width: 64px;
-    height: 64px;
-    margin-bottom: 16px;
+    width: 60px;
+    height: 60px;
+    margin-bottom: 12px;
     opacity: 0.5;
   }
 
   .pagination {
-    display: flex;
+    display: none;
     justify-content: center;
     align-items: center;
-    gap: var(--space-3);
-    margin-top: var(--space-10);
-    padding-top: var(--space-6);
-    border-top: 2px solid var(--border);
+    gap: 8px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
   }
 
   .pagination a,
   .pagination span {
-    font-family: var(--font-meta);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    padding: var(--space-2) var(--space-3);
+    padding: 6px 10px;
     border: 1px solid var(--border);
     min-width: 40px;
     text-align: center;
+    font-size: 0.85rem;
     text-decoration: none;
     color: var(--accent-primary);
   }
 
   .pagination a:hover {
-    background: var(--bg-elevated);
-    border-color: var(--border-strong);
+    background: var(--bg);
   }
 
   .pagination .current {
     background: var(--accent-primary);
-    color: white;
+    color: #fff;
     border-color: var(--accent-primary);
   }
 
   .pagination .disabled {
     color: var(--dim);
     cursor: not-allowed;
-    opacity: 0.5;
+    opacity: 0.6;
   }
 
-  .pagination .disabled:hover {
-    background: transparent;
-    border-color: var(--border);
+  .status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .status-badge.passed {
+    background: rgba(42, 157, 110, 0.15);
+    color: var(--green);
+  }
+
+  .status-badge.rejected,
+  .status-badge.failed {
+    background: rgba(231, 76, 60, 0.15);
+    color: var(--red);
+  }
+
+  .status-badge.partial {
+    background: rgba(251, 191, 36, 0.15);
+    color: #f59e0b;
+  }
+
+  .status-badge.processing {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--accent-primary);
+  }
+
+  .status-badge.skipped {
+    background: rgba(107, 114, 128, 0.15);
+    color: #6b7280;
+  }
+
+  .article-title {
+    max-width: 320px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .domain-cell {
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    font-size: 0.75rem;
+    margin-left: 6px;
   }
 </style>
 
-<!-- Tab navigation -->
-<div class="logs-tabs">
-  <button class="logs-tab active" data-tab="filter">过滤日志</button>
-  <button class="logs-tab" data-tab="crawl">爬取日志</button>
-</div>
-
-<!-- Filter Logs Panel -->
-<div class="logs-tab-panel active" id="filterLogsPanel">
-<div class="logs-container">
+<div class="logs-page">
   <div class="section-header">
-    <h2>过滤日志</h2>
-  </div>
-
-  <div class="filters">
-    <div class="filter-group">
-      <label>领域:</label>
-      <select id="domainFilter" onchange="applyFilters()">
-        <option value="">全部领域</option>
-      </select>
-    </div>
-    <div class="filter-group">
-      <label>结果:</label>
-      <select id="resultFilter" onchange="applyFilters()">
-        <option value="">全部</option>
-        <option value="passed">通过</option>
-        <option value="rejected">拒绝</option>
-      </select>
-    </div>
-  </div>
-
-  <table class="logs-table" id="logsTable">
-    <thead>
-      <tr>
-        <th class="expand-cell"></th>
-        <th>文章标题</th>
-        <th>领域</th>
-        <th>结果</th>
-        <th>相关性</th>
-        <th>原因</th>
-        <th>时间</th>
-      </tr>
-    </thead>
-    <tbody id="logsBody">
-      <!-- Dynamic content -->
-    </tbody>
-  </table>
-
-  <div id="emptyState" class="empty-state" style="display: none;">
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-    </svg>
-    <p>暂无过滤日志</p>
-  </div>
-
-  <div class="pagination" id="pagination" style="display: none;">
-  </div>
-</div>
-</div>
-
-<!-- Crawl Logs Panel -->
-<div class="logs-tab-panel" id="crawlLogsPanel">
-<div class="logs-container">
-  <div class="section-header">
-    <h2>爬取日志</h2>
-  </div>
-
-  <div class="filters">
-    <div class="filter-group">
-      <label>结果:</label>
-      <select id="crawlResultFilter" onchange="applyCrawlFilters()">
-        <option value="">全部</option>
-        <option value="success">成功</option>
-        <option value="failed">失败</option>
-        <option value="partial">部分成功</option>
-      </select>
+    <h2>流程日志</h2>
+    <div class="filters">
+      <div class="filter-group">
+        <label>时间范围:</label>
+        <select id="rangePreset">
+          <option value="7">最近7天</option>
+          <option value="30" selected>最近30天</option>
+          <option value="90">最近90天</option>
+          <option value="all">全部</option>
+          <option value="custom">自定义</option>
+        </select>
+      </div>
+      <div class="filter-group" id="customRangeGroup">
+        <label>开始:</label>
+        <input type="date" id="customFrom" />
+        <label>结束:</label>
+        <input type="date" id="customTo" />
+        <button type="button" class="apply-btn" id="applyCustomRange">应用</button>
+      </div>
+      <div class="filter-summary" id="rangeSummary">当前范围：最近30天</div>
     </div>
   </div>
 
-  <table class="logs-table" id="crawlLogsTable">
-    <thead>
-      <tr>
-        <th>时间</th>
-        <th>期刊</th>
-        <th>年/卷/期</th>
-        <th>结果</th>
-        <th>新增</th>
-        <th>耗时</th>
-      </tr>
-    </thead>
-    <tbody id="crawlLogsBody">
-      <!-- Dynamic content -->
-    </tbody>
-  </table>
-
-  <div id="crawlEmptyState" class="empty-state" style="display: none;">
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-    </svg>
-    <p>暂无爬取日志</p>
+  <div class="logs-tabs">
+    <button class="logs-tab active" data-tab="all">全部流程</button>
+    <button class="logs-tab" data-tab="rss">RSS 抓取</button>
+    <button class="logs-tab" data-tab="crawl">期刊爬取</button>
+    <button class="logs-tab" data-tab="filter">过滤日志</button>
+    <button class="logs-tab" data-tab="process">后处理</button>
   </div>
 
-  <div class="pagination" id="crawlPagination" style="display: none;">
+  <div class="logs-tab-panel active" data-panel="all">
+    <div class="panel-filter">
+      <span>显示范围：<strong id="rangeDesc">最近30天</strong></span>
+    </div>
+    <table class="logs-table" id="unifiedTable">
+      <thead>
+        <tr>
+          <th class="expand-cell"></th>
+          <th>流程</th>
+          <th>概要</th>
+          <th>状态</th>
+          <th>时间</th>
+        </tr>
+      </thead>
+      <tbody id="unifiedBody"></tbody>
+    </table>
+    <div class="empty-state" id="unifiedEmpty">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <p>暂无流程日志</p>
+    </div>
+    <div class="pagination" id="unifiedPagination"></div>
   </div>
-</div>
+
+  <div class="logs-tab-panel" data-panel="rss">
+    <div class="panel-filter">
+      <div class="filter-group">
+        <label>结果:</label>
+        <select id="rssStatusFilter">
+          <option value="">全部</option>
+          <option value="success">成功</option>
+          <option value="partial">部分成功</option>
+          <option value="failed">失败</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>执行:</label>
+        <select id="rssScheduleFilter">
+          <option value="">全部</option>
+          <option value="scheduled">定时</option>
+          <option value="manual">手动</option>
+        </select>
+      </div>
+    </div>
+    <table class="logs-table" id="rssTable">
+      <thead>
+        <tr>
+          <th class="expand-cell"></th>
+          <th>来源</th>
+          <th>结果</th>
+          <th>新增/总数</th>
+          <th>耗时</th>
+          <th>时间</th>
+        </tr>
+      </thead>
+      <tbody id="rssBody"></tbody>
+    </table>
+    <div class="empty-state" id="rssEmpty">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <p>暂无 RSS 抓取日志</p>
+    </div>
+    <div class="pagination" id="rssPagination"></div>
+  </div>
+
+  <div class="logs-tab-panel" data-panel="crawl">
+    <div class="panel-filter">
+      <div class="filter-group">
+        <label>结果:</label>
+        <select id="crawlResultFilter">
+          <option value="">全部</option>
+          <option value="success">成功</option>
+          <option value="partial">部分成功</option>
+          <option value="failed">失败</option>
+        </select>
+      </div>
+    </div>
+    <table class="logs-table" id="crawlTable">
+      <thead>
+        <tr>
+          <th class="expand-cell"></th>
+          <th>期刊</th>
+          <th>期次</th>
+          <th>结果</th>
+          <th>新增/总数</th>
+          <th>耗时</th>
+          <th>时间</th>
+        </tr>
+      </thead>
+      <tbody id="crawlBody"></tbody>
+    </table>
+    <div class="empty-state" id="crawlEmpty">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <p>暂无爬取日志</p>
+    </div>
+    <div class="pagination" id="crawlPagination"></div>
+  </div>
+
+  <div class="logs-tab-panel" data-panel="filter">
+    <div class="panel-filter">
+      <div class="filter-group">
+        <label>领域:</label>
+        <select id="domainFilter">
+          <option value="">全部领域</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>结果:</label>
+        <select id="resultFilter">
+          <option value="">全部</option>
+          <option value="passed">通过</option>
+          <option value="rejected">拒绝</option>
+        </select>
+      </div>
+    </div>
+    <table class="logs-table" id="filterTable">
+      <thead>
+        <tr>
+          <th class="expand-cell"></th>
+          <th>文章</th>
+          <th>领域</th>
+          <th>结果</th>
+          <th>相关性</th>
+          <th>原因</th>
+          <th>时间</th>
+        </tr>
+      </thead>
+      <tbody id="filterBody"></tbody>
+    </table>
+    <div class="empty-state" id="filterEmpty">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <p>暂无过滤日志</p>
+    </div>
+    <div class="pagination" id="filterPagination"></div>
+  </div>
+
+  <div class="logs-tab-panel" data-panel="process">
+    <div class="panel-filter">
+      <div class="filter-group">
+        <label>阶段:</label>
+        <select id="processStageFilter">
+          <option value="">全部</option>
+          <option value="markdown">内容清洗</option>
+          <option value="translate">翻译</option>
+          <option value="vector">向量化</option>
+          <option value="related">相关文章</option>
+          <option value="pipeline_complete">流程完成</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>状态:</label>
+        <select id="processStatusFilter">
+          <option value="">全部</option>
+          <option value="processing">处理中</option>
+          <option value="completed">完成</option>
+          <option value="failed">失败</option>
+          <option value="skipped">跳过</option>
+        </select>
+      </div>
+    </div>
+    <table class="logs-table" id="processTable">
+      <thead>
+        <tr>
+          <th class="expand-cell"></th>
+          <th>文章/阶段</th>
+          <th>状态</th>
+          <th>耗时</th>
+          <th>来源</th>
+          <th>时间</th>
+        </tr>
+      </thead>
+      <tbody id="processBody"></tbody>
+    </table>
+    <div class="empty-state" id="processEmpty">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <p>暂无后处理日志</p>
+    </div>
+    <div class="pagination" id="processPagination"></div>
+  </div>
 </div>
 
 <script>
-// Filter logs variables
-let currentPage = 1;
-let totalPages = 1;
-const pageSize = 20;
-let domains = [];
-let currentDomainFilter = '';
-let currentResultFilter = '';
-
-// Tab switching and initial data loading
-document.addEventListener('DOMContentLoaded', () => {
-  const tabs = document.querySelectorAll('.logs-tab');
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      // Remove active from all tabs and panels
-      document.querySelectorAll('.logs-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.logs-tab-panel').forEach(p => p.classList.remove('active'));
-
-      // Add active to clicked tab and corresponding panel
-      tab.classList.add('active');
-      const tabName = tab.dataset.tab;
-      document.getElementById(tabName + 'LogsPanel').classList.add('active');
-    });
-  });
-
-  loadDomains();
-  loadLogs(1);
-  loadCrawlLogs(1);
-});
-
-// Crawl logs variables and functions
-let crawlCurrentPage = 1;
-let crawlTotalPages = 1;
-const crawlPageSize = 20;
-let crawlCurrentResultFilter = '';
-
-async function loadCrawlLogs(page = 1) {
-  try {
-    const params = new URLSearchParams({
-      page: page.toString(),
-      limit: crawlPageSize.toString()
-    });
-
-    if (crawlCurrentResultFilter) {
-      params.append('result', crawlCurrentResultFilter);
-    }
-
-    const res = await fetch('/api/logs/crawl?' + params.toString());
-    const data = await res.json();
-
-    crawlCurrentPage = data.page || 1;
-    crawlTotalPages = data.totalPages || 1;
-
-    renderCrawlLogs(data.logs || [], data.total || 0);
-  } catch (err) {
-    console.error('Failed to load crawl logs:', err);
-    toast.error('加载爬取日志失败: ' + (err.message || '网络错误'));
-    showCrawlEmptyState();
-  }
-}
-
-function showCrawlEmptyState() {
-  document.getElementById('crawlLogsTable').style.display = 'none';
-  document.getElementById('crawlEmptyState').style.display = 'block';
-  document.getElementById('crawlPagination').style.display = 'none';
-}
-
-function renderCrawlLogs(logs, total) {
-  const tbody = document.getElementById('crawlLogsBody');
-  const emptyState = document.getElementById('crawlEmptyState');
-  const table = document.getElementById('crawlLogsTable');
-  const pagination = document.getElementById('crawlPagination');
-
-  if (logs.length === 0) {
-    table.style.display = 'none';
-    emptyState.style.display = 'block';
-    pagination.style.display = 'none';
-    return;
-  }
-
-  table.style.display = 'table';
-  emptyState.style.display = 'none';
-
-  const statusMap = {
-    'success': '<span class="status-badge passed">成功</span>',
-    'failed': '<span class="status-badge rejected">失败</span>',
-    'partial': '<span class="status-badge" style="background: rgba(251, 191, 36, 0.15); color: #f59e0b;">部分成功</span>'
+(() => {
+  const pageSize = 20;
+  const state = {
+    currentTab: 'all',
+    rangePreset: '30',
+    customFrom: '',
+    customTo: '',
+    tabs: {
+      all: { page: 1, totalPages: 1 },
+      rss: { page: 1, totalPages: 1 },
+      crawl: { page: 1, totalPages: 1 },
+      filter: { page: 1, totalPages: 1 },
+      process: { page: 1, totalPages: 1 },
+    },
+    filters: {
+      domainId: '',
+      filterResult: '',
+      rssStatus: '',
+      rssSchedule: '',
+      crawlStatus: '',
+      processStage: '',
+      processStatus: '',
+    },
   };
 
-  tbody.innerHTML = logs.map(log => {
-    const duration = log.duration_ms ? Math.round(log.duration_ms / 1000) + 's' : '-';
-    return '<tr>' +
-      '<td class="timestamp">' + formatDate(log.created_at) + '</td>' +
-      '<td>' + escapeHtml(log.journal_name || '-') + '</td>' +
-      '<td>' + formatYearVolumeIssue(log.crawl_year, log.crawl_volume, log.crawl_issue) + '</td>' +
-      '<td>' + (statusMap[log.status] || log.status) + '</td>' +
-      '<td>' + (log.new_articles_count !== null ? log.new_articles_count : '-') + '</td>' +
-      '<td>' + duration + '</td>' +
-    '</tr>';
-  }).join('');
+  let domains = [];
 
-  renderCrawlPagination();
-}
+  document.addEventListener('DOMContentLoaded', () => {
+    initTabs();
+    initRangeControls();
+    initFilterControls();
+    loadDomains();
+    reloadAllTabs();
+  });
 
-function renderCrawlPagination() {
-  const pagination = document.getElementById('crawlPagination');
-
-  if (crawlTotalPages <= 1) {
-    pagination.style.display = 'none';
-    return;
-  }
-
-  pagination.style.display = 'flex';
-
-  let html = '';
-
-  // Previous button
-  if (crawlCurrentPage > 1) {
-    html += '<a href="#" onclick="goToCrawlPage(' + (crawlCurrentPage - 1) + '); return false;">&laquo; 上一页</a>';
-  } else {
-    html += '<span class="disabled">&laquo; 上一页</span>';
-  }
-
-  // Page numbers (show max 5 pages)
-  const startPage = Math.max(1, crawlCurrentPage - 2);
-  const endPage = Math.min(crawlTotalPages, startPage + 4);
-
-  // Always show first page
-  if (startPage > 1) {
-    html += '<a href="#" onclick="goToCrawlPage(1); return false;">1</a>';
-    if (startPage > 2) {
-      html += '<span>...</span>';
-    }
-  }
-
-  // Page range
-  for (let i = startPage; i <= endPage; i++) {
-    if (i === crawlCurrentPage) {
-      html += '<span class="current">' + i + '</span>';
-    } else {
-      html += '<a href="#" onclick="goToCrawlPage(' + i + '); return false;">' + i + '</a>';
-    }
-  }
-
-  // Always show last page
-  if (endPage < crawlTotalPages) {
-    if (endPage < crawlTotalPages - 1) {
-      html += '<span>...</span>';
-    }
-    html += '<a href="#" onclick="goToCrawlPage(' + crawlTotalPages + '); return false;">' + crawlTotalPages + '</a>';
-  }
-
-  // Next button
-  if (crawlCurrentPage < crawlTotalPages) {
-    html += '<a href="#" onclick="goToCrawlPage(' + (crawlCurrentPage + 1) + '); return false;">下一页 &raquo;</a>';
-  } else {
-    html += '<span class="disabled">下一页 &raquo;</span>';
-  }
-
-  pagination.innerHTML = html;
-}
-
-function goToCrawlPage(page) {
-  loadCrawlLogs(page);
-}
-
-function applyCrawlFilters() {
-  crawlCurrentResultFilter = document.getElementById('crawlResultFilter').value;
-  loadCrawlLogs(1);
-}
-
-/* ===== Filter Logs ===== */
-
-async function loadDomains() {
-  try {
-    const res = await fetch('/api/topic-domains?isActive=true');
-    const data = await res.json();
-    domains = data.domains || [];
-
-    const select = document.getElementById('domainFilter');
-    domains.forEach(domain => {
-      const option = document.createElement('option');
-      option.value = domain.id;
-      option.textContent = domain.name;
-      select.appendChild(option);
+  function initTabs() {
+    const tabs = document.querySelectorAll('.logs-tab');
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        if (!target || target === state.currentTab) return;
+        state.currentTab = target;
+        tabs.forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === target));
+        document.querySelectorAll('.logs-tab-panel').forEach((panel) => {
+          panel.classList.toggle('active', panel.dataset.panel === target);
+        });
+      });
     });
-  } catch (err) {
-    console.error('Failed to load domains:', err);
-    toast.error('加载领域列表失败: ' + (err.message || '网络错误'));
   }
-}
 
-async function loadLogs(page = 1) {
-  try {
-    const params = new URLSearchParams({
+  function initRangeControls() {
+    const presetSelect = document.getElementById('rangePreset');
+    const customGroup = document.getElementById('customRangeGroup');
+    const applyBtn = document.getElementById('applyCustomRange');
+
+    if (presetSelect) {
+      presetSelect.addEventListener('change', () => {
+        state.rangePreset = presetSelect.value;
+        toggleCustomRange(customGroup);
+        if (state.rangePreset !== 'custom') {
+          reloadAllTabs();
+        }
+      });
+    }
+
+    if (applyBtn) {
+      applyBtn.addEventListener('click', () => {
+        const fromInput = document.getElementById('customFrom');
+        const toInput = document.getElementById('customTo');
+        const fromValue = fromInput ? fromInput.value : '';
+        const toValue = toInput ? toInput.value : '';
+        if (!fromValue || !toValue) {
+          toast.warn('请完整选择自定义时间范围');
+          return;
+        }
+        if (new Date(fromValue) > new Date(toValue)) {
+          toast.warn('开始日期不能晚于结束日期');
+          return;
+        }
+        state.customFrom = fromValue;
+        state.customTo = toValue;
+        reloadAllTabs();
+      });
+    }
+
+    toggleCustomRange(customGroup);
+    updateRangeSummary();
+  }
+
+  function toggleCustomRange(customGroup) {
+    if (!customGroup) return;
+    if (state.rangePreset === 'custom') {
+      customGroup.style.display = 'flex';
+      const fromInput = document.getElementById('customFrom');
+      const toInput = document.getElementById('customTo');
+      if (fromInput && state.customFrom) fromInput.value = state.customFrom;
+      if (toInput && state.customTo) toInput.value = state.customTo;
+    } else {
+      customGroup.style.display = 'none';
+    }
+    updateRangeSummary();
+  }
+
+  function initFilterControls() {
+    const domainSelect = document.getElementById('domainFilter');
+    if (domainSelect) {
+      domainSelect.addEventListener('change', () => {
+        state.filters.domainId = domainSelect.value;
+        loadFilterLogs(1);
+      });
+    }
+
+    const filterResult = document.getElementById('resultFilter');
+    if (filterResult) {
+      filterResult.addEventListener('change', () => {
+        state.filters.filterResult = filterResult.value;
+        loadFilterLogs(1);
+      });
+    }
+
+    const rssStatus = document.getElementById('rssStatusFilter');
+    if (rssStatus) {
+      rssStatus.addEventListener('change', () => {
+        state.filters.rssStatus = rssStatus.value;
+        loadRssLogs(1);
+      });
+    }
+
+    const rssSchedule = document.getElementById('rssScheduleFilter');
+    if (rssSchedule) {
+      rssSchedule.addEventListener('change', () => {
+        state.filters.rssSchedule = rssSchedule.value;
+        loadRssLogs(1);
+      });
+    }
+
+    const crawlResult = document.getElementById('crawlResultFilter');
+    if (crawlResult) {
+      crawlResult.addEventListener('change', () => {
+        state.filters.crawlStatus = crawlResult.value;
+        loadCrawlLogs(1);
+      });
+    }
+
+    const processStage = document.getElementById('processStageFilter');
+    if (processStage) {
+      processStage.addEventListener('change', () => {
+        state.filters.processStage = processStage.value;
+        loadProcessLogs(1);
+      });
+    }
+
+    const processStatus = document.getElementById('processStatusFilter');
+    if (processStatus) {
+      processStatus.addEventListener('change', () => {
+        state.filters.processStatus = processStatus.value;
+        loadProcessLogs(1);
+      });
+    }
+  }
+
+  function reloadAllTabs() {
+    Object.keys(state.tabs).forEach((key) => {
+      state.tabs[key].page = 1;
+    });
+    updateRangeSummary();
+    loadUnifiedLogs(1);
+    loadRssLogs(1);
+    loadCrawlLogs(1);
+    loadFilterLogs(1);
+    loadProcessLogs(1);
+  }
+
+  async function loadDomains() {
+    try {
+      const res = await fetch('/api/topic-domains?isActive=true');
+      const data = await res.json();
+      domains = data.domains || [];
+      const select = document.getElementById('domainFilter');
+      if (select) {
+        select.innerHTML = '<option value="">全部领域</option>';
+        domains.forEach((domain) => {
+          const option = document.createElement('option');
+          option.value = domain.id;
+          option.textContent = domain.name;
+          select.appendChild(option);
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load domains', err);
+      toast.error('加载领域列表失败：' + (err.message || '网络错误'));
+    }
+  }
+
+  async function loadUnifiedLogs(page = 1) {
+    try {
+      const params = buildParams(page);
+      const data = await fetchJson('/api/logs/unified', params);
+      state.tabs.all.page = data.page || 1;
+      state.tabs.all.totalPages = data.totalPages || 1;
+      renderUnifiedLogs(data.logs || []);
+      renderPagination('unifiedPagination', state.tabs.all.page, state.tabs.all.totalPages, 'all');
+    } catch (err) {
+      console.error(err);
+      toast.error('加载流程日志失败：' + (err.message || '网络错误'));
+      showEmptyState('unifiedTable', 'unifiedEmpty');
+    }
+  }
+
+  async function loadRssLogs(page = 1) {
+    try {
+      const params = buildParams(page);
+      if (state.filters.rssStatus) params.status = state.filters.rssStatus;
+      if (state.filters.rssSchedule === 'scheduled') params.isScheduled = 'true';
+      if (state.filters.rssSchedule === 'manual') params.isScheduled = 'false';
+      const data = await fetchJson('/api/logs/rss-fetch', params);
+      state.tabs.rss.page = data.page || 1;
+      state.tabs.rss.totalPages = data.totalPages || 1;
+      renderRssLogs(data.logs || []);
+      renderPagination('rssPagination', state.tabs.rss.page, state.tabs.rss.totalPages, 'rss');
+    } catch (err) {
+      console.error(err);
+      toast.error('加载 RSS 抓取日志失败：' + (err.message || '网络错误'));
+      showEmptyState('rssTable', 'rssEmpty');
+    }
+  }
+
+  async function loadCrawlLogs(page = 1) {
+    try {
+      const params = buildParams(page);
+      if (state.filters.crawlStatus) params.result = state.filters.crawlStatus;
+      const data = await fetchJson('/api/logs/crawl', params);
+      state.tabs.crawl.page = data.page || 1;
+      state.tabs.crawl.totalPages = data.totalPages || 1;
+      renderCrawlLogs(data.logs || []);
+      renderPagination('crawlPagination', state.tabs.crawl.page, state.tabs.crawl.totalPages, 'crawl');
+    } catch (err) {
+      console.error(err);
+      toast.error('加载爬取日志失败：' + (err.message || '网络错误'));
+      showEmptyState('crawlTable', 'crawlEmpty');
+    }
+  }
+
+  async function loadFilterLogs(page = 1) {
+    try {
+      const params = buildParams(page);
+      if (state.filters.domainId) params.domainId = state.filters.domainId;
+      if (state.filters.filterResult) params.isPassed = state.filters.filterResult === 'passed' ? 'true' : 'false';
+      const data = await fetchJson('/api/logs/filter', params);
+      state.tabs.filter.page = data.page || 1;
+      state.tabs.filter.totalPages = data.totalPages || 1;
+      renderFilterLogs(data.logs || []);
+      renderPagination('filterPagination', state.tabs.filter.page, state.tabs.filter.totalPages, 'filter');
+    } catch (err) {
+      console.error(err);
+      toast.error('加载过滤日志失败：' + (err.message || '网络错误'));
+      showEmptyState('filterTable', 'filterEmpty');
+    }
+  }
+
+  async function loadProcessLogs(page = 1) {
+    try {
+      const params = buildParams(page);
+      if (state.filters.processStage) params.stage = state.filters.processStage;
+      if (state.filters.processStatus) params.status = state.filters.processStatus;
+      const data = await fetchJson('/api/logs/process', params);
+      state.tabs.process.page = data.page || 1;
+      state.tabs.process.totalPages = data.totalPages || 1;
+      renderProcessLogs(data.logs || []);
+      renderPagination('processPagination', state.tabs.process.page, state.tabs.process.totalPages, 'process');
+    } catch (err) {
+      console.error(err);
+      toast.error('加载后处理日志失败：' + (err.message || '网络错误'));
+      showEmptyState('processTable', 'processEmpty');
+    }
+  function buildParams(page) {
+    const params = {
       page: page.toString(),
-      limit: pageSize.toString()
+      limit: pageSize.toString(),
+    };
+    appendDateParams(params);
+    return params;
+  }
+
+  function appendDateParams(params) {
+    const range = getDateParams();
+    if (range.fromDate) params.fromDate = range.fromDate;
+    if (range.toDate) params.toDate = range.toDate;
+  }
+
+  function getDateParams() {
+    if (state.rangePreset === 'all') {
+      return {};
+    }
+    if (state.rangePreset === 'custom') {
+      if (!state.customFrom || !state.customTo) {
+        return {};
+      }
+      const fromDate = new Date(state.customFrom);
+      const toDate = new Date(state.customTo);
+      if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+        return {};
+      }
+      const endDate = new Date(toDate);
+      endDate.setHours(23, 59, 59, 999);
+      return {
+        fromDate: fromDate.toISOString(),
+        toDate: endDate.toISOString(),
+      };
+    }
+    const days = parseInt(state.rangePreset, 10);
+    if (Number.isNaN(days)) {
+      return {};
+    }
+    const toDate = new Date();
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - days);
+    return {
+      fromDate: fromDate.toISOString(),
+      toDate: toDate.toISOString(),
+    };
+  }
+
+  async function fetchJson(url, params) {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        searchParams.append(key, value);
+      }
     });
-
-    if (currentDomainFilter) {
-      params.append('domainId', currentDomainFilter);
+    const query = searchParams.toString();
+    const res = await fetch(query ? `${url}?${query}` : url);
+    if (!res.ok) {
+      throw new Error('请求失败');
     }
-    if (currentResultFilter) {
-      params.append('isPassed', currentResultFilter === 'passed' ? 'true' : 'false');
+    return res.json();
+  }
+
+  function renderUnifiedLogs(logs) {
+    const table = document.getElementById('unifiedTable');
+    const tbody = document.getElementById('unifiedBody');
+    const empty = document.getElementById('unifiedEmpty');
+
+    if (!tbody || !table || !empty) return;
+
+    if (!logs.length) {
+      table.style.display = 'none';
+      empty.style.display = 'block';
+      tbody.innerHTML = '';
+      return;
     }
 
-    const res = await fetch('/api/logs/filter?' + params.toString());
-    const data = await res.json();
+    table.style.display = 'table';
+    empty.style.display = 'none';
 
-    currentPage = data.page || 1;
-    totalPages = data.totalPages || 1;
+    const rows = logs.map((log) => {
+      const detailId = `unified-detail-${log.id}`;
+      return `
+        <tr class="expand-row" data-detail-id="${detailId}">
+          <td class="expand-cell"><span class="expand-icon">▶</span></td>
+          <td>${getFlowLabel(log.type)}</td>
+          <td>${escapeHtml(getUnifiedSummary(log))}</td>
+          <td>${renderStatusBadge(log.status)}</td>
+          <td>${formatDate(log.created_at)}</td>
+        </tr>
+        <tr class="detail-row" id="${detailId}">
+          <td colspan="5" class="detail-cell">
+            <div class="detail-content">${buildUnifiedDetail(log)}</div>
+          </td>
+        </tr>
+      `;
+    }).join('');
 
-    renderLogs(data.logs || [], data.total || 0);
-  } catch (err) {
-    console.error('Failed to load logs:', err);
-    toast.error('加载日志失败: ' + (err.message || '网络错误'));
-    showEmptyState();
-  }
-}
-
-function showEmptyState() {
-  document.getElementById('logsTable').style.display = 'none';
-  document.getElementById('emptyState').style.display = 'block';
-  document.getElementById('pagination').style.display = 'none';
-}
-
-function renderLogs(logs, total) {
-  const tbody = document.getElementById('logsBody');
-  const emptyState = document.getElementById('emptyState');
-  const table = document.getElementById('logsTable');
-  const pagination = document.getElementById('pagination');
-
-  if (logs.length === 0) {
-    table.style.display = 'none';
-    emptyState.style.display = 'block';
-    pagination.style.display = 'none';
-    return;
+    tbody.innerHTML = rows;
+    bindExpandEvents('#unifiedBody');
   }
 
-  table.style.display = 'table';
-  emptyState.style.display = 'none';
+  function renderRssLogs(logs) {
+    const table = document.getElementById('rssTable');
+    const tbody = document.getElementById('rssBody');
+    const empty = document.getElementById('rssEmpty');
 
-  tbody.innerHTML = logs.map(log => {
-    const domain = domains.find(d => d.id === log.domain_id);
+    if (!tbody || !table || !empty) return;
 
-    return '<tr class="expand-row" data-id="' + log.id + '">' +
-      '<td class="expand-cell"><span class="expand-icon">▶</span></td>' +
-      '<td class="article-title">' +
-        '<a href="#" title="' + escapeHtml(log.article_title || 'N/A') + '">' + escapeHtml(log.article_title || 'N/A') + '</a>' +
-      '</td>' +
-      '<td class="domain-cell" title="' + (domain ? escapeHtml(domain.name) : '-') + '">' + (domain ? escapeHtml(domain.name) : '-') + '</td>' +
-      '<td>' +
-        '<span class="status-badge ' + (log.is_passed ? 'passed' : 'rejected') + '">' +
-          (log.is_passed ? '通过' : '拒绝') +
-        '</span>' +
-      '</td>' +
-      '<td class="relevance-score">' + (log.relevance_score !== null ? log.relevance_score.toFixed(2) : '-') + '</td>' +
-      '<td class="filter-reason" title="' + escapeHtml(log.filter_reason || '') + '">' + escapeHtml(log.filter_reason || '-') + '</td>' +
-      '<td class="timestamp">' + formatDate(log.created_at) + '</td>' +
-    '</tr>' +
-    '<tr class="detail-row" id="detail-' + log.id + '">' +
-      '<td colspan="7" class="detail-cell">' +
-        '<div class="detail-content">' +
-          '<h4>过滤详情</h4>' +
-          '<p><strong>文章ID:</strong> ' + log.article_id + '</p>' +
-          '<p><strong>领域:</strong> ' + (domain ? escapeHtml(domain.name) : '-') + '</p>' +
-          '<p><strong>结果:</strong> ' + (log.is_passed ? '通过' : '拒绝') + '</p>' +
-          '<p><strong>相关性分数:</strong> ' + (log.relevance_score !== null ? log.relevance_score.toFixed(2) : '-') + '</p>' +
-          '<p><strong>原因:</strong> ' + escapeHtml(log.filter_reason || '-') + '</p>' +
-          (log.llm_response ?
-            '<h4 style="margin-top: 16px;">LLM 响应</h4>' +
-            '<pre>' + escapeHtml(log.llm_response) + '</pre>' : '') +
-        '</div>' +
-      '</td>' +
-    '</tr>';
-  }).join('');
-
-  // Render pagination
-  renderPagination();
-
-  // Add click handlers for expand
-  document.querySelectorAll('.expand-row').forEach(row => {
-    row.addEventListener('click', function() {
-      const id = this.dataset.id;
-      this.classList.toggle('expanded');
-      document.getElementById('detail-' + id).classList.toggle('show');
-    });
-  });
-}
-
-function renderPagination() {
-  const pagination = document.getElementById('pagination');
-
-  if (totalPages <= 1) {
-    pagination.style.display = 'none';
-    return;
-  }
-
-  pagination.style.display = 'flex';
-
-  let html = '';
-
-  // Previous button
-  if (currentPage > 1) {
-    html += '<a href="#" onclick="goToPage(' + (currentPage - 1) + '); return false;">&laquo; 上一页</a>';
-  } else {
-    html += '<span class="disabled">&laquo; 上一页</span>';
-  }
-
-  // Page numbers (show max 5 pages)
-  const startPage = Math.max(1, currentPage - 2);
-  const endPage = Math.min(totalPages, startPage + 4);
-
-  // Always show first page
-  if (startPage > 1) {
-    html += '<a href="#" onclick="goToPage(1); return false;">1</a>';
-    if (startPage > 2) {
-      html += '<span>...</span>';
+    if (!logs.length) {
+      table.style.display = 'none';
+      empty.style.display = 'block';
+      tbody.innerHTML = '';
+      return;
     }
+
+    table.style.display = 'table';
+    empty.style.display = 'none';
+
+    tbody.innerHTML = logs.map((log) => {
+      const detailId = `rss-detail-${log.id}`;
+      const summary = `${escapeHtml(log.rss_source_name || '未命名订阅')}`;
+      const counts = `${log.new_articles_count ?? 0}/${log.articles_count ?? 0}`;
+      const schedule = log.is_scheduled ? '定时' : '手动';
+      return `
+        <tr class="expand-row" data-detail-id="${detailId}">
+          <td class="expand-cell"><span class="expand-icon">▶</span></td>
+          <td>${summary}<span class="chip">${schedule}</span></td>
+          <td>${renderStatusBadge(log.status)}</td>
+          <td>${counts}</td>
+          <td>${formatDuration(log.duration_ms)}</td>
+          <td>${formatDate(log.created_at)}</td>
+        </tr>
+        <tr class="detail-row" id="${detailId}">
+          <td colspan="6" class="detail-cell">
+            <div class="detail-content">
+              <h4>执行详情</h4>
+              <p>来源 ID：${log.rss_source_id}</p>
+              <p>执行方式：${schedule}</p>
+              <p>新增文章：${log.new_articles_count ?? 0}</p>
+              <p>总计文章：${log.articles_count ?? 0}</p>
+              <p>耗时：${formatDuration(log.duration_ms)}</p>
+              ${log.error_message ? `<p>错误信息：${escapeHtml(log.error_message)}</p>` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    bindExpandEvents('#rssBody');
   }
 
-  // Page range
-  for (let i = startPage; i <= endPage; i++) {
-    if (i === currentPage) {
-      html += '<span class="current">' + i + '</span>';
+  function renderCrawlLogs(logs) {
+    const table = document.getElementById('crawlTable');
+    const tbody = document.getElementById('crawlBody');
+    const empty = document.getElementById('crawlEmpty');
+
+    if (!tbody || !table || !empty) return;
+
+    if (!logs.length) {
+      table.style.display = 'none';
+      empty.style.display = 'block';
+      tbody.innerHTML = '';
+      return;
+    }
+
+    table.style.display = 'table';
+    empty.style.display = 'none';
+
+    tbody.innerHTML = logs.map((log) => {
+      const detailId = `crawl-detail-${log.id}`;
+      const period = formatYearVolumeIssue(log.crawl_year, log.crawl_volume, log.crawl_issue);
+      const counts = `${log.new_articles_count ?? 0}/${log.articles_count ?? 0}`;
+      return `
+        <tr class="expand-row" data-detail-id="${detailId}">
+          <td class="expand-cell"><span class="expand-icon">▶</span></td>
+          <td>${escapeHtml(log.journal_name || '-')}</td>
+          <td>${escapeHtml(period)}</td>
+          <td>${renderStatusBadge(log.status)}</td>
+          <td>${counts}</td>
+          <td>${formatDuration(log.duration_ms)}</td>
+          <td>${formatDate(log.created_at)}</td>
+        </tr>
+        <tr class="detail-row" id="${detailId}">
+          <td colspan="7" class="detail-cell">
+            <div class="detail-content">
+              <h4>执行详情</h4>
+              <p>期刊 ID：${log.journal_id}</p>
+              <p>新增文章：${log.new_articles_count ?? 0}</p>
+              <p>总计文章：${log.articles_count ?? 0}</p>
+              <p>耗时：${formatDuration(log.duration_ms)}</p>
+              ${log.error_message ? `<p>错误信息：${escapeHtml(log.error_message)}</p>` : '<p>错误信息：无</p>'}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    bindExpandEvents('#crawlBody');
+  }
+
+  function renderFilterLogs(logs) {
+    const table = document.getElementById('filterTable');
+    const tbody = document.getElementById('filterBody');
+    const empty = document.getElementById('filterEmpty');
+
+    if (!tbody || !table || !empty) return;
+
+    if (!logs.length) {
+      table.style.display = 'none';
+      empty.style.display = 'block';
+      tbody.innerHTML = '';
+      return;
+    }
+
+    table.style.display = 'table';
+    empty.style.display = 'none';
+
+    tbody.innerHTML = logs.map((log) => {
+      const detailId = `filter-detail-${log.id}`;
+      const domainName = getDomainName(log.domain_id);
+      const statusLabel = log.is_passed ? 'passed' : 'rejected';
+      return `
+        <tr class="expand-row" data-detail-id="${detailId}">
+          <td class="expand-cell"><span class="expand-icon">▶</span></td>
+          <td class="article-title" title="${escapeHtml(log.article_title || '未命名文章')}">${escapeHtml(log.article_title || '未命名文章')}</td>
+          <td class="domain-cell" title="${escapeHtml(domainName)}">${escapeHtml(domainName)}</td>
+          <td>${renderStatusBadge(statusLabel)}</td>
+          <td>${log.relevance_score !== null && log.relevance_score !== undefined ? log.relevance_score.toFixed(2) : '-'}</td>
+          <td>${escapeHtml(log.filter_reason || '-')}</td>
+          <td>${formatDate(log.created_at)}</td>
+        </tr>
+        <tr class="detail-row" id="${detailId}">
+          <td colspan="7" class="detail-cell">
+            <div class="detail-content">
+              <h4>过滤详情</h4>
+              <p>文章 ID：${log.article_id}</p>
+              <p>领域：${escapeHtml(domainName)}</p>
+              <p>相关性分数：${log.relevance_score !== null && log.relevance_score !== undefined ? log.relevance_score.toFixed(2) : '-'}</p>
+              <p>匹配关键词：${escapeHtml(log.matched_keywords || '-')}</p>
+              <p>原因：${escapeHtml(log.filter_reason || '-')}</p>
+              ${log.llm_response ? `<h4 style="margin-top: 12px;">LLM 响应</h4><pre>${escapeHtml(log.llm_response)}</pre>` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    bindExpandEvents('#filterBody');
+  }
+
+  function renderProcessLogs(logs) {
+    const table = document.getElementById('processTable');
+    const tbody = document.getElementById('processBody');
+    const empty = document.getElementById('processEmpty');
+
+    if (!tbody || !table || !empty) return;
+
+    if (!logs.length) {
+      table.style.display = 'none';
+      empty.style.display = 'block';
+      tbody.innerHTML = '';
+      return;
+    }
+
+    table.style.display = 'table';
+    empty.style.display = 'none';
+
+    tbody.innerHTML = logs.map((log) => {
+      const detailId = `process-detail-${log.id}`;
+      const stageLabel = getStageLabel(log.stage);
+      const sourceLabel = log.source_origin === 'journal' ? '期刊' : 'RSS';
+      return `
+        <tr class="expand-row" data-detail-id="${detailId}">
+          <td class="expand-cell"><span class="expand-icon">▶</span></td>
+          <td class="article-title" title="${escapeHtml(log.article_title || '未命名文章')}">${escapeHtml(log.article_title || '未命名文章')}<span class="chip">${stageLabel}</span></td>
+          <td>${renderStatusBadge(log.status)}</td>
+          <td>${formatDuration(log.duration_ms)}</td>
+          <td>${sourceLabel}</td>
+          <td>${formatDate(log.created_at)}</td>
+        </tr>
+        <tr class="detail-row" id="${detailId}">
+          <td colspan="6" class="detail-cell">
+            <div class="detail-content">
+              <h4>阶段详情</h4>
+              <p>文章 ID：${log.article_id}</p>
+              <p>阶段：${stageLabel}</p>
+              <p>状态：${getStatusText(log.status)}</p>
+              <p>耗时：${formatDuration(log.duration_ms)}</p>
+              ${log.error_message ? `<p>错误信息：${escapeHtml(log.error_message)}</p>` : ''}
+              ${log.details ? `<h4 style="margin-top: 12px;">附加信息</h4><pre>${formatDetailString(log.details)}</pre>` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    bindExpandEvents('#processBody');
+  }
+  function renderPagination(containerId, currentPage, totalPages, tabKey) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (!totalPages || totalPages <= 1) {
+      container.style.display = 'none';
+      container.innerHTML = '';
+      return;
+    }
+
+    container.style.display = 'flex';
+    container.innerHTML = buildPaginationHtml(currentPage, totalPages, tabKey);
+  }
+
+  function buildPaginationHtml(currentPage, totalPages, tabKey) {
+    let html = '';
+    if (currentPage > 1) {
+      html += `<a href="#" onclick="return changeLogPage('${tabKey}', ${currentPage - 1});">&laquo; 上一页</a>`;
     } else {
-      html += '<a href="#" onclick="goToPage(' + i + '); return false;">' + i + '</a>';
+      html += '<span class="disabled">&laquo; 上一页</span>';
+    }
+
+    const start = Math.max(1, currentPage - 2);
+    const end = Math.min(totalPages, start + 4);
+
+    if (start > 1) {
+      html += `<a href="#" onclick="return changeLogPage('${tabKey}', 1);">1</a>`;
+      if (start > 2) {
+        html += '<span>...</span>';
+      }
+    }
+
+    for (let i = start; i <= end; i++) {
+      if (i === currentPage) {
+        html += `<span class="current">${i}</span>`;
+      } else {
+        html += `<a href="#" onclick="return changeLogPage('${tabKey}', ${i});">${i}</a>`;
+      }
+    }
+
+    if (end < totalPages) {
+      if (end < totalPages - 1) {
+        html += '<span>...</span>';
+      }
+      html += `<a href="#" onclick="return changeLogPage('${tabKey}', ${totalPages});">${totalPages}</a>`;
+    }
+
+    if (currentPage < totalPages) {
+      html += `<a href="#" onclick="return changeLogPage('${tabKey}', ${currentPage + 1});">下一页 &raquo;</a>`;
+    } else {
+      html += '<span class="disabled">下一页 &raquo;</span>';
+    }
+
+    return html;
+  }
+
+  window.changeLogPage = function(tab, page) {
+    switch (tab) {
+      case 'all':
+        loadUnifiedLogs(page);
+        break;
+      case 'rss':
+        loadRssLogs(page);
+        break;
+      case 'crawl':
+        loadCrawlLogs(page);
+        break;
+      case 'filter':
+        loadFilterLogs(page);
+        break;
+      case 'process':
+        loadProcessLogs(page);
+        break;
+    }
+    return false;
+  };
+
+  function bindExpandEvents(scopeSelector) {
+    const container = document.querySelector(scopeSelector);
+    if (!container) return;
+    container.querySelectorAll('.expand-row').forEach((row) => {
+      row.addEventListener('click', () => {
+        const detailId = row.getAttribute('data-detail-id');
+        if (!detailId) return;
+        row.classList.toggle('expanded');
+        const detailRow = document.getElementById(detailId);
+        if (detailRow) {
+          detailRow.classList.toggle('show');
+        }
+      });
+    });
+  }
+
+  function showEmptyState(tableId, emptyId) {
+    const table = document.getElementById(tableId);
+    const empty = document.getElementById(emptyId);
+    if (table) table.style.display = 'none';
+    if (empty) empty.style.display = 'block';
+  }
+
+  function updateRangeSummary() {
+    const summary = document.getElementById('rangeSummary');
+    const desc = document.getElementById('rangeDesc');
+    const text = '当前范围：' + describeRange();
+    if (summary) summary.textContent = text;
+    if (desc) desc.textContent = describeRange();
+  }
+
+  function describeRange() {
+    if (state.rangePreset === 'all') {
+      return '全部时间';
+    }
+    if (state.rangePreset === 'custom' && state.customFrom && state.customTo) {
+      return `自定义：${state.customFrom} 至 ${state.customTo}`;
+    }
+    switch (state.rangePreset) {
+      case '7':
+        return '最近7天';
+      case '90':
+        return '最近90天';
+      default:
+        return '最近30天';
     }
   }
 
-  // Always show last page
-  if (endPage < totalPages) {
-    if (endPage < totalPages - 1) {
-      html += '<span>...</span>';
+  function getFlowLabel(type) {
+    switch (type) {
+      case 'rss_fetch':
+        return 'RSS 抓取';
+      case 'journal_crawl':
+        return '期刊爬取';
+      case 'filter':
+        return '过滤';
+      case 'process':
+        return '后处理';
+      default:
+        return '流程';
     }
-    html += '<a href="#" onclick="goToPage(' + totalPages + '); return false;">' + totalPages + '</a>';
   }
 
-  // Next button
-  if (currentPage < totalPages) {
-    html += '<a href="#" onclick="goToPage(' + (currentPage + 1) + '); return false;">下一页 &raquo;</a>';
-  } else {
-    html += '<span class="disabled">下一页 &raquo;</span>';
+  function getUnifiedSummary(log) {
+    switch (log.type) {
+      case 'rss_fetch':
+        return log.data?.rss_source_name || '未命名订阅';
+      case 'journal_crawl':
+        return `${log.data?.journal_name || '-'} · ${formatYearVolumeIssue(log.data?.crawl_year, log.data?.crawl_volume, log.data?.crawl_issue)}`;
+      case 'process':
+        return `${log.data?.article_title || '未命名文章'} · ${getStageLabel(log.data?.stage)}`;
+      case 'filter':
+      default:
+        return log.data?.article_title || '未命名文章';
+    }
   }
 
-  pagination.innerHTML = html;
-}
+  function buildUnifiedDetail(log) {
+    switch (log.type) {
+      case 'rss_fetch':
+        return buildRssDetail(log.data);
+      case 'journal_crawl':
+        return buildCrawlDetail(log.data);
+      case 'process':
+        return buildProcessDetail(log.data);
+      case 'filter':
+      default:
+        return buildFilterDetail(log.data);
+    }
+  }
 
-function goToPage(page) {
-  loadLogs(page);
-}
+  function buildFilterDetail(data) {
+    const domainName = getDomainName(data?.domain_id);
+    return `
+      <h4>过滤详情</h4>
+      <p>文章 ID：${data?.article_id}</p>
+      <p>领域：${escapeHtml(domainName)}</p>
+      <p>相关性分数：${data?.relevance_score !== null && data?.relevance_score !== undefined ? Number(data.relevance_score).toFixed(2) : '-'}</p>
+      <p>匹配关键词：${escapeHtml(data?.matched_keywords || '-')}</p>
+      <p>原因：${escapeHtml(data?.filter_reason || '-')}</p>
+      ${data?.llm_response ? `<h4 style="margin-top: 12px;">LLM 响应</h4><pre>${escapeHtml(data.llm_response)}</pre>` : ''}
+    `;
+  }
 
-function applyFilters() {
-  currentDomainFilter = document.getElementById('domainFilter').value;
-  currentResultFilter = document.getElementById('resultFilter').value;
-  loadLogs(1);
-}
+  function buildRssDetail(data) {
+    const schedule = data?.is_scheduled ? '定时' : '手动';
+    return `
+      <h4>RSS 抓取</h4>
+      <p>来源：${escapeHtml(data?.rss_source_name || '未命名订阅')}</p>
+      <p>执行方式：${schedule}</p>
+      <p>新增文章：${data?.new_articles_count ?? 0}</p>
+      <p>总计文章：${data?.articles_count ?? 0}</p>
+      <p>耗时：${formatDuration(data?.duration_ms)}</p>
+      ${data?.error_message ? `<p>错误信息：${escapeHtml(data.error_message)}</p>` : ''}
+    `;
+  }
 
-// Utility functions
-function escapeHtml(str) {
-  if (!str) return '';
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
+  function buildCrawlDetail(data) {
+    return `
+      <h4>期刊爬取</h4>
+      <p>期刊：${escapeHtml(data?.journal_name || '-')}</p>
+      <p>期次：${escapeHtml(formatYearVolumeIssue(data?.crawl_year, data?.crawl_volume, data?.crawl_issue))}</p>
+      <p>新增文章：${data?.new_articles_count ?? 0}</p>
+      <p>总计文章：${data?.articles_count ?? 0}</p>
+      <p>耗时：${formatDuration(data?.duration_ms)}</p>
+      ${data?.error_message ? `<p>错误信息：${escapeHtml(data.error_message)}</p>` : ''}
+    `;
+  }
 
-function formatDate(dateStr) {
-  if (!dateStr) return '-';
-  const date = new Date(dateStr);
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
+  function buildProcessDetail(data) {
+    return `
+      <h4>后处理</h4>
+      <p>文章：${escapeHtml(data?.article_title || '未命名文章')}</p>
+      <p>阶段：${getStageLabel(data?.stage)}</p>
+      <p>状态：${getStatusText(data?.status)}</p>
+      <p>耗时：${formatDuration(data?.duration_ms)}</p>
+      ${data?.error_message ? `<p>错误信息：${escapeHtml(data.error_message)}</p>` : ''}
+      ${data?.details ? `<h4 style="margin-top: 12px;">附加信息</h4><pre>${formatDetailString(data.details)}</pre>` : ''}
+    `;
+  }
 
-function formatYearVolumeIssue(year, volume, issue) {
-  if (!year) return '-';
-  if (!volume) return year + '-' + (issue || '-');
-  return year + '-Vol.' + volume + '-Issue.' + issue;
-}
+  function getDomainName(domainId) {
+    if (!domainId) return '-';
+    const idNum = Number(domainId);
+    const domain = domains.find((item) => Number(item.id) === idNum);
+    return domain ? domain.name : '-';
+  }
+
+  function renderStatusBadge(status) {
+    const normalized = (status || '').toString().toLowerCase();
+    let cls = '';
+    let text = status || '-';
+    switch (normalized) {
+      case 'passed':
+      case 'success':
+      case 'completed':
+        cls = 'passed';
+        text = normalized === 'passed' ? '通过' : '成功';
+        if (normalized === 'completed') text = '完成';
+        break;
+      case 'partial':
+        cls = 'partial';
+        text = '部分成功';
+        break;
+      case 'processing':
+        cls = 'processing';
+        text = '处理中';
+        break;
+      case 'skipped':
+        cls = 'skipped';
+        text = '跳过';
+        break;
+      case 'failed':
+      case 'rejected':
+        cls = 'failed';
+        text = normalized === 'rejected' ? '拒绝' : '失败';
+        break;
+      default:
+        cls = '';
+    }
+    return `<span class="status-badge ${cls}">${text}</span>`;
+  }
+
+  function getStatusText(status) {
+    const normalized = (status || '').toString().toLowerCase();
+    switch (normalized) {
+      case 'passed':
+        return '通过';
+      case 'rejected':
+        return '拒绝';
+      case 'success':
+        return '成功';
+      case 'failed':
+        return '失败';
+      case 'partial':
+        return '部分成功';
+      case 'processing':
+        return '处理中';
+      case 'completed':
+        return '完成';
+      case 'skipped':
+        return '跳过';
+      default:
+        return status || '-';
+    }
+  }
+
+  function getStageLabel(stage) {
+    switch (stage) {
+      case 'markdown':
+        return '内容清洗';
+      case 'translate':
+        return '翻译';
+      case 'vector':
+        return '向量化';
+      case 'related':
+        return '相关文章';
+      case 'pipeline_complete':
+        return '流程完成';
+      default:
+        return '阶段';
+    }
+  }
+
+  function formatDetailString(value) {
+    try {
+      const parsed = JSON.parse(value);
+      return escapeHtml(JSON.stringify(parsed, null, 2));
+    } catch (err) {
+      return escapeHtml(value);
+    }
+  }
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+  }
+
+  function formatDate(value) {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  function formatDuration(ms) {
+    if (ms === null || ms === undefined) return '-';
+    if (ms < 1000) return `${ms}ms`;
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+
+  function formatYearVolumeIssue(year, volume, issue) {
+    if (!year) return '-';
+    const vol = volume ? `Vol.${volume}` : '';
+    const iss = issue ? `Issue.${issue}` : '';
+    return [year, vol, iss].filter(Boolean).join(' ');
+  }
+})();
 </script>
 ` }) %>

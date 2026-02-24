@@ -300,6 +300,12 @@ export interface ListCrawlLogsResult {
   totalPages: number;
 }
 
+export interface CrawlLogQueryOptions {
+  status?: 'success' | 'failed' | 'partial';
+  fromDate?: string;
+  toDate?: string;
+}
+
 /**
  * 获取爬取日志列表（支持分页）
  */
@@ -307,7 +313,8 @@ export async function getCrawlLogs(
   userId: number,
   journalId?: number,
   page: number = 1,
-  limit: number = 10
+  limit: number = 10,
+  options?: CrawlLogQueryOptions
 ): Promise<ListCrawlLogsResult> {
   const db = getDb();
 
@@ -321,6 +328,18 @@ export async function getCrawlLogs(
 
   if (journalId) {
     baseQuery = baseQuery.where('journal_crawl_logs.journal_id', '=', journalId);
+  }
+
+  if (options?.status) {
+    baseQuery = baseQuery.where('journal_crawl_logs.status', '=', options.status);
+  }
+
+  if (options?.fromDate) {
+    baseQuery = baseQuery.where('journal_crawl_logs.created_at', '>=', options.fromDate);
+  }
+
+  if (options?.toDate) {
+    baseQuery = baseQuery.where('journal_crawl_logs.created_at', '<=', options.toDate);
   }
 
   // 获取总数（独立查询，避免污染主查询）

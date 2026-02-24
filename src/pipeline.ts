@@ -22,6 +22,7 @@ import {
 import { incrementalRefreshRelated } from './api/articles-refresh.js';
 import { logger } from './logger.js';
 import { toSimpleMarkdown } from './utils/markdown.js';
+import { createProcessLog } from './api/process-logs.js';
 
 const log = logger.child({ module: 'pipeline' });
 
@@ -65,10 +66,18 @@ function parseProcessStages(raw: string | null): ProcessStages {
 /**
  * 更新单个步骤状态
  */
+interface StageLogContext {
+  durationMs?: number;
+  errorMessage?: string;
+  details?: Record<string, unknown>;
+}
+
 async function updateProcessStage(
   articleId: number,
+  userId: number,
   stage: keyof ProcessStages,
-  status: StageStatus
+  status: StageStatus,
+  context?: StageLogContext
 ): Promise<void> {
   const db = getDb();
 
@@ -93,6 +102,16 @@ async function updateProcessStage(
     .execute();
 
   log.debug({ articleId, stage, status }, '[stage] Updated process stage status');
+
+  await createProcessLog({
+    userId,
+    articleId,
+    stage,
+    status,
+    durationMs: context?.durationMs,
+    errorMessage: context?.errorMessage ?? null,
+    details: context?.details ?? null,
+  });
 }
 
 /* ── Public Types ── */
@@ -178,6 +197,15 @@ export async function processArticle(
       { articleId, title: article.title, filterStatus: article.filter_status },
       '[skip] Article filter status is not "passed"'
     );
+
+    await createProcessLog({
+      userId,
+      articleId,
+      stage: 'pipeline_complete',
+      status: 'skipped',
+      details: { reason: `Filter status: ${article.filter_status}` },
+    });
+
     return {
       articleId,
       title: article.title,
@@ -197,6 +225,16 @@ export async function processArticle(
     const result = await runPipeline(articleId, article, userId, options);
     const duration = Date.now() - startTime;
 
+    await createProcessLog({
+      userId,
+      articleId,
+      stage: 'pipeline_complete',
+      status: result.status,
+      durationMs: duration,
+      errorMessage: result.error,
+      details: result.reason ? { reason: result.reason } : undefined,
+    });
+
     log.info({ articleId, title: article.title, duration, status: result.status }, '[done] Processing complete');
 
     return {
@@ -212,6 +250,15 @@ export async function processArticle(
     log.error({ articleId, title: article.title, error: errMsg }, '[error] Processing failed');
 
     await updateArticleProcessStatus(articleId, 'failed', errMsg);
+
+    await createProcessLog({
+      userId,
+      articleId,
+      stage: 'pipeline_complete',
+      status: 'failed',
+      durationMs: Date.now() - startTime,
+      errorMessage: errMsg,
+    });
 
     return {
       articleId,
@@ -338,7 +385,8 @@ async function runPipeline(
 
   // ── Stage 1: Prepare markdown_content ──
   if (stages.markdown !== 'completed') {
-    await updateProcessStage(articleId, 'markdown', 'processing');
+    const markdownStart = Date.now();
+    await updateProcessStage(articleId, userId, 'markdown', 'processing');
 
     if (!article.markdown_content) {
       if (article.content) {
@@ -354,13 +402,18 @@ async function runPipeline(
         log.debug({ articleId }, '[stage1] Markdown generated from content');
       } else {
         const errMsg = 'No content available for analysis';
-        await updateProcessStage(articleId, 'markdown', 'failed');
+        await updateProcessStage(articleId, userId, 'markdown', 'failed', {
+          durationMs: Date.now() - markdownStart,
+          errorMessage: errMsg,
+        });
         await updateArticleProcessStatus(articleId, 'failed', errMsg);
         return { status: 'failed', stage: 'prepare', error: errMsg };
       }
     }
 
-    await updateProcessStage(articleId, 'markdown', 'completed');
+    await updateProcessStage(articleId, userId, 'markdown', 'completed', {
+      durationMs: Date.now() - markdownStart,
+    });
   } else {
     log.debug({ articleId }, '[stage1] Markdown already completed, skipping');
   }
@@ -378,7 +431,8 @@ async function runPipeline(
   let translationSucceeded = false;
 
   if (stages.translate !== 'completed') {
-    await updateProcessStage(articleId, 'translate', 'processing');
+    const translateStart = Date.now();
+    await updateProcessStage(articleId, userId, 'translate', 'processing');
 
     try {
       log.debug({ articleId }, '[stage2] Starting LLM translation');
@@ -404,7 +458,12 @@ async function runPipeline(
         translationSucceeded = true;
       }
 
-      await updateProcessStage(articleId, 'translate', 'completed');
+      await updateProcessStage(articleId, userId, 'translate', 'completed', {
+        durationMs: Date.now() - translateStart,
+        details: translationResult
+          ? { usedFallback: Boolean(translationResult.usedFallback) }
+          : undefined,
+      });
 
       log.info(
         { articleId, translated: Boolean(translationResult), usedFallback: translationResult?.usedFallback },
@@ -414,7 +473,10 @@ async function runPipeline(
       const errMsg = error instanceof Error ? error.message : String(error);
       log.error({ articleId, error: errMsg }, '[stage2] Translate failed');
 
-      await updateProcessStage(articleId, 'translate', 'failed');
+      await updateProcessStage(articleId, userId, 'translate', 'failed', {
+        durationMs: Date.now() - translateStart,
+        errorMessage: errMsg,
+      });
       await updateArticleProcessStatus(articleId, 'failed', `[translate] ${errMsg}`);
 
       return { status: 'failed', stage: 'translate', error: errMsg };
@@ -428,18 +490,24 @@ async function runPipeline(
   // 如果翻译刚刚成功或之前已完成，需要重新向量化
   const needReindex = translationChanged && translationSucceeded;
   if (stages.vector !== 'completed' || needReindex) {
-    await updateProcessStage(articleId, 'vector', 'processing');
+    const vectorStart = Date.now();
+    await updateProcessStage(articleId, userId, 'vector', 'processing');
 
     log.debug({ articleId, needReindex }, '[stage3] Starting vector index');
 
     indexArticle(articleId, userId, async (result: IndexResult) => {
       if (!result.success) {
         log.warn({ articleId, error: result.error }, '[stage3] 向量索引失败');
-        await updateProcessStage(articleId, 'vector', 'failed');
+        await updateProcessStage(articleId, userId, 'vector', 'failed', {
+          durationMs: Date.now() - vectorStart,
+          errorMessage: result.error,
+        });
         // 向量化失败是非致命的，继续处理
       } else {
         log.debug({ articleId }, '[stage3] 向量索引成功');
-        await updateProcessStage(articleId, 'vector', 'completed');
+        await updateProcessStage(articleId, userId, 'vector', 'completed', {
+          durationMs: Date.now() - vectorStart,
+        });
       }
     });
   } else {
@@ -448,16 +516,22 @@ async function runPipeline(
 
   // ── Stage 4: Related Articles (缓存计算，非致命) ──
   if (stages.related !== 'completed') {
-    await updateProcessStage(articleId, 'related', 'processing');
+    const relatedStart = Date.now();
+    await updateProcessStage(articleId, userId, 'related', 'processing');
 
     try {
       await refreshRelatedArticles(articleId, userId, 5);
-      await updateProcessStage(articleId, 'related', 'completed');
+      await updateProcessStage(articleId, userId, 'related', 'completed', {
+        durationMs: Date.now() - relatedStart,
+      });
       log.debug({ articleId }, '[stage4] Related articles updated');
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       log.warn({ articleId, error: errMsg }, '[stage4] Related articles update failed (non-fatal)');
-      await updateProcessStage(articleId, 'related', 'failed');
+      await updateProcessStage(articleId, userId, 'related', 'failed', {
+        durationMs: Date.now() - relatedStart,
+        errorMessage: errMsg,
+      });
     }
   } else {
     log.debug({ articleId }, '[stage4] Related articles already completed, skipping');

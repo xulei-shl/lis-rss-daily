@@ -33,6 +33,7 @@ export interface DatabaseTable {
   topic_domains: TopicDomainsTable;
   topic_keywords: TopicKeywordsTable;
   article_filter_logs: ArticleFilterLogsTable;
+  article_process_logs: ArticleProcessLogsTable;
   article_related: ArticleRelatedTable;
   article_translations: ArticleTranslationsTable;
   llm_configs: LlmConfigsTable;
@@ -41,6 +42,7 @@ export interface DatabaseTable {
   daily_summaries: DailySummariesTable;
   journals: JournalsTable;
   journal_crawl_logs: JournalCrawlLogsTable;
+  rss_fetch_logs: RssFetchLogsTable;
 }
 
 export interface UsersTable {
@@ -122,6 +124,18 @@ export interface ArticleFilterLogsTable {
   matched_keywords: string | null;
   filter_reason: string | null;
   llm_response: string | null;
+  created_at: Generated<string>;
+}
+
+export interface ArticleProcessLogsTable {
+  id: Generated<number>;
+  user_id: number;
+  article_id: number;
+  stage: 'markdown' | 'translate' | 'vector' | 'related' | 'pipeline_complete';
+  status: 'processing' | 'completed' | 'failed' | 'skipped';
+  duration_ms: number | null;
+  error_message: string | null;
+  details: string | null;
   created_at: Generated<string>;
 }
 
@@ -224,6 +238,19 @@ export interface JournalCrawlLogsTable {
   created_at: Generated<string>;
 }
 
+export interface RssFetchLogsTable {
+  id: Generated<number>;
+  user_id: number;
+  rss_source_id: number;
+  status: 'success' | 'failed' | 'partial';
+  articles_count: number;
+  new_articles_count: number;
+  duration_ms: number | null;
+  is_scheduled: number;
+  error_message: string | null;
+  created_at: Generated<string>;
+}
+
 export type DB = Kysely<DatabaseTable>;
 
 // Selection result types (unwraps Generated<T> to T)
@@ -233,9 +260,11 @@ export type ArticlesSelection = SelectionType<ArticlesTable>;
 export type TopicDomainsSelection = SelectionType<TopicDomainsTable>;
 export type TopicKeywordsSelection = SelectionType<TopicKeywordsTable>;
 export type ArticleFilterLogsSelection = SelectionType<ArticleFilterLogsTable>;
+export type ArticleProcessLogsSelection = SelectionType<ArticleProcessLogsTable>;
 export type DailySummariesSelection = SelectionType<DailySummariesTable>;
 export type JournalsSelection = SelectionType<JournalsTable>;
 export type JournalCrawlLogsSelection = SelectionType<JournalCrawlLogsTable>;
+export type RssFetchLogsSelection = SelectionType<RssFetchLogsTable>;
 
 let _db: DB | null = null;
 
