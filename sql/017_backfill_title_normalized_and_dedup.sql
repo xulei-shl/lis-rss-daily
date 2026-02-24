@@ -1,0 +1,11 @@
+-- Migration 017: Backfill title_normalized and remove duplicates
+-- 回填 title_normalized 字段并删除重复数据
+--
+-- 注意：此迁移需要通过 Node.js 脚本执行（scripts/backfill-title-normalized.ts）
+-- 因为需要复杂的字符串处理逻辑
+--
+-- 操作步骤：
+-- 1. 为所有 title_normalized IS NULL 的记录回填标准化标题
+-- 2. 查找按 title_normalized 分组的重复数据
+-- 3. 删除重复数据（保留 id 最小的，删除 id 更大的）
+-- 4. 级联删除关联表数据：article_related, article_filter_logs, article_process_logs

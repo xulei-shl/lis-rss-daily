@@ -210,7 +210,8 @@ export class JournalScheduler {
       // 执行爬取
       const results: CrawlResult[] = [];
 
-      for (const journal of journals) {
+      for (let index = 0; index < journals.length; index++) {
+        const journal = journals[index];
         // 计算需要爬取的期号
         const issuesToCrawl = calculateIssuesToCrawl(journal, currentYear, currentMonth);
 
@@ -228,16 +229,16 @@ export class JournalScheduler {
         for (const issueInfo of issuesToCrawl) {
           const result = await this.crawlJournal(journal, issueInfo.year, issueInfo.issue, issueInfo.volume);
           results.push(result);
+        }
 
-          // 期刊间隔
-          if (results.length < journals.length) {
-            const delay = this.getRandomDelay(
-              this.config.journalInterval,
-              this.config.journalIntervalRandom
-            );
-            runLog.debug({ delay }, 'Waiting before next journal');
-            await new Promise((resolve) => setTimeout(resolve, delay));
-          }
+        // 网站间隔（每个期刊/网站执行完后等待）
+        if (index < journals.length - 1) {
+          const delay = this.getRandomDelay(
+            this.config.journalInterval,
+            this.config.journalIntervalRandom
+          );
+          runLog.debug({ delay }, 'Waiting before next journal');
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
 

@@ -364,6 +364,15 @@ CREATE TABLE IF NOT EXISTS journal_crawl_logs (
         continue;
       }
 
+      // ============================================================
+      // 017: 回填 title_normalized 并删除重复数据
+      // ============================================================
+      if (file === '017_backfill_title_normalized_and_dedup.sql') {
+        // 此迁移需要通过单独的脚本运行
+        console.log('      → Requires manual execution: pnpm run db:backfill-title-normalized');
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }
