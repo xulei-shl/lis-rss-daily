@@ -189,12 +189,36 @@ export async function updateJournal(
 
   const now = new Date().toISOString();
 
+  // 构建 update data，需要将 camelCase 转换为 snake_case
+  const updateData: Record<string, any> = {
+    updated_at: now,
+  };
+
+  if (params.name !== undefined) {
+    updateData.name = params.name;
+  }
+  if (params.sourceUrl !== undefined) {
+    updateData.source_url = params.sourceUrl;
+  }
+  if (params.journalCode !== undefined) {
+    updateData.journal_code = params.journalCode;
+  }
+  if (params.publicationCycle !== undefined) {
+    updateData.publication_cycle = params.publicationCycle;
+  }
+  if (params.issuesPerYear !== undefined) {
+    updateData.issues_per_year = params.issuesPerYear;
+  }
+  if (params.volumeOffset !== undefined) {
+    updateData.volume_offset = params.volumeOffset;
+  }
+  if (params.status !== undefined) {
+    updateData.status = params.status;
+  }
+
   const result = await db
     .updateTable('journals')
-    .set({
-      ...params,
-      updated_at: now,
-    })
+    .set(updateData)
     .where('id', '=', journalId)
     .where('user_id', '=', userId)
     .returningAll()
