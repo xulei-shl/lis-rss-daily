@@ -7,12 +7,11 @@
 
   let allHistory = [];
   let filteredHistory = [];
-  let currentPage = 1;
-  const perPage = 20;
+  let isFullDataLoaded = false;  // 是否已加载全部数据
+  const DEFAULT_DAYS = 30;  // 默认显示最近30天
 
   // DOM Elements
   const historyContainer = document.getElementById('historyContainer');
-  const pagination = document.getElementById('pagination');
   const resultsCount = document.getElementById('resultsCount');
   const searchInput = document.getElementById('searchInput');
   const typeFilter = document.getElementById('typeFilter');
@@ -42,25 +41,28 @@
     searchInput.addEventListener('input', () => {
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(() => {
-        currentPage = 1;
-        filterAndRender();
+        loadFullDataAndFilter();
       }, 300);
     });
 
     typeFilter.addEventListener('change', () => {
-      currentPage = 1;
-      filterAndRender();
+      loadFullDataAndFilter();
+    });
+
+    // Load full data when user opens year filter dropdown
+    yearFilter.addEventListener('focus', async () => {
+      if (!isFullDataLoaded) {
+        await loadFullDataAndFilter();
+      }
     });
 
     yearFilter.addEventListener('change', () => {
-      currentPage = 1;
       updateMonthFilter();
       filterAndRender();
     });
 
     monthFilter.addEventListener('change', () => {
-      currentPage = 1;
-      filterAndRender();
+      loadFullDataAndFilter();
     });
 
     closeSummaryModal.addEventListener('click', closeModal);
@@ -74,20 +76,26 @@
     });
   }
 
-  // Load all history
-  async function loadHistory() {
+  // Load history (default: recent 30 days)
+  async function loadHistory(loadAll = false) {
     historyContainer.innerHTML = '<div class="loading">加载中...</div>';
 
     try {
-      // Fetch all history with a large limit
-      const res = await fetch('/api/daily-summary/history?limit=1000');
+      // Calculate date range for default view
+      const limit = loadAll ? 10000 : 200;  // Enough for 30 days of records
+
+      const res = await fetch(`/api/daily-summary/history?limit=${limit}`);
       if (!res.ok) throw new Error('Failed to load history');
 
       const data = await res.json();
       allHistory = data.history || [];
+      isFullDataLoaded = loadAll;
 
-      // Populate year filter
-      populateYearFilter();
+      // Populate year filter with all available data
+      if (!loadAll) {
+        // For initial load, populate filters based on returned data
+        populateYearFilter();
+      }
 
       filterAndRender();
     } catch (err) {
@@ -98,6 +106,29 @@
           <div class="empty-state-desc">请稍后重试</div>
         </div>
       `;
+    }
+  }
+
+  // Load full data and apply filters
+  async function loadFullDataAndFilter() {
+    if (isFullDataLoaded) {
+      filterAndRender();
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/daily-summary/history?limit=10000');
+      if (!res.ok) throw new Error('Failed to load history');
+
+      const data = await res.json();
+      allHistory = data.history || [];
+      isFullDataLoaded = true;
+
+      // Re-populate year filter with full data
+      populateYearFilter();
+      filterAndRender();
+    } catch (err) {
+      console.error('Failed to load full history:', err);
     }
   }
 
@@ -130,6 +161,14 @@
     const selectedYear = yearFilter.value;
     const selectedMonth = monthFilter.value;
 
+    // Calculate 30 days ago date
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - DEFAULT_DAYS);
+    thirtyDaysAgo.setHours(0, 0, 0, 0);
+
+    // Check if any filter is active (search, type, year, month)
+    const hasActiveFilter = searchQuery || selectedType || selectedYear || selectedMonth;
+
     filteredHistory = allHistory.filter(item => {
       // Type filter
       if (selectedType && item.summary_type !== selectedType) return false;
@@ -148,24 +187,29 @@
         if (!dateStr.includes(searchQuery)) return false;
       }
 
+      // Default: only show last 30 days if no filters are active
+      if (!hasActiveFilter) {
+        if (date < thirtyDaysAgo) return false;
+      }
+
       return true;
     });
 
     renderHistory();
-    renderPagination();
     renderResultsCount();
   }
 
   // Render history grouped by month
   function renderHistory() {
     if (filteredHistory.length === 0) {
+      const hasFilter = searchInput.value.trim() || typeFilter.value || yearFilter.value || monthFilter.value;
       historyContainer.innerHTML = `
         <div class="empty-state">
           <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <div class="empty-state-title">未找到历史记录</div>
-          <div class="empty-state-desc">尝试调整筛选条件或搜索关键词</div>
+          <div class="empty-state-title">${hasFilter ? '未找到匹配的记录' : '暂无最近30天的历史记录'}</div>
+          <div class="empty-state-desc">${hasFilter ? '尝试调整筛选条件或搜索关键词' : '生成总结后将在此显示'}</div>
         </div>
       `;
       return;
@@ -174,14 +218,7 @@
     // Group by month
     const grouped = groupByMonth(filteredHistory);
 
-    // Pagination
-    const totalPages = Math.ceil(filteredHistory.length / perPage);
-    const startIdx = (currentPage - 1) * perPage;
-    const endIdx = startIdx + perPage;
-    const pageItems = filteredHistory.slice(startIdx, endIdx);
-    const pageGrouped = groupByMonth(pageItems);
-
-    historyContainer.innerHTML = Object.entries(pageGrouped).map(([monthKey, items]) => `
+    historyContainer.innerHTML = Object.entries(grouped).map(([monthKey, items]) => `
       <div class="history-group">
         <div class="history-group-header">
           <h2 class="history-group-title">${monthKey}</h2>
@@ -223,62 +260,20 @@
     `;
   }
 
-  // Render pagination
-  function renderPagination() {
-    const totalPages = Math.ceil(filteredHistory.length / perPage);
-
-    if (totalPages <= 1) {
-      pagination.style.display = 'none';
-      return;
-    }
-
-    pagination.style.display = 'flex';
-
-    let html = '';
-
-    // Previous
-    html += currentPage > 1
-      ? `<a href="#" onclick="window.historyPage.goToPage(${currentPage - 1}); return false;">← 上一页</a>`
-      : '<span>← 上一页</span>';
-
-    // Page numbers
-    const startPage = Math.max(1, currentPage - 2);
-    const endPage = Math.min(totalPages, currentPage + 2);
-
-    if (startPage > 1) {
-      html += '<a href="#" onclick="window.historyPage.goToPage(1); return false;">1</a>';
-      if (startPage > 2) html += '<span>...</span>';
-    }
-
-    for (let i = startPage; i <= endPage; i++) {
-      if (i === currentPage) {
-        html += `<span class="current">${i}</span>`;
-      } else {
-        html += `<a href="#" onclick="window.historyPage.goToPage(${i}); return false;">${i}</a>`;
-      }
-    }
-
-    if (endPage < totalPages) {
-      if (endPage < totalPages - 1) html += '<span>...</span>';
-      html += `<a href="#" onclick="window.historyPage.goToPage(${totalPages}); return false;">${totalPages}</a>`;
-    }
-
-    // Next
-    html += currentPage < totalPages
-      ? `<a href="#" onclick="window.historyPage.goToPage(${currentPage + 1}); return false;">下一页 →</a>`
-      : '<span>下一页 →</span>';
-
-    pagination.innerHTML = html;
-  }
-
   // Render results count
   function renderResultsCount() {
     const total = filteredHistory.length;
-    const start = total === 0 ? 0 : (currentPage - 1) * perPage + 1;
-    const end = Math.min(currentPage * perPage, total);
-    resultsCount.textContent = total > 0
-      ? `显示 ${start}-${end} / 共 ${total} 条记录`
-      : '暂无记录';
+    const hasFilter = searchInput.value.trim() || typeFilter.value || yearFilter.value || monthFilter.value;
+
+    if (hasFilter) {
+      resultsCount.textContent = total > 0
+        ? `找到 ${total} 条记录`
+        : '未找到匹配记录';
+    } else {
+      resultsCount.textContent = total > 0
+        ? `最近 ${DEFAULT_DAYS} 天：共 ${total} 条记录`
+        : '最近30天暂无记录';
+    }
   }
 
   // View summary detail
@@ -432,13 +427,6 @@
     });
   }
 
-  // Go to page
-  function goToPage(page) {
-    currentPage = page;
-    filterAndRender();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
   // Close modal
   function closeModal() {
     summaryModal.classList.remove('active');
@@ -560,7 +548,6 @@
   // Export functions for onclick handlers
   window.historyPage = {
     viewSummary,
-    goToPage,
     copySummary,
     downloadSummary
   };
