@@ -21,6 +21,13 @@ function hasColumn(db: Database.Database, table: string, column: string): boolea
   return columns.some((item) => item.name === column);
 }
 
+function hasTable(db: Database.Database, table: string): boolean {
+  const result = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?")
+    .get(table) as { name: string } | undefined;
+  return Boolean(result);
+}
+
 async function runMigrations() {
   console.log('🔧 Starting database migration...\n');
 
@@ -328,6 +335,31 @@ CREATE TABLE IF NOT EXISTS journal_crawl_logs (
           console.log('      → Added title_normalized column and unique index');
         } else {
           console.log('      → Skipped (already exists)');
+        }
+        continue;
+      }
+
+      // ============================================================
+      // 016: 添加统一流程日志表
+      // ============================================================
+      if (file === '016_add_unified_logs.sql') {
+        const hasRssFetchLogs = hasTable(db, 'rss_fetch_logs');
+        const hasProcessLogs = hasTable(db, 'article_process_logs');
+
+        if (!hasRssFetchLogs || !hasProcessLogs) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log(
+            `      → Created ${
+              !hasRssFetchLogs && !hasProcessLogs
+                ? 'rss_fetch_logs & article_process_logs'
+                : !hasRssFetchLogs
+                  ? 'rss_fetch_logs'
+                  : 'article_process_logs'
+            } tables`
+          );
+        } else {
+          console.log('      → Skipped (unified log tables already exist)');
         }
         continue;
       }

@@ -797,6 +797,8 @@
       toast.error('加载后处理日志失败：' + (err.message || '网络错误'));
       showEmptyState('processTable', 'processEmpty');
     }
+  }
+
   function buildParams(page) {
     const params = {
       page: page.toString(),
@@ -853,7 +855,7 @@
       }
     });
     const query = searchParams.toString();
-    const res = await fetch(query ? `${url}?${query}` : url);
+    const res = await fetch(query ? \`\${url}?\${query}\` : url);
     if (!res.ok) {
       throw new Error('请求失败');
     }
@@ -878,21 +880,21 @@
     empty.style.display = 'none';
 
     const rows = logs.map((log) => {
-      const detailId = `unified-detail-${log.id}`;
-      return `
-        <tr class="expand-row" data-detail-id="${detailId}">
+      const detailId = \`unified-detail-\${log.id}\`;
+      return \`
+        <tr class="expand-row" data-detail-id="\${detailId}">
           <td class="expand-cell"><span class="expand-icon">▶</span></td>
-          <td>${getFlowLabel(log.type)}</td>
-          <td>${escapeHtml(getUnifiedSummary(log))}</td>
-          <td>${renderStatusBadge(log.status)}</td>
-          <td>${formatDate(log.created_at)}</td>
+          <td>\${getFlowLabel(log.type)}</td>
+          <td>\${escapeHtml(getUnifiedSummary(log))}</td>
+          <td>\${renderStatusBadge(log.status)}</td>
+          <td>\${formatDate(log.created_at)}</td>
         </tr>
-        <tr class="detail-row" id="${detailId}">
+        <tr class="detail-row" id="\${detailId}">
           <td colspan="5" class="detail-cell">
-            <div class="detail-content">${buildUnifiedDetail(log)}</div>
+            <div class="detail-content">\${buildUnifiedDetail(log)}</div>
           </td>
         </tr>
-      `;
+      \`;
     }).join('');
 
     tbody.innerHTML = rows;
@@ -917,33 +919,33 @@
     empty.style.display = 'none';
 
     tbody.innerHTML = logs.map((log) => {
-      const detailId = `rss-detail-${log.id}`;
-      const summary = `${escapeHtml(log.rss_source_name || '未命名订阅')}`;
-      const counts = `${log.new_articles_count ?? 0}/${log.articles_count ?? 0}`;
+      const detailId = \`rss-detail-\${log.id}\`;
+      const summary = \`\${escapeHtml(log.rss_source_name || '未命名订阅')}\`;
+      const counts = \`\${log.new_articles_count ?? 0}/\${log.articles_count ?? 0}\`;
       const schedule = log.is_scheduled ? '定时' : '手动';
-      return `
-        <tr class="expand-row" data-detail-id="${detailId}">
+      return \`
+        <tr class="expand-row" data-detail-id="\${detailId}">
           <td class="expand-cell"><span class="expand-icon">▶</span></td>
-          <td>${summary}<span class="chip">${schedule}</span></td>
-          <td>${renderStatusBadge(log.status)}</td>
-          <td>${counts}</td>
-          <td>${formatDuration(log.duration_ms)}</td>
-          <td>${formatDate(log.created_at)}</td>
+          <td>\${summary}<span class="chip">\${schedule}</span></td>
+          <td>\${renderStatusBadge(log.status)}</td>
+          <td>\${counts}</td>
+          <td>\${formatDuration(log.duration_ms)}</td>
+          <td>\${formatDate(log.created_at)}</td>
         </tr>
-        <tr class="detail-row" id="${detailId}">
+        <tr class="detail-row" id="\${detailId}">
           <td colspan="6" class="detail-cell">
             <div class="detail-content">
               <h4>执行详情</h4>
-              <p>来源 ID：${log.rss_source_id}</p>
-              <p>执行方式：${schedule}</p>
-              <p>新增文章：${log.new_articles_count ?? 0}</p>
-              <p>总计文章：${log.articles_count ?? 0}</p>
-              <p>耗时：${formatDuration(log.duration_ms)}</p>
-              ${log.error_message ? `<p>错误信息：${escapeHtml(log.error_message)}</p>` : ''}
+              <p>来源 ID：\${log.rss_source_id}</p>
+              <p>执行方式：\${schedule}</p>
+              <p>新增文章：\${log.new_articles_count ?? 0}</p>
+              <p>总计文章：\${log.articles_count ?? 0}</p>
+              <p>耗时：\${formatDuration(log.duration_ms)}</p>
+              \${log.error_message ? \`<p>错误信息：\${escapeHtml(log.error_message)}</p>\` : ''}
             </div>
           </td>
         </tr>
-      `;
+      \`;
     }).join('');
 
     bindExpandEvents('#rssBody');
@@ -967,32 +969,32 @@
     empty.style.display = 'none';
 
     tbody.innerHTML = logs.map((log) => {
-      const detailId = `crawl-detail-${log.id}`;
+      const detailId = \`crawl-detail-\${log.id}\`;
       const period = formatYearVolumeIssue(log.crawl_year, log.crawl_volume, log.crawl_issue);
-      const counts = `${log.new_articles_count ?? 0}/${log.articles_count ?? 0}`;
-      return `
-        <tr class="expand-row" data-detail-id="${detailId}">
+      const counts = \`\${log.new_articles_count ?? 0}/\${log.articles_count ?? 0}\`;
+      return \`
+        <tr class="expand-row" data-detail-id="\${detailId}">
           <td class="expand-cell"><span class="expand-icon">▶</span></td>
-          <td>${escapeHtml(log.journal_name || '-')}</td>
-          <td>${escapeHtml(period)}</td>
-          <td>${renderStatusBadge(log.status)}</td>
-          <td>${counts}</td>
-          <td>${formatDuration(log.duration_ms)}</td>
-          <td>${formatDate(log.created_at)}</td>
+          <td>\${escapeHtml(log.journal_name || '-')}</td>
+          <td>\${escapeHtml(period)}</td>
+          <td>\${renderStatusBadge(log.status)}</td>
+          <td>\${counts}</td>
+          <td>\${formatDuration(log.duration_ms)}</td>
+          <td>\${formatDate(log.created_at)}</td>
         </tr>
-        <tr class="detail-row" id="${detailId}">
+        <tr class="detail-row" id="\${detailId}">
           <td colspan="7" class="detail-cell">
             <div class="detail-content">
               <h4>执行详情</h4>
-              <p>期刊 ID：${log.journal_id}</p>
-              <p>新增文章：${log.new_articles_count ?? 0}</p>
-              <p>总计文章：${log.articles_count ?? 0}</p>
-              <p>耗时：${formatDuration(log.duration_ms)}</p>
-              ${log.error_message ? `<p>错误信息：${escapeHtml(log.error_message)}</p>` : '<p>错误信息：无</p>'}
+              <p>期刊 ID：\${log.journal_id}</p>
+              <p>新增文章：\${log.new_articles_count ?? 0}</p>
+              <p>总计文章：\${log.articles_count ?? 0}</p>
+              <p>耗时：\${formatDuration(log.duration_ms)}</p>
+              \${log.error_message ? \`<p>错误信息：\${escapeHtml(log.error_message)}</p>\` : '<p>错误信息：无</p>'}
             </div>
           </td>
         </tr>
-      `;
+      \`;
     }).join('');
 
     bindExpandEvents('#crawlBody');
@@ -1016,33 +1018,33 @@
     empty.style.display = 'none';
 
     tbody.innerHTML = logs.map((log) => {
-      const detailId = `filter-detail-${log.id}`;
+      const detailId = \`filter-detail-\${log.id}\`;
       const domainName = getDomainName(log.domain_id);
       const statusLabel = log.is_passed ? 'passed' : 'rejected';
-      return `
-        <tr class="expand-row" data-detail-id="${detailId}">
+      return \`
+        <tr class="expand-row" data-detail-id="\${detailId}">
           <td class="expand-cell"><span class="expand-icon">▶</span></td>
-          <td class="article-title" title="${escapeHtml(log.article_title || '未命名文章')}">${escapeHtml(log.article_title || '未命名文章')}</td>
-          <td class="domain-cell" title="${escapeHtml(domainName)}">${escapeHtml(domainName)}</td>
-          <td>${renderStatusBadge(statusLabel)}</td>
-          <td>${log.relevance_score !== null && log.relevance_score !== undefined ? log.relevance_score.toFixed(2) : '-'}</td>
-          <td>${escapeHtml(log.filter_reason || '-')}</td>
-          <td>${formatDate(log.created_at)}</td>
+          <td class="article-title" title="\${escapeHtml(log.article_title || '未命名文章')}">\${escapeHtml(log.article_title || '未命名文章')}</td>
+          <td class="domain-cell" title="\${escapeHtml(domainName)}">\${escapeHtml(domainName)}</td>
+          <td>\${renderStatusBadge(statusLabel)}</td>
+          <td>\${log.relevance_score !== null && log.relevance_score !== undefined ? log.relevance_score.toFixed(2) : '-'}</td>
+          <td>\${escapeHtml(log.filter_reason || '-')}</td>
+          <td>\${formatDate(log.created_at)}</td>
         </tr>
-        <tr class="detail-row" id="${detailId}">
+        <tr class="detail-row" id="\${detailId}">
           <td colspan="7" class="detail-cell">
             <div class="detail-content">
               <h4>过滤详情</h4>
-              <p>文章 ID：${log.article_id}</p>
-              <p>领域：${escapeHtml(domainName)}</p>
-              <p>相关性分数：${log.relevance_score !== null && log.relevance_score !== undefined ? log.relevance_score.toFixed(2) : '-'}</p>
-              <p>匹配关键词：${escapeHtml(log.matched_keywords || '-')}</p>
-              <p>原因：${escapeHtml(log.filter_reason || '-')}</p>
-              ${log.llm_response ? `<h4 style="margin-top: 12px;">LLM 响应</h4><pre>${escapeHtml(log.llm_response)}</pre>` : ''}
+              <p>文章 ID：\${log.article_id}</p>
+              <p>领域：\${escapeHtml(domainName)}</p>
+              <p>相关性分数：\${log.relevance_score !== null && log.relevance_score !== undefined ? log.relevance_score.toFixed(2) : '-'}</p>
+              <p>匹配关键词：\${escapeHtml(log.matched_keywords || '-')}</p>
+              <p>原因：\${escapeHtml(log.filter_reason || '-')}</p>
+              \${log.llm_response ? \`<h4 style="margin-top: 12px;">LLM 响应</h4><pre>\${escapeHtml(log.llm_response)}</pre>\` : ''}
             </div>
           </td>
         </tr>
-      `;
+      \`;
     }).join('');
 
     bindExpandEvents('#filterBody');
@@ -1066,32 +1068,32 @@
     empty.style.display = 'none';
 
     tbody.innerHTML = logs.map((log) => {
-      const detailId = `process-detail-${log.id}`;
+      const detailId = \`process-detail-\${log.id}\`;
       const stageLabel = getStageLabel(log.stage);
       const sourceLabel = log.source_origin === 'journal' ? '期刊' : 'RSS';
-      return `
-        <tr class="expand-row" data-detail-id="${detailId}">
+      return \`
+        <tr class="expand-row" data-detail-id="\${detailId}">
           <td class="expand-cell"><span class="expand-icon">▶</span></td>
-          <td class="article-title" title="${escapeHtml(log.article_title || '未命名文章')}">${escapeHtml(log.article_title || '未命名文章')}<span class="chip">${stageLabel}</span></td>
-          <td>${renderStatusBadge(log.status)}</td>
-          <td>${formatDuration(log.duration_ms)}</td>
-          <td>${sourceLabel}</td>
-          <td>${formatDate(log.created_at)}</td>
+          <td class="article-title" title="\${escapeHtml(log.article_title || '未命名文章')}">\${escapeHtml(log.article_title || '未命名文章')}<span class="chip">\${stageLabel}</span></td>
+          <td>\${renderStatusBadge(log.status)}</td>
+          <td>\${formatDuration(log.duration_ms)}</td>
+          <td>\${sourceLabel}</td>
+          <td>\${formatDate(log.created_at)}</td>
         </tr>
-        <tr class="detail-row" id="${detailId}">
+        <tr class="detail-row" id="\${detailId}">
           <td colspan="6" class="detail-cell">
             <div class="detail-content">
               <h4>阶段详情</h4>
-              <p>文章 ID：${log.article_id}</p>
-              <p>阶段：${stageLabel}</p>
-              <p>状态：${getStatusText(log.status)}</p>
-              <p>耗时：${formatDuration(log.duration_ms)}</p>
-              ${log.error_message ? `<p>错误信息：${escapeHtml(log.error_message)}</p>` : ''}
-              ${log.details ? `<h4 style="margin-top: 12px;">附加信息</h4><pre>${formatDetailString(log.details)}</pre>` : ''}
+              <p>文章 ID：\${log.article_id}</p>
+              <p>阶段：\${stageLabel}</p>
+              <p>状态：\${getStatusText(log.status)}</p>
+              <p>耗时：\${formatDuration(log.duration_ms)}</p>
+              \${log.error_message ? \`<p>错误信息：\${escapeHtml(log.error_message)}</p>\` : ''}
+              \${log.details ? \`<h4 style="margin-top: 12px;">附加信息</h4><pre>\${formatDetailString(log.details)}</pre>\` : ''}
             </div>
           </td>
         </tr>
-      `;
+      \`;
     }).join('');
 
     bindExpandEvents('#processBody');
@@ -1113,7 +1115,7 @@
   function buildPaginationHtml(currentPage, totalPages, tabKey) {
     let html = '';
     if (currentPage > 1) {
-      html += `<a href="#" onclick="return changeLogPage('${tabKey}', ${currentPage - 1});">&laquo; 上一页</a>`;
+      html += \`<a href="#" onclick="return changeLogPage('\${tabKey}', \${currentPage - 1});">&laquo; 上一页</a>\`;
     } else {
       html += '<span class="disabled">&laquo; 上一页</span>';
     }
@@ -1122,7 +1124,7 @@
     const end = Math.min(totalPages, start + 4);
 
     if (start > 1) {
-      html += `<a href="#" onclick="return changeLogPage('${tabKey}', 1);">1</a>`;
+      html += \`<a href="#" onclick="return changeLogPage('\${tabKey}', 1);">1</a>\`;
       if (start > 2) {
         html += '<span>...</span>';
       }
@@ -1130,9 +1132,9 @@
 
     for (let i = start; i <= end; i++) {
       if (i === currentPage) {
-        html += `<span class="current">${i}</span>`;
+        html += \`<span class="current">\${i}</span>\`;
       } else {
-        html += `<a href="#" onclick="return changeLogPage('${tabKey}', ${i});">${i}</a>`;
+        html += \`<a href="#" onclick="return changeLogPage('\${tabKey}', \${i});">\${i}</a>\`;
       }
     }
 
@@ -1140,11 +1142,11 @@
       if (end < totalPages - 1) {
         html += '<span>...</span>';
       }
-      html += `<a href="#" onclick="return changeLogPage('${tabKey}', ${totalPages});">${totalPages}</a>`;
+      html += \`<a href="#" onclick="return changeLogPage('\${tabKey}', \${totalPages});">\${totalPages}</a>\`;
     }
 
     if (currentPage < totalPages) {
-      html += `<a href="#" onclick="return changeLogPage('${tabKey}', ${currentPage + 1});">下一页 &raquo;</a>`;
+      html += \`<a href="#" onclick="return changeLogPage('\${tabKey}', \${currentPage + 1});">下一页 &raquo;</a>\`;
     } else {
       html += '<span class="disabled">下一页 &raquo;</span>';
     }
@@ -1209,7 +1211,7 @@
       return '全部时间';
     }
     if (state.rangePreset === 'custom' && state.customFrom && state.customTo) {
-      return `自定义：${state.customFrom} 至 ${state.customTo}`;
+      return \`自定义：\${state.customFrom} 至 \${state.customTo}\`;
     }
     switch (state.rangePreset) {
       case '7':
@@ -1241,9 +1243,9 @@
       case 'rss_fetch':
         return log.data?.rss_source_name || '未命名订阅';
       case 'journal_crawl':
-        return `${log.data?.journal_name || '-'} · ${formatYearVolumeIssue(log.data?.crawl_year, log.data?.crawl_volume, log.data?.crawl_issue)}`;
+        return \`\${log.data?.journal_name || '-'} · \${formatYearVolumeIssue(log.data?.crawl_year, log.data?.crawl_volume, log.data?.crawl_issue)}\`;
       case 'process':
-        return `${log.data?.article_title || '未命名文章'} · ${getStageLabel(log.data?.stage)}`;
+        return \`\${log.data?.article_title || '未命名文章'} · \${getStageLabel(log.data?.stage)}\`;
       case 'filter':
       default:
         return log.data?.article_title || '未命名文章';
@@ -1266,52 +1268,52 @@
 
   function buildFilterDetail(data) {
     const domainName = getDomainName(data?.domain_id);
-    return `
+    return \`
       <h4>过滤详情</h4>
-      <p>文章 ID：${data?.article_id}</p>
-      <p>领域：${escapeHtml(domainName)}</p>
-      <p>相关性分数：${data?.relevance_score !== null && data?.relevance_score !== undefined ? Number(data.relevance_score).toFixed(2) : '-'}</p>
-      <p>匹配关键词：${escapeHtml(data?.matched_keywords || '-')}</p>
-      <p>原因：${escapeHtml(data?.filter_reason || '-')}</p>
-      ${data?.llm_response ? `<h4 style="margin-top: 12px;">LLM 响应</h4><pre>${escapeHtml(data.llm_response)}</pre>` : ''}
-    `;
+      <p>文章 ID：\${data?.article_id}</p>
+      <p>领域：\${escapeHtml(domainName)}</p>
+      <p>相关性分数：\${data?.relevance_score !== null && data?.relevance_score !== undefined ? Number(data.relevance_score).toFixed(2) : '-'}</p>
+      <p>匹配关键词：\${escapeHtml(data?.matched_keywords || '-')}</p>
+      <p>原因：\${escapeHtml(data?.filter_reason || '-')}</p>
+      \${data?.llm_response ? \`<h4 style="margin-top: 12px;">LLM 响应</h4><pre>\${escapeHtml(data.llm_response)}</pre>\` : ''}
+    \`;
   }
 
   function buildRssDetail(data) {
     const schedule = data?.is_scheduled ? '定时' : '手动';
-    return `
+    return \`
       <h4>RSS 抓取</h4>
-      <p>来源：${escapeHtml(data?.rss_source_name || '未命名订阅')}</p>
-      <p>执行方式：${schedule}</p>
-      <p>新增文章：${data?.new_articles_count ?? 0}</p>
-      <p>总计文章：${data?.articles_count ?? 0}</p>
-      <p>耗时：${formatDuration(data?.duration_ms)}</p>
-      ${data?.error_message ? `<p>错误信息：${escapeHtml(data.error_message)}</p>` : ''}
-    `;
+      <p>来源：\${escapeHtml(data?.rss_source_name || '未命名订阅')}</p>
+      <p>执行方式：\${schedule}</p>
+      <p>新增文章：\${data?.new_articles_count ?? 0}</p>
+      <p>总计文章：\${data?.articles_count ?? 0}</p>
+      <p>耗时：\${formatDuration(data?.duration_ms)}</p>
+      \${data?.error_message ? \`<p>错误信息：\${escapeHtml(data.error_message)}</p>\` : ''}
+    \`;
   }
 
   function buildCrawlDetail(data) {
-    return `
+    return \`
       <h4>期刊爬取</h4>
-      <p>期刊：${escapeHtml(data?.journal_name || '-')}</p>
-      <p>期次：${escapeHtml(formatYearVolumeIssue(data?.crawl_year, data?.crawl_volume, data?.crawl_issue))}</p>
-      <p>新增文章：${data?.new_articles_count ?? 0}</p>
-      <p>总计文章：${data?.articles_count ?? 0}</p>
-      <p>耗时：${formatDuration(data?.duration_ms)}</p>
-      ${data?.error_message ? `<p>错误信息：${escapeHtml(data.error_message)}</p>` : ''}
-    `;
+      <p>期刊：\${escapeHtml(data?.journal_name || '-')}</p>
+      <p>期次：\${escapeHtml(formatYearVolumeIssue(data?.crawl_year, data?.crawl_volume, data?.crawl_issue))}</p>
+      <p>新增文章：\${data?.new_articles_count ?? 0}</p>
+      <p>总计文章：\${data?.articles_count ?? 0}</p>
+      <p>耗时：\${formatDuration(data?.duration_ms)}</p>
+      \${data?.error_message ? \`<p>错误信息：\${escapeHtml(data.error_message)}</p>\` : ''}
+    \`;
   }
 
   function buildProcessDetail(data) {
-    return `
+    return \`
       <h4>后处理</h4>
-      <p>文章：${escapeHtml(data?.article_title || '未命名文章')}</p>
-      <p>阶段：${getStageLabel(data?.stage)}</p>
-      <p>状态：${getStatusText(data?.status)}</p>
-      <p>耗时：${formatDuration(data?.duration_ms)}</p>
-      ${data?.error_message ? `<p>错误信息：${escapeHtml(data.error_message)}</p>` : ''}
-      ${data?.details ? `<h4 style="margin-top: 12px;">附加信息</h4><pre>${formatDetailString(data.details)}</pre>` : ''}
-    `;
+      <p>文章：\${escapeHtml(data?.article_title || '未命名文章')}</p>
+      <p>阶段：\${getStageLabel(data?.stage)}</p>
+      <p>状态：\${getStatusText(data?.status)}</p>
+      <p>耗时：\${formatDuration(data?.duration_ms)}</p>
+      \${data?.error_message ? \`<p>错误信息：\${escapeHtml(data.error_message)}</p>\` : ''}
+      \${data?.details ? \`<h4 style="margin-top: 12px;">附加信息</h4><pre>\${formatDetailString(data.details)}</pre>\` : ''}
+    \`;
   }
 
   function getDomainName(domainId) {
@@ -1353,7 +1355,7 @@
       default:
         cls = '';
     }
-    return `<span class="status-badge ${cls}">${text}</span>`;
+    return \`<span class="status-badge \${cls}">\${text}</span>\`;
   }
 
   function getStatusText(status) {
@@ -1428,14 +1430,14 @@
 
   function formatDuration(ms) {
     if (ms === null || ms === undefined) return '-';
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
+    if (ms < 1000) return \`\${ms}ms\`;
+    return \`\${(ms / 1000).toFixed(1)}s\`;
   }
 
   function formatYearVolumeIssue(year, volume, issue) {
     if (!year) return '-';
-    const vol = volume ? `Vol.${volume}` : '';
-    const iss = issue ? `Issue.${issue}` : '';
+    const vol = volume ? \`Vol.\${volume}\` : '';
+    const iss = issue ? \`Issue.\${issue}\` : '';
     return [year, vol, iss].filter(Boolean).join(' ');
   }
 })();
