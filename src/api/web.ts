@@ -134,10 +134,7 @@ export function createApp(): express.Express {
     if (!req.userId) {
       return res.redirect('/login');
     }
-    // Only admin can access logs
-    if (req.user?.role !== 'admin') {
-      return res.redirect('/');
-    }
+    // All logged-in users can access logs
     res.render('filter-logs', {
       pageTitle: 'Filter Logs - LIS-RSS Literature Tracker',
       user: req.user,

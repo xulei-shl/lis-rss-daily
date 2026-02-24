@@ -37,7 +37,7 @@ router.get(['/logs/filter', '/filter/logs'], requireAuth, async (req: AuthReques
     const isPassed = parseBooleanParam(req.query.isPassed);
 
     const result = await getFilterLogs({
-      userId: req.userId!,
+      userId: req.effectiveUserId!,
       page,
       limit,
       domainId,
@@ -64,7 +64,7 @@ router.get(['/logs/crawl', '/journals/logs'], requireAuth, async (req: AuthReque
     const { fromDate, toDate } = getDateRangeFromQuery(req);
     const status = parseCrawlStatus(req.query.result);
 
-    const result = await getCrawlLogs(req.userId!, undefined, page, limit, {
+    const result = await getCrawlLogs(req.effectiveUserId!, undefined, page, limit, {
       status,
       fromDate,
       toDate,
@@ -98,7 +98,7 @@ router.get(['/logs/journals/:id', '/journals/:id/logs'], requireAuth, async (req
     const { fromDate, toDate } = getDateRangeFromQuery(req);
     const status = parseCrawlStatus(req.query.result);
 
-    const result = await getCrawlLogs(req.userId!, id, page, limit, {
+    const result = await getCrawlLogs(req.effectiveUserId!, id, page, limit, {
       status,
       fromDate,
       toDate,
@@ -126,7 +126,7 @@ router.get('/logs/rss-fetch', requireAuth, async (req: AuthRequest, res) => {
     const isScheduled = parseBooleanParam(req.query.isScheduled);
 
     const result = await getRssFetchLogs({
-      userId: req.userId!,
+      userId: req.effectiveUserId!,
       page,
       limit,
       status: status ?? undefined,
@@ -158,7 +158,7 @@ router.get('/logs/process', requireAuth, async (req: AuthRequest, res) => {
     const articleId = parseOptionalInt(req.query.articleId);
 
     const result = await getProcessLogs({
-      userId: req.userId!,
+      userId: req.effectiveUserId!,
       page,
       limit,
       stage: stage ?? undefined,
@@ -187,7 +187,7 @@ router.get('/logs/unified', requireAuth, async (req: AuthRequest, res) => {
     const types = parseUnifiedTypes(req.query.types);
 
     const result = await getUnifiedLogs({
-      userId: req.userId!,
+      userId: req.effectiveUserId!,
       page,
       limit,
       fromDate,
