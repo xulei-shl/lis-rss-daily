@@ -455,6 +455,7 @@ export class JournalScheduler {
             published_issue: article.publishedIssue || null,
             published_volume: article.publishedVolume || null,
             is_read: 0,
+            created_at: now,
             updated_at: now,
           })
           .execute();

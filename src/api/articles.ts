@@ -11,8 +11,18 @@ import type { RSSFeedItem } from '../rss-parser.js';
 import { toSimpleMarkdown } from '../utils/markdown.js';
 import { generateNormalizedTitle } from '../utils/title.js';
 import { search, SearchMode } from '../vector/search.js';
+import { getUserTimezone, buildUtcRangeFromLocalDate } from './timezone.js';
+import { normalizeDateFields } from '../utils/datetime.js';
 
 const log = logger.child({ module: 'articles-service' });
+
+const ARTICLE_DATE_FIELDS: Array<keyof ArticleWithSource> = [
+  'created_at',
+  'updated_at',
+  'filtered_at',
+  'processed_at',
+  'published_at',
+];
 
 /**
  * Create article input
@@ -107,6 +117,12 @@ export interface RelatedArticle {
   score: number;
 }
 
+function normalizeArticleDates<T extends Partial<ArticleWithSource>>(article: T | undefined): T | undefined {
+  if (!article) return article;
+  normalizeDateFields(article as Record<string, any>, ARTICLE_DATE_FIELDS);
+  return article;
+}
+
 /**
  * Batch save articles
  * @param rssSourceId - RSS source ID
@@ -171,6 +187,7 @@ export async function saveArticles(
           markdown_content: markdown || null,
           filter_status: 'pending',
           process_status: 'pending',
+          created_at: now,
           published_at: item.pubDate ? new Date(item.pubDate).toISOString() : null,
           is_read: 0,
           source_origin: 'rss',
@@ -347,10 +364,13 @@ export async function getArticleById(
   if (!article) return undefined;
 
   // 合并来源名称
-  return {
+  const merged = {
     ...article,
     source_name: (article as any).journal_name || (article as any).rss_source_name || 'Unknown',
   } as ArticleWithSource;
+
+  normalizeArticleDates(merged);
+  return merged;
 }
 
 
@@ -492,6 +512,8 @@ export async function getUserArticles(
   const page = options.page ?? 1;
   const limit = options.limit ?? 20;
   const offset = (page - 1) * limit;
+  const needsLocalDateFilter = Boolean(options.createdAfter || options.createdBefore);
+  const userTimezone = needsLocalDateFilter ? await getUserTimezone(userId) : undefined;
 
   // 判断是否应该应用时间过滤
   // 如果是搜索模式且启用了 skipDaysFilterForSearch，则不应用时间过滤
@@ -568,14 +590,12 @@ export async function getUserArticles(
 
   // 日期范围过滤（优先级高于 daysAgo）
   if (options.createdAfter) {
-    const startDate = new Date(options.createdAfter);
-    startDate.setHours(0, 0, 0, 0);
-    query = query.where('articles.created_at', '>=', startDate.toISOString());
+    const [startDate] = buildUtcRangeFromLocalDate(options.createdAfter, userTimezone);
+    query = query.where('articles.created_at', '>=', startDate);
   }
   if (options.createdBefore) {
-    const endDate = new Date(options.createdBefore);
-    endDate.setHours(23, 59, 59, 999);
-    query = query.where('articles.created_at', '<=', endDate.toISOString());
+    const [, endDate] = buildUtcRangeFromLocalDate(options.createdBefore, userTimezone);
+    query = query.where('articles.created_at', '<=', endDate);
   }
 
   // Get total count
@@ -646,14 +666,12 @@ export async function getUserArticles(
 
   // 日期范围过滤（优先级高于 daysAgo）
   if (options.createdAfter) {
-    const startDate = new Date(options.createdAfter);
-    startDate.setHours(0, 0, 0, 0);
-    articlesQuery = articlesQuery.where('articles.created_at', '>=', startDate.toISOString());
+    const [startDate] = buildUtcRangeFromLocalDate(options.createdAfter, userTimezone);
+    articlesQuery = articlesQuery.where('articles.created_at', '>=', startDate);
   }
   if (options.createdBefore) {
-    const endDate = new Date(options.createdBefore);
-    endDate.setHours(23, 59, 59, 999);
-    articlesQuery = articlesQuery.where('articles.created_at', '<=', endDate.toISOString());
+    const [, endDate] = buildUtcRangeFromLocalDate(options.createdBefore, userTimezone);
+    articlesQuery = articlesQuery.where('articles.created_at', '<=', endDate);
   }
 
   // Get paginated results with translation
@@ -696,8 +714,10 @@ export async function getUserArticles(
     source_name: article.journal_name || article.rss_source_name || 'Unknown',
   }));
 
+  const normalizedArticles = articlesWithSourceName.map((article) => normalizeArticleDates(article)!) as ArticleWithSource[];
+
   return {
-    articles: articlesWithSourceName as ArticleWithSource[],
+    articles: normalizedArticles,
     total,
     page,
     limit,
@@ -967,6 +987,8 @@ export async function markAllAsRead(
 ): Promise<number> {
   const db = getDb();
   const now = new Date().toISOString();
+  const needsLocalDateFilter = Boolean(options.createdAfter || options.createdBefore);
+  const userTimezone = needsLocalDateFilter ? await getUserTimezone(userId) : undefined;
 
   // 使用左连接同时支持 RSS 和期刊文章
   let query = db
@@ -1014,15 +1036,13 @@ export async function markAllAsRead(
   }
 
   if (options.createdAfter) {
-    const startDate = new Date(options.createdAfter);
-    startDate.setHours(0, 0, 0, 0);
-    query = query.where('created_at', '>=', startDate.toISOString());
+    const [startDate] = buildUtcRangeFromLocalDate(options.createdAfter, userTimezone);
+    query = query.where('created_at', '>=', startDate);
   }
 
   if (options.createdBefore) {
-    const endDate = new Date(options.createdBefore);
-    endDate.setHours(23, 59, 59, 999);
-    query = query.where('created_at', '<=', endDate.toISOString());
+    const [, endDate] = buildUtcRangeFromLocalDate(options.createdBefore, userTimezone);
+    query = query.where('created_at', '<=', endDate);
   }
 
   // 注意：搜索功能暂时不支持，因为 UPDATE 语句不支持 LIKE 查询

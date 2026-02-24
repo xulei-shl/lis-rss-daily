@@ -503,6 +503,9 @@ function truncate(str, len) {
 
 function formatTime(dateStr) {
   if (!dateStr) return '';
+  if (window.timeUtils && typeof window.timeUtils.formatRelativeTime === 'function') {
+    return window.timeUtils.formatRelativeTime(dateStr);
+  }
   const date = new Date(dateStr);
   const now = new Date();
   const diff = now - date;

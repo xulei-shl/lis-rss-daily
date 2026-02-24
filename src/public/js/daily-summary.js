@@ -224,7 +224,7 @@
           <circle cx="12" cy="12" r="10"></circle>
           <polyline points="12 6 12 12 16 14"></polyline>
         </svg>
-        <span>生成于 ${new Date(generatedAt).toLocaleTimeString('zh-CN')}</span>
+        <span>生成于 ${window.timeUtils ? window.timeUtils.formatTimeOfDay(generatedAt) : new Date(generatedAt).toLocaleTimeString('zh-CN')}</span>
       </div>
       <button class="summary-meta-action" id="copySummaryBtn" title="复制内容">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -401,6 +401,9 @@
   // Format date helper (shared with home page)
   function formatDate(dateStr) {
     if (!dateStr) return '';
+    if (window.timeUtils && typeof window.timeUtils.formatRelativeTime === 'function') {
+      return window.timeUtils.formatRelativeTime(dateStr);
+    }
     const date = new Date(dateStr);
     const now = new Date();
     const diff = now - date;

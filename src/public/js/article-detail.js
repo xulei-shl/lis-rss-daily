@@ -369,6 +369,9 @@ function truncateUrl(url) {
 
 function formatDateTime(dateStr) {
   if (!dateStr) return '';
+  if (window.timeUtils && typeof window.timeUtils.formatDateTime === 'function') {
+    return window.timeUtils.formatDateTime(dateStr);
+  }
   const date = new Date(dateStr);
   return date.toLocaleString('zh-CN', {
     year: 'numeric',
@@ -410,6 +413,9 @@ function getPublishTimeText(article) {
 
 function formatTime(dateStr) {
   if (!dateStr) return '';
+  if (window.timeUtils && typeof window.timeUtils.formatRelativeTime === 'function') {
+    return window.timeUtils.formatRelativeTime(dateStr);
+  }
   const date = new Date(dateStr);
   const now = new Date();
   const diff = now - date;

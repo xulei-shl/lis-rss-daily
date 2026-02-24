@@ -413,6 +413,9 @@
   // Format date helper
   function formatDate(dateStr) {
     if (!dateStr) return '';
+    if (window.timeUtils && typeof window.timeUtils.formatRelativeTime === 'function') {
+      return window.timeUtils.formatRelativeTime(dateStr);
+    }
     const date = new Date(dateStr);
     const now = new Date();
     const diff = now - date;
