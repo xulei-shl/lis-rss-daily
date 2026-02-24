@@ -44,3 +44,65 @@
     border-bottom: 1px solid var(--divider);
     margin-bottom: var(--space-4);
 }
+
+/* ============================================
+   SEARCHABLE SELECT (Source Filter)
+   ============================================ */
+
+.searchable-select {
+    position: relative;
+    width: 100%;
+}
+
+.searchable-input {
+    width: 100%;
+    padding-right: 36px !important;
+    cursor: text;
+}
+
+.select-arrow {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    font-size: 10px;
+    color: var(--text-tertiary);
+}
+
+.select-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 250px;
+    overflow-y: auto;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    margin-top: 4px;
+    z-index: 1000;
+}
+
+.select-option {
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border);
+}
+
+.select-option:last-child {
+    border-bottom: none;
+}
+
+.select-option:hover {
+    background-color: var(--accent-subtle);
+}
+
+.select-option[data-value=""] {
+    font-weight: 500;
+    color: var(--text-secondary);
+}

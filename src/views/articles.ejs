@@ -14,9 +14,13 @@
     <div class="filter-row filter-row-equal">
       <div class="filter-group">
         <span class="filter-label">来源</span>
-        <select id="filterSource" class="filter-select">
-          <option value="">全部来源</option>
-        </select>
+        <div class="searchable-select" id="sourceSearchableSelect">
+          <input type="text" id="filterSource" class="filter-select searchable-input" placeholder="搜索来源..." autocomplete="off">
+          <span class="select-arrow">▼</span>
+          <div class="select-dropdown" id="sourceDropdown" style="display: none;">
+            <div class="select-option" data-value="">全部来源</div>
+          </div>
+        </div>
       </div>
 
       <div class="filter-group date-group">
@@ -114,7 +118,7 @@
         }, 300);
       });
 
-      ['filterSource', 'filterStatus', 'filterProcess', 'filterRead'].forEach(id => {
+      ['filterStatus', 'filterProcess', 'filterRead'].forEach(id => {
         document.getElementById(id).addEventListener('change', () => {
           currentPage = 1;
           loadArticles();
@@ -127,6 +131,74 @@
           loadArticles();
         });
       });
+
+      // Setup searchable select for source
+      setupSearchableSelect('sourceSearchableSelect', 'filterSource', 'sourceDropdown', () => {
+        currentPage = 1;
+        loadArticles();
+      });
+    }
+
+    // Setup searchable select functionality
+    function setupSearchableSelect(containerId, inputId, dropdownId, onSelect) {
+      const container = document.getElementById(containerId);
+      const input = document.getElementById(inputId);
+      const dropdown = document.getElementById(dropdownId);
+
+      if (!container || !input || !dropdown) return;
+
+      let selectedValue = '';
+
+      // Toggle dropdown on input focus
+      input.addEventListener('focus', () => {
+        dropdown.style.display = 'block';
+      });
+
+      // Filter options on input
+      input.addEventListener('input', () => {
+        const query = input.value.toLowerCase();
+        const options = dropdown.querySelectorAll('.select-option');
+
+        options.forEach(option => {
+          const text = option.textContent.toLowerCase();
+          if (text.includes(query) || option.dataset.value === '') {
+            option.style.display = 'block';
+          } else {
+            option.style.display = 'none';
+          }
+        });
+
+        dropdown.style.display = 'block';
+      });
+
+      // Handle option selection
+      dropdown.addEventListener('click', (e) => {
+        const option = e.target.closest('.select-option');
+        if (!option) return;
+
+        selectedValue = option.dataset.value;
+        input.value = option.textContent;
+        dropdown.style.display = 'none';
+
+        if (onSelect) onSelect();
+      });
+
+      // Close dropdown when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!container.contains(e.target)) {
+          dropdown.style.display = 'none';
+        }
+      });
+
+      // Handle keyboard navigation
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          dropdown.style.display = 'none';
+        }
+      });
+
+      // Expose getter for selected value
+      input.getSelectedValue = () => selectedValue;
     }
 
     // Load merged sources for filter (RSS sources + journals)
@@ -146,9 +218,9 @@
     }
 
     async function loadSources() {
-      const select = document.getElementById('filterSource');
-      if (!select) {
-        console.error('filterSource element not found');
+      const dropdown = document.getElementById('sourceDropdown');
+      if (!dropdown) {
+        console.error('sourceDropdown element not found');
         return;
       }
 
@@ -162,16 +234,15 @@
         sources = data.sources || [];
 
         // 清空现有选项（保留第一个"全部来源"）
-        while (select.options.length > 1) {
-          select.remove(1);
-        }
+        dropdown.innerHTML = '<div class="select-option" data-value="">全部来源</div>';
 
         sources.forEach(source => {
-          const option = document.createElement('option');
-          option.value = source.id;
-          option.textContent = source.name;
+          const option = document.createElement('div');
+          option.className = 'select-option';
+          option.dataset.value = source.id;
           option.dataset.type = source.type;
-          select.appendChild(option);
+          option.textContent = source.name;
+          dropdown.appendChild(option);
         });
       } catch (err) {
         console.error('Failed to load sources:', err);
@@ -189,7 +260,8 @@
       });
 
       // Add filters
-      const sourceId = document.getElementById('filterSource').value;
+      const sourceInput = document.getElementById('filterSource');
+      const sourceId = sourceInput.getSelectedValue ? sourceInput.getSelectedValue() : sourceInput.value;
       const filterStatus = document.getElementById('filterStatus').value;
       const processStatus = document.getElementById('filterProcess').value;
       const filterRead = document.getElementById('filterRead').value;
@@ -631,7 +703,8 @@ async function markAllAsRead() {
 
   try {
     // 获取当前筛选条件
-    const sourceId = document.getElementById('filterSource').value;
+    const sourceInput = document.getElementById('filterSource');
+    const sourceId = sourceInput.getSelectedValue ? sourceInput.getSelectedValue() : sourceInput.value;
     const filterStatus = document.getElementById('filterStatus').value;
     const processStatus = document.getElementById('filterProcess').value;
     const searchQuery = document.getElementById('searchInput').value.trim();
