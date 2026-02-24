@@ -225,6 +225,12 @@ class CNKISpider:
                             print("点击搜索按钮", file=sys.stderr)
                             search_btn.first.click()
                             time.sleep(3)
+                            # 点击"期刊"标签页，确保搜索结果类型正确
+                            journal_tab = page.locator("ul.doctype li a:has-text('期刊')")
+                            if journal_tab.count() > 0:
+                                print("点击'期刊'标签页", file=sys.stderr)
+                                journal_tab.first.click()
+                                time.sleep(2)
                             # 点击第一个搜索结果
                             result_link = page.locator(".re_brief h1 a")
                             if result_link.count() > 0:
