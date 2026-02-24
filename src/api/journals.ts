@@ -5,6 +5,7 @@
 
 import { getDb, type JournalsSelection, type JournalCrawlLogsSelection } from '../db.js';
 import { logger } from '../logger.js';
+import { normalizeDateFields } from '../utils/datetime.js';
 import type { JournalSourceType, PublicationCycle, JournalInfo } from '../spiders/types.js';
 
 const log = logger.child({ module: 'journals-api' });
@@ -371,8 +372,13 @@ export async function getCrawlLogs(
     .offset(offset)
     .execute();
 
+  // 标准化时间字段为 UTC
+  const normalizedLogs = logs.map(log =>
+    normalizeDateFields(log as Record<string, any>, ['created_at'])
+  );
+
   return {
-    logs,
+    logs: normalizedLogs,
     page,
     limit,
     total,

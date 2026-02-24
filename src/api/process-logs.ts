@@ -3,6 +3,7 @@ import {
   type ArticleProcessLogsSelection,
 } from '../db.js';
 import { logger } from '../logger.js';
+import { normalizeDateFields } from '../utils/datetime.js';
 
 const log = logger.child({ module: 'process-logs' });
 
@@ -132,8 +133,13 @@ export async function getProcessLogs(query: ProcessLogQuery): Promise<ProcessLog
     .offset(offset)
     .execute();
 
+  // 标准化时间字段为 UTC
+  const normalizedLogs = (logs as ProcessLogRecord[]).map(log =>
+    normalizeDateFields(log as Record<string, any>, ['created_at'])
+  );
+
   return {
-    logs: logs as ProcessLogRecord[],
+    logs: normalizedLogs,
     total,
     page,
     limit,

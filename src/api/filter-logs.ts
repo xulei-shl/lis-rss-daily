@@ -6,6 +6,7 @@ import {
   getDb,
   type ArticleFilterLogsSelection,
 } from '../db.js';
+import { normalizeDateFields } from '../utils/datetime.js';
 
 export interface FilterLogsQuery {
   userId: number;
@@ -80,8 +81,13 @@ export async function getFilterLogs(params: FilterLogsQuery): Promise<FilterLogs
     .offset(offset)
     .execute();
 
+  // 标准化时间字段为 UTC
+  const normalizedLogs = (logs as FilterLogRecord[]).map(log =>
+    normalizeDateFields(log as Record<string, any>, ['created_at'])
+  );
+
   return {
-    logs: logs as FilterLogRecord[],
+    logs: normalizedLogs,
     total,
     page,
     limit,

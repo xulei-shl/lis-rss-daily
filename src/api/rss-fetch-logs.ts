@@ -1,5 +1,6 @@
 import { getDb, type RssFetchLogsSelection } from '../db.js';
 import { logger } from '../logger.js';
+import { normalizeDateFields } from '../utils/datetime.js';
 
 const log = logger.child({ module: 'rss-fetch-logs' });
 
@@ -118,8 +119,13 @@ export async function getRssFetchLogs(query: RssFetchLogQuery): Promise<RssFetch
     .offset(offset)
     .execute();
 
+  // 标准化时间字段为 UTC
+  const normalizedLogs = (logs as RssFetchLogRecord[]).map(log =>
+    normalizeDateFields(log as Record<string, any>, ['created_at'])
+  );
+
   return {
-    logs: logs as RssFetchLogRecord[],
+    logs: normalizedLogs,
     total,
     page,
     limit,
