@@ -1,6 +1,6 @@
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, requireWriteAccess } from '../../middleware/auth.js';
 import { logger } from '../../logger.js';
 
 const log = logger.child({ module: 'api-routes/filter' });
@@ -15,7 +15,7 @@ const router = express.Router();
  * POST /api/filter/article
  * Filter a single article
  */
-router.post('/filter/article', requireAuth, async (req: AuthRequest, res) => {
+router.post('/filter/article', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
   try {
     const { articleId, title, description, content, url } = req.body;
 

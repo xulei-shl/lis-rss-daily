@@ -30,9 +30,11 @@
         <a href="/articles">文章</a>
         <a href="/history">总结</a>
         <a href="/search">搜索</a>
-        <a href="/settings">设置</a>
-        <a href="/topics">主题</a>
-        <a href="/filter-logs">日志</a>
+        <% if (user.role === 'admin') { %>
+          <a href="/settings">设置</a>
+          <a href="/topics">主题</a>
+          <a href="/filter-logs">日志</a>
+        <% } %>
         <form method="POST" action="/logout" style="display: inline;">
           <button type="submit" class="btn-icon">登出</button>
         </form>
@@ -45,6 +47,11 @@
   <div class="page-body">
     <%- body %>
   </div>
+
+  <!-- User Role Data (for guest mode) -->
+  <script>
+    window.userRole = <%- user ? `"${user.role}"` : '"guest"' %>;
+  </script>
 
   <!-- Common JavaScript Components -->
   <script src="/js/confirm-dialog.js"></script>

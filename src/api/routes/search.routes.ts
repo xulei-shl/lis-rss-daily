@@ -35,7 +35,8 @@ router.get('/search', requireAuth, async (req: AuthRequest, res) => {
 
     const response = await search({
       mode: searchMode,
-      userId: req.userId!,
+      // Use effectiveUserId for guest users to read admin's data
+      userId: (req as any).effectiveUserId || req.userId!,
       query: query.trim(),
       limit,
       offset: (page - 1) * limit,

@@ -1,6 +1,6 @@
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, requireWriteAccess } from '../../middleware/auth.js';
 import * as articleProcessService from '../article-process.js';
 
 const router = express.Router();
@@ -13,7 +13,7 @@ const router = express.Router();
  * POST /api/articles/:id/process
  * Trigger processing for a single article
  */
-router.post('/articles/:id/process', requireAuth, async (req: AuthRequest, res) => {
+router.post('/articles/:id/process', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
   await articleProcessService.triggerProcess(req, res);
 });
 
@@ -21,7 +21,7 @@ router.post('/articles/:id/process', requireAuth, async (req: AuthRequest, res) 
  * POST /api/articles/process-batch
  * Trigger batch processing for pending or failed articles
  */
-router.post('/articles/process-batch', requireAuth, async (req: AuthRequest, res) => {
+router.post('/articles/process-batch', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
   await articleProcessService.triggerBatchProcess(req, res);
 });
 
@@ -29,7 +29,7 @@ router.post('/articles/process-batch', requireAuth, async (req: AuthRequest, res
  * POST /api/articles/:id/retry
  * Retry a single failed article
  */
-router.post('/articles/:id/retry', requireAuth, async (req: AuthRequest, res) => {
+router.post('/articles/:id/retry', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
   await articleProcessService.retryArticle(req, res);
 });
 

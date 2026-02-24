@@ -66,14 +66,14 @@ export function createApp(): express.Express {
 
   // Login API route (POST /login)
   app.post('/login', async (req: Request, res: Response) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
     try {
       const { handleLogin } = await import('../middleware/auth.js');
-      const { username, password } = req.body;
-
-      if (!username || !password) {
-        return res.status(400).json({ error: 'Username and password are required' });
-      }
-
       const result = await handleLogin(username, password, res);
 
       if (result.success) {
@@ -82,8 +82,10 @@ export function createApp(): express.Express {
         res.status(401).json({ error: result.error });
       }
     } catch (error) {
-      log.error({ error }, 'Login failed');
-      res.status(500).json({ error: 'Login failed' });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[web.ts /login] Error:', errorMessage);
+      log.error({ error: errorMessage, username }, 'Login failed');
+      res.status(500).json({ error: 'Login failed', details: errorMessage });
     }
   });
 
@@ -103,6 +105,10 @@ export function createApp(): express.Express {
     if (!req.userId) {
       return res.redirect('/login');
     }
+    // Only admin can access settings
+    if (req.user?.role !== 'admin') {
+      return res.redirect('/');
+    }
     res.render('settings', {
       pageTitle: 'Settings - LIS-RSS Literature Tracker',
       user: req.user,
@@ -114,6 +120,10 @@ export function createApp(): express.Express {
     if (!req.userId) {
       return res.redirect('/login');
     }
+    // Only admin can access topics
+    if (req.user?.role !== 'admin') {
+      return res.redirect('/');
+    }
     res.render('topics', {
       pageTitle: 'Topic Management - LIS-RSS Literature Tracker',
       user: req.user,
@@ -124,6 +134,10 @@ export function createApp(): express.Express {
     if (!req.userId) {
       return res.redirect('/login');
     }
+    // Only admin can access logs
+    if (req.user?.role !== 'admin') {
+      return res.redirect('/');
+    }
     res.render('filter-logs', {
       pageTitle: 'Filter Logs - LIS-RSS Literature Tracker',
       user: req.user,
@@ -133,6 +147,10 @@ export function createApp(): express.Express {
   app.get('/filter-stats', optionalAuth, (req: any, res: Response) => {
     if (!req.userId) {
       return res.redirect('/login');
+    }
+    // Only admin can access stats
+    if (req.user?.role !== 'admin') {
+      return res.redirect('/');
     }
     res.render('filter-stats', {
       pageTitle: 'Filter Statistics - LIS-RSS Literature Tracker',

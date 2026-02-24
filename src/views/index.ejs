@@ -1,570 +1,203 @@
-<%- include('layout', { pageTitle: pageTitle, pageStyles: ` <link rel="stylesheet" href="/css/pages/home.css">
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= pageTitle %></title>
+
+  <!-- Google Fonts Preload -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Main CSS Bundle -->
+  <% if (process.env.NODE_ENV === 'production') { %>
+    <link rel="stylesheet" href="/css/main.bundle.min.css">
+  <% } else { %>
+    <link rel="stylesheet" href="/css/main.css">
+  <% } %>
+
+  <!-- Page-Specific Styles -->
+  <link rel="stylesheet" href="/css/pages/home.css">
   <link rel="stylesheet" href="/css/components/articles.css">
   <link rel="stylesheet" href="/css/components/daily-summary.css">
-  `, body: `
 
+  <script src="/js/time-utils.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a href="/">📚 LIS-RSS Literature Tracker</a>
+    <nav class="site-nav">
+      <% if (user) { %>
+        <a href="/">首页</a>
+        <a href="/articles">文章</a>
+        <a href="/history">总结</a>
+        <a href="/search">搜索</a>
+        <% if (user.role === 'admin') { %>
+          <a href="/settings">设置</a>
+          <a href="/topics">主题</a>
+          <a href="/filter-logs">日志</a>
+        <% } %>
+        <form method="POST" action="/logout" style="display: inline;">
+          <button type="submit" class="btn-icon">登出</button>
+        </form>
+      <% } else { %>
+        <a href="/login">登录</a>
+      <% } %>
+    </nav>
+  </header>
 
-  <!-- Stats Section -->
-  <div class="stats-grid">
-    <div class="stat-card">
-      <div class="stat-value" id="todayNew">-</div>
-      <div class="stat-label">今日新增</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value" id="pendingCount">-</div>
-      <div class="stat-label">待处理</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value" id="analyzedCount">-</div>
-      <div class="stat-label">已完成</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value" id="passRate">-</div>
-      <div class="stat-label">通过率</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value" id="unreadCount">-</div>
-      <div class="stat-label">未读</div>
-    </div>
-  </div>
-
-  <!-- Daily Summary Panel -->
-  <div class="daily-summary-panel" id="dailySummaryPanel">
-    <div class="summary-panel-header" id="summaryPanelHeader">
-      <div class="summary-header-left">
-        <svg class="panel-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
-          <line x1="16" y1="13" x2="8" y2="13"></line>
-          <line x1="16" y1="17" x2="8" y2="17"></line>
-          <polyline points="10 9 9 9 8 9"></polyline>
-        </svg>
-        <h3>当日总结</h3>
-        <span class="panel-badge" id="todayBadge">今日</span>
+  <div class="page-body">
+    <!-- Stats Section -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="todayNew">-</div>
+        <div class="stat-label">今日新增</div>
       </div>
-      <div class="summary-header-right">
-        <button class="btn-icon btn-sm" id="refreshBtn" title="刷新">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M23 4v6h-6"></path>
-            <path d="M1 20v-6h6"></path>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-          </svg>
-        </button>
-        <button class="btn-icon btn-sm" id="historyBtn" title="历史记录">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-          </svg>
-        </button>
-        <svg class="chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2" id="panelChevron">
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
+      <div class="stat-card">
+        <div class="stat-value" id="pendingCount">-</div>
+        <div class="stat-label">待处理</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="analyzedCount">-</div>
+        <div class="stat-label">已完成</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="passRate">-</div>
+        <div class="stat-label">通过率</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="unreadCount">-</div>
+        <div class="stat-label">未读</div>
       </div>
     </div>
 
-    <div class="summary-panel-content" id="summaryPanelContent">
-      <!-- Tab Navigation -->
-      <div class="summary-tabs">
-        <button class="summary-tab active" data-type="journal" id="tabJournal">
-          <svg class="tab-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-          </svg>
-          <span class="tab-label">期刊精选</span>
-          <span class="tab-badge" id="journalBadge" style="display: none;">0</span>
-        </button>
-        <button class="summary-tab" data-type="blog_news" id="tabBlogNews">
-          <svg class="tab-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+    <!-- Daily Summary Panel -->
+    <div class="daily-summary-panel" id="dailySummaryPanel">
+      <div class="summary-panel-header" id="summaryPanelHeader">
+        <div class="summary-header-left">
+          <svg class="panel-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
             <polyline points="14 2 14 8 20 8"></polyline>
             <line x1="16" y1="13" x2="8" y2="13"></line>
             <line x1="16" y1="17" x2="8" y2="17"></line>
-            <line x1="10" y1="9" x2="8" y2="9"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
           </svg>
-          <span class="tab-label">博客资讯</span>
-          <span class="tab-badge" id="blogNewsBadge" style="display: none;">0</span>
-        </button>
-      </div>
-
-      <!-- Tab Content -->
-      <div class="summary-tab-content" id="summaryTabContent">
-        <!-- Loading State -->
-        <div class="summary-loading" id="summaryLoading" style="display: none;">
-          <div class="loading-spinner"></div>
-          <p>正在生成当日总结...</p>
-          <p class="loading-hint">这可能需要 30-60 秒</p>
+          <h3>当日总结</h3>
+          <span class="panel-badge" id="todayBadge">今日</span>
         </div>
-
-        <!-- Empty State -->
-        <div class="summary-empty" id="summaryEmpty" style="display: none;">
-          <p id="emptyMessage">点击下方按钮生成今日期刊总结</p>
-          <button class="btn btn-primary" id="generateBtn">生成总结</button>
-        </div>
-
-        <!-- Result State -->
-        <div class="summary-result" id="summaryResult" style="display: none;">
-          <div class="summary-meta" id="summaryMeta"></div>
-          <div class="summary-content markdown-content" id="summaryText"></div>
-        </div>
-
-        <!-- Error State -->
-        <div class="summary-error" id="summaryError" style="display: none;"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- History Modal -->
-  <div class="modal-overlay" id="historyModal">
-    <div class="modal">
-      <div class="modal-header">
-        <h3>历史总结</h3>
-        <button class="modal-close" id="closeHistoryModal">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div id="historyList" class="history-list"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Articles Timeline -->
-  <div id="articlesContainer">
-    <div class="loading">加载中...</div>
-  </div>
-
-  <!-- Pagination -->
-  <div class="pagination" id="pagination" style="display: none;">
-  </div>
-
-  <script>
-    // ============================================
-    // HOME PAGE LOGIC
-    // ============================================
-
-    let currentPage = 1;
-    let totalPages = 1;
-    const perPage = 20;
-
-    // Load on page ready
-    document.addEventListener('DOMContentLoaded', () => {
-      const params = new URLSearchParams(window.location.search);
-      const page = parseInt(params.get('page')) || 1;
-      loadStats();
-      loadArticles(page);
-    });
-
-    // Load statistics
-    async function loadStats() {
-      // 创建超时控制器
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      try {
-        const res = await fetch('/api/articles/stats', {
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        if (!res.ok) {
-          console.error('Failed to load stats:', res.status, res.statusText);
-          return;
-        }
-
-        const stats = await res.json();
-
-        document.getElementById('todayNew').textContent = stats.todayNew || 0;
-        document.getElementById('pendingCount').textContent = stats.pending || 0;
-        document.getElementById('analyzedCount').textContent = stats.analyzed || 0;
-        document.getElementById('passRate').textContent = stats.passRate
-          ? (stats.passRate * 100).toFixed(0) + '%'
-          : '-';
-        document.getElementById('unreadCount').textContent = stats.unread || 0;
-      } catch (err) {
-        clearTimeout(timeoutId);
-        console.error('Failed to load stats:', err);
-        // 静默失败，统计数据加载失败不影响主功能
-      }
-    }
-
-    // Load articles
-    async function loadArticles(page = 1) {
-      const container = document.getElementById('articlesContainer');
-      container.innerHTML = '<div class="loading">加载中...</div>';
-
-      // 创建超时控制器
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      // 备用超时处理（确保UI更新）
-      const fallbackTimeoutId = setTimeout(() => {
-        if (container.querySelector('.loading')) {
-          container.innerHTML = \`
-        <div class="empty-state">
-          <div class="empty-state-title">加载超时</div>
-          <div class="empty-state-desc">
-            服务器响应时间过长，请检查网络连接或稍后重试
-          </div>
-        </div>
-      \`;
-    }
-  }, 10500);
-
-  try {
-    const res = await fetch(\`/api/articles?page=\${page}&limit=\${perPage}&filterStatus=passed&daysAgo=7&isRead=false\`, {
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-    clearTimeout(fallbackTimeoutId);
-
-    if (!res.ok) throw new Error('Failed to fetch');
-
-    const data = await res.json();
-    currentPage = page;
-    totalPages = data.totalPages || 1;
-
-    renderArticles(data.articles || []);
-    renderPagination();
-  } catch (err) {
-    clearTimeout(timeoutId);
-    clearTimeout(fallbackTimeoutId);
-    console.error('Failed to load articles:', err);
-
-    const isTimeout = err.name === 'AbortError';
-    container.innerHTML = \`
-      <div class="empty-state">
-        <div class="empty-state-title">\${isTimeout ? '加载超时' : '加载失败'}</div>
-        <div class="empty-state-desc">
-          \${isTimeout ? '服务器响应时间过长，请稍后重试' : '请检查网络连接后刷新页面'}
+        <div class="summary-header-right">
+          <% if (user && user.role !== 'guest') { %>
+          <button class="btn-icon btn-sm" id="refreshBtn" title="刷新">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6"></path>
+              <path d="M1 20v-6h6"></path>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
+          <% } %>
+          <button class="btn-icon btn-sm" id="historyBtn" title="历史记录">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+          </button>
+          <svg class="chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="panelChevron">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
         </div>
       </div>
-    \`;
-  }
-}
 
-// Render articles grouped by date
-function renderArticles(articles) {
-  const container = document.getElementById('articlesContainer');
-
-  if (articles.length === 0) {
-    container.innerHTML = \`
-      <div class="empty-state">
-        <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-        </svg>
-        <div class="empty-state-title">暂无文章</div>
-        <div class="empty-state-desc">
-          添加RSS订阅源后，文章将显示在这里
-        </div>
-      </div>
-    \`;
-    return;
-  }
-
-  let html = '';
-  let currentDate = '';
-  let cardIndex = 0;
-
-  articles.forEach((article) => {
-    const dateLabel = formatDate(article.published_at);
-
-    if (dateLabel !== currentDate) {
-      currentDate = dateLabel;
-      html += \`
-        <div class="day-header">
-          \${dateLabel}
-          <span class="day-date">\${getWeekday(article.published_at)}</span>
-        </div>
-      \`;
-    }
-
-    html += renderArticleCard(article, cardIndex);
-    cardIndex++;
-  });
-
-  container.innerHTML = html;
-}
-
-// Render single article card
-function renderArticleCard(article, index) {
-  const statusLabel = {
-    'passed': '通过',
-    'rejected': '拒绝',
-    'pending': '待处理'
-  };
-
-  // 优先显示翻译后的中文摘要，如果没有则使用原始内容
-  const content = article.summary_zh || article.content || article.markdown_content || '';
-  const hasContent = content.length > 0;
-  const TRUNCATE_LENGTH = 400;
-  const needsTruncate = content.length > TRUNCATE_LENGTH;
-
-  // 已读状态
-  const isRead = article.is_read === 1;
-  const isRejected = article.filter_status === 'rejected';
-  const cardClass = isRead ? 'article-card fade-in-up is-read' : isRejected ? 'article-card fade-in-up is-rejected' : 'article-card fade-in-up';
-  const readIcon = isRead ? '<span class="article-read-icon">✅</span>' : '';
-
-  return \`
-    <div class="\${cardClass}" style="animation-delay: \${index * 30}ms" data-article-id="\${article.id}">
-      <div class="article-card-header">
-        <h3 class="article-title">
-          \${readIcon}<a href="/articles/\${article.id}">\${escapeHtml(article.title)}</a>
-        </h3>
-        <span class="badge \${article.filter_status}">\${statusLabel[article.filter_status] || '未知'}</span>
-      </div>
-      <div class="article-meta">
-        <span>\${escapeHtml(article.source_name || article.rss_source_name || 'Unknown')}</span>
-        <span>·</span>
-        <span>\${getPublishTimeText(article)}</span>
-        <span>·</span>
-        <a href="\${escapeHtml(article.url)}" target="_blank" rel="noopener">原文链接</a>
-      </div>
-      \${hasContent ? \`
-        <div class="article-summary">
-          \${needsTruncate ? \`
-            <span class="summary-short">\${truncate(content, TRUNCATE_LENGTH)}</span>
-            <span class="summary-full" style="display: none;">\${escapeHtml(content)}</span>
-            <button class="summary-toggle" onclick="toggleSummary(this)">展开</button>
-          \` : escapeHtml(content)}
-        </div>
-      \` : ''}
-      <div class="article-footer">
-        <div class="article-tags">
-          \${article.tags ? article.tags.split(',').map(tag => \`<span class="article-tag">#\${escapeHtml(tag.trim())}</span>\`).join('') : ''}
-        </div>
-        <div class="article-actions">
-          <button class="btn-icon" onclick="toggleReadStatus(\${article.id}, false)">
-            已读
+      <div class="summary-panel-content" id="summaryPanelContent">
+        <!-- Tab Navigation -->
+        <div class="summary-tabs">
+          <button class="summary-tab active" data-type="journal" id="tabJournal">
+            <svg class="tab-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+            <span class="tab-label">期刊精选</span>
+            <span class="tab-badge" id="journalBadge" style="display: none;">0</span>
+          </button>
+          <button class="summary-tab" data-type="blog_news" id="tabBlogNews">
+            <svg class="tab-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <line x1="10" y1="9" x2="8" y2="9"></line>
+            </svg>
+            <span class="tab-label">博客资讯</span>
+            <span class="tab-badge" id="blogNewsBadge" style="display: none;">0</span>
           </button>
         </div>
+
+        <!-- Tab Content -->
+        <div class="summary-tab-content" id="summaryTabContent">
+          <!-- Loading State -->
+          <div class="summary-loading" id="summaryLoading" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>正在生成当日总结...</p>
+            <p class="loading-hint">这可能需要 30-60 秒</p>
+          </div>
+
+          <!-- Empty State -->
+          <div class="summary-empty" id="summaryEmpty" style="display: none;">
+            <p id="emptyMessage">点击下方按钮生成今日期刊总结</p>
+            <% if (user && user.role !== 'guest') { %>
+            <button class="btn btn-primary" id="generateBtn">生成总结</button>
+            <% } else { %>
+            <p style="color: var(--text-tertiary); font-size: var(--text-sm);">访客模式下无法生成总结</p>
+            <% } %>
+          </div>
+
+          <!-- Result State -->
+          <div class="summary-result" id="summaryResult" style="display: none;">
+            <div class="summary-meta" id="summaryMeta"></div>
+            <div class="summary-content markdown-content" id="summaryText"></div>
+          </div>
+
+          <!-- Error State -->
+          <div class="summary-error" id="summaryError" style="display: none;"></div>
+        </div>
       </div>
     </div>
-  \`;
-}
 
-// Render pagination
-function renderPagination() {
-  const pagination = document.getElementById('pagination');
+    <!-- History Modal -->
+    <div class="modal-overlay" id="historyModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>历史总结</h3>
+          <button class="modal-close" id="closeHistoryModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="historyList" class="history-list"></div>
+        </div>
+      </div>
+    </div>
 
-  if (totalPages <= 1) {
-    pagination.style.display = 'none';
-    return;
-  }
+    <!-- Articles Timeline -->
+    <div id="articlesContainer">
+      <div class="loading">加载中...</div>
+    </div>
 
-  pagination.style.display = 'flex';
+    <!-- Pagination -->
+    <div class="pagination" id="pagination" style="display: none;"></div>
+  </div>
 
-  let html = '';
+  <!-- Common JavaScript Components -->
+  <script src="/js/confirm-dialog.js"></script>
+  <script src="/js/toast.js"></script>
 
-  // Previous
-  html += currentPage > 1
-    ? \`<a href="?page=\${currentPage - 1}">← 上一页</a>\`
-    : '<span>← 上一页</span>';
-
-  // Page numbers
-  const startPage = Math.max(1, currentPage - 2);
-  const endPage = Math.min(totalPages, currentPage + 2);
-
-  if (startPage > 1) {
-    html += '<a href="?page=1">1</a>';
-    if (startPage > 2) html += '<span>...</span>';
-  }
-
-  for (let i = startPage; i <= endPage; i++) {
-    if (i === currentPage) {
-      html += \`<span class="current">\${i}</span>\`;
-    } else {
-      html += \`<a href="?page=\${i}">\${i}</a>\`;
-    }
-  }
-
-  if (endPage < totalPages) {
-    if (endPage < totalPages - 1) html += '<span>...</span>';
-    html += \`<a href="?page=\${totalPages}">\${totalPages}</a>\`;
-  }
-
-  // Next
-  html += currentPage < totalPages
-    ? \`<a href="?page=\${currentPage + 1}">下一页 →</a>\`
-    : '<span>下一页 →</span>';
-
-  pagination.innerHTML = html;
-}
-
-// Toggle summary expansion
-function toggleSummary(btn) {
-  const container = btn.parentElement;
-  const shortText = container.querySelector('.summary-short');
-  const fullText = container.querySelector('.summary-full');
-
-  if (fullText.style.display === 'none') {
-    // 展开
-    shortText.style.display = 'none';
-    fullText.style.display = 'inline';
-    btn.textContent = '收起';
-  } else {
-    // 收起
-    fullText.style.display = 'none';
-    shortText.style.display = 'inline';
-    btn.textContent = '展开';
-  }
-}
-
-// Utility functions
-function escapeHtml(str) {
-  if (!str) return '';
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-function truncate(str, len) {
-  if (!str) return '';
-  if (str.length <= len) return str;
-  return str.substring(0, len - 3) + '...';
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return '未知日期';
-  const date = new Date(dateStr);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const articleDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
-  const diffDays = Math.floor((today - articleDate) / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return '今天';
-  if (diffDays === 1) return '昨天';
-  if (diffDays === 2) return '前天';
-  if (diffDays < 7) return \`\${diffDays} 天前\`;
-
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-}
-
-function getWeekday(dateStr) {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-  return weekdays[date.getDay()];
-}
-
-function formatTime(dateStr) {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diff = now - date;
-
-  if (diff < 60000) return '刚刚';
-  if (diff < 3600000) return \`\${Math.floor(diff / 60000)} 分钟前\`;
-  if (diff < 86400000) return \`\${Math.floor(diff / 3600000)} 小时前\`;
-
-  return date.toLocaleDateString('zh-CN', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-/**
- * 格式化期刊年卷期信息
- */
-function formatJournalIssue(article) {
-  const parts = [];
-  if (article.published_year) {
-    parts.push(article.published_year + '年');
-  }
-  if (article.published_issue) {
-    parts.push('第' + article.published_issue + '期');
-  }
-  if (article.published_volume) {
-    parts.push('第' + article.published_volume + '卷');
-  }
-  return parts.length > 0 ? parts.join(' ') : '';
-}
-
-/**
- * 获取文章发布时间显示文本
- * 期刊文章优先显示年卷期，RSS 文章显示 published_at
- */
-function getPublishTimeText(article) {
-  if (article.source_origin === 'journal') {
-    const issueText = formatJournalIssue(article);
-    return issueText || formatTime(article.published_at);
-  }
-  return formatTime(article.published_at);
-}
-
-// Handle browser back/forward
-window.addEventListener('popstate', () => {
-  const params = new URLSearchParams(window.location.search);
-  const page = parseInt(params.get('page')) || 1;
-  loadArticles(page);
-});
-
-// Toggle article read status
-async function toggleReadStatus(articleId, currentIsRead) {
-  const card = document.querySelector(\`[data-article-id="\${articleId}"]\`);
-  if (!card) return;
-
-  try {
-    const res = await fetch(\`/api/articles/\${articleId}/read\`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_read: !currentIsRead })
-    });
-
-    if (!res.ok) throw new Error('Failed to update');
-
-    // 标记为已读时，淡出并移除卡片
-    if (!currentIsRead) {
-      fadeOutAndRemoveCard(card);
-    }
-
-    // 更新统计数据
-    loadStats();
-  } catch (err) {
-    console.error('Failed to toggle read status:', err);
-    alert('操作失败，请稍后重试');
-  }
-}
-
-// 淡出并移除卡片
-function fadeOutAndRemoveCard(card) {
-  // 添加淡出动画
-  card.style.transition = 'opacity 0.3s ease, transform 0.3s ease, max-height 0.3s ease, margin 0.3s ease';
-  card.style.opacity = '0';
-  card.style.transform = 'translateX(20px)';
-  card.style.maxHeight = '0';
-  card.style.margin = '0';
-  card.style.overflow = 'hidden';
-
-  // 动画结束后移除DOM
-  setTimeout(() => {
-    card.remove();
-    // 检查是否需要移除日期分组标题
-    checkAndRemoveEmptyDayHeaders();
-  }, 300);
-}
-
-// 检查并移除没有文章的日期分组标题
-function checkAndRemoveEmptyDayHeaders() {
-  const dayHeaders = document.querySelectorAll('.day-header');
-  dayHeaders.forEach(header => {
-    const nextElement = header.nextElementSibling;
-    // 如果下一个元素不是文章卡片或者是另一个日期标题，则移除当前日期标题
-    if (!nextElement || !nextElement.classList.contains('article-card')) {
-      header.remove();
-    }
-  });
-}
-
+  <!-- User Role Data (for guest mode) -->
+  <script>
+    window.userRole = <%- user ? `"${user.role}"` : '"guest"' %>;
   </script>
+
+  <!-- Page Script -->
+  <script src="/js/home.js"></script>
 
   <!-- Daily Summary Script -->
   <script src="/js/daily-summary.js"></script>
-  ` }) %>
+</body>
+</html>

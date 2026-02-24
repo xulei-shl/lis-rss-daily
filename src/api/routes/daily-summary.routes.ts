@@ -4,7 +4,7 @@
 
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth, requireCliAuth } from '../../middleware/auth.js';
+import { requireAuth, requireCliAuth, requireWriteAccess } from '../../middleware/auth.js';
 import { logger } from '../../logger.js';
 import * as dailySummaryService from '../daily-summary.js';
 import type { SummaryType } from '../daily-summary.js';
@@ -34,7 +34,7 @@ function parseSummaryType(typeParam: unknown): SummaryType | undefined {
  * - limit: 可选，文章数量限制 (默认 30)
  * - type: 可选，总结类型 (journal | blog_news | all)
  */
-router.post('/daily-summary/generate', requireAuth, async (req: AuthRequest, res) => {
+router.post('/daily-summary/generate', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
   try {
     const { date, limit } = req.body || {};
     const type = parseSummaryType(req.body?.type);
@@ -74,7 +74,8 @@ router.post('/daily-summary/generate', requireAuth, async (req: AuthRequest, res
 router.get('/daily-summary/today', requireAuth, async (req: AuthRequest, res) => {
   try {
     const type = parseSummaryType(req.query.type);
-    const summary = await dailySummaryService.getTodaySummary(req.userId!, type);
+    // Use effectiveUserId so guest users can see admin's data
+    const summary = await dailySummaryService.getTodaySummary(req.effectiveUserId!, type);
 
     if (!summary) {
       res.status(404).json({ error: '今日总结尚未生成' });
@@ -101,7 +102,8 @@ router.get('/daily-summary/history', requireAuth, async (req: AuthRequest, res) 
     const limit = typeof req.query.limit === 'string' ? parseInt(req.query.limit) : 30;
     const type = parseSummaryType(req.query.type);
 
-    const history = await dailySummaryService.getDailySummaryHistory(req.userId!, limit, type);
+    // Use effectiveUserId so guest users can see admin's data
+    const history = await dailySummaryService.getDailySummaryHistory(req.effectiveUserId!, limit, type);
 
     res.json({ history });
   } catch (error) {
@@ -131,7 +133,8 @@ router.get('/daily-summary/:date', requireAuth, async (req: AuthRequest, res) =>
     }
 
     const type = parseSummaryType(req.query.type);
-    const summary = await dailySummaryService.getDailySummaryByDate(req.userId!, dateParam, type);
+    // Use effectiveUserId so guest users can see admin's data
+    const summary = await dailySummaryService.getDailySummaryByDate(req.effectiveUserId!, dateParam, type);
 
     if (!summary) {
       res.status(404).json({ error: '总结不存在' });
@@ -166,7 +169,8 @@ router.get('/daily-summary/:date/articles', requireAuth, async (req: AuthRequest
     }
 
     const type = parseSummaryType(req.query.type);
-    const summary = await dailySummaryService.getDailySummaryByDate(req.userId!, dateParam, type);
+    // Use effectiveUserId so guest users can see admin's data
+    const summary = await dailySummaryService.getDailySummaryByDate(req.effectiveUserId!, dateParam, type);
 
     if (!summary) {
       res.status(404).json({ error: '总结不存在' });

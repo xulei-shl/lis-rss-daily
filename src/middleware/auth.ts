@@ -3,19 +3,38 @@
  *
  * JWT-based authentication using cookie sessions.
  * Provides authentication for both API routes and page routes.
+ * Supports role-based access control (admin/guest).
+ * 
+ * Note: Password verification uses a simple comparison for development.
+ * For production, consider using proper bcrypt hashing.
  */
 
 import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config.js';
+import crypto from 'crypto';
 
 /**
  * Auth request interface with user info
  */
 export interface AuthRequest extends Request {
   userId?: number;
-  user?: { id: number; username?: string };
+  effectiveUserId?: number;
+  user?: { id: number; username?: string; role?: string };
 }
+
+/**
+ * User roles
+ */
+export type UserRole = 'admin' | 'guest';
+
+/**
+ * Role hierarchy for permission checking
+ */
+const ROLE_HIERARCHY: Record<UserRole, number> = {
+  admin: 2,
+  guest: 1,
+};
 
 const COOKIE_NAME = 'rss_session';
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -26,16 +45,14 @@ const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 interface JWTPayload {
   userId: number;
   username?: string;
+  role?: string;
 }
 
 /**
  * Create JWT token for user
- * @param userId - User ID
- * @param username - Username (optional)
- * @returns JWT token
  */
-export function createToken(userId: number, username?: string): string {
-  const payload: JWTPayload = { userId, username };
+export function createToken(userId: number, username?: string, role?: string): string {
+  const payload: JWTPayload = { userId, username, role };
   return jwt.sign(payload, config.jwtSecret, {
     expiresIn: config.jwtExpiresIn,
   } as jwt.SignOptions);
@@ -43,8 +60,6 @@ export function createToken(userId: number, username?: string): string {
 
 /**
  * Verify JWT token
- * @param token - JWT token string
- * @returns Decoded payload or null
  */
 export function verifyToken(token: string): JWTPayload | null {
   try {
@@ -56,8 +71,6 @@ export function verifyToken(token: string): JWTPayload | null {
 
 /**
  * Set session cookie
- * @param res - Express response
- * @param token - JWT token
  */
 export function setSessionCookie(res: Response, token: string): void {
   res.cookie(COOKIE_NAME, token, {
@@ -71,51 +84,37 @@ export function setSessionCookie(res: Response, token: string): void {
 
 /**
  * Clear session cookie
- * @param res - Express response
  */
 export function clearSessionCookie(res: Response): void {
-  res.clearCookie(COOKIE_NAME, {
-    path: '/',
-  });
-}
-
-/**
- * Send unauthorized response
- * Returns 401 for API routes, redirects to login for page routes
- */
-function sendUnauthorized(req: Request, res: Response): void {
-  if (req.path.startsWith('/api/')) {
-    res.status(401).json({ error: 'Unauthorized' });
-  } else {
-    res.redirect('/login');
-  }
+  res.clearCookie(COOKIE_NAME, { path: '/' });
 }
 
 /**
  * Require authentication middleware
- * Validates JWT token from cookie and attaches user info to request
  */
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {
   const token = req.cookies?.[COOKIE_NAME];
 
   if (!token) {
-    return sendUnauthorized(req, res);
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
   }
 
   const payload = verifyToken(token);
-
   if (!payload) {
-    return sendUnauthorized(req, res);
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
   }
 
   req.userId = payload.userId;
-  req.user = { id: payload.userId, username: payload.username };
+  req.user = { id: payload.userId, username: payload.username, role: payload.role };
+  // Set effectiveUserId: guest users read admin's data (user_id=1), others use their own
+  req.effectiveUserId = payload.role === 'guest' ? 1 : (payload.userId || 1);
   next();
 }
 
 /**
  * Optional authentication middleware
- * Attaches user info if token is valid, but doesn't require it
  */
 export function optionalAuth(req: AuthRequest, res: Response, next: NextFunction): void {
   const token = req.cookies?.[COOKIE_NAME];
@@ -124,7 +123,8 @@ export function optionalAuth(req: AuthRequest, res: Response, next: NextFunction
     const payload = verifyToken(token);
     if (payload) {
       req.userId = payload.userId;
-      req.user = { id: payload.userId, username: payload.username };
+      req.user = { id: payload.userId, username: payload.username, role: payload.role };
+      req.effectiveUserId = payload.role === 'guest' ? 1 : (payload.userId || 1);
     }
   }
 
@@ -132,24 +132,110 @@ export function optionalAuth(req: AuthRequest, res: Response, next: NextFunction
 }
 
 /**
+ * Check if user has required role or higher
+ */
+export function hasRole(userRole: string | undefined, requiredRole: UserRole): boolean {
+  const userLevel = ROLE_HIERARCHY[userRole as UserRole] ?? 0;
+  const requiredLevel = ROLE_HIERARCHY[requiredRole] ?? 0;
+  return userLevel >= requiredLevel;
+}
+
+/**
+ * Require admin role middleware
+ */
+export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void {
+  if (!hasRole(req.user?.role, 'admin')) {
+    if (req.path.startsWith('/api/')) {
+      res.status(403).json({ error: '权限不足，需要管理员权限' });
+      return;
+    }
+    res.status(403).render('error', {
+      pageTitle: '权限不足',
+      error: '您没有权限访问此页面',
+    });
+    return;
+  }
+  next();
+}
+
+/**
+ * Require write access middleware
+ */
+export function requireWriteAccess(req: AuthRequest, res: Response, next: NextFunction): void {
+  if (!hasRole(req.user?.role, 'admin')) {
+    if (req.path.startsWith('/api/')) {
+      res.status(403).json({ error: '权限不足，访客用户只能读取数据' });
+      return;
+    }
+    res.status(403).render('error', {
+      pageTitle: '权限不足',
+      error: '访客用户只能读取数据，无法执行此操作',
+    });
+    return;
+  }
+  next();
+}
+
+/**
+ * Login result type
+ */
+export interface LoginResult {
+  success: boolean;
+  error?: string;
+  role?: string;
+}
+
+/**
+ * Hash password using SHA256 (for development/simple use)
+ */
+export function hashPassword(password: string): string {
+  return crypto.createHash('sha256').update(password).digest('hex');
+}
+
+/**
+ * Verify password against stored hash
+ * Supports both bcrypt format ($2a$...) and SHA256 format
+ */
+async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+  // If the hash starts with $2a$, it's a bcrypt hash
+  if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$')) {
+    try {
+      // Dynamically load bcryptjs
+      const { createRequire } = await import('module');
+      const require = createRequire(import.meta.url);
+      const bcrypt = require('bcryptjs');
+      
+      if (typeof bcrypt.compareSync === 'function') {
+        return bcrypt.compareSync(password, storedHash);
+      } else {
+        console.error('[verifyPassword] bcrypt.compareSync is not a function');
+        // Fallback: compare with SHA256 of the password
+        const sha256Hash = hashPassword(password);
+        return sha256Hash === storedHash;
+      }
+    } catch (error) {
+      console.error('[verifyPassword] bcrypt error:', error);
+      return false;
+    }
+  }
+  
+  // Otherwise, compare as SHA256
+  const sha256Hash = hashPassword(password);
+  return sha256Hash === storedHash;
+}
+
+/**
  * Login handler
- * @param username - Username
- * @param password - Password
- * @param res - Express response
- * @returns Login result
  */
 export async function handleLogin(
   username: string,
   password: string,
   res: Response
-): Promise<{ success: boolean; error?: string }> {
-  // TODO: Implement actual password verification
-  // For now, we'll use a simple check against the database
-  // This will be implemented when we add the users table query
-
+): Promise<LoginResult> {
   const { getDb } = await import('../db.js');
   const db = getDb();
 
+  // Get user from database
   const user = await db
     .selectFrom('users')
     .where('username', '=', username)
@@ -160,21 +246,24 @@ export async function handleLogin(
     return { success: false, error: 'Invalid username or password' };
   }
 
-  // TODO: Add bcrypt password verification
-  // For now, we'll do a simple comparison (INSECURE - for development only)
-  // if (user.password_hash !== password) {
-  //   return { success: false, error: 'Invalid username or password' };
-  // }
+  // Get the role
+  const role = (user as any).role || 'admin';
 
-  const token = createToken(user.id, user.username);
+  // Verify password
+  const passwordValid = await verifyPassword(password, user.password_hash);
+  
+  if (!passwordValid) {
+    return { success: false, error: 'Invalid username or password' };
+  }
+
+  const token = createToken(user.id, user.username, role);
   setSessionCookie(res, token);
 
-  return { success: true };
+  return { success: true, role };
 }
 
 /**
  * Logout handler
- * @param res - Express response
  */
 export function handleLogout(res: Response): void {
   clearSessionCookie(res);
@@ -182,11 +271,8 @@ export function handleLogout(res: Response): void {
 
 /**
  * CLI authentication middleware
- * Validates user_id and api_key from query parameters or headers
- * Designed for CLI/script access without cookie-based auth
  */
 export async function requireCliAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-  // Get CLI_API_KEY from environment
   const cliApiKey = process.env.CLI_API_KEY;
 
   if (!cliApiKey) {
@@ -194,7 +280,6 @@ export async function requireCliAuth(req: AuthRequest, res: Response, next: Next
     return;
   }
 
-  // Get user_id from query parameter
   const userIdStr = req.query.user_id as string;
   if (!userIdStr) {
     res.status(400).json({ status: 'error', error: 'Missing user_id parameter' });
@@ -207,7 +292,6 @@ export async function requireCliAuth(req: AuthRequest, res: Response, next: Next
     return;
   }
 
-  // Get api_key from query parameter or header
   const apiKeyQuery = req.query.api_key as string;
   const apiKeyHeader = req.headers['x-api-key'] as string;
   const providedApiKey = apiKeyQuery || apiKeyHeader;
@@ -217,13 +301,11 @@ export async function requireCliAuth(req: AuthRequest, res: Response, next: Next
     return;
   }
 
-  // Verify API key
   if (providedApiKey !== cliApiKey) {
     res.status(401).json({ status: 'error', error: 'Invalid api_key' });
     return;
   }
 
-  // Verify user exists
   try {
     const { getDb } = await import('../db.js');
     const db = getDb();
@@ -238,7 +320,6 @@ export async function requireCliAuth(req: AuthRequest, res: Response, next: Next
       return;
     }
 
-    // Attach user info to request
     req.userId = userId;
     req.user = { id: userId, username: user.username };
     next();

@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
+  role TEXT DEFAULT 'admin' CHECK(role IN ('admin', 'guest')),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -389,8 +390,13 @@ VALUES ('types_config_version', '1.0', CURRENT_TIMESTAMP);
 -- ===========================================
 
 -- Default admin user (password: admin123 - CHANGE IN PRODUCTION!)
-INSERT OR IGNORE INTO users (id, username, password_hash)
-VALUES (1, 'admin', '$2a$10$fmMiQ94fM351fv3Iojv6EurpOWhRzj5vuY9SZpDxyQTiv17ecySD.');
+-- 密码哈希使用 SHA256 格式（兼容 bcryptjs ESM 加载问题）
+INSERT OR IGNORE INTO users (id, username, password_hash, role)
+VALUES (1, 'admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'admin');
+
+-- Default guest user (password: cc@7007 - read-only access)
+INSERT OR IGNORE INTO users (id, username, password_hash, role)
+VALUES (2, 'guest', '369a85abf5be438e8d598ede77a8efabff97669c483efaa2ca0a29f749d83f22', 'guest');
 
 -- Default settings for admin user
 INSERT OR IGNORE INTO settings (user_id, key, value)
@@ -405,6 +411,20 @@ VALUES
   (1, 'chroma_port', '8000'),
   (1, 'chroma_collection', 'articles'),
   (1, 'chroma_distance_metric', 'cosine');
+
+-- Default settings for guest user (read-only access)
+INSERT OR IGNORE INTO settings (user_id, key, value)
+VALUES
+  (2, 'rss_fetch_schedule', '0 9 * * *'),
+  (2, 'rss_fetch_enabled', 'true'),
+  (2, 'llm_filter_enabled', 'true'),
+  (2, 'max_concurrent_fetch', '5'),
+  (2, 'timezone', 'Asia/Shanghai'),
+  (2, 'language', 'zh-CN'),
+  (2, 'chroma_host', '127.0.0.1'),
+  (2, 'chroma_port', '8000'),
+  (2, 'chroma_collection', 'articles'),
+  (2, 'chroma_distance_metric', 'cosine');
 
 -- Default system prompt for article filtering
 INSERT OR IGNORE INTO system_prompts (user_id, type, name, template, variables, is_active)

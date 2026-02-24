@@ -1,6 +1,6 @@
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, requireAdmin } from '../../middleware/auth.js';
 import * as topicDomainService from '../topic-domains.js';
 import { logger } from '../../logger.js';
 
@@ -87,7 +87,7 @@ router.get('/topic-domains/:id', requireAuth, async (req: AuthRequest, res) => {
  * POST /api/topic-domains
  * Create a new topic domain
  */
-router.post('/topic-domains', requireAuth, async (req: AuthRequest, res) => {
+router.post('/topic-domains', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { name, description, priority, isActive } = req.body;
 
@@ -120,7 +120,7 @@ router.post('/topic-domains', requireAuth, async (req: AuthRequest, res) => {
  * PUT /api/topic-domains/:id
  * Update topic domain
  */
-router.put('/topic-domains/:id', requireAuth, async (req: AuthRequest, res) => {
+router.put('/topic-domains/:id', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const idParam = req.params.id;
     if (Array.isArray(idParam)) {
@@ -186,7 +186,7 @@ router.put('/topic-domains/:id', requireAuth, async (req: AuthRequest, res) => {
  * DELETE /api/topic-domains/:id
  * Delete topic domain
  */
-router.delete('/topic-domains/:id', requireAuth, async (req: AuthRequest, res) => {
+router.delete('/topic-domains/:id', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const idParam = req.params.id;
     if (Array.isArray(idParam)) {

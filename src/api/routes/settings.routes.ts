@@ -1,6 +1,6 @@
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, requireAdmin } from '../../middleware/auth.js';
 import { getChromaSettings, updateChromaSettings } from '../settings.js';
 import { logger } from '../../logger.js';
 
@@ -26,7 +26,7 @@ router.get('/settings/chroma', requireAuth, async (req: AuthRequest, res) => {
  * PUT /api/settings/chroma
  * 更新 Chroma 配置
  */
-router.put('/settings/chroma', requireAuth, async (req: AuthRequest, res) => {
+router.put('/settings/chroma', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { host, port, collection, distanceMetric } = req.body || {};
 

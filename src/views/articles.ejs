@@ -1,11 +1,17 @@
-<%- include('layout', { pageTitle: pageTitle, pageStyles: '<link rel="stylesheet" href="/css/pages/articles-list.css">'
-  , body: ` <!-- Page Header -->
-  <div class="page-header">
-    <h1 class="page-title">文章列表</h1>
+<%
+const pageStyles = '<link rel="stylesheet" href="/css/pages/articles-list.css">';
+const isGuest = user && user.role === 'guest';
+const isGuestValue = isGuest ? 'true' : 'false';
+const pageActions = isGuest ? '' : `
     <div class="page-actions">
       <button class="btn btn-secondary" onclick="processBatch()">批量处理</button>
       <button class="btn btn-secondary" onclick="markAllAsRead()">批量已读</button>
-    </div>
+    </div>`;
+%>
+<%- include('layout', { pageTitle: pageTitle, pageStyles: pageStyles
+  , body: ` <!-- Page Header -->
+  <div class="page-header">
+    <h1 class="page-title">文章列表</h1>${pageActions}
   </div>
 
   <!-- Filters Bar -->
@@ -98,6 +104,7 @@
     let totalPages = 1;
     const perPage = 20;
     let rssSources = [];
+    const isGuest = ${isGuestValue};
 
     // Load on page ready
     document.addEventListener('DOMContentLoaded', () => {
@@ -389,14 +396,14 @@ const summary = article.summary_zh || article.content || article.markdown_conten
           ).join('') : ''}
         </div>
         <div class="article-actions">
-          <button class="btn-icon" onclick="toggleReadStatus(\${article.id}, \${isRead})">
+          \${!isGuest ? \`<button class="btn-icon" onclick="toggleReadStatus(\${article.id}, \${isRead})">
             \${isRead ? '未读' : '已读'}
-          </button>
-          \${article.process_status === 'pending' || article.process_status === 'failed'
+          </button>\` : ''}
+          \${!isGuest && (article.process_status === 'pending' || article.process_status === 'failed')
             ? \`<button class="btn-icon" onclick="processArticle(\${article.id})">处理</button>\`
             : ''
           }
-          <button class="btn-icon" onclick="deleteArticle(\${article.id})">删除</button>
+          \${!isGuest ? \`<button class="btn-icon" onclick="deleteArticle(\${article.id})">删除</button>\` : ''}
         </div>
       </div>
     </div>

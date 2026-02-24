@@ -373,6 +373,67 @@ CREATE TABLE IF NOT EXISTS journal_crawl_logs (
         continue;
       }
 
+      // ============================================================
+      // 018: 添加用户角色字段 (role)
+      // ============================================================
+      if (file === '018_add_user_role.sql') {
+        // 1. 检查是否需要添加 role 字段
+        const hasRoleColumn = hasColumn(db, 'users', 'role');
+        if (!hasRoleColumn) {
+          db.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'admin' CHECK(role IN ('admin', 'guest'));");
+          console.log('      → Added role column to users table');
+        } else {
+          console.log('      → role column already exists');
+        }
+
+        // 2. 确保现有 admin 用户有 role
+        const adminHasRole = db.prepare("SELECT role FROM users WHERE username = 'admin'").get() as { role: string } | undefined;
+        if (!adminHasRole || !adminHasRole.role) {
+          db.exec("UPDATE users SET role = 'admin' WHERE username = 'admin';");
+          console.log('      → Updated admin user role');
+        } else {
+          console.log('      → admin user role already set');
+        }
+
+        // 3. 创建 guest 用户（如果不存在）
+        // 密码哈希使用 SHA256 格式（兼容 bcryptjs ESM 加载问题）
+        const guestExists = db.prepare("SELECT id FROM users WHERE username = 'guest'").get() as { id: number } | undefined;
+        if (!guestExists) {
+          db.exec(
+            "INSERT INTO users (username, password_hash, role) VALUES ('guest', '369a85abf5be438e8d598ede77a8efabff97669c483efaa2ca0a29f749d83f22', 'guest');"
+          );
+          console.log('      → Created guest user (password: cc@7007)');
+        } else {
+          console.log('      → guest user already exists');
+        }
+
+        // 4. 为 guest 用户创建默认设置（如果不存在）
+        const guestUser = db.prepare("SELECT id FROM users WHERE username = 'guest'").get() as { id: number } | undefined;
+        if (guestUser) {
+          const guestSettings = [
+            ['rss_fetch_schedule', '0 9 * * *'],
+            ['rss_fetch_enabled', 'true'],
+            ['llm_filter_enabled', 'true'],
+            ['max_concurrent_fetch', '5'],
+            ['timezone', 'Asia/Shanghai'],
+            ['language', 'zh-CN'],
+            ['chroma_host', '127.0.0.1'],
+            ['chroma_port', '8000'],
+            ['chroma_collection', 'articles'],
+            ['chroma_distance_metric', 'cosine'],
+          ];
+
+          const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (user_id, key, value) VALUES (?, ?, ?)');
+          for (const [key, value] of guestSettings) {
+            insertSetting.run(guestUser.id, key, value);
+          }
+          console.log('      → Created guest user settings');
+        }
+
+        console.log('      → Migration 018 completed');
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

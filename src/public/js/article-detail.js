@@ -43,6 +43,16 @@ document.addEventListener('DOMContentLoaded', () => {
   // 检查向量配置
   checkVectorConfig();
 
+  // 访客模式：隐藏操作按钮
+  if (window.userRole === 'guest') {
+    const readBtn = document.getElementById('readBtn');
+    const processBtn = document.getElementById('processBtn');
+    const deleteBtn = document.getElementById('deleteBtn');
+    if (readBtn) readBtn.style.display = 'none';
+    if (processBtn) processBtn.style.display = 'none';
+    if (deleteBtn) deleteBtn.style.display = 'none';
+  }
+
   if (!isNaN(articleId)) {
     loadArticle(articleId);
   } else {

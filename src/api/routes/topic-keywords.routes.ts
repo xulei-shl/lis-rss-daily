@@ -1,6 +1,6 @@
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, requireAdmin } from '../../middleware/auth.js';
 import * as topicKeywordService from '../topic-keywords.js';
 import { logger } from '../../logger.js';
 
@@ -103,7 +103,7 @@ router.get('/topic-keywords/:id', requireAuth, async (req: AuthRequest, res) => 
  * POST /api/topic-keywords
  * Create a new topic keyword
  */
-router.post('/topic-keywords', requireAuth, async (req: AuthRequest, res) => {
+router.post('/topic-keywords', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { domainId, keyword, description, weight, isActive } = req.body;
 
@@ -146,7 +146,7 @@ router.post('/topic-keywords', requireAuth, async (req: AuthRequest, res) => {
  * PUT /api/topic-keywords/:id
  * Update topic keyword
  */
-router.put('/topic-keywords/:id', requireAuth, async (req: AuthRequest, res) => {
+router.put('/topic-keywords/:id', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const idParam = req.params.id;
     if (Array.isArray(idParam)) {
@@ -218,7 +218,7 @@ router.put('/topic-keywords/:id', requireAuth, async (req: AuthRequest, res) => 
  * DELETE /api/topic-keywords/:id
  * Delete topic keyword
  */
-router.delete('/topic-keywords/:id', requireAuth, async (req: AuthRequest, res) => {
+router.delete('/topic-keywords/:id', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const idParam = req.params.id;
     if (Array.isArray(idParam)) {

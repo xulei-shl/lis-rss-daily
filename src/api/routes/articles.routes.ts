@@ -1,6 +1,6 @@
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, requireWriteAccess } from '../../middleware/auth.js';
 import { getDb } from '../../db.js';
 import * as articleService from '../articles.js';
 import { logger } from '../../logger.js';
@@ -91,7 +91,7 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
     const rssSourceIds = normalizeQueryIds(req.query.rssSourceIds as string | string[] | undefined);
     const journalIds = normalizeQueryIds(req.query.journalIds as string | string[] | undefined);
 
-    const result = await articleService.getUserArticles(req.userId!, {
+    const result = await articleService.getUserArticles(req.effectiveUserId!, {
       page,
       limit,
       rssSourceId,
@@ -122,6 +122,8 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
 router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
   try {
     const db = getDb();
+    // Use effectiveUserId so guest users can see admin's data
+    const userId = req.effectiveUserId!;
 
     // Get today's new articles count (using UTC to match database)
     const today = new Date();
@@ -133,11 +135,11 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .where((eb) => eb.or([
         eb.and([
           eb('articles.rss_source_id', 'is not', null),
-          eb('rss_sources.user_id', '=', req.userId!),
+          eb('rss_sources.user_id', '=', userId),
         ]),
         eb.and([
           eb('articles.journal_id', 'is not', null),
-          eb('journals.user_id', '=', req.userId!),
+          eb('journals.user_id', '=', userId),
         ]),
       ]))
       .where('articles.created_at', '>=', today.toISOString())
@@ -154,11 +156,11 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .where((eb) => eb.or([
         eb.and([
           eb('articles.rss_source_id', 'is not', null),
-          eb('rss_sources.user_id', '=', req.userId!),
+          eb('rss_sources.user_id', '=', userId),
         ]),
         eb.and([
           eb('articles.journal_id', 'is not', null),
-          eb('journals.user_id', '=', req.userId!),
+          eb('journals.user_id', '=', userId),
         ]),
       ]))
       .where('articles.filter_status', '=', 'pending')
@@ -175,11 +177,11 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .where((eb) => eb.or([
         eb.and([
           eb('articles.rss_source_id', 'is not', null),
-          eb('rss_sources.user_id', '=', req.userId!),
+          eb('rss_sources.user_id', '=', userId),
         ]),
         eb.and([
           eb('articles.journal_id', 'is not', null),
-          eb('journals.user_id', '=', req.userId!),
+          eb('journals.user_id', '=', userId),
         ]),
       ]))
       .where('articles.process_status', '=', 'completed')
@@ -196,11 +198,11 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .where((eb) => eb.or([
         eb.and([
           eb('articles.rss_source_id', 'is not', null),
-          eb('rss_sources.user_id', '=', req.userId!),
+          eb('rss_sources.user_id', '=', userId),
         ]),
         eb.and([
           eb('articles.journal_id', 'is not', null),
-          eb('journals.user_id', '=', req.userId!),
+          eb('journals.user_id', '=', userId),
         ]),
       ]))
       .where('articles.filter_status', '!=', 'pending')
@@ -237,11 +239,11 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .where((eb) => eb.or([
         eb.and([
           eb('articles.rss_source_id', 'is not', null),
-          eb('rss_sources.user_id', '=', req.userId!),
+          eb('rss_sources.user_id', '=', userId),
         ]),
         eb.and([
           eb('articles.journal_id', 'is not', null),
-          eb('journals.user_id', '=', req.userId!),
+          eb('journals.user_id', '=', userId),
         ]),
       ]))
       .where('articles.filter_status', '=', 'passed')
@@ -272,7 +274,8 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
  */
 router.get('/articles/vector-check', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const userId = req.userId!;
+    // Use effectiveUserId so guest users can see admin's data
+    const userId = req.effectiveUserId!;
 
     // 检查 embedding 配置
     const embeddingConfig = await getActiveConfigByType(userId, 'embedding');
@@ -324,7 +327,8 @@ router.get('/articles/vector-check', requireAuth, async (req: AuthRequest, res) 
  */
 router.get('/articles/sources', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const sources = await articleService.getMergedSources(req.userId!);
+    // Use effectiveUserId so guest users can see admin's data
+    const sources = await articleService.getMergedSources(req.effectiveUserId!);
     res.json({ sources });
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to get merged sources');
@@ -348,15 +352,15 @@ router.get('/articles/:id', requireAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Invalid article ID' });
     }
 
-    const article = await articleService.getArticleById(id, req.userId!);
+    const article = await articleService.getArticleById(id, req.effectiveUserId!);
 
     if (!article) {
       return res.status(404).json({ error: 'Article not found' });
     }
 
     const [translation, filterMatches] = await Promise.all([
-      articleService.getArticleTranslation(id, req.userId!),
-      articleService.getArticleFilterMatches(id, req.userId!),
+      articleService.getArticleTranslation(id, req.effectiveUserId!),
+      articleService.getArticleFilterMatches(id, req.effectiveUserId!),
     ]);
 
     res.json({
@@ -373,8 +377,9 @@ router.get('/articles/:id', requireAuth, async (req: AuthRequest, res) => {
 /**
  * DELETE /api/articles/:id
  * Delete article by ID
+ * Requires admin role (not guest)
  */
-router.delete('/articles/:id', requireAuth, async (req: AuthRequest, res) => {
+router.delete('/articles/:id', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
   try {
     const idParam = req.params.id;
     if (typeof idParam !== 'string') {
@@ -386,8 +391,8 @@ router.delete('/articles/:id', requireAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Invalid article ID' });
     }
 
-    await articleService.deleteArticle(id, req.userId!);
-    deleteVectorArticle(id, req.userId!).catch((error) => {
+    await articleService.deleteArticle(id, req.effectiveUserId!);
+    deleteVectorArticle(id, req.effectiveUserId!).catch((error) => {
       log.warn({ error, articleId: id }, '删除向量索引失败');
     });
 
@@ -417,7 +422,7 @@ router.get('/articles/:id/related', requireAuth, async (req: AuthRequest, res) =
       return res.status(400).json({ error: 'Invalid article ID' });
     }
 
-    const related = await articleService.getRelatedArticles(id, req.userId!, 5);
+    const related = await articleService.getRelatedArticles(id, req.effectiveUserId!, 5);
     res.json(related);
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to get related articles');
@@ -428,8 +433,9 @@ router.get('/articles/:id/related', requireAuth, async (req: AuthRequest, res) =
 /**
  * PATCH /api/articles/:id/read
  * Update article read status
+ * Requires admin role (not guest)
  */
-router.patch('/articles/:id/read', requireAuth, async (req: AuthRequest, res) => {
+router.patch('/articles/:id/read', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
   try {
     const idParam = req.params.id;
     if (typeof idParam !== 'string') {
@@ -446,7 +452,7 @@ router.patch('/articles/:id/read', requireAuth, async (req: AuthRequest, res) =>
       return res.status(400).json({ error: 'is_read must be a boolean' });
     }
 
-    await articleService.updateArticleReadStatus(id, req.userId!, is_read);
+    await articleService.updateArticleReadStatus(id, req.effectiveUserId!, is_read);
 
     res.json({ success: true, is_read });
   } catch (error) {
@@ -461,8 +467,9 @@ router.patch('/articles/:id/read', requireAuth, async (req: AuthRequest, res) =>
 /**
  * POST /api/articles/batch-read
  * Batch update article read status
+ * Requires admin role (not guest)
  */
-router.post('/articles/batch-read', requireAuth, async (req: AuthRequest, res) => {
+router.post('/articles/batch-read', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
   try {
     const { articleIds, is_read } = req.body;
 
@@ -475,7 +482,7 @@ router.post('/articles/batch-read', requireAuth, async (req: AuthRequest, res) =
     }
 
     const count = await articleService.batchUpdateArticleReadStatus(
-      req.userId!,
+      req.effectiveUserId!,
       articleIds,
       is_read
     );
@@ -490,8 +497,9 @@ router.post('/articles/batch-read', requireAuth, async (req: AuthRequest, res) =
 /**
  * POST /api/articles/mark-all-read
  * Mark all filtered articles as read
+ * Requires admin role (not guest)
  */
-router.post('/articles/mark-all-read', requireAuth, async (req: AuthRequest, res) => {
+router.post('/articles/mark-all-read', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
   try {
     const {
       filterStatus,
@@ -512,7 +520,7 @@ router.post('/articles/mark-all-read', requireAuth, async (req: AuthRequest, res
     const singleRssSourceId = parseOptionalNumber(rssSourceId);
     const singleJournalId = parseOptionalNumber(journalId);
 
-    const count = await articleService.markAllAsRead(req.userId!, {
+    const count = await articleService.markAllAsRead(req.effectiveUserId!, {
       filterStatus,
       daysAgo,
       rssSourceId: singleRssSourceId,

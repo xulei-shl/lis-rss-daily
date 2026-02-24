@@ -1,6 +1,6 @@
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, requireAdmin } from '../../middleware/auth.js';
 import * as rssSourceService from '../rss-sources.js';
 import { getRSSParser } from '../../rss-parser.js';
 import { initRSSScheduler } from '../../rss-scheduler.js';
@@ -72,7 +72,7 @@ router.get('/rss-sources/:id', requireAuth, async (req: AuthRequest, res) => {
  * POST /api/rss-sources
  * Create a new RSS source
  */
-router.post('/rss-sources', requireAuth, async (req: AuthRequest, res) => {
+router.post('/rss-sources', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { name, url, sourceType, fetchInterval, status } = req.body;
 
@@ -120,7 +120,7 @@ router.post('/rss-sources', requireAuth, async (req: AuthRequest, res) => {
  * PUT /api/rss-sources/:id
  * Update RSS source
  */
-router.put('/rss-sources/:id', requireAuth, async (req: AuthRequest, res) => {
+router.put('/rss-sources/:id', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const idParam = req.params.id;
     if (Array.isArray(idParam)) {
@@ -208,7 +208,7 @@ router.put('/rss-sources/:id', requireAuth, async (req: AuthRequest, res) => {
  * DELETE /api/rss-sources/:id
  * Delete RSS source
  */
-router.delete('/rss-sources/:id', requireAuth, async (req: AuthRequest, res) => {
+router.delete('/rss-sources/:id', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const idParam = req.params.id;
     if (Array.isArray(idParam)) {

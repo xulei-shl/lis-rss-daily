@@ -65,28 +65,36 @@
   });
 
   // Refresh button
-  refreshBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    // Clear cache for current type
-    summaryCache[currentSummaryType] = null;
-    await loadTodaySummary(currentSummaryType);
-  });
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      // Clear cache for current type
+      summaryCache[currentSummaryType] = null;
+      await loadTodaySummary(currentSummaryType);
+    });
+  }
 
   // History button
-  historyBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    openHistoryModal();
-  });
+  if (historyBtn) {
+    historyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openHistoryModal();
+    });
+  }
 
   // Generate button
-  generateBtn.addEventListener('click', async () => {
-    await generateDailySummary(currentSummaryType);
-  });
+  if (generateBtn) {
+    generateBtn.addEventListener('click', async () => {
+      await generateDailySummary(currentSummaryType);
+    });
+  }
 
   // Close history modal
-  closeHistoryModal.addEventListener('click', () => {
-    historyModal.classList.remove('active');
-  });
+  if (closeHistoryModal) {
+    closeHistoryModal.addEventListener('click', () => {
+      historyModal.classList.remove('active');
+    });
+  }
 
   historyModal.addEventListener('click', (e) => {
     if (e.target === historyModal) {
@@ -241,6 +249,7 @@
         </svg>
         <span>下载</span>
       </button>
+      ${window.userRole !== 'guest' ? `
       <button class="summary-meta-action" id="regenerateBtn" title="重新生成">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M23 4v6h-6"></path>
@@ -249,6 +258,7 @@
         </svg>
         <span>重生成</span>
       </button>
+      ` : ''}
     `;
 
     // Re-attach event listeners to new buttons

@@ -1,6 +1,6 @@
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, requireAdmin } from '../../middleware/auth.js';
 import { logger } from '../../logger.js';
 import {
   listSystemPrompts,
@@ -39,7 +39,7 @@ router.get('/system-prompts', requireAuth, async (req: AuthRequest, res) => {
  * POST /api/system-prompts/bootstrap
  * 初始化默认系统提示词（若缺失）
  */
-router.post('/system-prompts/bootstrap', requireAuth, async (req: AuthRequest, res) => {
+router.post('/system-prompts/bootstrap', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const result = await ensureDefaultSystemPrompts(req.userId!);
     res.json(result);
@@ -88,7 +88,7 @@ router.get('/system-prompts/:id', requireAuth, async (req: AuthRequest, res) => 
  * POST /api/system-prompts
  * 创建系统提示词
  */
-router.post('/system-prompts', requireAuth, async (req: AuthRequest, res) => {
+router.post('/system-prompts', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { type, name, template, variables, isActive } = req.body || {};
     const isActiveValue =
@@ -127,7 +127,7 @@ router.post('/system-prompts', requireAuth, async (req: AuthRequest, res) => {
  * PUT /api/system-prompts/:id
  * 更新系统提示词
  */
-router.put('/system-prompts/:id', requireAuth, async (req: AuthRequest, res) => {
+router.put('/system-prompts/:id', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) {
@@ -165,7 +165,7 @@ router.put('/system-prompts/:id', requireAuth, async (req: AuthRequest, res) => 
  * DELETE /api/system-prompts/:id
  * 删除系统提示词
  */
-router.delete('/system-prompts/:id', requireAuth, async (req: AuthRequest, res) => {
+router.delete('/system-prompts/:id', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) {

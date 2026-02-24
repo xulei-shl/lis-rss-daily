@@ -5,7 +5,7 @@
 
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, requireAdmin } from '../../middleware/auth.js';
 import * as journalsService from '../journals.js';
 import { initJournalScheduler } from '../../journal-scheduler.js';
 import { logger } from '../../logger.js';
@@ -78,7 +78,7 @@ router.get('/journals/:id', requireAuth, async (req: AuthRequest, res) => {
  * POST /api/journals
  * 创建期刊
  */
-router.post('/journals', requireAuth, async (req: AuthRequest, res) => {
+router.post('/journals', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { name, sourceType, sourceUrl, journalCode, publicationCycle, issuesPerYear, volumeOffset } = req.body;
 
@@ -136,7 +136,7 @@ router.post('/journals', requireAuth, async (req: AuthRequest, res) => {
  * PUT /api/journals/:id
  * 更新期刊
  */
-router.put('/journals/:id', requireAuth, async (req: AuthRequest, res) => {
+router.put('/journals/:id', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const idParam = req.params.id;
     if (Array.isArray(idParam)) {
@@ -209,7 +209,7 @@ router.put('/journals/:id', requireAuth, async (req: AuthRequest, res) => {
  * DELETE /api/journals/:id
  * 删除期刊
  */
-router.delete('/journals/:id', requireAuth, async (req: AuthRequest, res) => {
+router.delete('/journals/:id', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const idParam = req.params.id;
     if (Array.isArray(idParam)) {

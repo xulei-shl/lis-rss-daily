@@ -1,6 +1,6 @@
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, requireAdmin } from '../../middleware/auth.js';
 import * as llmConfigService from '../llm-configs.js';
 import { logger } from '../../logger.js';
 import { TASK_TYPES, type TaskType } from '../../config/system-prompt-variables.js';
@@ -113,7 +113,7 @@ router.get('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
  * POST /api/llm-configs
  * Create a new LLM configuration
  */
-router.post('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
+router.post('/llm-configs', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const {
       provider,
@@ -218,7 +218,7 @@ router.post('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
  * PUT /api/llm-configs/:id
  * Update LLM configuration
  */
-router.put('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
+router.put('/llm-configs/:id', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const idParam = req.params.id;
     if (Array.isArray(idParam)) {
@@ -363,7 +363,7 @@ router.put('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
  * DELETE /api/llm-configs/:id
  * Delete LLM configuration
  */
-router.delete('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => {
+router.delete('/llm-configs/:id', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const idParam = req.params.id;
     if (Array.isArray(idParam)) {
@@ -391,7 +391,7 @@ router.delete('/llm-configs/:id', requireAuth, async (req: AuthRequest, res) => 
  * POST /api/llm-configs/:id/set-default
  * Set LLM config as default
  */
-router.post('/llm-configs/:id/set-default', requireAuth, async (req: AuthRequest, res) => {
+router.post('/llm-configs/:id/set-default', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const idParam = req.params.id;
     if (Array.isArray(idParam)) {
