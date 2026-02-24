@@ -6,7 +6,7 @@
 /**
  * 期刊来源类型
  */
-export type JournalSourceType = 'cnki' | 'rdfybk' | 'lis';
+export type JournalSourceType = 'cnki' | 'rdfybk' | 'lis' | 'wanfang';
 
 /**
  * 发行周期

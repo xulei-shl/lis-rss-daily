@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 from camoufox.sync_api import Camoufox
 
 from paper_detail import PaperDetailSpider
+from paper_filter import create_default_filter
 
 
 class CNKISpider:
@@ -114,6 +115,9 @@ class CNKISpider:
         self.timeout = timeout
         self.results = []
 
+        # 初始化论文过滤器
+        self.paper_filter = create_default_filter()
+
         # 解析期号
         if isinstance(issues, str):
             self.issues = self.parse_issue_string(issues)
@@ -143,12 +147,7 @@ class CNKISpider:
 
     def _should_skip_title(self, title: str) -> bool:
         """
-        判断是否应该跳过该标题
-
-        跳过规则：
-        1. 空标题
-        2. 标题为 "目录"
-        3. 标题包含非论文关键词
+        判断是否应该跳过该标题（使用统一的论文过滤器）
 
         Args:
             title: 论文标题
@@ -156,22 +155,7 @@ class CNKISpider:
         Returns:
             True 表示跳过，False 表示保留
         """
-        if not title:
-            return True
-
-        title = title.strip()
-
-        # 跳过 "目录"
-        if title == "目录":
-            return True
-
-        # 跳过非论文条目
-        skip_keywords = ["优秀审稿专家", "优秀编委", "优秀论文", "年度优秀", "编者按", "声明", "征稿"]
-        for keyword in skip_keywords:
-            if keyword in title:
-                return True
-
-        return False
+        return self.paper_filter.should_skip(title)
 
     def crawl(self, issue: Optional[int] = None) -> list:
         """

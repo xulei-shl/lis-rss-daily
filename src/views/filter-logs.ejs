@@ -448,7 +448,7 @@ async function loadCrawlLogs(page = 1) {
       params.append('result', crawlCurrentResultFilter);
     }
 
-    const res = await fetch('/api/journals/logs?' + params.toString());
+    const res = await fetch('/api/logs/crawl?' + params.toString());
     const data = await res.json();
 
     crawlCurrentPage = data.page || 1;
@@ -607,7 +607,7 @@ async function loadLogs(page = 1) {
       params.append('isPassed', currentResultFilter === 'passed' ? 'true' : 'false');
     }
 
-    const res = await fetch('/api/filter/logs?' + params.toString());
+    const res = await fetch('/api/logs/filter?' + params.toString());
     const data = await res.json();
 
     currentPage = data.page || 1;

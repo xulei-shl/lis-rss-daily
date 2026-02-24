@@ -1371,7 +1371,8 @@ function renderJournalsTable() {
   const sourceTypeLabels = {
     'cnki': 'CNKI',
     'rdfybk': '人大报刊',
-    'lis': 'LIS'
+    'lis': 'LIS',
+    'wanfang': '万方'
   };
 
   const cycleLabels = {
@@ -1448,7 +1449,8 @@ function updateJournalSourceUI() {
   const urlInput = document.getElementById('journalUrl');
   const codeInput = document.getElementById('journalCode');
 
-  if (sourceType === 'rdfybk') {
+  // rdfybk 和 wanfang 使用 journal code，其他类型使用 source url
+  if (sourceType === 'rdfybk' || sourceType === 'wanfang') {
     urlGroup.style.display = 'none';
     codeGroup.style.display = 'block';
     urlInput.removeAttribute('required');
@@ -1493,8 +1495,8 @@ document.getElementById('journalForm')?.addEventListener('submit', async functio
   const data = {
     name: document.getElementById('journalName').value.trim(),
     sourceType: sourceType,
-    sourceUrl: sourceType !== 'rdfybk' ? document.getElementById('journalUrl').value.trim() : null,
-    journalCode: sourceType === 'rdfybk' ? document.getElementById('journalCode').value.trim() : null,
+    sourceUrl: (sourceType === 'cnki' || sourceType === 'lis') ? document.getElementById('journalUrl').value.trim() : null,
+    journalCode: (sourceType === 'rdfybk' || sourceType === 'wanfang') ? document.getElementById('journalCode').value.trim() : null,
     publicationCycle: document.getElementById('journalPublicationCycle').value,
     issuesPerYear: parseInt(document.getElementById('journalIssuesPerYear').value),
     status: document.getElementById('journalStatus').value

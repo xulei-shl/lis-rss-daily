@@ -21,6 +21,8 @@ from typing import Optional, List, Union
 from camoufox.sync_api import Camoufox
 from camoufox.async_api import AsyncCamoufox
 
+from paper_filter import LISPaperFilter
+
 
 class LISSpider:
     """图书情报知识 (lis.ac.cn) 期刊爬虫类"""
@@ -197,6 +199,9 @@ class LISSpider:
         self.max_retries = max_retries
         self.results = []
 
+        # 初始化论文过滤器（LIS 专用）
+        self.paper_filter = LISPaperFilter()
+
         # 校验年卷期参数并获取卷号
         validation = self.validate_year_volume_issue(year, volume)
         self.volume = validation["volume"]
@@ -218,12 +223,7 @@ class LISSpider:
 
     def _should_skip_title(self, title: str) -> bool:
         """
-        判断是否应该跳过该标题
-
-        跳过规则：
-        1. 标题为 "目录"
-        2. 标题以 "专题：" 开头（但保留具体论文）
-        3. 标题包含 "优秀审稿专家"、"优秀编委"、"优秀论文" 等
+        判断是否应该跳过该标题（使用 LIS 专用过滤器）
 
         Args:
             title: 论文标题
@@ -231,32 +231,7 @@ class LISSpider:
         Returns:
             True 表示跳过，False 表示保留
         """
-        if not title:
-            return True
-
-        title = title.strip()
-
-        # 跳过 "目录"
-        if title == "目录":
-            return True
-
-        # 跳过纯专题标题（不包含具体论文标题）
-        # 格式如 "专题：构建面向强国建设的科技文献资源保障发展体系 序"
-        # 但保留 "专题：xxx 论文标题" 格式中的论文
-        if title.startswith("专题：") and " 序" in title:
-            return True
-        
-        # 跳过《图书情报工作》相关
-        if title.startswith("《图书情报工作》"):
-            return True
-        
-        # 跳过优秀审稿专家、优秀编委、优秀论文等非论文条目
-        skip_keywords = ["优秀审稿专家", "优秀编委", "优秀论文", "年度优秀"]
-        for keyword in skip_keywords:
-            if keyword in title:
-                return True
-            
-        return False
+        return self.paper_filter.should_skip(title)
 
     def _parse_volume_issue(self, text: str) -> tuple:
         """

@@ -270,51 +270,6 @@ router.post('/journals/:id/crawl', requireAuth, async (req: AuthRequest, res) =>
 });
 
 /**
- * GET /api/journals/:id/logs
- * 获取爬取日志
- */
-router.get('/journals/:id/logs', requireAuth, async (req: AuthRequest, res) => {
-  try {
-    const idParam = req.params.id;
-    if (Array.isArray(idParam)) {
-      return res.status(400).json({ error: 'Invalid journal ID' });
-    }
-    const id = parseInt(idParam);
-
-    if (isNaN(id)) {
-      return res.status(400).json({ error: 'Invalid journal ID' });
-    }
-
-    const limit = parseInt(req.query.limit as string) || 50;
-
-    const logs = await journalsService.getCrawlLogs(req.userId!, id, limit);
-
-    res.json({ logs });
-  } catch (error) {
-    log.error({ error, userId: req.userId }, 'Failed to get crawl logs');
-    res.status(500).json({ error: 'Failed to get crawl logs' });
-  }
-});
-
-/**
- * GET /api/journals/logs
- * 获取所有爬取日志（支持分页）
- */
-router.get('/journals/logs', requireAuth, async (req: AuthRequest, res) => {
-  try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-
-    const result = await journalsService.getCrawlLogs(req.userId!, undefined, page, limit);
-
-    res.json(result);
-  } catch (error) {
-    log.error({ error, userId: req.userId }, 'Failed to get crawl logs');
-    res.status(500).json({ error: 'Failed to get crawl logs' });
-  }
-});
-
-/**
  * GET /api/journals/scheduler/status
  * 获取调度器状态
  */

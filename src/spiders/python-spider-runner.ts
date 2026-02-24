@@ -57,6 +57,7 @@ export class PythonSpiderRunner {
         cnki: 'cnki_spider.py',
         rdfybk: 'rdfybk_spider.py',
         lis: 'lis_spider.py',
+        wanfang: 'wanfang_spider.py',
       };
 
       const script = scriptMap[spiderType];
@@ -178,6 +179,18 @@ export class PythonSpiderRunner {
         args.push('-t', '180000');
         // 添加重试次数
         args.push('-r', '3');
+        break;
+
+      case 'wanfang':
+        // 万方爬虫参数
+        // python wanfang_spider.py -j CODE -y YEAR -i ISSUE [-d]
+        if (params.code) {
+          args.push('-j', params.code);
+        }
+        args.push('-y', String(params.year));
+        args.push('-i', String(params.issue));
+        // 获取详情
+        args.push('-d');
         break;
     }
 
