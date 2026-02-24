@@ -21,12 +21,12 @@
 - 文章详情 `/articles/:id`
 - 历史总结 `/history`
 - 搜索 `/search`
+- 日志 `/filter-logs`
 - 登出 `/logout`
 
 ### 1.4 访客不可见页面（仅管理员可见）
 - 设置 `/settings`
 - 主题 `/topics`
-- 日志 `/filter-logs`
 
 ---
 
@@ -83,9 +83,9 @@ flowchart TD
         Nav2[文章]
         Nav3[总结]
         Nav4[搜索]
-        Nav5[设置]
-        Nav6[主题]
-        Nav7[日志]
+        Nav5[日志]
+        Nav6[设置]
+        Nav7[主题]
         Nav8[登出]
     end
 
@@ -94,7 +94,8 @@ flowchart TD
         NavG2[文章]
         NavG3[总结]
         NavG4[搜索]
-        NavG5[登出]
+        NavG5[日志]
+        NavG6[登出]
     end
 ```
 
@@ -219,8 +220,8 @@ cd d:/GITHUB/lis-rss-daily && npm run db:migrate
 - 访客账号：`guest` / `cc@7007`
 
 ### 验证
-- 使用 guest 账号登录后，只能看到首页、文章、总结、搜索四个页面
-- 尝试访问 `/settings`、`/topics`、`/filter-logs` 会被重定向到首页
+- 使用 guest 账号登录后，只能看到首页、文章、总结、搜索、日志五个页面
+- 尝试访问 `/settings`、`/topics` 会被重定向到首页
 - 点击操作按钮会收到 403 权限不足的错误提示
 
 ---
