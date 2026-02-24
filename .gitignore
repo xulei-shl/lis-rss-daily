@@ -1,6 +1,8 @@
 # Dependencies
 node_modules/
 期刊网页定时爬取/
+venv/
+.venv/
 
 向量化参考/
 __pycache__/
@@ -35,4 +37,4 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
-lis-rss/lib/
+lis-rss/

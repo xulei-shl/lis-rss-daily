@@ -22,8 +22,9 @@ export class PythonSpiderRunner {
 
   constructor() {
     // Python 解释器路径，可通过环境变量配置
-    this.pythonPath = process.env.PYTHON_PATH || 'python';
-    
+    // 默认使用项目虚拟环境中的 Python
+    this.pythonPath = process.env.PYTHON_PATH || path.join(process.cwd(), 'venv', 'bin', 'python');
+
     // Python 脚本目录
     // 开发环境：docs/期刊网页定时爬取/
     // 生产环境：需要将脚本复制到相应位置
