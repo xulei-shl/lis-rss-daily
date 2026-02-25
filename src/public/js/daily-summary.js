@@ -52,11 +52,20 @@
 
       currentSummaryType = type;
 
-      // Update empty message
+      // Update empty message based on user role
+      const adminMessage = type === 'journal'
+        ? '点击下方按钮生成今日期刊总结'
+        : '点击下方按钮生成今日博客资讯总结';
+      const guestMessage = type === 'journal'
+        ? '暂无今日期刊总结'
+        : '暂无今日博客资讯总结';
+
       if (emptyMessage) {
-        emptyMessage.textContent = type === 'journal'
-          ? '点击下方按钮生成今日期刊总结'
-          : '点击下方按钮生成今日博客资讯总结';
+        emptyMessage.textContent = window.userRole === 'guest' ? guestMessage : adminMessage;
+      }
+      const guestMessageEl = document.getElementById('emptyMessageGuest');
+      if (guestMessageEl) {
+        guestMessageEl.textContent = guestMessage;
       }
 
       // Load summary for this type
@@ -82,9 +91,16 @@
     });
   }
 
-  // Generate button
+  // Generate button (admin only)
   if (generateBtn) {
     generateBtn.addEventListener('click', async () => {
+      // Check if user is guest
+      if (window.userRole === 'guest') {
+        if (window.toast) {
+          window.toast.error('访客模式下无法生成总结');
+        }
+        return;
+      }
       await generateDailySummary(currentSummaryType);
     });
   }

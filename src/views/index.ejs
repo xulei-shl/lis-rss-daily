@@ -96,9 +96,9 @@
 
         <!-- Empty State -->
         <div class="summary-empty" id="summaryEmpty" style="display: none;">
-          <p id="emptyMessage">点击下方按钮生成今日期刊总结</p>
+          <p id="emptyMessage" class="admin-message">点击下方按钮生成今日期刊总结</p>
+          <p id="emptyMessageGuest" class="guest-message" style="display: none;">暂无今日期刊总结</p>
           <button class="btn btn-primary" id="generateBtn" data-guest-hide>生成总结</button>
-          <p class="guest-only" style="color: var(--text-tertiary); font-size: var(--text-sm); display: none;">访客模式下无法生成总结</p>
         </div>
 
         <!-- Result State -->
@@ -139,6 +139,18 @@
     if (window.userRole === 'guest') {
       document.querySelectorAll('[data-guest-hide]').forEach(el => el.style.display = 'none');
       document.querySelectorAll('.guest-only').forEach(el => el.style.display = 'block');
+      document.querySelectorAll('.admin-message').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.guest-message').forEach(el => el.style.display = 'block');
+    }
+
+    // Initialize empty message based on role
+    const emptyMessage = document.getElementById('emptyMessage');
+    const emptyMessageGuest = document.getElementById('emptyMessageGuest');
+    if (emptyMessage && emptyMessageGuest) {
+      if (window.userRole === 'guest') {
+        emptyMessage.style.display = 'none';
+        emptyMessageGuest.style.display = 'block';
+      }
     }
   </script>
 ` }) %>
