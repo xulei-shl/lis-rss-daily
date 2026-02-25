@@ -108,8 +108,14 @@ export async function getDailyPassedArticles(
 
   // 根据总结类型筛选文章来源
   if (type === 'journal') {
-    // 只包含期刊来源的文章（source_origin = 'journal'）
-    query = query.where('articles.source_origin', '=', 'journal');
+    // 只包含期刊类型文章（包括 source_origin = 'journal' 的期刊文章，和 source_type = 'journal' 的 RSS 源文章）
+    query = query.where((eb) => eb.or([
+      eb('articles.source_origin', '=', 'journal'),                    // 期刊来源文章
+      eb.and([                                                       // RSS 源中的期刊类型
+        eb('articles.source_origin', '=', 'rss'),
+        eb('rss_sources.source_type', '=', 'journal'),
+      ]),
+    ]));
   } else if (type === 'blog_news') {
     // 只包含 RSS 来源的 blog/news 类型文章
     query = query.where('articles.source_origin', '=', 'rss')
