@@ -85,6 +85,24 @@
     z-index: 1000;
 }
 
+/* Custom scrollbar for select dropdown */
+.select-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.select-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.select-dropdown::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+}
+
+.select-dropdown::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
+}
+
 .select-option {
     padding: 10px 12px;
     cursor: pointer;
