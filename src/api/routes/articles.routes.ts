@@ -216,11 +216,11 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .where((eb) => eb.or([
         eb.and([
           eb('articles.rss_source_id', 'is not', null),
-          eb('rss_sources.user_id', '=', req.userId!),
+          eb('rss_sources.user_id', '=', userId),
         ]),
         eb.and([
           eb('articles.journal_id', 'is not', null),
-          eb('journals.user_id', '=', req.userId!),
+          eb('journals.user_id', '=', userId),
         ]),
       ]))
       .where('articles.filter_status', '=', 'passed')
