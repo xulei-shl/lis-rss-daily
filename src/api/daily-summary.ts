@@ -9,7 +9,7 @@ import { logger } from '../logger.js';
 import { getUserLLMProvider } from '../llm.js';
 import { resolveSystemPrompt } from './system-prompts.js';
 import { SOURCE_TYPE_PRIORITY, SOURCE_TYPE_LABELS, type SourceType } from '../constants/source-types.js';
-import { getUserTimezone, buildUtcRangeFromLocalDate } from './timezone.js';
+import { getUserTimezone, buildUtcRangeFromLocalDate, getUserLocalDate } from './timezone.js';
 
 const log = logger.child({ module: 'daily-summary-service' });
 
@@ -196,7 +196,7 @@ export async function generateDailySummary(
   const { userId, date, limit = 30, type = 'all' } = input;
 
   // 默认使用今天日期（用户时区）
-  const today = date || new Date().toISOString().split('T')[0];
+  const today = date || await getUserLocalDate(userId);
 
   // 获取文章列表（根据类型筛选）
   const articles = await getDailyPassedArticles(userId, today, limit, type);
@@ -371,6 +371,6 @@ export async function getTodaySummary(
   userId: number,
   type?: SummaryType
 ): Promise<DailySummariesSelection | undefined> {
-  const today = new Date().toISOString().split('T')[0];
+  const today = await getUserLocalDate(userId);
   return getDailySummaryByDate(userId, today, type);
 }

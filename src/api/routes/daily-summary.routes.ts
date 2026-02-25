@@ -7,6 +7,7 @@ import type { AuthRequest } from '../../middleware/auth.js';
 import { requireAuth, requireCliAuth, requireWriteAccess } from '../../middleware/auth.js';
 import { logger } from '../../logger.js';
 import * as dailySummaryService from '../daily-summary.js';
+import { getUserLocalDate } from '../timezone.js';
 import type { SummaryType } from '../daily-summary.js';
 
 const log = logger.child({ module: 'api-routes/daily-summary' });
@@ -211,7 +212,7 @@ router.post('/daily-summary/cli', requireCliAuth, async (req: AuthRequest, res) 
   try {
     const { date, limit, generateAll } = req.body || {};
     const type = parseSummaryType(req.body?.type);
-    const targetDate = date || new Date().toISOString().split('T')[0];
+    const targetDate = date || await getUserLocalDate(req.userId!);
 
     // 如果请求生成所有类型的总结
     if (generateAll) {
