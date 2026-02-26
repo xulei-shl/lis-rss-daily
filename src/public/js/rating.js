@@ -84,11 +84,11 @@ const RatingComponent = {
         if (!container) return;
 
         const articleId = parseInt(container.dataset.articleId, 10);
-        const success = await this.updateRating(articleId, null);
+        const success = await RatingComponent.updateRating(articleId, null);
 
         if (success) {
           // 更新 UI
-          container.outerHTML = this.renderInput(articleId, null, false);
+          container.outerHTML = RatingComponent.renderInput(articleId, null, false);
         }
         return;
       }
@@ -103,7 +103,7 @@ const RatingComponent = {
 
         // 点击当前已评级的星级 -> 取消评级（toggle 行为）
         const newRating = (currentRating === clickedRating) ? null : clickedRating;
-        const success = await this.updateRating(articleId, newRating);
+        const success = await RatingComponent.updateRating(articleId, newRating);
 
         if (success) {
           // 打标时自动触发已读状态 UI 更新
@@ -121,7 +121,7 @@ const RatingComponent = {
           }
 
           // 更新评级 UI
-          container.outerHTML = this.renderInput(articleId, newRating, false);
+          container.outerHTML = RatingComponent.renderInput(articleId, newRating, false);
         }
       }
     });
