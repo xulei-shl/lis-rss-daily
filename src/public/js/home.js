@@ -360,7 +360,7 @@ function fadeOutAndRemoveCard(card) {
   card.style.maxHeight = '0';
   card.style.margin = '0';
   card.style.overflow = 'hidden';
-  
+
   // 动画结束后移除DOM
   setTimeout(() => {
     card.remove();
@@ -368,6 +368,8 @@ function fadeOutAndRemoveCard(card) {
     checkAndRemoveEmptyDayHeaders();
   }, 300);
 }
+// 导出为全局函数供 rating.js 调用
+window.fadeOutAndRemoveCard = fadeOutAndRemoveCard;
 
 // 检查并移除没有文章的日期分组标题
 function checkAndRemoveEmptyDayHeaders() {

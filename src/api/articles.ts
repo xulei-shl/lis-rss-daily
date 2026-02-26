@@ -1259,10 +1259,13 @@ export async function updateArticleRating(
     throw new Error('Rating must be between 1 and 5');
   }
 
+  // 打标时自动标记为已读（幂等操作，多次设置无副作用）
   const result = await db
     .updateTable('articles')
     .set({
       rating: rating,
+      // 第一次打标时自动标记已读
+      ...(rating !== null && { is_read: 1 }),
       updated_at: now,
     })
     .where('id', '=', articleId)

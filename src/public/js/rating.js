@@ -106,7 +106,21 @@ const RatingComponent = {
         const success = await this.updateRating(articleId, newRating);
 
         if (success) {
-          // 更新 UI
+          // 打标时自动触发已读状态 UI 更新
+          if (newRating !== null) {
+            const card = document.querySelector(`[data-article-id="${articleId}"]`);
+            // 首页未读文章打标后淡出移除
+            if (card && card.classList.contains('article-card') && !card.classList.contains('is-read')) {
+              if (typeof window.fadeOutAndRemoveCard === 'function') {
+                window.fadeOutAndRemoveCard(card);
+              } else {
+                // 如果没有淡出函数，添加已读样式
+                card.classList.add('is-read');
+              }
+            }
+          }
+
+          // 更新评级 UI
           container.outerHTML = this.renderInput(articleId, newRating, false);
         }
       }
