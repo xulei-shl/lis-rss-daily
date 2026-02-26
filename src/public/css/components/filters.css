@@ -28,14 +28,12 @@
   /* Aligns labels and inputs vertically */
 }
 
-/* 
-  ROW 1: Source + Date Range 
-  Logic: Source takes 1/3 width, Date takes 2/3 width.
-  Aligns with Status+Process (1/3) and Read+Search (2/3) roughly, 
-  ensuring a clean vertical rhythm.
+/*
+  ROW 1: Source + Date Range + Rating
+  Logic: Source(1), Date(1.5), Rating(1.5) - balanced for visual harmony.
 */
 .filter-row:first-child {
-  grid-template-columns: 1fr 2fr;
+  grid-template-columns: 1fr 1.5fr 1fr;
 }
 
 /* 
@@ -253,15 +251,13 @@
 
 @media (max-width: 1024px) {
 
-  /* Tablet: Stack closer */
+  /* Tablet: 3 columns for row 1, 4 columns for row 2 */
   .filter-row:first-child {
-    grid-template-columns: 1fr 1fr;
-    /* 50/50 */
+    grid-template-columns: 1fr 1fr 1fr;
   }
 
   .filter-row:nth-child(2) {
     grid-template-columns: 1fr 1fr 1fr 1fr;
-    /* Equal */
   }
 }
 

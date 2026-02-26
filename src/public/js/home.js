@@ -135,7 +135,10 @@ function renderArticleCard(article, index) {
   html += '<span class="badge ' + article.filter_status + '">' + (statusLabel[article.filter_status] || '未知') + '</span></div>';
   html += '<div class="article-meta"><span>' + escapeHtml(article.source_name || article.rss_source_name || 'Unknown') + '</span><span>·</span>';
   html += '<span>' + getPublishTimeText(article) + '</span><span>·</span>';
-  html += '<a href="' + escapeHtml(article.url) + '" target="_blank" rel="noopener">原文链接</a></div>';
+  html += '<a href="' + escapeHtml(article.url) + '" target="_blank" rel="noopener">原文链接</a>';
+  // 添加评级组件
+  html += '<span>·</span>' + renderRatingInput(article.id, article.rating, window.userRole === 'guest');
+  html += '</div>';
   
   if (hasContent) {
     html += '<div class="article-summary">';

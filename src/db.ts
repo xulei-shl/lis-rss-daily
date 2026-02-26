@@ -89,6 +89,7 @@ export interface ArticlesTable {
   is_read: number;  // 0 = 未读, 1 = 已读
   source_origin: 'rss' | 'journal';  // 文章来源
   journal_id: number | null;  // 期刊ID（RSS文章为 null）
+  rating: number | null;  // 文章评级（1-5星）
   created_at: Generated<string>;
   updated_at: string;
 }

@@ -434,6 +434,21 @@ CREATE TABLE IF NOT EXISTS journal_crawl_logs (
         continue;
       }
 
+      // ============================================================
+      // 019: 添加文章评级字段
+      // ============================================================
+      if (file === '019_add_article_rating.sql') {
+        const hasRating = hasColumn(db, 'articles', 'rating');
+        if (!hasRating) {
+          db.exec('ALTER TABLE articles ADD COLUMN rating INTEGER CHECK(rating IS NULL OR (rating >= 1 AND rating <= 5));');
+          db.exec('CREATE INDEX IF NOT EXISTS idx_articles_rating ON articles(rating) WHERE rating IS NOT NULL;');
+          console.log('      → Added rating column to articles table');
+        } else {
+          console.log('      → Skipped (rating column already exists)');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

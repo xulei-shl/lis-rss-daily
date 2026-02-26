@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS articles (
   source_origin TEXT DEFAULT 'rss' CHECK(source_origin IN ('rss', 'journal')),  -- 文章来源
   journal_id INTEGER,  -- 期刊ID（RSS文章为 null）
   error_message TEXT,
+  rating INTEGER CHECK(rating IS NULL OR (rating >= 1 AND rating <= 5)),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (rss_source_id) REFERENCES rss_sources(id) ON DELETE CASCADE,
@@ -90,6 +91,7 @@ CREATE INDEX IF NOT EXISTS idx_articles_journal_id ON articles(journal_id);
 CREATE INDEX IF NOT EXISTS idx_articles_published_year ON articles(published_year);
 CREATE INDEX IF NOT EXISTS idx_articles_published_issue ON articles(published_issue);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_title_normalized ON articles(title_normalized) WHERE title_normalized IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_articles_rating ON articles(rating) WHERE rating IS NOT NULL;
 
 -- ===========================================
 -- 4. Topic Domains Table

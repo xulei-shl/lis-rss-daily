@@ -1,0 +1,60 @@
+/**
+ * Rating Component Styles
+ * 文章星级评分组件样式
+ */
+
+/* 评级容器 */
+.rating-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  user-select: none;
+}
+
+/* 单个星星 */
+.rating-star {
+  color: var(--border-strong);
+  font-size: 14px;
+  transition: color 0.15s ease;
+}
+
+/* 填充状态（已评级） */
+.rating-star.filled {
+  color: #fbbf24;
+}
+
+/* 交互模式 */
+.rating-input .rating-star {
+  cursor: pointer;
+}
+
+.rating-input .rating-star:hover {
+  color: #fbbf24;
+}
+
+.rating-input .rating-star.active {
+  color: #fbbf24;
+}
+
+/* guest 只读模式 */
+.rating-display .rating-star {
+  cursor: default;
+}
+
+/* 清除评级按钮 */
+.rating-clear {
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rating-input:hover .rating-clear {
+  opacity: 1;
+}
+
+.rating-clear:hover {
+  color: var(--danger-color);
+}

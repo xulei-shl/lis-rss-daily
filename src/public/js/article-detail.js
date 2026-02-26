@@ -114,6 +114,12 @@ function renderArticle(article) {
       '<a href="' + escapeHtml(article.url) + '" target="_blank" rel="noopener">' +
         '原文链接' +
       '</a>' +
+    '</div>' +
+    '<div class="article-meta-item">' +
+      '<span>·</span>' +
+    '</div>' +
+    '<div class="article-meta-item">' +
+      renderRatingInput(article.id, article.rating, window.userRole === 'guest') +
     '</div>';
   document.getElementById('articleMeta').innerHTML = metaHtml;
 

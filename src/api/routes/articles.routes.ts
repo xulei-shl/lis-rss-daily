@@ -90,6 +90,10 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
     const isRead = isReadParam === 'true' ? true : isReadParam === 'false' ? false : undefined;
     const rssSourceIds = normalizeQueryIds(req.query.rssSourceIds as string | string[] | undefined);
     const journalIds = normalizeQueryIds(req.query.journalIds as string | string[] | undefined);
+    // 评级筛选
+    const ratingParam = req.query.rating as string | undefined;
+    const rating = ratingParam === 'unrated' ? undefined : parseOptionalNumber(ratingParam);
+    const ratingNull = ratingParam === 'unrated' ? true : undefined;
 
     const result = await articleService.getUserArticles(req.effectiveUserId!, {
       page,
@@ -106,6 +110,8 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
       createdBefore,
       skipDaysFilterForSearch,
       isRead,
+      rating,
+      ratingNull,
     });
 
     res.json(result);
@@ -538,6 +544,40 @@ router.post('/articles/mark-all-read', requireAuth, requireWriteAccess, async (r
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to mark all articles as read');
     res.status(500).json({ error: 'Failed to mark all articles as read' });
+  }
+});
+
+/**
+ * PATCH /api/articles/:id/rating
+ * Update article rating
+ * Requires admin role (not guest)
+ */
+router.patch('/articles/:id/rating', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
+  try {
+    const idParam = req.params.id;
+    if (typeof idParam !== 'string') {
+      return res.status(400).json({ error: 'Invalid article ID' });
+    }
+    const id = parseInt(idParam);
+
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid article ID' });
+    }
+
+    const { rating } = req.body;
+    if (rating !== null && (typeof rating !== 'number' || rating < 1 || rating > 5)) {
+      return res.status(400).json({ error: 'Rating must be null or a number between 1 and 5' });
+    }
+
+    await articleService.updateArticleRating(id, req.effectiveUserId!, rating);
+
+    res.json({ success: true, rating });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Article not found') {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    log.error({ error, userId: req.userId }, 'Failed to update article rating');
+    res.status(500).json({ error: 'Failed to update article rating' });
   }
 });
 

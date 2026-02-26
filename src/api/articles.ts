@@ -65,6 +65,7 @@ export interface ArticleWithSource {
   error_message: string | null;
   is_read: number;  // 0 = 未读, 1 = 已读
   source_origin: 'rss' | 'journal';  // 文章来源
+  rating: number | null;  // 文章评级（1-5星）
   created_at: string;
   updated_at: string;
 }
@@ -370,6 +371,7 @@ export async function getArticleById(
       'articles.error_message',
       'articles.is_read',
       'articles.source_origin',
+      'articles.rating',
       'articles.created_at',
       'articles.updated_at',
       'rss_sources.name as rss_source_name',
@@ -524,6 +526,10 @@ export async function getUserArticles(
     skipDaysFilterForSearch?: boolean;
     /** 已读状态过滤 */
     isRead?: boolean;
+    /** 评级筛选 */
+    rating?: number;
+    /** 筛选未评级文章 */
+    ratingNull?: boolean;
   } = {}
 ): Promise<PaginatedArticlesResult> {
   const db = getDb();
@@ -589,6 +595,13 @@ export async function getUserArticles(
 
   if (options.isRead !== undefined) {
     query = query.where('articles.is_read', '=', options.isRead ? 1 : 0);
+  }
+
+  // 评级筛选
+  if (options.ratingNull === true) {
+    query = query.where('articles.rating', 'is', null);
+  } else if (options.rating !== undefined) {
+    query = query.where('articles.rating', '=', options.rating);
   }
 
   if (options.search !== undefined && options.search.trim() !== '') {
@@ -662,6 +675,12 @@ export async function getUserArticles(
   if (options.isRead !== undefined) {
     articlesQuery = articlesQuery.where('articles.is_read', '=', options.isRead ? 1 : 0);
   }
+  // 评级筛选
+  if (options.ratingNull === true) {
+    articlesQuery = articlesQuery.where('articles.rating', 'is', null);
+  } else if (options.rating !== undefined) {
+    articlesQuery = articlesQuery.where('articles.rating', '=', options.rating);
+  }
   if (options.search !== undefined && options.search.trim() !== '') {
     const searchTerm = `%${options.search.trim()}%`;
     articlesQuery = articlesQuery.where((eb) => eb.or([
@@ -710,6 +729,7 @@ export async function getUserArticles(
       'articles.error_message',
       'articles.is_read',
       'articles.source_origin',
+      'articles.rating',
       'articles.created_at',
       'articles.updated_at',
       'rss_sources.name as rss_source_name',
@@ -1220,3 +1240,51 @@ export async function getMergedSources(userId: number): Promise<MergedSourceOpti
   return Array.from(sourceMap.values()).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
 }
 
+/**
+ * 更新文章评级
+ * @param articleId - Article ID
+ * @param userId - User ID (for permission check)
+ * @param rating - Rating value (1-5) or null to clear
+ */
+export async function updateArticleRating(
+  articleId: number,
+  userId: number,
+  rating: number | null
+): Promise<void> {
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  // 验证评级值
+  if (rating !== null && (rating < 1 || rating > 5)) {
+    throw new Error('Rating must be between 1 and 5');
+  }
+
+  const result = await db
+    .updateTable('articles')
+    .set({
+      rating: rating,
+      updated_at: now,
+    })
+    .where('id', '=', articleId)
+    .where((eb) => eb.or([
+      eb.and([
+        eb('articles.rss_source_id', 'is not', null),
+        eb('articles.rss_source_id', 'in', (eb) =>
+          eb.selectFrom('rss_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.journal_id', 'is not', null),
+        eb('articles.journal_id', 'in', (eb) =>
+          eb.selectFrom('journals').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+    ]))
+    .executeTakeFirst();
+
+  if (result.numUpdatedRows === 0n) {
+    throw new Error('Article not found');
+  }
+
+  log.info({ articleId, userId, rating }, 'Article rating updated');
+}

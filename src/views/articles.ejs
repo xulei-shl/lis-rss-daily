@@ -1,5 +1,5 @@
 <%
-const pageStyles = '<link rel="stylesheet" href="/css/pages/articles-list.css">';
+const pageStyles = '<link rel="stylesheet" href="/css/pages/articles-list.css"><link rel="stylesheet" href="/css/components/rating.css">';
 const isGuest = user && user.role === 'guest';
 const isGuestValue = isGuest ? 'true' : 'false';
 const pageActions = isGuest ? '' : `
@@ -36,6 +36,19 @@ const pageActions = isGuest ? '' : `
           <span class="date-separator">—</span>
           <input type="date" id="dateTo" class="filter-date" placeholder="结束日期" title="结束日期">
         </div>
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">评级</span>
+        <select id="filterRating" class="filter-select">
+          <option value="">全部</option>
+          <option value="unrated">未评级</option>
+          <option value="5">★★★★★</option>
+          <option value="4">★★★★</option>
+          <option value="3">★★★</option>
+          <option value="2">★★</option>
+          <option value="1">★</option>
+        </select>
       </div>
     </div>
 
@@ -125,7 +138,7 @@ const pageActions = isGuest ? '' : `
         }, 300);
       });
 
-      ['filterStatus', 'filterProcess', 'filterRead'].forEach(id => {
+      ['filterStatus', 'filterProcess', 'filterRead', 'filterRating'].forEach(id => {
         document.getElementById(id).addEventListener('change', () => {
           currentPage = 1;
           loadArticles();
@@ -275,6 +288,7 @@ const pageActions = isGuest ? '' : `
       const searchQuery = document.getElementById('searchInput').value.trim();
       const dateFrom = document.getElementById('dateFrom').value;
       const dateTo = document.getElementById('dateTo').value;
+      const filterRating = document.getElementById('filterRating').value;
 
       // 日期范围优先于默认的 daysAgo
       const hasDateRange = dateFrom || dateTo;
@@ -300,6 +314,8 @@ const pageActions = isGuest ? '' : `
       if (searchQuery) params.append('search', searchQuery);
       if (dateFrom) params.append('createdAfter', dateFrom);
       if (dateTo) params.append('createdBefore', dateTo);
+      // 评级筛选
+      if (filterRating) params.append('rating', filterRating);
       // 只有在没有日期范围时才使用默认的30天过滤
       if (!hasDateRange) {
         params.append('daysAgo', '30');
@@ -387,6 +403,8 @@ const summary = article.summary_zh || article.content || article.markdown_conten
         <span>处理状态: \${processStatusLabel[article.process_status] || article.process_status}</span>
         <span class="article-meta-divider">·</span>
         <a href="\${escapeHtml(article.url)}" target="_blank" rel="noopener">原文</a>
+        <span class="article-meta-divider">·</span>
+        \${renderRatingInput(article.id, article.rating, isGuest)}
       </div>
       \${summary ? \`<div class="article-summary">\${escapeHtml(truncate(summary, 200))}</div>\` : ''}
       <div class="article-footer">
@@ -783,4 +801,5 @@ async function markAllAsRead() {
   }
 }
   </script>
+  <script src="/js/rating.js"></script>
   ` }) %>

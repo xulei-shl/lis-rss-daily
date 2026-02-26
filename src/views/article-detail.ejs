@@ -1,4 +1,4 @@
-<%- include('layout', { pageTitle: pageTitle, pageStyles: '<link rel="stylesheet" href="/css/pages/article-detail.css">'
+<%- include('layout', { pageTitle: pageTitle, pageStyles: '<link rel="stylesheet" href="/css/pages/article-detail.css"><link rel="stylesheet" href="/css/components/rating.css">'
   , body: ` <!-- Back Navigation -->
   <nav class="back-nav">
     <a href="/articles" class="back-link">
@@ -128,5 +128,6 @@
     </div>
   </div>
 
+  <script src="/js/rating.js"></script>
   <script src="/js/article-detail.js"></script>
   ` }) %>
