@@ -98,7 +98,11 @@ const RatingComponent = {
         if (!container || container.classList.contains('rating-display')) return;
 
         const articleId = parseInt(container.dataset.articleId, 10);
-        const newRating = parseInt(star.dataset.rating, 10);
+        const clickedRating = parseInt(star.dataset.rating, 10);
+        const currentRating = parseInt(container.dataset.currentRating, 10) || 0;
+
+        // 点击当前已评级的星级 -> 取消评级（toggle 行为）
+        const newRating = (currentRating === clickedRating) ? null : clickedRating;
         const success = await this.updateRating(articleId, newRating);
 
         if (success) {
@@ -153,4 +157,6 @@ const RatingComponent = {
 // 导出全局函数
 window.renderRatingDisplay = RatingComponent.renderDisplay.bind(RatingComponent);
 window.renderRatingInput = RatingComponent.renderInput.bind(RatingComponent);
-window.initRatingInputs = RatingComponent.initInputs.bind(RatingComponent);
+
+// 自动初始化事件监听（使用事件委托，无需等待 DOM）
+RatingComponent.initInputs();
