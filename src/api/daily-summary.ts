@@ -35,7 +35,7 @@ export interface DailySummaryArticle {
 export interface DailySummaryInput {
   userId: number;
   date?: string; // YYYY-MM-DD 格式，默认今天
-  limit?: number; // 默认 30
+  limit?: number; // 已废弃，使用 type 决定数量
   type?: SummaryType; // 总结类型
 }
 
@@ -73,11 +73,15 @@ export interface SaveDailySummaryInput {
 /**
  * 获取当日通过的文章，按源类型排序
  * @param type - 总结类型，用于筛选文章来源
+ *
+ * 数量限制：
+ * - journal: 50篇
+ * - blog_news: 30篇
+ * - all: 60篇（优先40篇期刊，不足或剩余部分由博客/资讯补足）
  */
 export async function getDailyPassedArticles(
   userId: number,
   dateStr: string,
-  limit: number = 30,
   type?: SummaryType
 ): Promise<DailySummaryArticle[]> {
   const db = getDb();
@@ -86,44 +90,103 @@ export async function getDailyPassedArticles(
   const timezone = await getUserTimezone(userId);
 
   // 计算日期范围（将本地日期转换为 UTC 时间范围）
-  // 例如：本地日期 2026-02-15 (UTC+8) -> UTC 范围 [2026-02-14T16:00:00Z, 2026-02-15T15:59:59Z]
   const [startDate, endDate] = buildUtcRangeFromLocalDate(dateStr, timezone);
 
   log.info({ userId, date: dateStr, timezone, startDate, endDate, type }, 'Daily article query date range');
 
-  // 使用 LEFT JOIN 同时支持 RSS 和期刊来源的文章
-  // - RSS 文章：通过 rss_source_id 关联 rss_sources 表
-  // - 期刊文章：rss_source_id 为 null，通过 journal_id 关联
-  let query = db
-    .selectFrom('articles')
-    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-    .leftJoin('journals', 'journals.id', 'articles.journal_id')
-    .where('articles.filter_status', '=', 'passed')
-    .where((eb) => eb.or([
-      eb('rss_sources.user_id', '=', userId),  // RSS 文章的用户匹配
-      eb('journals.user_id', '=', userId),     // 期刊文章的用户匹配
-    ]))
-    .where('articles.created_at', '>=', startDate)
-    .where('articles.created_at', '<=', endDate);
+  // 定义数量限制
+  const JOURNAL_LIMIT = 50;
+  const BLOG_NEWS_LIMIT = 30;
+  const ALL_TOTAL_LIMIT = 60;
+  const ALL_JOURNAL_PRIORITY = 40; // all 类型中期刊的优先数量
 
-  // 根据总结类型筛选文章来源
+  // 辅助函数：构建基础查询
+  const buildBaseQuery = () => {
+    return db
+      .selectFrom('articles')
+      .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+      .leftJoin('journals', 'journals.id', 'articles.journal_id')
+      .where('articles.filter_status', '=', 'passed')
+      .where((eb) => eb.or([
+        eb('rss_sources.user_id', '=', userId),
+        eb('journals.user_id', '=', userId),
+      ]))
+      .where('articles.created_at', '>=', startDate)
+      .where('articles.created_at', '<=', endDate);
+  };
+
+  // 辅助函数：执行查询并转换结果
+  const executeQuery = async (query: any, limit: number) => {
+    const articles = await query
+      .select((eb) => [
+        'articles.id',
+        'articles.title',
+        'articles.url',
+        'articles.summary',
+        'articles.markdown_content',
+        'articles.published_at',
+        eb.fn.coalesce('rss_sources.name', 'journals.name').as('source_name'),
+        eb.fn.coalesce('rss_sources.source_type', eb.val<'journal' | 'blog' | 'news'>('journal')).as('source_type'),
+      ])
+      .orderBy('articles.created_at', 'desc')
+      .limit(limit)
+      .execute();
+
+    return articles.map((row: any) => ({
+      id: row.id,
+      title: row.title,
+      url: row.url,
+      summary: row.summary,
+      markdown_content: row.markdown_content,
+      source_name: row.source_name || '未知来源',
+      source_type: row.source_type || 'blog',
+      published_at: row.published_at,
+    }));
+  };
+
+  let result: DailySummaryArticle[] = [];
+
   if (type === 'journal') {
-    // 只包含期刊类型文章（包括 source_origin = 'journal' 的期刊文章，和 source_type = 'journal' 的 RSS 源文章）
-    query = query.where((eb) => eb.or([
-      eb('articles.source_origin', '=', 'journal'),                    // 期刊来源文章
-      eb.and([                                                       // RSS 源中的期刊类型
+    // 只获取期刊文章，最多50篇
+    const query = buildBaseQuery().where((eb) => eb.or([
+      eb('articles.source_origin', '=', 'journal'),
+      eb.and([
         eb('articles.source_origin', '=', 'rss'),
         eb('rss_sources.source_type', '=', 'journal'),
       ]),
     ]));
-  } else if (type === 'blog_news') {
-    // 只包含 RSS 来源的 blog/news 类型文章
-    query = query.where('articles.source_origin', '=', 'rss')
-      .where('rss_sources.source_type', 'in', ['blog', 'news']);
-  }
-  // type 为 undefined 或 'all' 时不筛选（包含所有来源）
+    result = await executeQuery(query, JOURNAL_LIMIT);
 
-  const articles = await query
+  } else if (type === 'blog_news') {
+    // 只获取博客/资讯文章，最多30篇
+    const query = buildBaseQuery()
+      .where('articles.source_origin', '=', 'rss')
+      .where('rss_sources.source_type', 'in', ['blog', 'news']);
+    result = await executeQuery(query, BLOG_NEWS_LIMIT);
+
+  } else {
+    // type === 'all' 或 undefined：优先获取40篇期刊，不足或剩余部分由博客/资讯补足
+    const journalQuery = buildBaseQuery().where((eb) => eb.or([
+      eb('articles.source_origin', '=', 'journal'),
+      eb.and([
+        eb('articles.source_origin', '=', 'rss'),
+        eb('rss_sources.source_type', '=', 'journal'),
+      ]),
+    ]));
+    const journalArticles = await executeQuery(journalQuery, ALL_JOURNAL_PRIORITY);
+
+    const remainingCount = ALL_TOTAL_LIMIT - journalArticles.length;
+    let blogNewsArticles: DailySummaryArticle[] = [];
+
+    if (remainingCount > 0) {
+      const blogNewsQuery = buildBaseQuery()
+        .where('articles.source_origin', '=', 'rss')
+        .where('rss_sources.source_type', 'in', ['blog', 'news']);
+      blogNewsArticles = await executeQuery(blogNewsQuery, remainingCount);
+    }
+
+    result = [...journalArticles, ...blogNewsArticles];
+  }
     .select((eb) => [
       'articles.id',
       'articles.title',
@@ -152,14 +215,14 @@ export async function getDailyPassedArticles(
     published_at: row.published_at,
   }));
 
-  // 按源类型优先级排序
+  // 按源类型优先级排序（保持一致性）
   result.sort((a, b) => {
     const priorityA = SOURCE_TYPE_PRIORITY[a.source_type] ?? 999;
     const priorityB = SOURCE_TYPE_PRIORITY[b.source_type] ?? 999;
     return priorityA - priorityB;
   });
 
-  log.info({ userId, date: dateStr, count: result.length }, 'Fetched daily articles for summary');
+  log.info({ userId, date: dateStr, count: result.length, type }, 'Fetched daily articles for summary');
 
   return result;
 }
@@ -199,13 +262,13 @@ function buildArticlesListText(articlesByType: {
 export async function generateDailySummary(
   input: DailySummaryInput
 ): Promise<DailySummaryResult> {
-  const { userId, date, limit = 30, type = 'all' } = input;
+  const { userId, date, type = 'all' } = input;
 
   // 默认使用今天日期（用户时区）
   const today = date || await getUserLocalDate(userId);
 
-  // 获取文章列表（根据类型筛选）
-  const articles = await getDailyPassedArticles(userId, today, limit, type);
+  // 获取文章列表（根据类型自动决定数量）
+  const articles = await getDailyPassedArticles(userId, today, type);
 
   if (articles.length === 0) {
     return {
