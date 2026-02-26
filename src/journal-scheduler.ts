@@ -635,7 +635,7 @@ export class JournalScheduler {
 export function initJournalScheduler(): JournalScheduler {
   const config: JournalSchedulerConfig = {
     enabled: process.env.JOURNAL_CRAWL_ENABLED !== 'false',
-    schedule: process.env.JOURNAL_CRAWL_SCHEDULE || '0 20 * * 6', // 每周六晚上 20:00
+    schedule: process.env.JOURNAL_CRAWL_SCHEDULE || '15 2 * * 6', // 每周六凌晨 2:15
     journalInterval: parseInt(process.env.JOURNAL_INTERVAL || '180000', 10), // 3 分钟
     journalIntervalRandom: parseInt(process.env.JOURNAL_INTERVAL_RANDOM || '30000', 10), // 30 秒
     timeout: parseInt(process.env.SPIDER_TIMEOUT || '300000', 10), // 5 分钟

@@ -84,7 +84,7 @@ async function main() {
   // Initialize and start Journal scheduler
   const journalScheduler = initJournalScheduler();
   const journalCrawlEnabled = process.env.JOURNAL_CRAWL_ENABLED !== 'false';
-  const journalCrawlSchedule = process.env.JOURNAL_CRAWL_SCHEDULE || '0 20 * * 6';
+  const journalCrawlSchedule = process.env.JOURNAL_CRAWL_SCHEDULE || '15 2 * * 6';
   if (journalCrawlEnabled) {
     journalScheduler.start();
     log.info(`📚 Journal scheduler started (schedule: ${journalCrawlSchedule})`);
