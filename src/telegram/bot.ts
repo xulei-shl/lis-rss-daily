@@ -578,6 +578,7 @@ export class TelegramBot {
       filterStatus: 'passed',
       limit: 5,
       page: 1,
+      randomOrder: true,
     });
 
     const articles = result.articles;

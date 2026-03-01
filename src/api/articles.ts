@@ -6,6 +6,7 @@
  */
 
 import { getDb, type DatabaseTable } from '../db.js';
+import { sql } from 'kysely';
 import { logger } from '../logger.js';
 import type { RSSFeedItem } from '../rss-parser.js';
 import { toSimpleMarkdown } from '../utils/markdown.js';
@@ -532,6 +533,8 @@ export async function getUserArticles(
     rating?: number;
     /** 筛选未评级文章 */
     ratingNull?: boolean;
+    /** 随机排序（SQLite RANDOM()） */
+    randomOrder?: boolean;
   } = {}
 ): Promise<PaginatedArticlesResult> {
   const db = getDb();
@@ -708,37 +711,43 @@ export async function getUserArticles(
     articlesQuery = articlesQuery.where('articles.created_at', '<=', endDate);
   }
 
-  // Get paginated results with translation
-  const articles = await articlesQuery
-    .select([
-      'articles.id',
-      'articles.rss_source_id',
-      'articles.journal_id',
-      'articles.title',
-      'articles.url',
-      'articles.summary',
-      'articles.content',
-      'articles.markdown_content',
-      'articles.filter_status',
-      'articles.filter_score',
-      'articles.filtered_at',
-      'articles.process_status',
-      'articles.processed_at',
-      'articles.published_at',
-      'articles.published_year',
-      'articles.published_issue',
-      'articles.published_volume',
-      'articles.error_message',
-      'articles.is_read',
-      'articles.source_origin',
-      'articles.rating',
-      'articles.created_at',
-      'articles.updated_at',
-      'rss_sources.name as rss_source_name',
-      'journals.name as journal_name',
-      'article_translations.summary_zh',
-    ])
-    .orderBy('articles.created_at', 'desc')
+  // Build select query
+  const selectQuery = articlesQuery.select([
+    'articles.id',
+    'articles.rss_source_id',
+    'articles.journal_id',
+    'articles.title',
+    'articles.url',
+    'articles.summary',
+    'articles.content',
+    'articles.markdown_content',
+    'articles.filter_status',
+    'articles.filter_score',
+    'articles.filtered_at',
+    'articles.process_status',
+    'articles.processed_at',
+    'articles.published_at',
+    'articles.published_year',
+    'articles.published_issue',
+    'articles.published_volume',
+    'articles.error_message',
+    'articles.is_read',
+    'articles.source_origin',
+    'articles.rating',
+    'articles.created_at',
+    'articles.updated_at',
+    'rss_sources.name as rss_source_name',
+    'journals.name as journal_name',
+    'article_translations.summary_zh',
+  ]);
+
+  // Apply ordering (random or by created_at desc)
+  const orderedQuery = options.randomOrder
+    ? selectQuery.orderBy(sql`RANDOM()`)
+    : selectQuery.orderBy('articles.created_at', 'desc');
+
+  // Get paginated results
+  const articles = await orderedQuery
     .limit(limit)
     .offset(offset)
     .execute();
