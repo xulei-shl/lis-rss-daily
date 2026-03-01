@@ -4,7 +4,7 @@
  * Format data into Telegram messages with appropriate length limits.
  */
 
-import type { DailySummaryData } from './types.js';
+import type { DailySummaryData, InlineKeyboardMarkup } from './types.js';
 
 const MAX_MESSAGE_LENGTH = 4096;
 const MAX_SUMMARY_LENGTH = 3500; // Leave room for header and footer
@@ -135,4 +135,71 @@ export function formatNewArticle(data: {
   }
 
   return message;
+}
+
+/**
+ * Create article action keyboard
+ * @param articleId - Article ID
+ * @param isRead - Current read status
+ * @param currentRating - Current rating (1-5 or null)
+ */
+export function createArticleKeyboard(
+  articleId: number,
+  isRead: boolean,
+  currentRating: number | null
+): InlineKeyboardMarkup {
+  // Rating button text
+  let ratingText = '⭐ 评分';
+  if (currentRating !== null) {
+    ratingText = '⭐'.repeat(currentRating);
+  }
+
+  // Read status button text
+  const readText = isRead ? '✅ 已读' : '📖 标记已读';
+
+  return {
+    inline_keyboard: [
+      [
+        { text: ratingText, callback_data: `sr:${articleId}` },
+      ],
+      [
+        { text: readText, callback_data: `mr:${articleId}` },
+      ],
+    ],
+  };
+}
+
+/**
+ * Create rating selection keyboard
+ * @param articleId - Article ID
+ */
+export function createRatingKeyboard(
+  articleId: number
+): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [
+        { text: '1⃣', callback_data: `rt:${articleId}:1` },
+        { text: '2⃣', callback_data: `rt:${articleId}:2` },
+        { text: '3⃣', callback_data: `rt:${articleId}:3` },
+      ],
+      [
+        { text: '4⃣', callback_data: `rt:${articleId}:4` },
+        { text: '5⃣', callback_data: `rt:${articleId}:5` },
+        { text: '', callback_data: '' }, // Empty placeholder
+      ].filter((btn) => btn.text !== ''), // Remove empty button
+      [
+        { text: '❌ 取消', callback_data: `cl:${articleId}` },
+      ],
+    ],
+  };
+}
+
+/**
+ * Create empty keyboard (to remove inline keyboard)
+ */
+export function createEmptyKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [],
+  };
 }

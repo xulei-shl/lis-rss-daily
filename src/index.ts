@@ -12,6 +12,7 @@ import { initRSSParser } from './rss-parser.js';
 import { initRSSScheduler } from './rss-scheduler.js';
 import { initRelatedScheduler } from './related-scheduler.js';
 import { initJournalScheduler } from './journal-scheduler.js';
+import { initTelegramBotManager } from './telegram/bot-manager.js';
 import { config } from './config.js';
 import { createApp, startServer } from './api/web.js';
 import path from 'path';
@@ -92,6 +93,14 @@ async function main() {
     log.info('📚 Journal scheduler disabled');
   }
 
+  // Initialize and start Telegram Bot
+  const telegramBotManager = await initTelegramBotManager();
+  if (telegramBotManager) {
+    log.info('🤖 Telegram bot manager started');
+  } else {
+    log.info('🤖 Telegram bot manager: No enabled users');
+  }
+
   // Keep process running
   log.info('✅ Application ready. Press Ctrl+C to stop.');
 
@@ -110,6 +119,12 @@ async function main() {
     // Stop journal scheduler
     await journalScheduler.stop();
     log.info('📚 Journal scheduler stopped');
+
+    // Stop Telegram bot manager
+    if (telegramBotManager) {
+      await telegramBotManager.stop();
+      log.info('🤖 Telegram bot manager stopped');
+    }
 
     server.close(() => {
       log.info('🌐 Web server closed');

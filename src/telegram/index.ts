@@ -7,7 +7,7 @@
 
 import { logger } from '../logger.js';
 import { TelegramClient } from './client.js';
-import { formatDailySummary, formatNewArticle } from './formatters.js';
+import { formatDailySummary, formatNewArticle, createArticleKeyboard } from './formatters.js';
 import type { TelegramConfig, DailySummaryData } from './types.js';
 import { getUserSettings } from '../api/settings.js';
 import type { ArticleWithSource } from '../api/articles.js';
@@ -186,7 +186,14 @@ class TelegramNotifier {
         summary,
       });
 
-      const result = await client.sendMessage(config.chatId, message, 'HTML');
+      // Create inline keyboard for article actions
+      const keyboard = createArticleKeyboard(
+        article.id,
+        article.is_read === 1,
+        article.rating
+      );
+
+      const result = await client.sendMessageWithKeyboard(config.chatId, message, keyboard, 'HTML');
 
       if (result.ok) {
         log.info({

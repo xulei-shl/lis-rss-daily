@@ -36,3 +36,67 @@ export interface TelegramMessageResponse {
   error_code?: number;
   description?: string;
 }
+
+/**
+ * Inline Keyboard Button
+ */
+export interface InlineKeyboardButton {
+  text: string;
+  callback_data?: string;
+}
+
+/**
+ * Inline Keyboard Markup
+ */
+export interface InlineKeyboardMarkup {
+  inline_keyboard: InlineKeyboardButton[][];
+}
+
+/**
+ * Telegram User
+ */
+export interface TelegramUser {
+  id: number;
+  is_bot: boolean;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  language_code?: string;
+}
+
+/**
+ * Callback Query
+ */
+export interface CallbackQuery {
+  id: string;
+  from: TelegramUser;
+  message?: {
+    message_id: number;
+    chat: {
+      id: number;
+      type: string;
+    };
+    date: number;
+    text?: string;
+  };
+  data: string;
+  chat_instance?: string;
+}
+
+/**
+ * Update from Telegram getUpdates
+ */
+export interface TelegramUpdate {
+  update_id: number;
+  callback_query?: CallbackQuery;
+}
+
+/**
+ * GetUpdates Response
+ */
+export interface GetUpdatesResponse {
+  ok: boolean;
+  result: TelegramUpdate[];
+  error_code?: number;
+  description?: string;
+}
