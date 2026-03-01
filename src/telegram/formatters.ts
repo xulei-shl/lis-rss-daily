@@ -107,6 +107,16 @@ function convertMarkdownToHTML(markdown: string): string {
 }
 
 /**
+ * Escape HTML special characters for Telegram HTML parse mode
+ */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
  * Format new article notification (for future use)
  */
 export function formatNewArticle(data: {
@@ -117,15 +127,15 @@ export function formatNewArticle(data: {
   summary?: string;
 }): string {
   let message = '🆕 新文献推荐\n\n';
-  message += `【${data.sourceType}】${data.sourceName}\n\n`;
-  message += `标题: ${data.title}\n`;
+  message += `【${escapeHtml(data.sourceType)}】${escapeHtml(data.sourceName)}\n\n`;
+  message += `标题: ${escapeHtml(data.title)}\n`;
 
   if (data.summary) {
     const maxPreview = 500;
     const preview = data.summary.length > maxPreview
       ? data.summary.substring(0, maxPreview) + '...'
       : data.summary;
-    message += `\n摘要: ${preview}\n`;
+    message += `\n摘要: ${escapeHtml(preview)}\n`;
   }
 
   message += `\n🔗 ${data.url}`;

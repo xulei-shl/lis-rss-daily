@@ -592,41 +592,58 @@ export class TelegramBot {
     await this.client.sendMessage(this.chatId,
       `📚 找到 ${articles.length} 篇${year}年${month}月${day}日的未读文章：`);
 
+    let sentCount = 0;
+    let failedCount = 0;
+
     // Send articles with delay to avoid rate limits
     for (const article of articles) {
-      // Use translated summary if available, otherwise use original summary or content
-      // Priority: summary_zh > summary > markdown_content > content
-      let summary = article.summary_zh || article.summary || undefined;
-      if (!summary && (article.markdown_content || article.content)) {
-        summary = article.markdown_content || article.content || undefined;
-        // Truncate content if too long (max 500 chars for preview)
-        if (summary && summary.length > 500) {
-          summary = summary.substring(0, 500) + '...';
+      try {
+        // Use translated summary if available, otherwise use original summary or content
+        // Priority: summary_zh > summary > markdown_content > content
+        let summary = article.summary_zh || article.summary || undefined;
+        if (!summary && (article.markdown_content || article.content)) {
+          summary = article.markdown_content || article.content || undefined;
+          // Truncate content if too long (max 500 chars for preview)
+          if (summary && summary.length > 500) {
+            summary = summary.substring(0, 500) + '...';
+          }
         }
+
+        const message = formatNewArticle({
+          title: article.title,
+          url: article.url,
+          sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
+          sourceType: article.source_origin === 'journal' ? '期刊文章' : 'RSS订阅',
+          summary,
+        });
+
+        const keyboard = createArticleKeyboard(
+          article.id,
+          article.is_read === 1,
+          article.rating
+        );
+
+        await this.client.sendMessageWithKeyboard(this.chatId, message, keyboard, 'HTML');
+        sentCount++;
+
+        // Rate limiting: 1 second between messages
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        failedCount++;
+        log.error({ error, articleId: article.id, title: article.title }, 'Failed to send article via /getarticles');
+        // Continue with next article instead of stopping
       }
-
-      const message = formatNewArticle({
-        title: article.title,
-        url: article.url,
-        sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
-        sourceType: article.source_origin === 'journal' ? '期刊文章' : 'RSS订阅',
-        summary,
-      });
-
-      const keyboard = createArticleKeyboard(
-        article.id,
-        article.is_read === 1,
-        article.rating
-      );
-
-      await this.client.sendMessageWithKeyboard(this.chatId, message, keyboard, 'HTML');
-
-      // Rate limiting: 1 second between messages
-      await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    log.info({ userId: this.userId, year, month, day, count: articles.length },
+    // Log result
+    log.info({ userId: this.userId, year, month, day, sentCount, failedCount },
       'Sent articles via /getarticles command');
+
+    // Notify user if some articles failed to send
+    if (failedCount > 0) {
+      await this.client.sendMessage(this.chatId,
+        `⚠️ ${failedCount} 篇文章发送失败，请查看日志了解详情`);
+    }
   }
 }
 
