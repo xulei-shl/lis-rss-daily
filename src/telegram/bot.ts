@@ -594,12 +594,23 @@ export class TelegramBot {
 
     // Send articles with delay to avoid rate limits
     for (const article of articles) {
+      // Use translated summary if available, otherwise use original summary or content
+      // Priority: summary_zh > summary > markdown_content > content
+      let summary = article.summary_zh || article.summary || undefined;
+      if (!summary && (article.markdown_content || article.content)) {
+        summary = article.markdown_content || article.content || undefined;
+        // Truncate content if too long (max 500 chars for preview)
+        if (summary && summary.length > 500) {
+          summary = summary.substring(0, 500) + '...';
+        }
+      }
+
       const message = formatNewArticle({
         title: article.title,
         url: article.url,
         sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
         sourceType: article.source_origin === 'journal' ? '期刊文章' : 'RSS订阅',
-        summary: article.summary_zh || article.summary || undefined,
+        summary,
       });
 
       const keyboard = createArticleKeyboard(
