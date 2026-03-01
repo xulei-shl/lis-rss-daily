@@ -20,4 +20,10 @@ router.post('/logout', (req: AuthRequest, res) => {
   res.json({ success: true });
 });
 
+// Test route added to working file
+router.get('/test-in-auth', (req, res) => {
+  console.log('[auth.routes.ts] /test-in-auth called!');
+  res.json({ message: 'test in auth works!' });
+});
+
 export default router;

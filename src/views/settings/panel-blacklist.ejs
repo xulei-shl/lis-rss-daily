@@ -1,0 +1,33 @@
+<div class="settings-panel" data-tab="blacklist">
+  <h2>黑名单设置</h2>
+  <p class="panel-description">配置标题关键词黑名单，匹配的文章将自动被拒绝，跳过 LLM 过滤。</p>
+
+  <div id="blacklist-status" class="status-message" style="display: none;"></div>
+
+  <form id="blacklist-form">
+    <div class="form-group">
+      <label class="toggle-label">
+        <input type="checkbox" id="blacklist-enabled" name="enabled" class="toggle-input">
+        <span class="toggle-switch"></span>
+        <span class="toggle-text">启用标题黑名单过滤</span>
+      </label>
+      <p class="form-hint">启用后，文章标题包含黑名单关键词时将被直接拒绝</p>
+    </div>
+
+    <div class="form-group">
+      <label for="blacklist-keywords" class="form-label">黑名单关键词</label>
+      <textarea
+        id="blacklist-keywords"
+        name="keywords"
+        rows="8"
+        placeholder="输入关键词，用逗号分隔（支持中英文逗号）&#10;例如：招聘, 广告, 推广"
+      ></textarea>
+      <p class="form-hint">每行一个关键词，或用逗号分隔多个关键词。匹配不区分大小写。</p>
+    </div>
+
+    <div class="panel-actions">
+      <button id="save-blacklist-btn" class="btn btn-primary">保存配置</button>
+      <button id="reset-blacklist-btn" class="btn btn-secondary">重置</button>
+    </div>
+  </form>
+</div>

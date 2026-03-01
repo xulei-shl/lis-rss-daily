@@ -115,3 +115,73 @@ textarea.is-invalid:focus {
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
   border-color: var(--red);
 }
+
+/* Toggle Switch */
+.form-group .toggle-label,
+.toggle-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: var(--space-2);
+}
+
+.toggle-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  background: var(--border);
+  border-radius: 12px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toggle-input:checked + .toggle-switch {
+  background: var(--accent-primary);
+}
+
+.toggle-input:checked + .toggle-switch::after {
+  transform: translateX(20px);
+}
+
+.toggle-input:focus + .toggle-switch {
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+.toggle-input:hover + .toggle-switch {
+  background: var(--text-tertiary);
+}
+
+.toggle-input:checked:hover + .toggle-switch {
+  background: var(--accent-hover);
+}
+
+.toggle-text {
+  font-family: var(--font-meta);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}

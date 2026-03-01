@@ -55,7 +55,13 @@ export function createApp(): express.Express {
   app.use(express.static(path.join(__dirname, '../public')));
 
   // API routes
+  console.log('[web.ts] Mounting API routes at /api, router stack length:', apiRoutes.stack?.length);
+  app.use('/api', (req, res, next) => {
+    console.log('[web.ts /api middleware] Request:', req.method, req.path, req.url);
+    next();
+  });
   app.use('/api', apiRoutes);
+  console.log('[web.ts] API routes mounted');
 
   // Page routes
   app.get('/login', (req: Request, res: Response) => {

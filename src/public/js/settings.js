@@ -1644,3 +1644,82 @@ goToPage = function (type, page) {
     originalGoToPage(type, page);
   }
 };
+
+// ============================================
+// Blacklist Settings
+// ============================================
+
+let blacklistConfig = null;
+
+// Load blacklist settings on page load
+loadBlacklistConfig();
+
+async function loadBlacklistConfig() {
+  try {
+    const res = await fetch('/api/blacklist', { cache: 'no-store' });
+    if (!res.ok) {
+      throw new Error('加载黑名单配置失败');
+    }
+    blacklistConfig = await res.json();
+    populateBlacklistForm();
+  } catch (err) {
+    console.error('Failed to load blacklist config:', err);
+    showBlacklistStatus('加载黑名单配置失败', 'error');
+  }
+}
+
+function populateBlacklistForm() {
+  if (!blacklistConfig) return;
+
+  document.getElementById('blacklist-enabled').checked = blacklistConfig.title_keywords.enabled || false;
+  document.getElementById('blacklist-keywords').value = blacklistConfig.title_keywords.keywords || '';
+}
+
+function resetBlacklistForm() {
+  if (blacklistConfig) {
+    populateBlacklistForm();
+  }
+  showBlacklistStatus('', '');
+}
+
+async function saveBlacklistConfig(e) {
+  e.preventDefault();
+
+  const payload = {
+    title_keywords: {
+      enabled: document.getElementById('blacklist-enabled').checked,
+      keywords: document.getElementById('blacklist-keywords').value.trim(),
+    },
+  };
+
+  try {
+    const res = await fetch('/api/blacklist', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
+      blacklistConfig = await res.json();
+      showBlacklistStatus('黑名单配置已保存', 'success');
+    } else {
+      const result = await res.json();
+      showBlacklistStatus(result.error || '保存失败', 'error');
+    }
+  } catch (err) {
+    showBlacklistStatus('保存失败，请稍后重试', 'error');
+  }
+}
+
+function showBlacklistStatus(message, type) {
+  const el = document.getElementById('blacklist-status');
+  if (!el) return;
+
+  el.textContent = message || '';
+  el.className = 'status-message ' + type;
+  el.style.display = message ? 'block' : 'none';
+}
+
+// Blacklist form event listeners
+document.getElementById('save-blacklist-btn')?.addEventListener('click', saveBlacklistConfig);
+document.getElementById('reset-blacklist-btn')?.addEventListener('click', resetBlacklistForm);

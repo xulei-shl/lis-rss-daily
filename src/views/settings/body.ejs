@@ -4,6 +4,7 @@
   <button class="settings-tab" data-tab="chroma">Chroma 设置</button>
   <button class="settings-tab" data-tab="prompts">系统提示词</button>
   <button class="settings-tab" data-tab="journals">期刊管理</button>
+  <button class="settings-tab" data-tab="blacklist">黑名单</button>
 </div>
 
 <%- include('panel-rss') %>
@@ -11,6 +12,7 @@
     <%- include('panel-chroma') %>
       <%- include('panel-prompts') %>
         <%- include('panel-journals') %>
-          <%- include('modals') %>
+          <%- include('panel-blacklist') %>
+            <%- include('modals') %>
 
             <script src="/js/settings.js"></script>

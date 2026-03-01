@@ -359,6 +359,22 @@ export async function filterArticle(
 
   requestLog.debug({ title: input.title }, 'Starting article filter');
 
+  // 黑名单检查（Stage 0）
+  const { checkTitleBlacklist } = await import('./config/blacklist-filter.js');
+  const blacklistResult = checkTitleBlacklist(input.title);
+
+  if (blacklistResult.isBlacklisted) {
+    await updateArticleFilterStatus(input.articleId, 'rejected', 0);
+    await recordFilterLog(input.articleId, null, false, null, blacklistResult.reason ?? null, null);
+    requestLog.info({ reason: blacklistResult.reason }, 'Article rejected by blacklist');
+    return {
+      passed: false,
+      domainMatches: [],
+      filterReason: blacklistResult.reason,
+      usedFallback: false,
+    };
+  }
+
   // LLM filter
   const llmResult = await llmFilter(input);
 

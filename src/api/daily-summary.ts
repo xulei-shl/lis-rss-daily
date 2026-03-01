@@ -187,33 +187,6 @@ export async function getDailyPassedArticles(
 
     result = [...journalArticles, ...blogNewsArticles];
   }
-    .select((eb) => [
-      'articles.id',
-      'articles.title',
-      'articles.url',
-      'articles.summary',
-      'articles.markdown_content',
-      'articles.published_at',
-      // 优先使用 RSS 源名称，否则使用期刊名称
-      eb.fn.coalesce('rss_sources.name', 'journals.name').as('source_name'),
-      // 优先使用 RSS 源类型，期刊来源统一为 'journal'
-      eb.fn.coalesce('rss_sources.source_type', eb.val<'journal' | 'blog' | 'news'>('journal')).as('source_type'),
-    ])
-    .orderBy('articles.created_at', 'desc')
-    .limit(limit)
-    .execute();
-
-  // 转换为 DailySummaryArticle 类型
-  const result: DailySummaryArticle[] = articles.map((row: any) => ({
-    id: row.id,
-    title: row.title,
-    url: row.url,
-    summary: row.summary,
-    markdown_content: row.markdown_content,
-    source_name: row.source_name || '未知来源',
-    source_type: row.source_type || 'blog',
-    published_at: row.published_at,
-  }));
 
   // 按源类型优先级排序（保持一致性）
   result.sort((a, b) => {
