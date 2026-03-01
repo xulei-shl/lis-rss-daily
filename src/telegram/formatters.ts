@@ -10,7 +10,7 @@ const MAX_MESSAGE_LENGTH = 4096;
 const MAX_SUMMARY_LENGTH = 3500; // Leave room for header and footer
 
 /**
- * Format daily summary data into a Telegram message
+ * Format daily summary data into a Telegram message (HTML format)
  */
 export function formatDailySummary(data: DailySummaryData): string {
   const { date, type, totalArticles, summary, articlesByType } = data;
@@ -25,10 +25,10 @@ export function formatDailySummary(data: DailySummaryData): string {
     blog_news: '博客资讯',
     all: '综合总结',
   };
-  message += `📋 类型：${typeLabels[type] || type}\n\n`;
+  message += `📋 <b>类型：</b>${typeLabels[type] || type}\n\n`;
 
   // Statistics
-  message += '📊 统计\n';
+  message += '📊 <b>统计</b>\n';
   if (articlesByType.journal > 0) {
     message += `  期刊精选: ${articlesByType.journal} 篇\n`;
   }
@@ -40,11 +40,12 @@ export function formatDailySummary(data: DailySummaryData): string {
   }
   message += `  总计: ${totalArticles} 篇\n\n`;
 
-  // Summary content (truncate if necessary)
-  message += '📝 内容摘要\n';
-  const truncatedSummary = summary.length > MAX_SUMMARY_LENGTH
-    ? summary.substring(0, MAX_SUMMARY_LENGTH) + '\n\n...'
-    : summary;
+  // Summary content - convert Markdown to HTML
+  message += '📝 <b>内容摘要</b>\n';
+  const htmlSummary = convertMarkdownToHTML(summary);
+  const truncatedSummary = htmlSummary.length > MAX_SUMMARY_LENGTH
+    ? htmlSummary.substring(0, MAX_SUMMARY_LENGTH) + '\n\n...'
+    : htmlSummary;
   message += truncatedSummary;
 
   // Ensure total message length is within Telegram's limit
@@ -53,6 +54,56 @@ export function formatDailySummary(data: DailySummaryData): string {
   }
 
   return message;
+}
+
+/**
+ * Convert Markdown to simple HTML for Telegram
+ * Telegram HTML supports: b, i, u, s, code, pre, a, br
+ */
+function convertMarkdownToHTML(markdown: string): string {
+  let html = markdown;
+
+  // Escape HTML special chars first (except < > for tags we'll create)
+  html = html.replace(/&/g, '&amp;');
+
+  // Headers to bold
+  html = html.replace(/^####\s+(.*)$/gm, '<b>$1</b>');
+  html = html.replace(/^###\s+(.*)$/gm, '<b>$1</b>');
+  html = html.replace(/^##\s+(.*)$/gm, '<b>$1</b>');
+  html = html.replace(/^#\s+(.*)$/gm, '<b>$1</b>');
+
+  // Bold: **text** or __text__
+  html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  html = html.replace(/__(.+?)__/g, '<b>$1</b>');
+
+  // Italic: *text* or _text_ (but not ** or __)
+  html = html.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<i>$1</i>');
+  html = html.replace(/(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g, '<i>$1</i>');
+
+  // Code: `text` to <code>text</code>
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Links: [text](url) to <a href="url">text</a>
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+
+  // Lists: - item to • item
+  html = html.replace(/^[\-\*]\s+/gm, '• ');
+
+  // Numbered lists keep as is
+
+  // Horizontal rules
+  html = html.replace(/^---+$/gm, '─────────');
+
+  // Escape remaining < > that aren't part of our tags
+  html = html.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // Restore our tags
+  html = html.replace(/&lt;b&gt;/g, '<b>').replace(/&lt;\/b&gt;/g, '</b>');
+  html = html.replace(/&lt;i&gt;/g, '<i>').replace(/&lt;\/i&gt;/g, '</i>');
+  html = html.replace(/&lt;code&gt;/g, '<code>').replace(/&lt;\/code&gt;/g, '</code>');
+  html = html.replace(/&lt;a href=/g, '<a href=').replace(/&lt;\/a&gt;/g, '</a>');
+
+  return html;
 }
 
 /**

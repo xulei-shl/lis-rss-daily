@@ -2,13 +2,12 @@
  * Telegram API Client
  *
  * HTTP client for Telegram Bot API with proxy support.
- * Uses undici for better control over proxy configuration and retries.
+ * Uses undici ProxyAgent for proxy support.
  */
 
-import { request } from 'undici';
-import { ProxyAgent } from 'undici';
 import { logger } from '../logger.js';
 import type { TelegramMessageResponse } from './types.js';
+import { setGlobalDispatcher, ProxyAgent } from 'undici';
 
 const log = logger.child({ module: 'telegram-client' });
 
@@ -21,6 +20,9 @@ const TELEGRAM_PROXY = process.env.TELEGRAM_PROXY || null;
 
 if (TELEGRAM_PROXY) {
   log.info({ proxy: TELEGRAM_PROXY }, 'Telegram client configured with proxy');
+  // Set global proxy dispatcher for undici (used by Node.js fetch)
+  const agent = new ProxyAgent(TELEGRAM_PROXY);
+  setGlobalDispatcher(agent);
 } else {
   log.warn('No Telegram proxy configured (TELEGRAM_PROXY not set)');
 }
@@ -34,15 +36,10 @@ function sleep(ms: number): Promise<void> {
  */
 export class TelegramClient {
   private botToken: string;
-  private proxyAgent: ProxyAgent | undefined;
   private abortController: AbortController | null = null;
 
   constructor(botToken: string) {
     this.botToken = botToken;
-
-    if (TELEGRAM_PROXY) {
-      this.proxyAgent = new ProxyAgent(TELEGRAM_PROXY);
-    }
   }
 
   /**
@@ -54,15 +51,8 @@ export class TelegramClient {
   ): Promise<TelegramMessageResponse> {
     const url = `${TELEGRAM_API_BASE}/bot${this.botToken}/${method}`;
 
-    // Build query string for GET requests
-    const queryParams = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== null) {
-        queryParams.append(key, String(value));
-      }
-    }
-
-    const fullUrl = `${url}?${queryParams.toString()}`;
+    // Build body for POST request
+    const body = JSON.stringify(params);
 
     // Retry logic: only retry on 5xx or 429 (rate limit)
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -70,24 +60,23 @@ export class TelegramClient {
       const timer = setTimeout(() => this.abortController!.abort(), DEFAULT_TIMEOUT);
 
       try {
-        log.debug({ method, attempt }, 'Telegram API request');
+        log.debug({ method, attempt, params }, 'Telegram API request');
 
-        const response = await request(fullUrl, {
-          method: 'GET',
-          dispatcher: this.proxyAgent,
+        const response = await fetch(url, {
+          method: 'POST',
           headers: {
             'Accept': 'application/json',
+            'Content-Type': 'application/json',
           },
+          body,
           signal: this.abortController.signal,
         });
 
-        const data = await response.body.json() as TelegramMessageResponse;
+        const data = await response.json() as TelegramMessageResponse;
 
-        // Check for HTTP error status (undici uses statusCode, not ok)
-        const statusCode = response.statusCode;
-        const isSuccess = statusCode >= 200 && statusCode < 300;
-
-        if (!isSuccess) {
+        // Check for HTTP error status
+        if (!response.ok) {
+          const statusCode = response.status;
           const retryable = statusCode >= 500 || statusCode === 429;
 
           if (!retryable || attempt === MAX_RETRIES) {
@@ -114,7 +103,7 @@ export class TelegramClient {
 
         // Retry on network errors
         const delay = 500 * Math.pow(2, attempt);
-        log.info({ method, attempt, delay }, 'Retrying Telegram API request (network error)');
+        log.info({ method, attempt, delay, error: error instanceof Error ? error.message : String(error) }, 'Retrying Telegram API request (network error)');
         await sleep(delay);
 
       } finally {
@@ -130,12 +119,12 @@ export class TelegramClient {
    * Send a text message
    * @param chatId - Target chat ID
    * @param text - Message text
-   * @param parseMode - Optional parse mode ('Markdown' or 'MarkdownV2')
+   * @param parseMode - Optional parse mode ('Markdown', 'MarkdownV2', or 'HTML')
    */
   async sendMessage(
     chatId: string,
     text: string,
-    parseMode?: 'Markdown' | 'MarkdownV2'
+    parseMode?: 'Markdown' | 'MarkdownV2' | 'HTML'
   ): Promise<TelegramMessageResponse> {
     const params: Record<string, any> = {
       chat_id: chatId,

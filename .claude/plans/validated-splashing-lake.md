@@ -5,7 +5,7 @@
 LIS-RSS-Daily 是一个 RSS 文献追踪系统，用户希望在每日总结生成后自动推送到 Telegram。项目已有完整的设计文档 `docs/telegram-integration-plan.md`，本计划基于该文档和现有代码模式制定详细的实现方案。
 
 **关键约束**：
-- Telegram API 调用必须通过代理 `http://127.0.0.1:7892`
+- Telegram API 调用必须通过代理 `http://127.0.0.1:7890`
 - 配置存储在 Settings 表（用户级配置，每个用户有自己的 bot token 和 chat id）
 
 ---
@@ -175,7 +175,7 @@ telegramProxy: process.env.TELEGRAM_PROXY,
 添加：
 ```bash
 # Telegram Proxy
-TELEGRAM_PROXY=http://127.0.0.1:7892
+TELEGRAM_PROXY=http://127.0.0.1:7890
 ```
 
 ---

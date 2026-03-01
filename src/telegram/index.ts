@@ -79,7 +79,7 @@ class TelegramNotifier {
       const client = new TelegramClient(config.botToken);
       const message = formatDailySummary(data);
 
-      const result = await client.sendMessage(config.chatId, message, 'Markdown');
+      const result = await client.sendMessage(config.chatId, message, 'HTML');
 
       if (result.ok) {
         log.info({

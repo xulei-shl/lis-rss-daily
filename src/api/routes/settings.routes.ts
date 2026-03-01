@@ -83,10 +83,21 @@ router.get('/settings/telegram', requireAuth, async (req: AuthRequest, res) => {
       }
     }
 
+    // Mask chat ID for security (show first 3 and last 3 characters)
+    let maskedChatId = '';
+    if (settings.chatId) {
+      const chatIdStr = String(settings.chatId);
+      if (chatIdStr.length > 6) {
+        maskedChatId = chatIdStr.substring(0, 3) + '***' + chatIdStr.substring(chatIdStr.length - 3);
+      } else {
+        maskedChatId = '***';
+      }
+    }
+
     res.json({
       enabled: settings.enabled,
       botToken: maskedBotToken,
-      chatId: settings.chatId,
+      chatId: maskedChatId,
       dailySummary: settings.dailySummary,
       newArticles: settings.newArticles,
     });
@@ -141,7 +152,7 @@ router.put('/settings/telegram', requireAuth, requireAdmin, async (req: AuthRequ
  * POST /api/settings/telegram/test
  * 测试 Telegram 连接
  */
-router.post('/settings/telegram/test', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+router.post('/settings/telegram/test', requireAuth, async (req: AuthRequest, res) => {
   try {
     const notifier = getTelegramNotifier();
     const result = await notifier.testConnection(req.userId!);
