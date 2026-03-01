@@ -1772,6 +1772,8 @@ function populateTelegramForm() {
   } else if (telegramConfig.botToken && telegramConfig.botToken.includes('***')) {
     // Masked value - show placeholder indicating value is set
     botTokenInput.placeholder = '已配置（点击修改）';
+    // Clear value so placeholder shows if it was just saved
+    botTokenInput.value = '';
   }
 
   // Only set chatId if it's not masked (masked contains ***)
@@ -1780,6 +1782,8 @@ function populateTelegramForm() {
   } else if (telegramConfig.chatId && telegramConfig.chatId.includes('***')) {
     // Masked value - show placeholder indicating value is set
     chatIdInput.placeholder = '已配置（点击修改）';
+    // Clear value so placeholder shows if it was just saved
+    chatIdInput.value = '';
   }
 
   dailySummaryCheckbox.checked = telegramConfig.dailySummary || false;
@@ -1804,6 +1808,14 @@ async function saveTelegramSettings(e) {
   const success = await saveTelegramSettingsInternal();
   if (success) {
     showTelegramStatus('Telegram 配置已保存', 'success');
+
+    // 我们手动同步当前的 checkbox 状态，以防止后端返回的数据可能存在的延迟
+    if (telegramConfig) {
+      telegramConfig.enabled = document.getElementById('telegramEnabled').checked;
+      telegramConfig.dailySummary = document.getElementById('telegramDailySummary').checked;
+      telegramConfig.newArticles = document.getElementById('telegramNewArticles').checked;
+    }
+
     populateTelegramForm();
   }
 }
@@ -1833,6 +1845,13 @@ async function testTelegramConnection() {
         testBtn.disabled = false;
         return;
       }
+      // Update UI after save
+      if (telegramConfig) {
+        telegramConfig.enabled = document.getElementById('telegramEnabled').checked;
+        telegramConfig.dailySummary = document.getElementById('telegramDailySummary').checked;
+        telegramConfig.newArticles = document.getElementById('telegramNewArticles').checked;
+      }
+      populateTelegramForm();
     }
 
     // Now test the connection

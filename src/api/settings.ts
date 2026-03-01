@@ -336,7 +336,7 @@ export async function updateTelegramSettings(
   const updates: Record<string, SettingValue> = {};
 
   if (settings.enabled !== undefined) {
-    updates.telegram_enabled = settings.enabled;
+    updates.telegram_enabled = settings.enabled ? 'true' : 'false';
   }
   if (settings.botToken !== undefined) {
     updates.telegram_bot_token = settings.botToken;
@@ -345,10 +345,10 @@ export async function updateTelegramSettings(
     updates.telegram_chat_id = settings.chatId;
   }
   if (settings.dailySummary !== undefined) {
-    updates.telegram_daily_summary = settings.dailySummary;
+    updates.telegram_daily_summary = settings.dailySummary ? 'true' : 'false';
   }
   if (settings.newArticles !== undefined) {
-    updates.telegram_new_articles = settings.newArticles;
+    updates.telegram_new_articles = settings.newArticles ? 'true' : 'false';
   }
 
   if (Object.keys(updates).length > 0) {

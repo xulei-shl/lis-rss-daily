@@ -65,42 +65,48 @@ router.put('/settings/chroma', requireAuth, requireAdmin, async (req: AuthReques
 });
 
 /**
+ * Helper to mask sensitive Telegram settings
+ */
+function maskTelegramSettings(settings: any) {
+  // Mask bot token for security (show first 4 and last 4 characters if possible)
+  let maskedBotToken = '';
+  if (settings.botToken) {
+    const tokenParts = settings.botToken.split(':');
+    if (tokenParts.length > 1) {
+      maskedBotToken = `${tokenParts[0].substring(0, 4)}***:${tokenParts[1].substring(0, 4)}***`;
+    } else {
+      maskedBotToken = settings.botToken.substring(0, 4) + '***';
+    }
+  }
+
+  // Mask chat ID for security (show first 3 and last 3 characters if possible)
+  let maskedChatId = '';
+  if (settings.chatId) {
+    const chatIdStr = String(settings.chatId);
+    if (chatIdStr.length > 6) {
+      maskedChatId = chatIdStr.substring(0, 3) + '***' + chatIdStr.substring(chatIdStr.length - 3);
+    } else {
+      maskedChatId = '***';
+    }
+  }
+
+  return {
+    enabled: settings.enabled,
+    botToken: maskedBotToken,
+    chatId: maskedChatId,
+    dailySummary: settings.dailySummary,
+    newArticles: settings.newArticles,
+  };
+}
+
+/**
  * GET /api/settings/telegram
  * 获取 Telegram 配置（bot token 部分遮蔽显示）
  */
 router.get('/settings/telegram', requireAuth, async (req: AuthRequest, res) => {
   try {
     const settings = await getTelegramSettings(req.userId!);
-
-    // Mask bot token for security (show first 4 and last 4 characters)
-    let maskedBotToken = '';
-    if (settings.botToken) {
-      const tokenParts = settings.botToken.split(':');
-      if (tokenParts.length > 1) {
-        maskedBotToken = `${tokenParts[0].substring(0, 4)}***:${tokenParts[1].substring(0, 4)}***`;
-      } else {
-        maskedBotToken = settings.botToken.substring(0, 4) + '***';
-      }
-    }
-
-    // Mask chat ID for security (show first 3 and last 3 characters)
-    let maskedChatId = '';
-    if (settings.chatId) {
-      const chatIdStr = String(settings.chatId);
-      if (chatIdStr.length > 6) {
-        maskedChatId = chatIdStr.substring(0, 3) + '***' + chatIdStr.substring(chatIdStr.length - 3);
-      } else {
-        maskedChatId = '***';
-      }
-    }
-
-    res.json({
-      enabled: settings.enabled,
-      botToken: maskedBotToken,
-      chatId: maskedChatId,
-      dailySummary: settings.dailySummary,
-      newArticles: settings.newArticles,
-    });
+    res.json(maskTelegramSettings(settings));
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to get Telegram settings');
     res.status(500).json({ error: 'Failed to get Telegram settings' });
@@ -141,7 +147,9 @@ router.put('/settings/telegram', requireAuth, requireAdmin, async (req: AuthRequ
       newArticles: newArticles !== undefined ? Boolean(newArticles) : undefined,
     });
 
-    res.json({ success: true });
+    // 获取更新后的完整配置并返回（脱敏处理）
+    const updatedSettings = await getTelegramSettings(req.userId!);
+    res.json(maskTelegramSettings(updatedSettings));
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to update Telegram settings');
     res.status(500).json({ error: 'Failed to update Telegram settings' });
