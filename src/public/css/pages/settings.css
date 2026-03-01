@@ -409,6 +409,65 @@
     margin-top: var(--space-2);
 }
 
+.chroma-status {
+    grid-column: 1 / -1;
+}
+
+/* Telegram Specific */
+.telegram-section {
+    background: var(--bg-surface);
+    padding: var(--space-6);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+}
+
+.telegram-config-fields {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-4);
+    margin-top: var(--space-4);
+    transition: opacity 0.2s ease;
+}
+
+.telegram-form .form-group:first-child {
+    margin-bottom: var(--space-4);
+}
+
+.telegram-form .form-group:first-child label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.telegram-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+}
+
+.telegram-status {
+    margin-top: var(--space-4);
+}
+
+.section-description {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin-top: var(--space-2);
+}
+
+.section-description a {
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+
+.section-description a:hover {
+    text-decoration: underline;
+}
+
 /* Prompts Variables Info */
 .variables-info-panel details {
     background: var(--bg-subtle);
@@ -437,6 +496,10 @@
 /* Response for Mobile */
 @media (max-width: 768px) {
     .chroma-form {
+        grid-template-columns: 1fr;
+    }
+
+    .telegram-config-fields {
         grid-template-columns: 1fr;
     }
 }

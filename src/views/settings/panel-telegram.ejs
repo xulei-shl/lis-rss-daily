@@ -1,0 +1,76 @@
+<!-- Telegram Settings Section -->
+<section class="settings-panel" data-tab="telegram">
+  <div class="telegram-section">
+    <div class="section-header">
+      <h2>Telegram 通知</h2>
+      <p class="section-description">
+        配置 Telegram Bot 接收每日总结推送。
+        <a href="https://core.telegram.org/bots#how-do-i-create-a-bot" target="_blank" rel="noopener">
+          如何创建 Bot？
+        </a>
+      </p>
+    </div>
+
+    <form id="telegramForm" class="telegram-form">
+      <div class="form-group">
+        <label for="telegramEnabled">
+          <input type="checkbox" id="telegramEnabled" name="enabled">
+          启用 Telegram 通知
+        </label>
+      </div>
+
+      <div id="telegramConfigFields" class="telegram-config-fields">
+        <div class="form-group">
+          <label for="telegramBotToken">Bot Token</label>
+          <input
+            type="password"
+            id="telegramBotToken"
+            name="botToken"
+            placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+            autocomplete="off"
+          >
+          <small class="form-hint">
+            从 @BotFather 获取。格式：数字:字符串
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="telegramChatId">Chat ID</label>
+          <input
+            type="text"
+            id="telegramChatId"
+            name="chatId"
+            placeholder="123456789 或 @channelname"
+            autocomplete="off"
+          >
+          <small class="form-hint">
+            从 @userinfobot 获取。可以是数字或 @开头的用户名
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="telegramDailySummary" name="dailySummary">
+            推送每日总结
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="telegramNewArticles" name="newArticles" disabled>
+            推送新增文章（即将推出）
+          </label>
+        </div>
+      </div>
+
+      <div class="telegram-actions">
+        <button type="button" id="telegramTestBtn" class="btn btn-secondary" disabled>
+          测试连接
+        </button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+
+    <div id="telegramStatus" class="telegram-status"></div>
+  </div>
+</section>

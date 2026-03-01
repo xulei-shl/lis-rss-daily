@@ -10,6 +10,7 @@ import { getUserLLMProvider } from '../llm.js';
 import { resolveSystemPrompt } from './system-prompts.js';
 import { SOURCE_TYPE_PRIORITY, SOURCE_TYPE_LABELS, type SourceType } from '../constants/source-types.js';
 import { getUserTimezone, buildUtcRangeFromLocalDate, getUserLocalDate } from './timezone.js';
+import { getTelegramNotifier } from '../telegram/index.js';
 
 const log = logger.child({ module: 'daily-summary-service' });
 
@@ -306,7 +307,8 @@ ${articlesText}
 
   log.info({ userId, date: today, articleCount: articles.length, type }, 'Daily summary generated');
 
-  return {
+  // 推送到 Telegram（异步，不阻塞主流程）
+  const result = {
     date: today,
     type,
     totalArticles: articles.length,
@@ -314,6 +316,22 @@ ${articlesText}
     summary,
     generatedAt: new Date().toISOString(),
   };
+
+  getTelegramNotifier().sendDailySummary(userId, {
+    date: result.date,
+    type: result.type,
+    totalArticles: result.totalArticles,
+    summary: result.summary,
+    articlesByType: {
+      journal: result.articlesByType.journal.length,
+      blog: result.articlesByType.blog.length,
+      news: result.articlesByType.news.length,
+    },
+  }).catch(err => {
+    log.warn({ error: err }, 'Failed to send daily summary to Telegram');
+  });
+
+  return result;
 }
 
 /**

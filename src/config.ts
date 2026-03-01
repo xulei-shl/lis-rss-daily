@@ -63,6 +63,9 @@ export interface Config {
 
   // Timezone
   defaultTimezone: string;
+
+  // Telegram
+  telegramProxy?: string;
 }
 
 function getConfig(): Config {
@@ -133,6 +136,9 @@ function getConfig(): Config {
 
     // Timezone
     defaultTimezone: process.env.DEFAULT_TIMEZONE || 'Asia/Shanghai',
+
+    // Telegram
+    telegramProxy: process.env.TELEGRAM_PROXY,
   };
 }
 

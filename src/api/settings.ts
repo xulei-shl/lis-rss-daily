@@ -292,3 +292,67 @@ export async function updateChromaSettings(
     log.info({ userId, settings: updates }, 'Chroma settings updated');
   }
 }
+
+/**
+ * 获取 Telegram 设置
+ */
+export async function getTelegramSettings(userId: number): Promise<{
+  enabled: boolean;
+  botToken: string;
+  chatId: string;
+  dailySummary: boolean;
+  newArticles: boolean;
+}> {
+  const settings = await getUserSettings(userId, [
+    'telegram_enabled',
+    'telegram_bot_token',
+    'telegram_chat_id',
+    'telegram_daily_summary',
+    'telegram_new_articles',
+  ]);
+
+  return {
+    enabled: settings.telegram_enabled === 'true',
+    botToken: settings.telegram_bot_token || '',
+    chatId: settings.telegram_chat_id || '',
+    dailySummary: settings.telegram_daily_summary === 'true',
+    newArticles: settings.telegram_new_articles === 'true',
+  };
+}
+
+/**
+ * 更新 Telegram 设置
+ */
+export async function updateTelegramSettings(
+  userId: number,
+  settings: {
+    enabled?: boolean;
+    botToken?: string;
+    chatId?: string;
+    dailySummary?: boolean;
+    newArticles?: boolean;
+  }
+): Promise<void> {
+  const updates: Record<string, SettingValue> = {};
+
+  if (settings.enabled !== undefined) {
+    updates.telegram_enabled = settings.enabled;
+  }
+  if (settings.botToken !== undefined) {
+    updates.telegram_bot_token = settings.botToken;
+  }
+  if (settings.chatId !== undefined) {
+    updates.telegram_chat_id = settings.chatId;
+  }
+  if (settings.dailySummary !== undefined) {
+    updates.telegram_daily_summary = settings.dailySummary;
+  }
+  if (settings.newArticles !== undefined) {
+    updates.telegram_new_articles = settings.newArticles;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await batchSetUserSettings(userId, updates);
+    log.info({ userId, settings: updates }, 'Telegram settings updated');
+  }
+}
