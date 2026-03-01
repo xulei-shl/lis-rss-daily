@@ -339,6 +339,7 @@ export async function getArticleById(
     .selectFrom('articles')
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('article_translations', 'article_translations.article_id', 'articles.id')
     .where('articles.id', '=', id)
     .where((eb) => eb.or([
       eb.and([
@@ -359,6 +360,7 @@ export async function getArticleById(
       'articles.summary',
       'articles.content',
       'articles.markdown_content',
+      'article_translations.summary_zh',
       'articles.filter_status',
       'articles.filter_score',
       'articles.filtered_at',

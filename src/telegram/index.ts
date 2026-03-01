@@ -7,9 +7,10 @@
 
 import { logger } from '../logger.js';
 import { TelegramClient } from './client.js';
-import { formatDailySummary } from './formatters.js';
+import { formatDailySummary, formatNewArticle } from './formatters.js';
 import type { TelegramConfig, DailySummaryData } from './types.js';
 import { getUserSettings } from '../api/settings.js';
+import type { ArticleWithSource } from '../api/articles.js';
 
 const log = logger.child({ module: 'telegram-notifier' });
 
@@ -144,6 +145,72 @@ class TelegramNotifier {
         success: false,
         message: `连接测试失败: ${error instanceof Error ? error.message : String(error)}`,
       };
+    }
+  }
+
+  /**
+   * Send new article notification
+   */
+  async sendNewArticle(userId: number, article: ArticleWithSource): Promise<boolean> {
+    const config = await loadTelegramConfig(userId);
+
+    if (!config) {
+      log.debug({ userId }, 'Telegram not configured, skipping new article notification');
+      return false;
+    }
+
+    if (!config.newArticles) {
+      log.debug({ userId }, 'New article notifications disabled');
+      return false;
+    }
+
+    try {
+      const client = new TelegramClient(config.botToken);
+
+      // Use translated summary if available, otherwise use original summary or content
+      // Priority: summary_zh > summary > markdown_content > content
+      let summary = article.summary_zh || article.summary || undefined;
+      if (!summary && (article.markdown_content || article.content)) {
+        summary = article.markdown_content || article.content || undefined;
+        // Truncate content if too long (max 500 chars for preview)
+        if (summary && summary.length > 500) {
+          summary = summary.substring(0, 500) + '...';
+        }
+      }
+
+      const message = formatNewArticle({
+        title: article.title,
+        url: article.url,
+        sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
+        sourceType: article.source_origin === 'journal' ? '期刊文章' : 'RSS订阅',
+        summary,
+      });
+
+      const result = await client.sendMessage(config.chatId, message, 'HTML');
+
+      if (result.ok) {
+        log.info({
+          userId,
+          articleId: article.id,
+          title: article.title,
+          messageId: result.result?.message_id,
+        }, 'New article sent to Telegram');
+        return true;
+      } else {
+        log.warn({
+          userId,
+          articleId: article.id,
+          error: result.description,
+        }, 'Failed to send new article to Telegram');
+        return false;
+      }
+    } catch (error) {
+      log.error({
+        userId,
+        articleId: article.id,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'Failed to send new article to Telegram');
+      return false;
     }
   }
 

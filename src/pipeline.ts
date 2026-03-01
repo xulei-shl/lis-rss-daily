@@ -540,6 +540,20 @@ async function runPipeline(
   // ── Complete ──
   await updateArticleProcessStatus(articleId, 'completed');
 
+  // ── Send Telegram Notification (fire-and-forget) ──
+  // Re-fetch article one more time to get the latest data (including translations)
+  const finalArticle = await getArticleById(articleId, userId);
+  if (finalArticle) {
+    const { getTelegramNotifier } = await import('./telegram/index.js');
+    getTelegramNotifier().sendNewArticle(userId, finalArticle).catch((error) => {
+      // Non-fatal: log but don't fail the pipeline
+      log.warn(
+        { articleId, error: error?.message || String(error) },
+        '[pipeline] Telegram notification failed (non-fatal)'
+      );
+    });
+  }
+
   // ── Incremental Refresh: Update similar old articles' related lists ──
   // This is a fire-and-forget operation that runs in the background
   // to ensure new articles appear in related lists of existing similar content.
