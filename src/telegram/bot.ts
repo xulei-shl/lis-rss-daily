@@ -7,10 +7,11 @@
 
 import { logger } from '../logger.js';
 import { TelegramClient } from './client.js';
-import { getArticleById, updateArticleReadStatus, updateArticleRating } from '../api/articles.js';
+import { getArticleById, updateArticleReadStatus, updateArticleRating, getUserArticles } from '../api/articles.js';
 import { decodeCallback, CallbackAction } from './callback-encoder.js';
-import { createArticleKeyboard, createRatingKeyboard, createEmptyKeyboard } from './formatters.js';
-import type { CallbackQuery, TelegramUpdate, InlineKeyboardMarkup } from './types.js';
+import { createArticleKeyboard, createRatingKeyboard, createEmptyKeyboard, formatNewArticle } from './formatters.js';
+import type { CallbackQuery, TelegramUpdate, InlineKeyboardMarkup, Message } from './types.js';
+import { parseGetArticlesCommand } from './command-parser.js';
 import { readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -212,6 +213,29 @@ export class TelegramBot {
     for (const update of updates) {
       // Update latest update_id for pagination
       this.latestUpdateId = update.update_id;
+
+      // Process message commands
+      if (update.message) {
+        const messageId = `${update.update_id}-msg`;
+
+        // Skip if already processing this message
+        if (this.pendingCallbacks.has(messageId)) {
+          log.debug({ messageId }, 'Message already being processed, skipping');
+          continue;
+        }
+
+        this.pendingCallbacks.add(messageId);
+        try {
+          await this.handleMessage(update.message);
+          successCount++;
+        } catch (error) {
+          errorCount++;
+          throw error;
+        } finally {
+          this.pendingCallbacks.delete(messageId);
+        }
+        continue; // Skip callback processing for this update
+      }
 
       // Process callback query with duplicate prevention
       if (update.callback_query) {
@@ -475,6 +499,123 @@ export class TelegramBot {
     }
 
     log.debug({ articleId, userId: this.userId }, 'Rating keyboard cancelled via Telegram');
+  }
+
+  /**
+   * Handle incoming message (commands)
+   */
+  private async handleMessage(message: Message): Promise<void> {
+    const { from, chat, text } = message;
+
+    // Validate user (only allow configured user)
+    const chatId = String(chat.id);
+    if (chatId !== this.chatId) {
+      log.warn({ from: from?.id, chatId }, 'Unauthorized message');
+      await this.client.sendMessage(chatId, '❌ 无权操作');
+      return;
+    }
+
+    // Parse command
+    if (!text || !text.startsWith('/')) {
+      return; // Ignore non-command messages
+    }
+
+    const parts = text.trim().split(/\s+/);
+    const command = parts[0];
+
+    switch (command) {
+      case '/getarticles':
+        await this.handleGetArticlesCommandWrapper(parts.slice(1).join(' '));
+        break;
+
+      default:
+        log.debug({ command }, 'Unknown command');
+    }
+  }
+
+  /**
+   * Wrapper for getarticles command with error handling
+   */
+  private async handleGetArticlesCommandWrapper(args: string): Promise<void> {
+    try {
+      const parsed = parseGetArticlesCommand(args);
+      if (!parsed) {
+        await this.client.sendMessage(this.chatId,
+          '❌ 格式错误。正确格式：/getarticles YYYY-MM-DD 或 YYYYMMDD\n例如：/getarticles 2026-3-1 或 /getarticles 20260301');
+        return;
+      }
+
+      const { year, month, day } = parsed;
+
+      // Validate not in future
+      const now = new Date();
+      const cmdDate = new Date(year, month - 1, day);
+      cmdDate.setHours(23, 59, 59, 999); // Set to end of the day
+      if (cmdDate > now) {
+        await this.client.sendMessage(this.chatId, '❌ 日期不能是未来时间');
+        return;
+      }
+
+      await this.handleGetArticlesCommand(year, month, day);
+    } catch (error) {
+      log.error({ error, args }, 'Error in getarticles command');
+      await this.client.sendMessage(this.chatId, '❌ 查询失败，请稍后重试');
+    }
+  }
+
+  /**
+   * Handle /getarticles command
+   */
+  private async handleGetArticlesCommand(year: number, month: number, day: number): Promise<void> {
+    // Format date string (YYYY-MM-DD)
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+    // Query articles for the specific date
+    const result = await getUserArticles(this.userId, {
+      createdAfter: dateStr,
+      createdBefore: dateStr,
+      isRead: false,
+      filterStatus: 'passed',
+      limit: 5,
+      page: 1,
+    });
+
+    const articles = result.articles;
+
+    if (articles.length === 0) {
+      await this.client.sendMessage(this.chatId,
+        `📭 ${year}年${month}月${day}日没有符合条件的未读文章`);
+      return;
+    }
+
+    // Send summary
+    await this.client.sendMessage(this.chatId,
+      `📚 找到 ${articles.length} 篇${year}年${month}月${day}日的未读文章：`);
+
+    // Send articles with delay to avoid rate limits
+    for (const article of articles) {
+      const message = formatNewArticle({
+        title: article.title,
+        url: article.url,
+        sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
+        sourceType: article.source_origin === 'journal' ? '期刊文章' : 'RSS订阅',
+        summary: article.summary_zh || article.summary || undefined,
+      });
+
+      const keyboard = createArticleKeyboard(
+        article.id,
+        article.is_read === 1,
+        article.rating
+      );
+
+      await this.client.sendMessageWithKeyboard(this.chatId, message, keyboard, 'HTML');
+
+      // Rate limiting: 1 second between messages
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    log.info({ userId: this.userId, year, month, day, count: articles.length },
+      'Sent articles via /getarticles command');
   }
 }
 

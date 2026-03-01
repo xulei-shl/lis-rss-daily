@@ -84,11 +84,26 @@ export interface CallbackQuery {
 }
 
 /**
+ * Telegram Message
+ */
+export interface Message {
+  message_id: number;
+  chat: {
+    id: number;
+    type: string;
+  };
+  date: number;
+  text?: string;
+  from?: TelegramUser;
+}
+
+/**
  * Update from Telegram getUpdates
  */
 export interface TelegramUpdate {
   update_id: number;
   callback_query?: CallbackQuery;
+  message?: Message;
 }
 
 /**
