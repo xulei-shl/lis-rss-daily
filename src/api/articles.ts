@@ -1169,21 +1169,61 @@ export interface MergedSourceOption {
 export async function getMergedSources(userId: number): Promise<MergedSourceOption[]> {
   const db = getDb();
 
-  // 获取 RSS 源列表
-  const rssSources = await db
+  // 获取 RSS 源列表：包括 active 状态的，以及有文章的非 active 状态的
+  // RSS 源 status 只控制是否自动爬取，不应影响已有文章的检索
+  const activeRssSources = await db
     .selectFrom('rss_sources')
     .select(['id', 'name'])
     .where('user_id', '=', userId)
     .where('status', '=', 'active')
     .execute();
 
-  // 获取期刊列表
-  const journals = await db
+  // 获取有文章但状态非 active 的 RSS 源（用于检索已有文章）
+  const rssSourcesWithArticles = await db
+    .selectFrom('rss_sources')
+    .innerJoin('articles', 'articles.rss_source_id', 'rss_sources.id')
+    .select(['rss_sources.id', 'rss_sources.name'])
+    .where('rss_sources.user_id', '=', userId)
+    .where('rss_sources.status', '!=', 'active')
+    .execute();
+
+  // 合并 RSS 源列表（去重）
+  const rssSourcesMap = new Map<number, { id: number; name: string }>();
+  for (const s of activeRssSources) {
+    rssSourcesMap.set(s.id, s);
+  }
+  for (const s of rssSourcesWithArticles) {
+    rssSourcesMap.set(s.id, s);
+  }
+  const rssSources = Array.from(rssSourcesMap.values());
+
+  // 获取期刊列表：包括 active 状态的，以及有文章的非 active 状态的
+  // 期刊 status 只控制是否自动爬取，不应影响已有文章的检索
+  const activeJournals = await db
     .selectFrom('journals')
     .select(['id', 'name'])
     .where('user_id', '=', userId)
     .where('status', '=', 'active')
     .execute();
+
+  // 获取有文章但状态非 active 的期刊（用于检索已有文章）
+  const journalsWithArticles = await db
+    .selectFrom('journals')
+    .innerJoin('articles', 'articles.journal_id', 'journals.id')
+    .select(['journals.id', 'journals.name'])
+    .where('journals.user_id', '=', userId)
+    .where('journals.status', '!=', 'active')
+    .execute();
+
+  // 合并期刊列表（去重）
+  const journalsMap = new Map<number, { id: number; name: string }>();
+  for (const j of activeJournals) {
+    journalsMap.set(j.id, j);
+  }
+  for (const j of journalsWithArticles) {
+    journalsMap.set(j.id, j);
+  }
+  const journals = Array.from(journalsMap.values());
 
   // 按名称分组
   const sourceMap = new Map<string, MergedSourceOption>();
