@@ -13,23 +13,17 @@ import { logger } from '../../logger.js';
 const log = logger.child({ module: 'blacklist-api' });
 const router = express.Router();
 
-// Debug log to verify route is loaded
-console.log('[blacklist.routes.ts] Loading blacklist routes...');
-
 const CONFIG_PATH = path.join(process.cwd(), 'config', 'blacklist.yaml');
 
 /**
  * GET /api/blacklist - 获取黑名单配置
  */
 router.get('/blacklist', async (req, res) => {
-  console.log('[blacklist.routes.ts] GET /blacklist called!');
   try {
     const config = getBlacklistConfig();
-    console.log('[blacklist.routes.ts] Config loaded:', config);
     res.json(config);
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
-    console.error('[blacklist.routes.ts] Error:', errMsg);
     log.error({ error: errMsg }, 'Failed to get blacklist config');
     res.status(500).json({ error: '获取黑名单配置失败' });
   }

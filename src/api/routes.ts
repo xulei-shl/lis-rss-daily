@@ -18,8 +18,6 @@ import journalsRoutes from './routes/journals.routes.js';
 import logsRoutes from './routes/logs.routes.js';
 import blacklistRoutes from './routes/blacklist.routes.js';
 
-console.log('[routes.ts] blacklistRoutes imported:', typeof blacklistRoutes);
-
 const router = express.Router();
 
 router.use(pingRoutes);
@@ -39,19 +37,6 @@ router.use(dailySummaryRoutes);
 router.use(typesRoutes);
 router.use(journalsRoutes);
 router.use(logsRoutes);
-console.log('[routes.ts] About to use blacklistRoutes, stack:', blacklistRoutes.stack?.length || 0);
-console.log('[routes.ts] blacklistRoutes stack:', blacklistRoutes.stack?.map((l: any) => ({ path: l.path, method: l.methods?.[0] })));
 router.use(blacklistRoutes);
-console.log('[routes.ts] blacklistRoutes registered');
-
-// Debug: Print all registered routes
-router._router?.stack?.forEach((layer: any) => {
-  if (layer.name === 'router') {
-    console.log('[routes.ts] Subrouter registered:', layer.regexp);
-    layer.handle?.stack?.forEach((subLayer: any) => {
-      console.log('[routes.ts]   - route:', subLayer.route?.path || subLayer.path, 'methods:', subLayer.route?.methods || subLayer.methods);
-    });
-  }
-});
 
 export default router;
