@@ -1763,26 +1763,20 @@ function populateTelegramForm() {
   // Set form values
   enabledCheckbox.checked = telegramConfig.enabled || false;
 
-  // Check if credentials are already configured (masked values mean they exist)
-  hasExistingCredentials = telegramConfig.botToken?.includes('***') || telegramConfig.chatId?.includes('***');
+  // Use hasCredentials flag from backend to check if credentials are configured
+  hasExistingCredentials = telegramConfig.hasCredentials || false;
 
-  // Only set botToken if user hasn't entered a new one and it's not masked
-  if (!botTokenInput.value && telegramConfig.botToken && !telegramConfig.botToken.includes('***')) {
-    botTokenInput.value = telegramConfig.botToken;
-  } else if (telegramConfig.botToken && telegramConfig.botToken.includes('***')) {
+  // Handle botToken input
+  if (telegramConfig.botToken) {
     // Masked value - show placeholder indicating value is set
     botTokenInput.placeholder = '已配置（点击修改）';
-    // Clear value so placeholder shows if it was just saved
     botTokenInput.value = '';
   }
 
-  // Only set chatId if it's not masked (masked contains ***)
-  if (telegramConfig.chatId && !telegramConfig.chatId.includes('***')) {
-    chatIdInput.value = telegramConfig.chatId;
-  } else if (telegramConfig.chatId && telegramConfig.chatId.includes('***')) {
+  // Handle chatId input
+  if (telegramConfig.chatId) {
     // Masked value - show placeholder indicating value is set
     chatIdInput.placeholder = '已配置（点击修改）';
-    // Clear value so placeholder shows if it was just saved
     chatIdInput.value = '';
   }
 
@@ -1796,7 +1790,6 @@ function populateTelegramForm() {
   }
 
   // Enable/disable test button based on configuration
-  // If credentials already exist, enable test button when enabled is checked
   if (testBtn) {
     const hasInputValues = botTokenInput.value || chatIdInput.value;
     testBtn.disabled = !enabledCheckbox.checked || (!hasInputValues && !hasExistingCredentials);
@@ -1808,14 +1801,8 @@ async function saveTelegramSettings(e) {
   const success = await saveTelegramSettingsInternal();
   if (success) {
     showTelegramStatus('Telegram 配置已保存', 'success');
-
-    // 我们手动同步当前的 checkbox 状态，以防止后端返回的数据可能存在的延迟
-    if (telegramConfig) {
-      telegramConfig.enabled = document.getElementById('telegramEnabled').checked;
-      telegramConfig.dailySummary = document.getElementById('telegramDailySummary').checked;
-      telegramConfig.newArticles = document.getElementById('telegramNewArticles').checked;
-    }
-
+    // telegramConfig 已在 saveTelegramSettingsInternal 中从后端更新
+    // 直接使用后端返回的数据重新填充表单
     populateTelegramForm();
   }
 }
@@ -1845,12 +1832,8 @@ async function testTelegramConnection() {
         testBtn.disabled = false;
         return;
       }
-      // Update UI after save
-      if (telegramConfig) {
-        telegramConfig.enabled = document.getElementById('telegramEnabled').checked;
-        telegramConfig.dailySummary = document.getElementById('telegramDailySummary').checked;
-        telegramConfig.newArticles = document.getElementById('telegramNewArticles').checked;
-      }
+      // telegramConfig 已在 saveTelegramSettingsInternal 中从后端更新
+      // 直接重新填充表单
       populateTelegramForm();
     }
 
@@ -1885,9 +1868,10 @@ async function saveTelegramSettingsInternal() {
   const dailySummary = document.getElementById('telegramDailySummary').checked;
   const newArticles = document.getElementById('telegramNewArticles').checked;
 
-  // Check if fields were previously configured (have masked values)
-  const hasExistingToken = telegramConfig?.botToken && telegramConfig.botToken.includes('***');
-  const hasExistingChatId = telegramConfig?.chatId && telegramConfig.chatId.includes('***');
+  // Check if fields were previously configured
+  // Backend returns masked values (or empty) when credentials exist
+  const hasExistingToken = !!(telegramConfig?.botToken);
+  const hasExistingChatId = !!(telegramConfig?.chatId);
 
   // Validation - only require new values if enabling and no existing value
   if (enabled && !botToken && !hasExistingToken) {

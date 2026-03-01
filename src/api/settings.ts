@@ -16,6 +16,21 @@ const log = logger.child({ module: 'settings-service' });
 export type SettingValue = string | number | boolean;
 
 /**
+ * Boolean to string conversion for database storage
+ */
+function boolToString(value: boolean): string {
+  return value ? 'true' : 'false';
+}
+
+/**
+ * String to boolean conversion for database retrieval
+ */
+function stringToBool(value: string | undefined | null, defaultValue = false): boolean {
+  if (!value) return defaultValue;
+  return value === 'true';
+}
+
+/**
  * Get user setting
  * @param userId - User ID
  * @param key - Setting key
@@ -192,7 +207,7 @@ export async function getSchedulerSettings(userId: number): Promise<{
 
   return {
     rssFetchSchedule: settings.rss_fetch_schedule || '0 9 * * *',
-    rssFetchEnabled: settings.rss_fetch_enabled !== 'false',
+    rssFetchEnabled: stringToBool(settings.rss_fetch_enabled, false),
     maxConcurrentFetch: parseInt(settings.max_concurrent_fetch || '5', 10),
   };
 }
@@ -217,7 +232,7 @@ export async function updateSchedulerSettings(
   }
 
   if (settings.rssFetchEnabled !== undefined) {
-    updates.rss_fetch_enabled = settings.rssFetchEnabled;
+    updates.rss_fetch_enabled = boolToString(settings.rssFetchEnabled);
   }
 
   if (settings.maxConcurrentFetch !== undefined) {
@@ -312,11 +327,11 @@ export async function getTelegramSettings(userId: number): Promise<{
   ]);
 
   return {
-    enabled: settings.telegram_enabled === 'true',
+    enabled: stringToBool(settings.telegram_enabled, false),
     botToken: settings.telegram_bot_token || '',
     chatId: settings.telegram_chat_id || '',
-    dailySummary: settings.telegram_daily_summary === 'true',
-    newArticles: settings.telegram_new_articles === 'true',
+    dailySummary: stringToBool(settings.telegram_daily_summary, false),
+    newArticles: stringToBool(settings.telegram_new_articles, false),
   };
 }
 
@@ -336,7 +351,7 @@ export async function updateTelegramSettings(
   const updates: Record<string, SettingValue> = {};
 
   if (settings.enabled !== undefined) {
-    updates.telegram_enabled = settings.enabled ? 'true' : 'false';
+    updates.telegram_enabled = boolToString(settings.enabled);
   }
   if (settings.botToken !== undefined) {
     updates.telegram_bot_token = settings.botToken;
@@ -345,10 +360,10 @@ export async function updateTelegramSettings(
     updates.telegram_chat_id = settings.chatId;
   }
   if (settings.dailySummary !== undefined) {
-    updates.telegram_daily_summary = settings.dailySummary ? 'true' : 'false';
+    updates.telegram_daily_summary = boolToString(settings.dailySummary);
   }
   if (settings.newArticles !== undefined) {
-    updates.telegram_new_articles = settings.newArticles ? 'true' : 'false';
+    updates.telegram_new_articles = boolToString(settings.newArticles);
   }
 
   if (Object.keys(updates).length > 0) {

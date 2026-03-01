@@ -66,8 +66,11 @@ router.put('/settings/chroma', requireAuth, requireAdmin, async (req: AuthReques
 
 /**
  * Helper to mask sensitive Telegram settings
+ * Returns masked values with a `masked` flag to indicate the state
  */
 function maskTelegramSettings(settings: any) {
+  const isMasked = !!(settings.botToken || settings.chatId);
+
   // Mask bot token for security (show first 4 and last 4 characters if possible)
   let maskedBotToken = '';
   if (settings.botToken) {
@@ -96,6 +99,8 @@ function maskTelegramSettings(settings: any) {
     chatId: maskedChatId,
     dailySummary: settings.dailySummary,
     newArticles: settings.newArticles,
+    // Explicit flag to indicate if credentials are configured (masked)
+    hasCredentials: isMasked,
   };
 }
 
