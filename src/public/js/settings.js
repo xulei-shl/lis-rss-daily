@@ -1760,8 +1760,11 @@ function populateTelegramForm() {
   const testBtn = document.getElementById('telegramTestBtn');
   const configFields = document.getElementById('telegramConfigFields');
 
+  console.log('[DEBUG] populateTelegramForm 被调用, telegramConfig:', telegramConfig);
+
   // Set form values
   enabledCheckbox.checked = telegramConfig.enabled || false;
+  console.log('[DEBUG] 设置 enabledCheckbox.checked 为:', enabledCheckbox.checked);
 
   // Use hasCredentials flag from backend to check if credentials are configured
   hasExistingCredentials = telegramConfig.hasCredentials || false;
@@ -1785,6 +1788,11 @@ function populateTelegramForm() {
   if (configFields) {
     configFields.style.opacity = enabledCheckbox.checked ? '1' : '0.5';
     configFields.style.pointerEvents = enabledCheckbox.checked ? 'auto' : 'none';
+    console.log('[DEBUG] configFields 状态:', {
+      opacity: configFields.style.opacity,
+      pointerEvents: configFields.style.pointerEvents,
+      enabledChecked: enabledCheckbox.checked
+    });
   }
 
   // Enable/disable test button based on configuration
@@ -1900,6 +1908,8 @@ async function saveTelegramSettingsInternal() {
 
     if (res.ok) {
       telegramConfig = await res.json();
+      console.log('[DEBUG] 保存成功，后端返回的配置:', telegramConfig);
+      console.log('[DEBUG] enabled checkbox 状态:', enabled);
       // Clear input fields after successful save so placeholder shows
       if (botToken) botTokenInput.value = '';
       if (chatId) chatIdInput.value = '';
