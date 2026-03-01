@@ -1767,17 +1767,15 @@ function populateTelegramForm() {
   hasExistingCredentials = telegramConfig.hasCredentials || false;
 
   // Handle botToken input
-  if (telegramConfig.botToken) {
-    // Masked value - show placeholder indicating value is set
+  // Only show masked placeholder if input is currently empty (user hasn't just entered a value)
+  if (telegramConfig.botToken && !botTokenInput.value) {
     botTokenInput.placeholder = '已配置（点击修改）';
-    botTokenInput.value = '';
   }
 
   // Handle chatId input
-  if (telegramConfig.chatId) {
-    // Masked value - show placeholder indicating value is set
+  // Only show masked placeholder if input is currently empty (user hasn't just entered a value)
+  if (telegramConfig.chatId && !chatIdInput.value) {
     chatIdInput.placeholder = '已配置（点击修改）';
-    chatIdInput.value = '';
   }
 
   dailySummaryCheckbox.checked = telegramConfig.dailySummary || false;
@@ -1902,6 +1900,9 @@ async function saveTelegramSettingsInternal() {
 
     if (res.ok) {
       telegramConfig = await res.json();
+      // Clear input fields after successful save so placeholder shows
+      if (botToken) botTokenInput.value = '';
+      if (chatId) chatIdInput.value = '';
       return true;
     } else {
       const result = await res.json();
