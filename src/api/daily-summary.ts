@@ -107,10 +107,12 @@ export async function getDailyPassedArticles(
       .selectFrom('articles')
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
+      .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
       .where('articles.filter_status', '=', 'passed')
       .where((eb) => eb.or([
         eb('rss_sources.user_id', '=', userId),
         eb('journals.user_id', '=', userId),
+        eb('keyword_subscriptions.user_id', '=', userId),
       ]))
       .where('articles.created_at', '>=', startDate)
       .where('articles.created_at', '<=', endDate);
@@ -119,38 +121,48 @@ export async function getDailyPassedArticles(
   // 辅助函数：执行查询并转换结果
   const executeQuery = async (query: any, limit: number) => {
     const articles = await query
-      .select((eb) => [
+      .select((eb: any) => [
         'articles.id',
         'articles.title',
         'articles.url',
         'articles.summary',
         'articles.markdown_content',
         'articles.published_at',
-        eb.fn.coalesce('rss_sources.name', 'journals.name').as('source_name'),
-        eb.fn.coalesce('rss_sources.source_type', eb.val<'journal' | 'blog' | 'news'>('journal')).as('source_type'),
+        'articles.source_origin',
+        eb.fn.coalesce('rss_sources.name', 'journals.name', 'keyword_subscriptions.keyword').as('source_name'),
+        eb.fn.coalesce('rss_sources.source_type', eb.val('journal')).as('source_type'),
       ])
       .orderBy('articles.created_at', 'desc')
       .limit(limit)
       .execute();
 
-    return articles.map((row: any) => ({
-      id: row.id,
-      title: row.title,
-      url: row.url,
-      summary: row.summary,
-      markdown_content: row.markdown_content,
-      source_name: row.source_name || '未知来源',
-      source_type: row.source_type || 'blog',
-      published_at: row.published_at,
-    }));
+    return articles.map((row: any) => {
+      // 如果是关键词文章，修改 source_name 为 "关键词: xxx"
+      let sourceName = row.source_name || '未知来源';
+      if (row.source_origin === 'keyword') {
+        sourceName = `关键词: ${row.source_name}`;
+      }
+
+      return {
+        id: row.id,
+        title: row.title,
+        url: row.url,
+        summary: row.summary,
+        markdown_content: row.markdown_content,
+        source_name: sourceName,
+        source_type: row.source_type || 'blog',
+        published_at: row.published_at,
+      };
+    });
   };
 
   let result: DailySummaryArticle[] = [];
 
   if (type === 'journal') {
-    // 只获取期刊文章，最多50篇
+    // 只获取期刊文章（包含关键词爬虫文章），最多50篇
     const query = buildBaseQuery().where((eb) => eb.or([
       eb('articles.source_origin', '=', 'journal'),
+      eb('articles.source_origin', '=', 'keyword'),
       eb.and([
         eb('articles.source_origin', '=', 'rss'),
         eb('rss_sources.source_type', '=', 'journal'),
@@ -166,9 +178,10 @@ export async function getDailyPassedArticles(
     result = await executeQuery(query, BLOG_NEWS_LIMIT);
 
   } else {
-    // type === 'all' 或 undefined：优先获取40篇期刊，不足或剩余部分由博客/资讯补足
+    // type === 'all' 或 undefined：优先获取40篇期刊（包含关键词），不足或剩余部分由博客/资讯补足
     const journalQuery = buildBaseQuery().where((eb) => eb.or([
       eb('articles.source_origin', '=', 'journal'),
+      eb('articles.source_origin', '=', 'keyword'),
       eb.and([
         eb('articles.source_origin', '=', 'rss'),
         eb('rss_sources.source_type', '=', 'journal'),

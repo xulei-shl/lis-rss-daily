@@ -43,6 +43,8 @@ export interface DatabaseTable {
   journals: JournalsTable;
   journal_crawl_logs: JournalCrawlLogsTable;
   rss_fetch_logs: RssFetchLogsTable;
+  keyword_subscriptions: KeywordSubscriptionsTable;
+  keyword_crawl_logs: KeywordCrawlLogsTable;
 }
 
 export interface UsersTable {
@@ -68,7 +70,7 @@ export interface RssSourcesTable {
 
 export interface ArticlesTable {
   id: Generated<number>;
-  rss_source_id: number | null;  // RSS来源（期刊文章为 null）
+  rss_source_id: number | null;  // RSS来源（期刊/关键词文章为 null）
   title: string;
   title_normalized: string | null;  // 规范化标题用于去重
   url: string;
@@ -87,8 +89,9 @@ export interface ArticlesTable {
   published_volume: number | null;  // 卷号（期刊文章使用）
   error_message: string | null;
   is_read: number;  // 0 = 未读, 1 = 已读
-  source_origin: 'rss' | 'journal';  // 文章来源
-  journal_id: number | null;  // 期刊ID（RSS文章为 null）
+  source_origin: 'rss' | 'journal' | 'keyword';  // 文章来源
+  journal_id: number | null;  // 期刊ID（RSS/关键词文章为 null）
+  keyword_id: number | null;  // 关键词订阅ID（RSS/期刊文章为 null）
   rating: number | null;  // 文章评级（1-5星）
   created_at: Generated<string>;
   updated_at: string;
@@ -252,6 +255,37 @@ export interface RssFetchLogsTable {
   created_at: Generated<string>;
 }
 
+export interface KeywordSubscriptionsTable {
+  id: Generated<number>;
+  user_id: number;
+  keyword: string;
+  year_start: number | null;
+  year_end: number | null;
+  is_active: number;
+  spider_type: 'google_scholar' | 'cnki';
+  num_results: number;
+  last_crawl_time: string | null;
+  crawl_count: number;
+  total_articles: number;
+  created_at: Generated<string>;
+  updated_at: string;
+}
+
+export interface KeywordCrawlLogsTable {
+  id: Generated<number>;
+  keyword_id: number;
+  keyword: string;
+  spider_type: string;
+  year_start: number | null;
+  year_end: number | null;
+  articles_count: number;
+  new_articles_count: number;
+  status: 'success' | 'failed' | 'partial';
+  error_message: string | null;
+  duration_ms: number | null;
+  created_at: Generated<string>;
+}
+
 export type DB = Kysely<DatabaseTable>;
 
 // Selection result types (unwraps Generated<T> to T)
@@ -266,6 +300,8 @@ export type DailySummariesSelection = SelectionType<DailySummariesTable>;
 export type JournalsSelection = SelectionType<JournalsTable>;
 export type JournalCrawlLogsSelection = SelectionType<JournalCrawlLogsTable>;
 export type RssFetchLogsSelection = SelectionType<RssFetchLogsTable>;
+export type KeywordSubscriptionsSelection = SelectionType<KeywordSubscriptionsTable>;
+export type KeywordCrawlLogsSelection = SelectionType<KeywordCrawlLogsTable>;
 
 let _db: DB | null = null;
 

@@ -449,6 +449,74 @@ CREATE TABLE IF NOT EXISTS journal_crawl_logs (
         continue;
       }
 
+      // ============================================================
+      // 020: 添加关键词订阅配置表
+      // ============================================================
+      if (file === '020_add_keyword_subscriptions.sql') {
+        const hasKeywordSubscriptions = hasTable(db, 'keyword_subscriptions');
+        if (!hasKeywordSubscriptions) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log('      → Created keyword_subscriptions table');
+        } else {
+          console.log('      → Skipped (keyword_subscriptions table already exists)');
+        }
+        continue;
+      }
+
+      // ============================================================
+      // 021: 添加关键词爬取日志表
+      // ============================================================
+      if (file === '021_add_keyword_crawl_logs.sql') {
+        const hasKeywordCrawlLogs = hasTable(db, 'keyword_crawl_logs');
+        if (!hasKeywordCrawlLogs) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log('      → Created keyword_crawl_logs table');
+        } else {
+          console.log('      → Skipped (keyword_crawl_logs table already exists)');
+        }
+        continue;
+      }
+
+      // ============================================================
+      // 022: 为 articles 表添加 keyword_id 字段
+      // ============================================================
+      if (file === '022_add_keyword_id_to_articles.sql') {
+        const hasKeywordId = hasColumn(db, 'articles', 'keyword_id');
+        if (!hasKeywordId) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log('      → Added keyword_id column to articles table');
+        } else {
+          console.log('      → Skipped (keyword_id column already exists)');
+        }
+        continue;
+      }
+
+      // ============================================================
+      // 023: 修复 articles 表的 source_origin 约束和 keyword_id 外键
+      // ============================================================
+      if (file === '023_fix_source_origin_constraint.sql') {
+        // 检查 articles 表的 source_origin 约束是否包含 'keyword'
+        const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='articles'").get() as { sql: string } | undefined;
+        const needsFix = tableInfo?.sql.includes("CHECK(source_origin IN") && !tableInfo?.sql.includes("'keyword'");
+
+        if (needsFix) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+
+          // 验证数据完整性
+          const countBefore = db.prepare('SELECT COUNT(*) as count FROM articles').get() as { count: number };
+          console.log(`      → Rebuilt articles table with updated constraints (${countBefore.count} rows preserved)`);
+          console.log('      → source_origin constraint now includes: rss, journal, keyword');
+          console.log('      → keyword_id foreign key constraint created');
+        } else {
+          console.log('      → Skipped (constraints already updated)');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

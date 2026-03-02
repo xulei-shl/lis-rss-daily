@@ -70,14 +70,16 @@ CREATE TABLE IF NOT EXISTS articles (
   published_issue INTEGER,   -- 期号（期刊文章使用）
   published_volume INTEGER,  -- 卷号（期刊文章使用）
   is_read INTEGER DEFAULT 0,
-  source_origin TEXT DEFAULT 'rss' CHECK(source_origin IN ('rss', 'journal')),  -- 文章来源
+  source_origin TEXT DEFAULT 'rss' CHECK(source_origin IN ('rss', 'journal', 'keyword')),  -- 文章来源
   journal_id INTEGER,  -- 期刊ID（RSS文章为 null）
+  keyword_id INTEGER,  -- 关键词订阅ID（关键词文章使用）
   error_message TEXT,
   rating INTEGER CHECK(rating IS NULL OR (rating >= 1 AND rating <= 5)),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (rss_source_id) REFERENCES rss_sources(id) ON DELETE CASCADE,
-  FOREIGN KEY (journal_id) REFERENCES journals(id) ON DELETE SET NULL
+  FOREIGN KEY (journal_id) REFERENCES journals(id) ON DELETE SET NULL,
+  FOREIGN KEY (keyword_id) REFERENCES keyword_subscriptions(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_articles_rss_source_id ON articles(rss_source_id);
@@ -88,6 +90,7 @@ CREATE INDEX IF NOT EXISTS idx_articles_created_at ON articles(created_at);
 CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at);
 CREATE INDEX IF NOT EXISTS idx_articles_source_origin ON articles(source_origin);
 CREATE INDEX IF NOT EXISTS idx_articles_journal_id ON articles(journal_id);
+CREATE INDEX IF NOT EXISTS idx_articles_keyword_id ON articles(keyword_id);
 CREATE INDEX IF NOT EXISTS idx_articles_published_year ON articles(published_year);
 CREATE INDEX IF NOT EXISTS idx_articles_published_issue ON articles(published_issue);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_title_normalized ON articles(title_normalized) WHERE title_normalized IS NOT NULL;
@@ -374,7 +377,56 @@ CREATE INDEX IF NOT EXISTS idx_journal_crawl_logs_journal_id ON journal_crawl_lo
 CREATE INDEX IF NOT EXISTS idx_journal_crawl_logs_created_at ON journal_crawl_logs(created_at);
 
 -- ===========================================
--- 15. Schema Metadata Table
+-- 16. Keyword Subscriptions Table (关键词订阅表)
+-- ===========================================
+-- 存储关键词订阅配置，用于定期爬取学术文献
+CREATE TABLE IF NOT EXISTS keyword_subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  keyword TEXT NOT NULL,
+  year_start INTEGER,
+  year_end INTEGER,
+  is_active INTEGER DEFAULT 1,
+  spider_type TEXT DEFAULT 'google_scholar' CHECK(spider_type IN ('google_scholar', 'cnki')),
+  num_results INTEGER DEFAULT 20,
+  last_crawl_time DATETIME,
+  crawl_count INTEGER DEFAULT 0,
+  total_articles INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_keyword_subscriptions_user_id ON keyword_subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_keyword_subscriptions_is_active ON keyword_subscriptions(is_active);
+CREATE INDEX IF NOT EXISTS idx_keyword_subscriptions_spider_type ON keyword_subscriptions(spider_type);
+
+-- ===========================================
+-- 17. Keyword Crawl Logs Table (关键词爬取日志表)
+-- ===========================================
+-- 记录每次关键词爬取的详细信息
+CREATE TABLE IF NOT EXISTS keyword_crawl_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  keyword_id INTEGER NOT NULL,
+  keyword TEXT NOT NULL,
+  spider_type TEXT NOT NULL,
+  year_start INTEGER,
+  year_end INTEGER,
+  articles_count INTEGER DEFAULT 0,
+  new_articles_count INTEGER DEFAULT 0,
+  status TEXT NOT NULL CHECK(status IN ('success', 'failed', 'partial')),
+  error_message TEXT,
+  duration_ms INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (keyword_id) REFERENCES keyword_subscriptions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_keyword_crawl_logs_keyword_id ON keyword_crawl_logs(keyword_id);
+CREATE INDEX IF NOT EXISTS idx_keyword_crawl_logs_created_at ON keyword_crawl_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_keyword_crawl_logs_status ON keyword_crawl_logs(status);
+
+-- ===========================================
+-- 18. Schema Metadata Table
 -- ===========================================
 -- 用于跟踪数据库 schema 版本和配置版本
 CREATE TABLE IF NOT EXISTS schema_metadata (

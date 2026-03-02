@@ -15,6 +15,7 @@ import systemPromptRoutes from './routes/system-prompts.routes.js';
 import dailySummaryRoutes from './routes/daily-summary.routes.js';
 import typesRoutes from './routes/types.routes.js';
 import journalsRoutes from './routes/journals.routes.js';
+import keywordsRoutes from './routes/keywords.routes.js';
 import logsRoutes from './routes/logs.routes.js';
 import blacklistRoutes from './routes/blacklist.routes.js';
 
@@ -36,6 +37,7 @@ router.use(systemPromptRoutes);
 router.use(dailySummaryRoutes);
 router.use(typesRoutes);
 router.use(journalsRoutes);
+router.use(keywordsRoutes);
 router.use(logsRoutes);
 router.use(blacklistRoutes);
 

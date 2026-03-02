@@ -66,6 +66,19 @@ export interface Config {
 
   // Telegram
   telegramProxy?: string;
+
+  // Journal Crawler
+  journalCrawlEnabled: boolean;
+  journalCrawlSchedule: string;
+  journalInterval: number;
+  journalIntervalRandom: number;
+  spiderTimeout: number;
+
+  // Keyword Crawler
+  keywordCrawlEnabled: boolean;
+  keywordCrawlSchedule: string;
+  keywordInterval: number;
+  keywordIntervalRandom: number;
 }
 
 function getConfig(): Config {
@@ -139,6 +152,19 @@ function getConfig(): Config {
 
     // Telegram
     telegramProxy: process.env.TELEGRAM_PROXY,
+
+    // Journal Crawler
+    journalCrawlEnabled: process.env.JOURNAL_CRAWL_ENABLED !== 'false',
+    journalCrawlSchedule: process.env.JOURNAL_CRAWL_SCHEDULE || '15 2 * * 6',
+    journalInterval: parseInt(process.env.JOURNAL_INTERVAL || '480000', 10),
+    journalIntervalRandom: parseInt(process.env.JOURNAL_INTERVAL_RANDOM || '0', 10),
+    spiderTimeout: parseInt(process.env.SPIDER_TIMEOUT || '430000', 10),
+
+    // Keyword Crawler
+    keywordCrawlEnabled: process.env.KEYWORD_CRAWL_ENABLED !== 'false',
+    keywordCrawlSchedule: process.env.KEYWORD_CRAWL_SCHEDULE || '15 3 * * 6',
+    keywordInterval: parseInt(process.env.KEYWORD_INTERVAL || '300000', 10),
+    keywordIntervalRandom: parseInt(process.env.KEYWORD_INTERVAL_RANDOM || '30000', 10),
   };
 }
 

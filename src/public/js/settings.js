@@ -1979,3 +1979,253 @@ document.getElementById('telegramChatId')?.addEventListener('input', () => {
     testBtn.disabled = !enabled || (!hasInputValues && !hasExistingCredentials);
   }
 });
+
+// ============================================================================
+// 关键词订阅管理
+// ============================================================================
+
+let keywords = [];
+let keywordsPagination = {
+  page: 1,
+  limit: 10,
+  total: 0,
+  totalPages: 0
+};
+
+// 加载关键词列表
+async function loadKeywords(page = 1) {
+  try {
+    const res = await fetch(`/api/keywords?page=${page}&limit=${keywordsPagination.limit}`);
+    if (!res.ok) throw new Error('Failed to load keywords');
+    const data = await res.json();
+    keywords = data.keywords || [];
+    keywordsPagination.page = data.page;
+    keywordsPagination.limit = data.limit;
+    keywordsPagination.total = data.total;
+    keywordsPagination.totalPages = data.totalPages;
+    renderKeywordsTable();
+    renderKeywordsPagination();
+  } catch (err) {
+    console.error('加载关键词失败:', err);
+    showStatusMessage('加载关键词失败', 'error');
+  }
+}
+
+// 渲染关键词表格
+function renderKeywordsTable() {
+  const tbody = document.getElementById('keywordsBody');
+  const emptyState = document.getElementById('keywordsEmptyState');
+  const table = document.getElementById('keywordsTable');
+
+  if (keywords.length === 0) {
+    table.style.display = 'none';
+    emptyState.style.display = 'block';
+    return;
+  }
+
+  table.style.display = 'table';
+  emptyState.style.display = 'none';
+
+  tbody.innerHTML = keywords.map(kw => `
+    <tr>
+      <td>${escapeHtml(kw.keyword)}</td>
+      <td>${formatYearRange(kw.year_start, kw.year_end)}</td>
+      <td>${getSpiderTypeLabel(kw.spider_type)}</td>
+      <td>${kw.num_results}</td>
+      <td>${kw.last_crawl_time ? formatDate(kw.last_crawl_time) : '<span style="color: #999">未爬取</span>'}</td>
+      <td>${kw.total_articles || 0}</td>
+      <td>${kw.is_active ? '<span class="badge-active">启用</span>' : '<span class="badge-inactive">停用</span>'}</td>
+      <td>
+        <button class="btn btn-sm btn-secondary" onclick="crawlKeywordNow(${kw.id})" title="立即爬取">爬取</button>
+        <button class="btn btn-sm btn-secondary" onclick="showKeywordEditModal(${kw.id})" title="编辑">编辑</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteKeyword(${kw.id})" title="删除">删除</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// 渲染分页
+function renderKeywordsPagination() {
+  const container = document.getElementById('keywordsPagination');
+  if (keywordsPagination.totalPages <= 1) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const pages = [];
+  for (let i = 1; i <= keywordsPagination.totalPages; i++) {
+    pages.push(i);
+  }
+
+  container.innerHTML = `
+    <div class="pagination">
+      ${keywordsPagination.page > 1 ? `<button onclick="loadKeywords(${keywordsPagination.page - 1})">上一页</button>` : ''}
+      ${pages.map(p => `
+        <button class="${p === keywordsPagination.page ? 'active' : ''}" onclick="loadKeywords(${p})">${p}</button>
+      `).join('')}
+      ${keywordsPagination.page < keywordsPagination.totalPages ? `<button onclick="loadKeywords(${keywordsPagination.page + 1})">下一页</button>` : ''}
+    </div>
+  `;
+}
+
+// 格式化年份范围
+function formatYearRange(start, end) {
+  if (!start && !end) return '不限';
+  const currentYear = new Date().getFullYear();
+  const displayStart = start || (currentYear - 2);
+  const displayEnd = end || '至今';
+  return `${displayStart} - ${displayEnd}`;
+}
+
+// 获取爬虫类型标签
+function getSpiderTypeLabel(type) {
+  const labels = {
+    'google_scholar': 'Google Scholar',
+    'cnki': 'CNKI'
+  };
+  return labels[type] || type;
+}
+
+// 显示添加关键词模态框
+function showKeywordAddModal() {
+  document.getElementById('keywordModalTitle').textContent = '添加关键词订阅';
+  document.getElementById('keywordId').value = '';
+  document.getElementById('keywordText').value = '';
+  document.getElementById('yearStart').value = '';
+  document.getElementById('yearEnd').value = '';
+  document.getElementById('spiderType').value = 'google_scholar';
+  document.getElementById('numResults').value = '20';
+  document.getElementById('keywordActive').checked = true;
+  document.getElementById('keywordModal').style.display = 'flex';
+}
+
+// 显示编辑关键词模态框
+async function showKeywordEditModal(id) {
+  const keyword = keywords.find(k => k.id === id);
+  if (!keyword) return;
+
+  document.getElementById('keywordModalTitle').textContent = '编辑关键词订阅';
+  document.getElementById('keywordId').value = keyword.id;
+  document.getElementById('keywordText').value = keyword.keyword;
+  document.getElementById('yearStart').value = keyword.year_start || '';
+  document.getElementById('yearEnd').value = keyword.year_end || '';
+  document.getElementById('spiderType').value = keyword.spider_type;
+  document.getElementById('numResults').value = keyword.num_results;
+  document.getElementById('keywordActive').checked = keyword.is_active === 1;
+  document.getElementById('keywordModal').style.display = 'flex';
+}
+
+// 关闭关键词模态框
+function closeKeywordModal() {
+  document.getElementById('keywordModal').style.display = 'none';
+}
+
+// 保存关键词
+async function saveKeyword() {
+  const id = document.getElementById('keywordId').value;
+  const keyword = document.getElementById('keywordText').value.trim();
+  const yearStart = document.getElementById('yearStart').value;
+  const yearEnd = document.getElementById('yearEnd').value;
+  const spiderType = document.getElementById('spiderType').value;
+  const numResults = parseInt(document.getElementById('numResults').value);
+  const isActive = document.getElementById('keywordActive').checked;
+
+  // 验证
+  if (!keyword) {
+    showStatusMessage('请输入关键词', 'error');
+    return;
+  }
+
+  if (numResults < 10 || numResults > 100) {
+    showStatusMessage('每次爬取结果数必须在 10-100 之间', 'error');
+    return;
+  }
+
+  const data = {
+    keyword,
+    yearStart: yearStart ? parseInt(yearStart) : null,
+    yearEnd: yearEnd ? parseInt(yearEnd) : null,
+    spiderType,
+    numResults,
+    isActive
+  };
+
+  try {
+    const url = id ? `/api/keywords/${id}` : '/api/keywords';
+    const method = id ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to save keyword');
+    }
+
+    closeKeywordModal();
+    await loadKeywords(keywordsPagination.page);
+    showStatusMessage(id ? '关键词已更新' : '关键词已添加', 'success');
+  } catch (err) {
+    console.error('保存关键词失败:', err);
+    showStatusMessage(err.message || '保存关键词失败', 'error');
+  }
+}
+
+// 删除关键词
+async function deleteKeyword(id) {
+  if (!confirm('确定要删除这个关键词订阅吗？')) return;
+
+  try {
+    const res = await fetch(`/api/keywords/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Failed to delete keyword');
+
+    await loadKeywords(keywordsPagination.page);
+    showStatusMessage('关键词已删除', 'success');
+  } catch (err) {
+    console.error('删除关键词失败:', err);
+    showStatusMessage('删除关键词失败', 'error');
+  }
+}
+
+// 手动触发爬取
+async function crawlKeywordNow(id) {
+  const keyword = keywords.find(k => k.id === id);
+  if (!keyword) return;
+
+  if (!confirm(`确定要立即爬取关键词 "${keyword.keyword}" 吗？`)) return;
+
+  try {
+    showStatusMessage('正在爬取，请稍候...', 'info');
+
+    const res = await fetch(`/api/keywords/${id}/crawl`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to crawl keyword');
+
+    const result = await res.json();
+
+    if (result.success) {
+      await loadKeywords(keywordsPagination.page);
+      showStatusMessage(`爬取完成！获取 ${result.articlesCount} 篇文章，新增 ${result.newArticlesCount} 篇`, 'success');
+    } else {
+      showStatusMessage(`爬取失败：${result.error || '未知错误'}`, 'error');
+    }
+  } catch (err) {
+    console.error('爬取关键词失败:', err);
+    showStatusMessage('爬取关键词失败', 'error');
+  }
+}
+
+// 加载关键词（当切换到关键词 tab 时）
+const keywordsTabBtn = document.querySelector('.settings-tab[data-tab="keywords"]');
+if (keywordsTabBtn) {
+  keywordsTabBtn.addEventListener('click', () => {
+    loadKeywords();
+  });
+}
+
+// 初始加载（如果默认在关键词 tab）
+if (document.querySelector('.settings-tab.active')?.dataset.tab === 'keywords') {
+  loadKeywords();
+}

@@ -246,3 +246,60 @@
     </form>
   </div>
 </div>
+<!-- Keyword Modal -->
+<div class="modal-overlay" id="keywordModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="keywordModalTitle">添加关键词订阅</h3>
+      <button class="modal-close" onclick="closeKeywordModal()">&times;</button>
+    </div>
+    <form id="keywordForm" onsubmit="event.preventDefault(); saveKeyword();">
+      <input type="hidden" id="keywordId">
+      
+      <div class="form-group">
+        <label for="keywordText">关键词 *</label>
+        <input type="text" id="keywordText" required placeholder="例如: machine learning">
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label for="yearStart">起始年份</label>
+          <input type="number" id="yearStart" placeholder="例如: 2023" min="1900" max="2100">
+          <small class="form-hint">留空则默认为最近两年</small>
+        </div>
+        
+        <div class="form-group">
+          <label for="yearEnd">结束年份</label>
+          <input type="number" id="yearEnd" placeholder="例如: 2024" min="1900" max="2100">
+          <small class="form-hint">留空则不限结束年份</small>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label for="spiderType">爬虫类型</label>
+        <select id="spiderType">
+          <option value="google_scholar">Google Scholar</option>
+          <option value="cnki">CNKI（暂未实现）</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label for="numResults">每次爬取结果数</label>
+        <input type="number" id="numResults" value="20" min="10" max="100">
+        <small class="form-hint">建议不超过 50，避免触发反爬</small>
+      </div>
+      
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="keywordActive" checked>
+          启用此订阅
+        </label>
+      </div>
+      
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeKeywordModal()">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>

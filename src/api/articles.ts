@@ -516,6 +516,8 @@ export async function getUserArticles(
     rssSourceIds?: number[];
     journalId?: number;
     journalIds?: number[];
+    keywordId?: number;
+    keywordIds?: number[];
     filterStatus?: 'pending' | 'passed' | 'rejected';
     processStatus?: 'pending' | 'processing' | 'completed' | 'failed';
     search?: string;
@@ -552,12 +554,15 @@ export async function getUserArticles(
     !hasDateRange &&
     !(options.skipDaysFilterForSearch && options.search && options.search.trim() !== '');
 
-  // 使用左连接和条件来同时支持 RSS 和期刊文章
-  // (rss_source_id IS NOT NULL AND rss_source.user_id = :userId) OR (journal_id IS NOT NULL AND journal.user_id = :userId)
+  // 使用左连接和条件来同时支持 RSS、期刊和关键词文章
+  // (rss_source_id IS NOT NULL AND rss_source.user_id = :userId) OR
+  // (journal_id IS NOT NULL AND journal.user_id = :userId) OR
+  // (keyword_id IS NOT NULL AND keyword_subscriptions.user_id = :userId)
   let query = db
     .selectFrom('articles')
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
     .where((eb) => eb.or([
       eb.and([
         eb('articles.rss_source_id', 'is not', null),
@@ -567,26 +572,50 @@ export async function getUserArticles(
         eb('articles.journal_id', 'is not', null),
         eb('journals.user_id', '=', userId),
       ]),
+      eb.and([
+        eb('articles.keyword_id', 'is not', null),
+        eb('keyword_subscriptions.user_id', '=', userId),
+      ]),
     ]));
 
   const rssSourceIds = buildIdList(options.rssSourceIds, options.rssSourceId);
   const journalIds = buildIdList(options.journalIds, options.journalId);
+  const keywordIds = buildIdList(options.keywordIds, options.keywordId);
   const hasSourceFilter = Boolean(
     (rssSourceIds && rssSourceIds.length > 0) ||
-    (journalIds && journalIds.length > 0)
+    (journalIds && journalIds.length > 0) ||
+    (keywordIds && keywordIds.length > 0)
   );
 
-  // 来源筛选：支持 RSS 源或期刊
+  // 来源筛选：支持 RSS 源、期刊或关键词
   if (hasSourceFilter) {
-    if (rssSourceIds && rssSourceIds.length > 0 && journalIds && journalIds.length > 0) {
+    if (rssSourceIds && rssSourceIds.length > 0 && journalIds && journalIds.length > 0 && keywordIds && keywordIds.length > 0) {
       query = query.where((eb) => eb.or([
         eb('articles.rss_source_id', 'in', rssSourceIds),
         eb('articles.journal_id', 'in', journalIds),
+        eb('articles.keyword_id', 'in', keywordIds),
+      ]));
+    } else if (rssSourceIds && rssSourceIds.length > 0 && journalIds && journalIds.length > 0) {
+      query = query.where((eb) => eb.or([
+        eb('articles.rss_source_id', 'in', rssSourceIds),
+        eb('articles.journal_id', 'in', journalIds),
+      ]));
+    } else if (rssSourceIds && rssSourceIds.length > 0 && keywordIds && keywordIds.length > 0) {
+      query = query.where((eb) => eb.or([
+        eb('articles.rss_source_id', 'in', rssSourceIds),
+        eb('articles.keyword_id', 'in', keywordIds),
+      ]));
+    } else if (journalIds && journalIds.length > 0 && keywordIds && keywordIds.length > 0) {
+      query = query.where((eb) => eb.or([
+        eb('articles.journal_id', 'in', journalIds),
+        eb('articles.keyword_id', 'in', keywordIds),
       ]));
     } else if (rssSourceIds && rssSourceIds.length > 0) {
       query = query.where('articles.rss_source_id', 'in', rssSourceIds);
     } else if (journalIds && journalIds.length > 0) {
       query = query.where('articles.journal_id', 'in', journalIds);
+    } else if (keywordIds && keywordIds.length > 0) {
+      query = query.where('articles.keyword_id', 'in', keywordIds);
     }
   }
 
@@ -646,6 +675,7 @@ export async function getUserArticles(
     .selectFrom('articles')
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
     .leftJoin('article_translations', 'article_translations.article_id', 'articles.id')
     .where((eb) => eb.or([
       eb.and([
@@ -656,19 +686,41 @@ export async function getUserArticles(
         eb('articles.journal_id', 'is not', null),
         eb('journals.user_id', '=', userId),
       ]),
+      eb.and([
+        eb('articles.keyword_id', 'is not', null),
+        eb('keyword_subscriptions.user_id', '=', userId),
+      ]),
     ]));
 
   // Re-apply filters (same logic as above)
   if (hasSourceFilter) {
-    if (rssSourceIds && rssSourceIds.length > 0 && journalIds && journalIds.length > 0) {
+    if (rssSourceIds && rssSourceIds.length > 0 && journalIds && journalIds.length > 0 && keywordIds && keywordIds.length > 0) {
       articlesQuery = articlesQuery.where((eb) => eb.or([
         eb('articles.rss_source_id', 'in', rssSourceIds),
         eb('articles.journal_id', 'in', journalIds),
+        eb('articles.keyword_id', 'in', keywordIds),
+      ]));
+    } else if (rssSourceIds && rssSourceIds.length > 0 && journalIds && journalIds.length > 0) {
+      articlesQuery = articlesQuery.where((eb) => eb.or([
+        eb('articles.rss_source_id', 'in', rssSourceIds),
+        eb('articles.journal_id', 'in', journalIds),
+      ]));
+    } else if (rssSourceIds && rssSourceIds.length > 0 && keywordIds && keywordIds.length > 0) {
+      articlesQuery = articlesQuery.where((eb) => eb.or([
+        eb('articles.rss_source_id', 'in', rssSourceIds),
+        eb('articles.keyword_id', 'in', keywordIds),
+      ]));
+    } else if (journalIds && journalIds.length > 0 && keywordIds && keywordIds.length > 0) {
+      articlesQuery = articlesQuery.where((eb) => eb.or([
+        eb('articles.journal_id', 'in', journalIds),
+        eb('articles.keyword_id', 'in', keywordIds),
       ]));
     } else if (rssSourceIds && rssSourceIds.length > 0) {
       articlesQuery = articlesQuery.where('articles.rss_source_id', 'in', rssSourceIds);
     } else if (journalIds && journalIds.length > 0) {
       articlesQuery = articlesQuery.where('articles.journal_id', 'in', journalIds);
+    } else if (keywordIds && keywordIds.length > 0) {
+      articlesQuery = articlesQuery.where('articles.keyword_id', 'in', keywordIds);
     }
   }
   if (options.filterStatus !== undefined) {
@@ -1164,15 +1216,16 @@ export async function getUnreadCount(
  * 合并来源选项接口
  */
 export interface MergedSourceOption {
-  id: string;           // 格式: "rss:{id}" 或 "journal:{id}" 或 "mixed:{id}"
+  id: string;           // 格式: "rss:{id}" 或 "journal:{id}" 或 "keyword:{id}" 或 "mixed:{id}"
   name: string;         // 来源名称
-  type: 'rss' | 'journal' | 'mixed';
+  type: 'rss' | 'journal' | 'keyword' | 'mixed';
   rssIds?: number[];    // 当 name 相同时，包含多个 RSS ID
   journalIds?: number[]; // 当 name 相同时，包含多个期刊 ID
+  keywordIds?: number[]; // 关键词订阅 ID
 }
 
 /**
- * 获取合并后的来源列表（RSS 源和期刊按名称合并）
+ * 获取合并后的来源列表（RSS 源、期刊和关键词订阅）
  * @param userId - User ID
  */
 export async function getMergedSources(userId: number): Promise<MergedSourceOption[]> {
@@ -1234,6 +1287,33 @@ export async function getMergedSources(userId: number): Promise<MergedSourceOpti
   }
   const journals = Array.from(journalsMap.values());
 
+  // 获取关键词订阅列表：包括 active 状态的，以及有文章的非 active 状态的
+  const activeKeywords = await db
+    .selectFrom('keyword_subscriptions')
+    .select(['id', 'keyword'])
+    .where('user_id', '=', userId)
+    .where('is_active', '=', 1)
+    .execute();
+
+  // 获取有文章但状态非 active 的关键词订阅（用于检索已有文章）
+  const keywordsWithArticles = await db
+    .selectFrom('keyword_subscriptions')
+    .innerJoin('articles', 'articles.keyword_id', 'keyword_subscriptions.id')
+    .select(['keyword_subscriptions.id', 'keyword_subscriptions.keyword'])
+    .where('keyword_subscriptions.user_id', '=', userId)
+    .where('keyword_subscriptions.is_active', '!=', 1)
+    .execute();
+
+  // 合并关键词订阅列表（去重）
+  const keywordsMap = new Map<number, { id: number; name: string }>();
+  for (const k of activeKeywords) {
+    keywordsMap.set(k.id, { id: k.id, name: k.keyword });
+  }
+  for (const k of keywordsWithArticles) {
+    keywordsMap.set(k.id, { id: k.id, name: k.keyword });
+  }
+  const keywords = Array.from(keywordsMap.values());
+
   // 按名称分组
   const sourceMap = new Map<string, MergedSourceOption>();
 
@@ -1285,6 +1365,18 @@ export async function getMergedSources(userId: number): Promise<MergedSourceOpti
         journalIds: [journal.id],
       });
     }
+  }
+
+  // 添加关键词订阅
+  for (const keyword of keywords) {
+    const keywordName = `关键词: ${keyword.name}`;
+    // 关键词订阅不与其他来源合并（名称是唯一的）
+    sourceMap.set(keywordName, {
+      id: `keyword:${keyword.id}`,
+      name: keywordName,
+      type: 'keyword',
+      keywordIds: [keyword.id],
+    });
   }
 
   // 按名称排序

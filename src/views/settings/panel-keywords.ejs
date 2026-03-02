@@ -1,0 +1,36 @@
+<section class="settings-panel" data-tab="keywords">
+<div class="settings-container">
+  <div class="section-header">
+    <h2>关键词订阅</h2>
+    <button class="btn btn-primary" onclick="showKeywordAddModal()">+ 添加关键词</button>
+  </div>
+
+  <table class="rss-sources-table" id="keywordsTable">
+    <thead>
+      <tr>
+        <th>关键词</th>
+        <th>时间范围</th>
+        <th>爬虫类型</th>
+        <th>每次爬取</th>
+        <th>上次爬取</th>
+        <th>累计文章</th>
+        <th>状态</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="keywordsBody">
+      <!-- 动态加载 -->
+    </tbody>
+  </table>
+
+  <div id="keywordsPagination"></div>
+
+  <div id="keywordsEmptyState" class="empty-state" style="display: none;">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    </svg>
+    <p>暂无关键词订阅</p>
+    <p style="font-size: 0.9rem; margin-top: 8px;">点击上方按钮添加您的第一个关键词</p>
+  </div>
+</div>
+</section>

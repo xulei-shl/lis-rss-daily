@@ -12,6 +12,7 @@ import { initRSSParser } from './rss-parser.js';
 import { initRSSScheduler } from './rss-scheduler.js';
 import { initRelatedScheduler } from './related-scheduler.js';
 import { initJournalScheduler } from './journal-scheduler.js';
+import { initKeywordScheduler } from './keyword-scheduler.js';
 import { initTelegramBotManager } from './telegram/bot-manager.js';
 import { config } from './config.js';
 import { createApp, startServer } from './api/web.js';
@@ -93,6 +94,17 @@ async function main() {
     log.info('📚 Journal scheduler disabled');
   }
 
+  // Initialize and start Keyword scheduler
+  const keywordScheduler = initKeywordScheduler();
+  const keywordCrawlEnabled = process.env.KEYWORD_CRAWL_ENABLED !== 'false';
+  const keywordCrawlSchedule = process.env.KEYWORD_CRAWL_SCHEDULE || '15 3 * * 6';
+  if (keywordCrawlEnabled) {
+    keywordScheduler.start();
+    log.info(`🔑 Keyword scheduler started (schedule: ${keywordCrawlSchedule})`);
+  } else {
+    log.info('🔑 Keyword scheduler disabled');
+  }
+
   // Initialize and start Telegram Bot
   const telegramBotManager = await initTelegramBotManager();
   if (telegramBotManager) {
@@ -119,6 +131,10 @@ async function main() {
     // Stop journal scheduler
     await journalScheduler.stop();
     log.info('📚 Journal scheduler stopped');
+
+    // Stop keyword scheduler
+    await keywordScheduler.stop();
+    log.info('🔑 Keyword scheduler stopped');
 
     // Stop Telegram bot manager
     if (telegramBotManager) {

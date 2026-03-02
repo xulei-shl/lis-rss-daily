@@ -65,6 +65,9 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
     const journalId = req.query.journalId
       ? parseInt(req.query.journalId as string)
       : undefined;
+    const keywordId = req.query.keywordId
+      ? parseInt(req.query.keywordId as string)
+      : undefined;
     const filterStatus = req.query.filterStatus as
       | 'pending'
       | 'passed'
@@ -90,6 +93,7 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
     const isRead = isReadParam === 'true' ? true : isReadParam === 'false' ? false : undefined;
     const rssSourceIds = normalizeQueryIds(req.query.rssSourceIds as string | string[] | undefined);
     const journalIds = normalizeQueryIds(req.query.journalIds as string | string[] | undefined);
+    const keywordIds = normalizeQueryIds(req.query.keywordIds as string | string[] | undefined);
     // 评级筛选
     const ratingParam = req.query.rating as string | undefined;
     const rating = ratingParam === 'unrated' ? undefined : parseOptionalNumber(ratingParam);
@@ -102,6 +106,8 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
       rssSourceIds,
       journalId,
       journalIds,
+      keywordId,
+      keywordIds,
       filterStatus,
       processStatus,
       search: searchQuery,
