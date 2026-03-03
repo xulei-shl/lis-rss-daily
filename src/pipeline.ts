@@ -34,6 +34,11 @@ const log = logger.child({ module: 'pipeline' });
 export type StageStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
 
 /**
+ * 处理日志状态（不包含 pending）
+ */
+type LogStatus = 'processing' | 'completed' | 'failed' | 'skipped';
+
+/**
  * 处理步骤状态记录
  */
 export interface ProcessStages {
@@ -76,7 +81,7 @@ async function updateProcessStage(
   articleId: number,
   userId: number,
   stage: keyof ProcessStages,
-  status: StageStatus,
+  status: LogStatus,
   context?: StageLogContext
 ): Promise<void> {
   const db = getDb();
@@ -495,20 +500,24 @@ async function runPipeline(
 
     log.debug({ articleId, needReindex }, '[stage3] Starting vector index');
 
-    indexArticle(articleId, userId, async (result: IndexResult) => {
-      if (!result.success) {
-        log.warn({ articleId, error: result.error }, '[stage3] 向量索引失败');
-        await updateProcessStage(articleId, userId, 'vector', 'failed', {
-          durationMs: Date.now() - vectorStart,
-          errorMessage: result.error,
-        });
-        // 向量化失败是非致命的，继续处理
-      } else {
-        log.debug({ articleId }, '[stage3] 向量索引成功');
-        await updateProcessStage(articleId, userId, 'vector', 'completed', {
-          durationMs: Date.now() - vectorStart,
-        });
-      }
+    // 使用 Promise 等待向量化完成
+    await new Promise<void>((resolve) => {
+      indexArticle(articleId, userId, async (result: IndexResult) => {
+        if (!result.success) {
+          log.warn({ articleId, error: result.error }, '[stage3] 向量索引失败');
+          await updateProcessStage(articleId, userId, 'vector', 'failed', {
+            durationMs: Date.now() - vectorStart,
+            errorMessage: result.error,
+          });
+          // 向量化失败是非致命的，继续处理
+        } else {
+          log.debug({ articleId }, '[stage3] 向量索引成功');
+          await updateProcessStage(articleId, userId, 'vector', 'completed', {
+            durationMs: Date.now() - vectorStart,
+          });
+        }
+        resolve();
+      });
     });
   } else {
     log.debug({ articleId }, '[stage3] Vector already completed, skipping');
@@ -646,18 +655,42 @@ function sleep(ms: number): Promise<void> {
 export async function getPendingArticleIds(userId: number, limit: number = 50): Promise<number[]> {
   const db = getDb();
 
-  const articles = await db
+  // 获取 RSS 文章
+  const rssArticles = await db
     .selectFrom('articles')
     .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .where('rss_sources.user_id', '=', userId)
     .where('articles.filter_status', '=', 'passed')
     .where('articles.process_status', '=', 'pending')
-    .select('articles.id')
-    .orderBy('articles.created_at', 'desc')
-    .limit(limit)
+    .select(['articles.id', 'articles.created_at'])
     .execute();
 
-  return articles.map((a) => a.id);
+  // 获取关键词文章
+  const keywordArticles = await db
+    .selectFrom('articles')
+    .innerJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .where('keyword_subscriptions.user_id', '=', userId)
+    .where('articles.filter_status', '=', 'passed')
+    .where('articles.process_status', '=', 'pending')
+    .select(['articles.id', 'articles.created_at'])
+    .execute();
+
+  // 获取期刊文章
+  const journalArticles = await db
+    .selectFrom('articles')
+    .innerJoin('journals', 'journals.id', 'articles.journal_id')
+    .where('journals.user_id', '=', userId)
+    .where('articles.filter_status', '=', 'passed')
+    .where('articles.process_status', '=', 'pending')
+    .select(['articles.id', 'articles.created_at'])
+    .execute();
+
+  // 合并并按时间排序
+  const allArticles = [...rssArticles, ...keywordArticles, ...journalArticles]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, limit);
+
+  return allArticles.map((a) => a.id);
 }
 
 /**
@@ -670,16 +703,40 @@ export async function getPendingArticleIds(userId: number, limit: number = 50): 
 export async function getFailedArticleIds(userId: number, limit: number = 50): Promise<number[]> {
   const db = getDb();
 
-  const articles = await db
+  // 获取 RSS 文章
+  const rssArticles = await db
     .selectFrom('articles')
     .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .where('rss_sources.user_id', '=', userId)
     .where('articles.filter_status', '=', 'passed')
     .where('articles.process_status', '=', 'failed')
-    .select('articles.id')
-    .orderBy('articles.updated_at', 'desc')
-    .limit(limit)
+    .select(['articles.id', 'articles.updated_at'])
     .execute();
 
-  return articles.map((a) => a.id);
+  // 获取关键词文章
+  const keywordArticles = await db
+    .selectFrom('articles')
+    .innerJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .where('keyword_subscriptions.user_id', '=', userId)
+    .where('articles.filter_status', '=', 'passed')
+    .where('articles.process_status', '=', 'failed')
+    .select(['articles.id', 'articles.updated_at'])
+    .execute();
+
+  // 获取期刊文章
+  const journalArticles = await db
+    .selectFrom('articles')
+    .innerJoin('journals', 'journals.id', 'articles.journal_id')
+    .where('journals.user_id', '=', userId)
+    .where('articles.filter_status', '=', 'passed')
+    .where('articles.process_status', '=', 'failed')
+    .select(['articles.id', 'articles.updated_at'])
+    .execute();
+
+  // 合并并按时间排序
+  const allArticles = [...rssArticles, ...keywordArticles, ...journalArticles]
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    .slice(0, limit);
+
+  return allArticles.map((a) => a.id);
 }

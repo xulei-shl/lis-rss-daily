@@ -36,7 +36,8 @@ async function loadArticles(articleIds: number[], userId?: number) {
   const db = getDb();
   let query = db
     .selectFrom('articles')
-    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    // 使用 leftJoin 支持关键词文章和期刊文章（rss_source_id 为 null）
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('article_translations', 'article_translations.article_id', 'articles.id')
     .where('articles.id', 'in', articleIds)
     .select([
@@ -44,16 +45,71 @@ async function loadArticles(articleIds: number[], userId?: number) {
       'articles.title',
       'articles.content',
       'articles.markdown_content',
+      'articles.keyword_id',
+      'articles.journal_id',
       'article_translations.title_zh',
       'article_translations.summary_zh',
-      'rss_sources.user_id as user_id',
+      'rss_sources.user_id as rss_user_id',
     ]);
 
   if (userId !== undefined) {
-    query = query.where('rss_sources.user_id', '=', userId);
+    // 需要同时检查 RSS 来源、关键词订阅和期刊的用户 ID
+    query = query.where((eb) =>
+      eb.or([
+        eb('rss_sources.user_id', '=', userId),
+        eb.exists(
+          eb.selectFrom('keyword_subscriptions')
+            .whereRef('keyword_subscriptions.id', '=', 'articles.keyword_id')
+            .where('keyword_subscriptions.user_id', '=', userId)
+        ),
+        eb.exists(
+          eb.selectFrom('journals')
+            .whereRef('journals.id', '=', 'articles.journal_id')
+            .where('journals.user_id', '=', userId)
+        )
+      ])
+    ) as any;
   }
 
-  return await query.execute();
+  const rows = await query.execute();
+
+  // 获取关键词文章的 user_id
+  const keywordIds = rows.filter(r => !r.rss_user_id && r.keyword_id).map(r => r.keyword_id!);
+  const keywordUserMap = new Map<number, number>();
+
+  if (keywordIds.length > 0) {
+    const keywordRows = await db
+      .selectFrom('keyword_subscriptions')
+      .where('id', 'in', keywordIds)
+      .select(['id', 'user_id'])
+      .execute();
+
+    for (const kr of keywordRows) {
+      keywordUserMap.set(kr.id, kr.user_id);
+    }
+  }
+
+  // 获取期刊文章的 user_id
+  const journalIds = rows.filter(r => !r.rss_user_id && !r.keyword_id && r.journal_id).map(r => r.journal_id!);
+  const journalUserMap = new Map<number, number>();
+
+  if (journalIds.length > 0) {
+    const journalRows = await db
+      .selectFrom('journals')
+      .where('id', 'in', journalIds)
+      .select(['id', 'user_id'])
+      .execute();
+
+    for (const jr of journalRows) {
+      journalUserMap.set(jr.id, jr.user_id);
+    }
+  }
+
+  // 补充 user_id（优先级：RSS > 关键词 > 期刊）
+  return rows.map(row => ({
+    ...row,
+    user_id: row.rss_user_id || keywordUserMap.get(row.keyword_id!) || journalUserMap.get(row.journal_id!) || null
+  }));
 }
 
 async function doIndexArticles(
@@ -67,6 +123,11 @@ async function doIndexArticles(
   const groups = new Map<number, any[]>();
   for (const row of rows as any[]) {
     const uid = Number(row.user_id);
+    // 跳过没有 user_id 的文章（不应该发生，但作为保护）
+    if (!uid) {
+      log.warn({ articleId: row.id }, 'Article has no user_id, skipping vector index');
+      continue;
+    }
     if (!groups.has(uid)) {
       groups.set(uid, []);
     }
