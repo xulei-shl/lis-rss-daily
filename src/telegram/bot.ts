@@ -15,6 +15,7 @@ import { parseGetArticlesCommand } from './command-parser.js';
 import { readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { getUserLocalDate } from '../api/timezone.js';
 
 const log = logger.child({ module: 'telegram-bot' });
 
@@ -547,11 +548,10 @@ export class TelegramBot {
 
       const { year, month, day } = parsed;
 
-      // Validate not in future
-      const now = new Date();
-      const cmdDate = new Date(year, month - 1, day);
-      cmdDate.setHours(23, 59, 59, 999); // Set to end of the day
-      if (cmdDate > now) {
+      // Validate not in future (use user's timezone)
+      const todayStr = await getUserLocalDate(this.userId);
+      const cmdDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      if (cmdDateStr > todayStr) {
         await this.client.sendMessage(this.chatId, '❌ 日期不能是未来时间');
         return;
       }
@@ -614,7 +614,8 @@ export class TelegramBot {
           title: article.title,
           url: article.url,
           sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
-          sourceType: article.source_origin === 'journal' ? '期刊文章' : 'RSS订阅',
+          sourceType: article.source_origin === 'journal' ? '期刊文章' :
+                      article.source_origin === 'keyword' ? '关键词订阅' : 'RSS订阅',
           summary,
         });
 

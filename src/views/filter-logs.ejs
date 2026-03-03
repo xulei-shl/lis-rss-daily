@@ -672,7 +672,8 @@
     tbody.innerHTML = logs.map((log) => {
       const detailId = \`process-detail-\${log.id}\`;
       const stageLabel = getStageLabel(log.stage);
-      const sourceLabel = log.source_origin === 'journal' ? '期刊' : 'RSS';
+      const sourceLabel = log.source_origin === 'journal' ? '期刊' :
+                          log.source_origin === 'keyword' ? '关键词' : 'RSS';
       return \`
         <tr class="expand-row" data-detail-id="\${detailId}">
           <td class="expand-cell"><span class="expand-icon">▶</span></td>
