@@ -47,6 +47,27 @@ function parseOptionalNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+/**
+ * 生成用户文章权限检查条件
+ * 检查文章是否属于指定用户（通过 rss_source、journal 或 keyword_subscriptions）
+ */
+function buildUserArticlePermissionCondition(userId: number) {
+  return (eb: any) => eb.or([
+    eb.and([
+      eb('articles.rss_source_id', 'is not', null),
+      eb('rss_sources.user_id', '=', userId),
+    ]),
+    eb.and([
+      eb('articles.journal_id', 'is not', null),
+      eb('journals.user_id', '=', userId),
+    ]),
+    eb.and([
+      eb('articles.keyword_id', 'is not', null),
+      eb('keyword_subscriptions.user_id', '=', userId),
+    ]),
+  ]);
+}
+
 // ============================================================================
 // Articles Routes
 // ============================================================================
@@ -144,16 +165,8 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .selectFrom('articles')
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
-      .where((eb) => eb.or([
-        eb.and([
-          eb('articles.rss_source_id', 'is not', null),
-          eb('rss_sources.user_id', '=', userId),
-        ]),
-        eb.and([
-          eb('articles.journal_id', 'is not', null),
-          eb('journals.user_id', '=', userId),
-        ]),
-      ]))
+      .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .where(buildUserArticlePermissionCondition(userId))
       .where('articles.created_at', '>=', today.toISOString())
       .select((eb) => eb.fn.count('articles.id').as('count'))
       .executeTakeFirst();
@@ -165,16 +178,8 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .selectFrom('articles')
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
-      .where((eb) => eb.or([
-        eb.and([
-          eb('articles.rss_source_id', 'is not', null),
-          eb('rss_sources.user_id', '=', userId),
-        ]),
-        eb.and([
-          eb('articles.journal_id', 'is not', null),
-          eb('journals.user_id', '=', userId),
-        ]),
-      ]))
+      .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .where(buildUserArticlePermissionCondition(userId))
       .where('articles.filter_status', '=', 'pending')
       .select((eb) => eb.fn.count('articles.id').as('count'))
       .executeTakeFirst();
@@ -186,16 +191,8 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .selectFrom('articles')
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
-      .where((eb) => eb.or([
-        eb.and([
-          eb('articles.rss_source_id', 'is not', null),
-          eb('rss_sources.user_id', '=', userId),
-        ]),
-        eb.and([
-          eb('articles.journal_id', 'is not', null),
-          eb('journals.user_id', '=', userId),
-        ]),
-      ]))
+      .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .where(buildUserArticlePermissionCondition(userId))
       .where('articles.process_status', '=', 'completed')
       .select((eb) => eb.fn.count('articles.id').as('count'))
       .executeTakeFirst();
@@ -207,16 +204,8 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .selectFrom('articles')
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
-      .where((eb) => eb.or([
-        eb.and([
-          eb('articles.rss_source_id', 'is not', null),
-          eb('rss_sources.user_id', '=', userId),
-        ]),
-        eb.and([
-          eb('articles.journal_id', 'is not', null),
-          eb('journals.user_id', '=', userId),
-        ]),
-      ]))
+      .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .where(buildUserArticlePermissionCondition(userId))
       .where('articles.filter_status', '!=', 'pending')
       .select((eb) => eb.fn.count('articles.id').as('count'))
       .executeTakeFirst();
@@ -225,16 +214,8 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .selectFrom('articles')
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
-      .where((eb) => eb.or([
-        eb.and([
-          eb('articles.rss_source_id', 'is not', null),
-          eb('rss_sources.user_id', '=', userId),
-        ]),
-        eb.and([
-          eb('articles.journal_id', 'is not', null),
-          eb('journals.user_id', '=', userId),
-        ]),
-      ]))
+      .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .where(buildUserArticlePermissionCondition(userId))
       .where('articles.filter_status', '=', 'passed')
       .select((eb) => eb.fn.count('articles.id').as('count'))
       .executeTakeFirst();
@@ -248,16 +229,8 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .selectFrom('articles')
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
-      .where((eb) => eb.or([
-        eb.and([
-          eb('articles.rss_source_id', 'is not', null),
-          eb('rss_sources.user_id', '=', userId),
-        ]),
-        eb.and([
-          eb('articles.journal_id', 'is not', null),
-          eb('journals.user_id', '=', userId),
-        ]),
-      ]))
+      .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .where(buildUserArticlePermissionCondition(userId))
       .where('articles.filter_status', '=', 'passed')
       .where('articles.is_read', '=', 0)
       .select((eb) => eb.fn.count('articles.id').as('count'))

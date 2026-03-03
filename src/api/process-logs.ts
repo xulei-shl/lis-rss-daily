@@ -76,6 +76,7 @@ export async function getProcessLogs(query: ProcessLogQuery): Promise<ProcessLog
     .innerJoin('articles', 'articles.id', 'article_process_logs.article_id')
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
     .where((eb) =>
       eb.or([
         eb.and([
@@ -85,6 +86,10 @@ export async function getProcessLogs(query: ProcessLogQuery): Promise<ProcessLog
         eb.and([
           eb('articles.journal_id', 'is not', null),
           eb('journals.user_id', '=', query.userId),
+        ]),
+        eb.and([
+          eb('articles.keyword_id', 'is not', null),
+          eb('keyword_subscriptions.user_id', '=', query.userId),
         ]),
       ])
     );

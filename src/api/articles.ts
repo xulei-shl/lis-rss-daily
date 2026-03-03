@@ -44,8 +44,10 @@ export interface ArticleWithSource {
   id: number;
   rss_source_id: number | null;
   journal_id: number | null;
+  keyword_id: number | null;  // 关键词订阅ID
   rss_source_name?: string;
   journal_name?: string;
+  keyword_name?: string;  // 关键词名称
   source_name?: string;  // 合并后的来源名称
   title: string;
   url: string;
@@ -65,7 +67,7 @@ export interface ArticleWithSource {
   published_volume: number | null;  // 卷号（期刊文章使用）
   error_message: string | null;
   is_read: number;  // 0 = 未读, 1 = 已读
-  source_origin: 'rss' | 'journal';  // 文章来源
+  source_origin: 'rss' | 'journal' | 'keyword';  // 文章来源
   rating: number | null;  // 文章评级（1-5星）
   created_at: string;
   updated_at: string;
@@ -340,6 +342,7 @@ export async function getArticleById(
     .selectFrom('articles')
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
     .leftJoin('article_translations', 'article_translations.article_id', 'articles.id')
     .where('articles.id', '=', id)
     .where((eb) => eb.or([
@@ -351,11 +354,16 @@ export async function getArticleById(
         eb('articles.journal_id', 'is not', null),
         eb('journals.user_id', '=', userId),
       ]),
+      eb.and([
+        eb('articles.keyword_id', 'is not', null),
+        eb('keyword_subscriptions.user_id', '=', userId),
+      ]),
     ]))
     .select([
       'articles.id',
       'articles.rss_source_id',
       'articles.journal_id',
+      'articles.keyword_id',
       'articles.title',
       'articles.url',
       'articles.summary',
@@ -379,6 +387,7 @@ export async function getArticleById(
       'articles.updated_at',
       'rss_sources.name as rss_source_name',
       'journals.name as journal_name',
+      'keyword_subscriptions.keyword as keyword_name',
     ])
     .executeTakeFirst();
 
@@ -387,7 +396,7 @@ export async function getArticleById(
   // 合并来源名称
   const merged = {
     ...article,
-    source_name: (article as any).journal_name || (article as any).rss_source_name || 'Unknown',
+    source_name: (article as any).journal_name || (article as any).rss_source_name || (article as any).keyword_name || 'Unknown',
   } as ArticleWithSource;
 
   normalizeArticleDates(merged);
@@ -409,6 +418,7 @@ export async function getArticleFilterMatches(
     .innerJoin('articles', 'articles.id', 'article_filter_logs.article_id')
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
     .leftJoin('topic_domains', 'topic_domains.id', 'article_filter_logs.domain_id')
     .where('article_filter_logs.article_id', '=', articleId)
     .where((eb) => eb.or([
@@ -419,6 +429,10 @@ export async function getArticleFilterMatches(
       eb.and([
         eb('articles.journal_id', 'is not', null),
         eb('journals.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.keyword_id', 'is not', null),
+        eb('keyword_subscriptions.user_id', '=', userId),
       ]),
     ]))
     .where('article_filter_logs.is_passed', '=', 1)
@@ -905,6 +919,12 @@ export async function deleteArticle(id: number, userId: number): Promise<void> {
           eb.selectFrom('journals').select('id').where('user_id', '=', userId)
         ),
       ]),
+      eb.and([
+        eb('articles.keyword_id', 'is not', null),
+        eb('articles.keyword_id', 'in', (eb) =>
+          eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
+        ),
+      ]),
     ]))
     .executeTakeFirst();
 
@@ -1014,6 +1034,12 @@ export async function updateArticleReadStatus(
           eb.selectFrom('journals').select('id').where('user_id', '=', userId)
         ),
       ]),
+      eb.and([
+        eb('articles.keyword_id', 'is not', null),
+        eb('articles.keyword_id', 'in', (eb) =>
+          eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
+        ),
+      ]),
     ]))
     .executeTakeFirst();
 
@@ -1061,6 +1087,12 @@ export async function batchUpdateArticleReadStatus(
           eb.selectFrom('journals').select('id').where('user_id', '=', userId)
         ),
       ]),
+      eb.and([
+        eb('articles.keyword_id', 'is not', null),
+        eb('articles.keyword_id', 'in', (eb) =>
+          eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
+        ),
+      ]),
     ]))
     .executeTakeFirst();
 
@@ -1098,7 +1130,7 @@ export async function markAllAsRead(
   const rssSourceIds = buildIdList(options.rssSourceIds, options.rssSourceId);
   const journalIds = buildIdList(options.journalIds, options.journalId);
 
-  // 使用左连接同时支持 RSS 和期刊文章
+  // 使用左连接同时支持 RSS、期刊和关键词文章
   let query = db
     .updateTable('articles')
     .set({
@@ -1116,6 +1148,12 @@ export async function markAllAsRead(
         eb('articles.journal_id', 'is not', null),
         eb('articles.journal_id', 'in', (eb) =>
           eb.selectFrom('journals').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.keyword_id', 'is not', null),
+        eb('articles.keyword_id', 'in', (eb) =>
+          eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
         ),
       ]),
     ]))
@@ -1423,6 +1461,12 @@ export async function updateArticleRating(
         eb('articles.journal_id', 'is not', null),
         eb('articles.journal_id', 'in', (eb) =>
           eb.selectFrom('journals').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.keyword_id', 'is not', null),
+        eb('articles.keyword_id', 'in', (eb) =>
+          eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
         ),
       ]),
     ]))
