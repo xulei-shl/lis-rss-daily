@@ -2025,7 +2025,7 @@ function renderKeywordsTable() {
       <td>${kw.num_results}</td>
       <td>${kw.last_crawl_time ? formatDate(kw.last_crawl_time) : '<span style="color: #999">未爬取</span>'}</td>
       <td>${kw.total_articles || 0}</td>
-      <td>${kw.is_active ? '<span class="badge-active">启用</span>' : '<span class="badge-inactive">停用</span>'}</td>
+      <td>${kw.is_active ? '<span class="status-badge active">启用</span>' : '<span class="status-badge inactive">禁用</span>'}</td>
       <td>
         <div class="action-buttons">
           <button class="btn-icon" onclick="crawlKeywordNow(${kw.id})" title="立即爬取">爬取</button>
