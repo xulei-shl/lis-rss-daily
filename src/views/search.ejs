@@ -223,6 +223,16 @@ function renderSearchResult(result, index) {
     currentQuery
   );
 
+  // 根据来源类型确定来源名称
+  let sourceName = 'Unknown';
+  if (result.source_origin === 'journal') {
+    sourceName = result.journal_name || 'Unknown';
+  } else if (result.source_origin === 'keyword') {
+    sourceName = result.keyword_name || 'Unknown';
+  } else {
+    sourceName = result.rss_source_name || 'Unknown';
+  }
+
   return \`
     <div class="search-result fade-in-up" style="animation-delay: \${index * 30}ms">
       <div class="search-result-header">
@@ -234,7 +244,7 @@ function renderSearchResult(result, index) {
         </div>
       </div>
       <div class="search-result-meta">
-        <span>\${escapeHtml(result.rss_source_name || 'Unknown')}</span>
+        <span>\${escapeHtml(sourceName)}</span>
         <span>·</span>
         <span>\${formatTime(result.published_at)}</span>
         <span>·</span>
