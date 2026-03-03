@@ -8,6 +8,7 @@
     <button class="logs-tab active" data-tab="all">全部流程</button>
     <button class="logs-tab" data-tab="rss">RSS 抓取</button>
     <button class="logs-tab" data-tab="crawl">期刊爬取</button>
+    <button class="logs-tab" data-tab="keyword">关键词爬取</button>
     <button class="logs-tab" data-tab="filter">过滤日志</button>
     <button class="logs-tab" data-tab="process">后处理</button>
   </div>
@@ -114,6 +115,43 @@
     <div class="pagination" id="crawlPagination"></div>
   </div>
 
+  <div class="logs-tab-panel" data-panel="keyword">
+    <div class="panel-filter logs-filter-bar">
+      <div class="filter-group">
+        <label>结果:</label>
+        <select id="keywordStatusFilter" class="filter-select">
+          <option value="">全部</option>
+          <option value="success">成功</option>
+          <option value="partial">部分成功</option>
+          <option value="failed">失败</option>
+        </select>
+      </div>
+    </div>
+    <table class="logs-table" id="keywordTable">
+      <thead>
+        <tr>
+          <th class="expand-cell"></th>
+          <th>关键词</th>
+          <th>爬虫类型</th>
+          <th>年份范围</th>
+          <th>结果</th>
+          <th>新增/总数</th>
+          <th>耗时</th>
+          <th>时间</th>
+        </tr>
+      </thead>
+      <tbody id="keywordBody"></tbody>
+    </table>
+    <div class="empty-state" id="keywordEmpty">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <p>暂无关键词爬取日志</p>
+    </div>
+    <div class="pagination" id="keywordPagination"></div>
+  </div>
+
   <div class="logs-tab-panel" data-panel="filter">
     <div class="panel-filter logs-filter-bar">
       <div class="filter-group">
@@ -212,6 +250,7 @@
           all: { page: 1, totalPages: 1 },
           rss: { page: 1, totalPages: 1 },
           crawl: { page: 1, totalPages: 1 },
+          keyword: { page: 1, totalPages: 1 },
           filter: { page: 1, totalPages: 1 },
           process: { page: 1, totalPages: 1 },
         },
@@ -221,6 +260,7 @@
           rssStatus: '',
           rssSchedule: '',
           crawlStatus: '',
+          keywordStatus: '',
           processStage: '',
           processStatus: '',
         },
@@ -291,6 +331,14 @@
           });
         }
 
+        const keywordStatus = document.getElementById('keywordStatusFilter');
+        if (keywordStatus) {
+          keywordStatus.addEventListener('change', () => {
+            state.filters.keywordStatus = keywordStatus.value;
+            loadKeywordLogs(1);
+          });
+        }
+
         const processStage = document.getElementById('processStageFilter');
         if (processStage) {
           processStage.addEventListener('change', () => {
@@ -315,6 +363,7 @@
         loadUnifiedLogs(1);
         loadRssLogs(1);
         loadCrawlLogs(1);
+        loadKeywordLogs(1);
         loadFilterLogs(1);
         loadProcessLogs(1);
       }
@@ -386,6 +435,22 @@
           console.error(err);
           toast.error('加载爬取日志失败：' + (err.message || '网络错误'));
           showEmptyState('crawlTable', 'crawlEmpty');
+        }
+      }
+
+      async function loadKeywordLogs(page = 1) {
+        try {
+          const params = buildParams(page);
+          if (state.filters.keywordStatus) params.status = state.filters.keywordStatus;
+          const data = await fetchJson('/api/logs/keyword-crawl', params);
+          state.tabs.keyword.page = data.page || 1;
+          state.tabs.keyword.totalPages = data.totalPages || 1;
+          renderKeywordLogs(data.logs || []);
+          renderPagination('keywordPagination', state.tabs.keyword.page, state.tabs.keyword.totalPages, 'keyword');
+        } catch (err) {
+          console.error(err);
+          toast.error('加载关键词爬取日志失败：' + (err.message || '网络错误'));
+          showEmptyState('keywordTable', 'keywordEmpty');
         }
       }
 
@@ -602,6 +667,60 @@
     bindExpandEvents('#crawlBody');
   }
 
+  function renderKeywordLogs(logs) {
+    const table = document.getElementById('keywordTable');
+    const tbody = document.getElementById('keywordBody');
+    const empty = document.getElementById('keywordEmpty');
+
+    if (!tbody || !table || !empty) return;
+
+    if (!logs.length) {
+      table.style.display = 'none';
+      empty.style.display = 'block';
+      tbody.innerHTML = '';
+      return;
+    }
+
+    table.style.display = 'table';
+    empty.style.display = 'none';
+
+    tbody.innerHTML = logs.map((log) => {
+      const detailId = \`keyword-detail-\${log.id}\`;
+      const spiderLabel = getSpiderTypeLabel(log.spider_type);
+      const yearRange = formatYearRange(log.year_start, log.year_end);
+      const counts = \`\${log.new_articles_count ?? 0}/\${log.articles_count ?? 0}\`;
+      return \`
+        <tr class="expand-row" data-detail-id="\${detailId}">
+          <td class="expand-cell"><span class="expand-icon">▶</span></td>
+          <td>\${escapeHtml(log.keyword || '-')}</td>
+          <td>\${spiderLabel}</td>
+          <td>\${escapeHtml(yearRange)}</td>
+          <td>\${renderStatusBadge(log.status)}</td>
+          <td>\${counts}</td>
+          <td>\${formatDuration(log.duration_ms)}</td>
+          <td>\${formatDate(log.created_at)}</td>
+        </tr>
+        <tr class="detail-row" id="\${detailId}">
+          <td colspan="8" class="detail-cell">
+            <div class="detail-content">
+              <h4>爬取详情</h4>
+              <p>关键词 ID：\${log.keyword_id}</p>
+              <p>关键词：\${escapeHtml(log.keyword || '-')}</p>
+              <p>爬虫类型：\${spiderLabel}</p>
+              <p>年份范围：\${escapeHtml(yearRange)}</p>
+              <p>新增文章：\${log.new_articles_count ?? 0}</p>
+              <p>总计文章：\${log.articles_count ?? 0}</p>
+              <p>耗时：\${formatDuration(log.duration_ms)}</p>
+              \${log.error_message ? \`<p>错误信息：\${escapeHtml(log.error_message)}</p>\` : ''}
+            </div>
+          </td>
+        </tr>
+      \`;
+    }).join('');
+
+    bindExpandEvents('#keywordBody');
+  }
+
   function renderFilterLogs(logs) {
     const table = document.getElementById('filterTable');
     const tbody = document.getElementById('filterBody');
@@ -768,6 +887,9 @@
       case 'crawl':
         loadCrawlLogs(page);
         break;
+      case 'keyword':
+        loadKeywordLogs(page);
+        break;
       case 'filter':
         loadFilterLogs(page);
         break;
@@ -807,6 +929,8 @@
         return 'RSS 抓取';
       case 'journal_crawl':
         return '期刊爬取';
+      case 'keyword_crawl':
+        return '关键词爬取';
       case 'filter':
         return '过滤';
       case 'process':
@@ -822,6 +946,8 @@
         return log.data?.rss_source_name || '未命名订阅';
       case 'journal_crawl':
         return \`\${log.data?.journal_name || '-'} · \${formatYearVolumeIssue(log.data?.crawl_year, log.data?.crawl_volume, log.data?.crawl_issue)}\`;
+      case 'keyword_crawl':
+        return \`\${log.data?.keyword || '-'} · \${getSpiderTypeLabel(log.data?.spider_type)}\`;
       case 'process':
         return \`\${log.data?.article_title || '未命名文章'} · \${getStageLabel(log.data?.stage)}\`;
       case 'filter':
@@ -836,6 +962,8 @@
         return buildRssDetail(log.data);
       case 'journal_crawl':
         return buildCrawlDetail(log.data);
+      case 'keyword_crawl':
+        return buildKeywordDetail(log.data);
       case 'process':
         return buildProcessDetail(log.data);
       case 'filter':
@@ -892,6 +1020,36 @@
       \${data?.error_message ? \`<p>错误信息：\${escapeHtml(data.error_message)}</p>\` : ''}
       \${data?.details ? \`<h4 style="margin-top: 12px;">附加信息</h4><pre>\${formatDetailString(data.details)}</pre>\` : ''}
     \`;
+  }
+
+  function buildKeywordDetail(data) {
+    return \`
+      <h4>关键词爬取</h4>
+      <p>关键词：\${escapeHtml(data?.keyword || '-')}</p>
+      <p>爬虫类型：\${getSpiderTypeLabel(data?.spider_type)}</p>
+      <p>年份范围：\${escapeHtml(formatYearRange(data?.year_start, data?.year_end))}</p>
+      <p>新增文章：\${data?.new_articles_count ?? 0}</p>
+      <p>总计文章：\${data?.articles_count ?? 0}</p>
+      <p>耗时：\${formatDuration(data?.duration_ms)}</p>
+      \${data?.error_message ? \`<p>错误信息：\${escapeHtml(data.error_message)}</p>\` : ''}
+    \`;
+  }
+
+  function getSpiderTypeLabel(spiderType) {
+    switch (spiderType) {
+      case 'google_scholar':
+        return 'Google Scholar';
+      case 'cnki':
+        return '知网';
+      default:
+        return spiderType || '-';
+    }
+  }
+
+  function formatYearRange(yearStart, yearEnd) {
+    if (!yearStart) return '-';
+    if (!yearEnd || yearStart === yearEnd) return String(yearStart);
+    return \`\${yearStart} - \${yearEnd}\`;
   }
 
   function getDomainName(domainId) {

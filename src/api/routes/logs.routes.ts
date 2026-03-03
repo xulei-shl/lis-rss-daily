@@ -16,10 +16,16 @@ import {
   type ProcessStatus,
 } from '../process-logs.js';
 import { getUnifiedLogs, type UnifiedLogType } from '../unified-logs.js';
+import {
+  getKeywordCrawlLogs,
+  type KeywordCrawlLogQueryOptions,
+} from '../keywords.js';
 import { logger } from '../../logger.js';
 
 const log = logger.child({ module: 'api-routes/logs' });
 const DEFAULT_RANGE_DAYS = 30;
+
+console.log('[logs.routes.ts] Module loaded!');
 
 const router = express.Router();
 
@@ -176,6 +182,78 @@ router.get('/logs/process', requireAuth, async (req: AuthRequest, res) => {
 });
 
 /**
+ * GET /api/logs/keyword-crawl
+ * 关键词爬取日志分页
+ */
+router.get('/logs/keyword-crawl', requireAuth, async (req: AuthRequest, res) => {
+  console.log('[logs.routes.ts] /logs/keyword-crawl handler called');
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const { fromDate, toDate } = getDateRangeFromQuery(req, DEFAULT_RANGE_DAYS);
+
+    const status = parseKeywordCrawlStatus(req.query.status);
+
+    const result = await getKeywordCrawlLogs(
+      req.effectiveUserId!,
+      undefined,
+      page,
+      limit,
+      {
+        status: status ?? undefined,
+        fromDate,
+        toDate,
+      }
+    );
+
+    res.json(result);
+  } catch (error) {
+    log.error({ error, userId: req.userId }, 'Failed to get keyword crawl logs');
+    res.status(500).json({ error: 'Failed to get keyword crawl logs' });
+  }
+});
+
+/**
+ * GET /api/logs/keywords/:id
+ * 单个关键词爬取日志
+ */
+router.get('/logs/keywords/:id', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const idParam = req.params.id;
+    if (Array.isArray(idParam)) {
+      return res.status(400).json({ error: 'Invalid keyword ID' });
+    }
+    const id = parseInt(idParam, 10);
+
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid keyword ID' });
+    }
+
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const { fromDate, toDate } = getDateRangeFromQuery(req);
+    const status = parseKeywordCrawlStatus(req.query.status);
+
+    const result = await getKeywordCrawlLogs(
+      req.effectiveUserId!,
+      id,
+      page,
+      limit,
+      {
+        status: status ?? undefined,
+        fromDate,
+        toDate,
+      }
+    );
+
+    res.json(result);
+  } catch (error) {
+    log.error({ error, userId: req.userId }, 'Failed to get keyword crawl logs for keyword');
+    res.status(500).json({ error: 'Failed to get keyword crawl logs' });
+  }
+});
+
+/**
  * GET /api/logs/unified
  * 综合日志面板
  */
@@ -241,6 +319,12 @@ function parseProcessStatus(value: unknown): ProcessStatus | undefined {
   return allowed.includes(value as ProcessStatus) ? (value as ProcessStatus) : undefined;
 }
 
+function parseKeywordCrawlStatus(value: unknown): KeywordCrawlLogQueryOptions['status'] | undefined {
+  if (typeof value !== 'string') return undefined;
+  const allowed: KeywordCrawlLogQueryOptions['status'][] = ['success', 'failed', 'partial'];
+  return allowed.includes(value as any) ? (value as KeywordCrawlLogQueryOptions['status']) : undefined;
+}
+
 function parseUnifiedTypes(value: unknown): UnifiedLogType[] | undefined {
   if (typeof value !== 'string' || value.trim() === '') {
     return undefined;
@@ -250,11 +334,12 @@ function parseUnifiedTypes(value: unknown): UnifiedLogType[] | undefined {
     .map((item) => item.trim())
     .filter(Boolean);
 
-  const allowedSet = new Set<UnifiedLogType>(['filter', 'rss_fetch', 'journal_crawl', 'process']);
+  const allowedSet = new Set<UnifiedLogType>(['filter', 'rss_fetch', 'journal_crawl', 'process', 'keyword_crawl']);
   const normalized = requested
     .map((type) => {
       if (type === 'rss') return 'rss_fetch';
       if (type === 'crawl') return 'journal_crawl';
+      if (type === 'keyword') return 'keyword_crawl';
       return type as UnifiedLogType;
     })
     .filter((type): type is UnifiedLogType => allowedSet.has(type as UnifiedLogType));

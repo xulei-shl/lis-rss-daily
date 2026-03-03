@@ -2,11 +2,12 @@ import { getFilterLogs } from './filter-logs.js';
 import { getCrawlLogs } from './journals.js';
 import { getRssFetchLogs } from './rss-fetch-logs.js';
 import { getProcessLogs } from './process-logs.js';
+import { getKeywordCrawlLogs } from './keywords.js';
 import type { FilterLogRecord } from './filter-logs.js';
 import type { RssFetchLogRecord } from './rss-fetch-logs.js';
 import type { ProcessLogRecord } from './process-logs.js';
 
-export type UnifiedLogType = 'filter' | 'rss_fetch' | 'journal_crawl' | 'process';
+export type UnifiedLogType = 'filter' | 'rss_fetch' | 'journal_crawl' | 'process' | 'keyword_crawl';
 
 export interface UnifiedLogsQuery {
   userId: number;
@@ -34,7 +35,7 @@ export interface UnifiedLogsResult {
   totalsByType: Record<UnifiedLogType, number>;
 }
 
-const ALL_TYPES: UnifiedLogType[] = ['filter', 'rss_fetch', 'journal_crawl', 'process'];
+const ALL_TYPES: UnifiedLogType[] = ['filter', 'rss_fetch', 'journal_crawl', 'process', 'keyword_crawl'];
 
 export async function getUnifiedLogs(params: UnifiedLogsQuery): Promise<UnifiedLogsResult> {
   const page = params.page ?? 1;
@@ -98,6 +99,23 @@ export async function getUnifiedLogs(params: UnifiedLogsQuery): Promise<UnifiedL
     };
   }
 
+  if (types.includes('keyword_crawl')) {
+    const keywordResult = await getKeywordCrawlLogs(
+      params.userId,
+      undefined,
+      1,
+      fetchLimitPerType,
+      {
+        fromDate: params.fromDate,
+        toDate: params.toDate,
+      }
+    );
+    resultsByType.keyword_crawl = {
+      entries: keywordResult.logs.map(mapKeywordCrawlLog),
+      total: keywordResult.total,
+    };
+  }
+
   const combinedEntries: UnifiedLogEntry[] = Object.values(resultsByType)
     .flatMap((result) => result?.entries ?? [])
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -109,6 +127,7 @@ export async function getUnifiedLogs(params: UnifiedLogsQuery): Promise<UnifiedL
     rss_fetch: resultsByType.rss_fetch?.total ?? 0,
     journal_crawl: resultsByType.journal_crawl?.total ?? 0,
     process: resultsByType.process?.total ?? 0,
+    keyword_crawl: resultsByType.keyword_crawl?.total ?? 0,
   };
 
   const total = types.reduce((sum, type) => sum + (totalsByType[type] ?? 0), 0);
@@ -204,6 +223,28 @@ function mapProcessLog(log: ProcessLogRecord): UnifiedLogEntry {
       error_message: log.error_message,
       details: log.details,
       source_origin: log.source_origin,
+      created_at: log.created_at,
+    },
+  };
+}
+
+function mapKeywordCrawlLog(log: { keyword: string; spider_type: string } & Record<string, any>): UnifiedLogEntry {
+  return {
+    id: `keyword_crawl:${log.id}`,
+    type: 'keyword_crawl',
+    created_at: log.created_at,
+    status: log.status,
+    data: {
+      id: log.id,
+      keyword_id: log.keyword_id,
+      keyword: log.keyword,
+      spider_type: log.spider_type,
+      year_start: log.year_start,
+      year_end: log.year_end,
+      articles_count: log.articles_count,
+      new_articles_count: log.new_articles_count,
+      duration_ms: log.duration_ms,
+      error_message: log.error_message,
       created_at: log.created_at,
     },
   };

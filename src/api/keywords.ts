@@ -577,13 +577,23 @@ export async function createKeywordCrawlLog(params: KeywordCrawlLogParams): Prom
 }
 
 /**
+ * 关键词爬取日志查询选项
+ */
+export interface KeywordCrawlLogQueryOptions {
+  status?: 'success' | 'failed' | 'partial';
+  fromDate?: string;
+  toDate?: string;
+}
+
+/**
  * 获取爬取日志列表
  */
 export async function getKeywordCrawlLogs(
   userId: number,
   keywordId?: number,
   page: number = 1,
-  limit: number = 10
+  limit: number = 10,
+  options?: KeywordCrawlLogQueryOptions
 ): Promise<{ logs: KeywordCrawlLogsSelection[]; total: number; page: number; limit: number; totalPages: number }> {
   const db = getDb();
   const offset = (page - 1) * limit;
@@ -595,6 +605,18 @@ export async function getKeywordCrawlLogs(
 
   if (keywordId) {
     query = query.where('keyword_crawl_logs.keyword_id', '=', keywordId);
+  }
+
+  if (options?.status) {
+    query = query.where('keyword_crawl_logs.status', '=', options.status);
+  }
+
+  if (options?.fromDate) {
+    query = query.where('keyword_crawl_logs.created_at', '>=', options.fromDate);
+  }
+
+  if (options?.toDate) {
+    query = query.where('keyword_crawl_logs.created_at', '<=', options.toDate);
   }
 
   // 获取总数
