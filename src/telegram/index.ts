@@ -126,8 +126,10 @@ class TelegramNotifier {
 
   /**
    * Test Telegram connection
+   * @param userId - User ID
+   * @param chatId - Optional specific chat ID to test. If not provided, tests all active chats.
    */
-  async testConnection(userId: number): Promise<{ success: boolean; message: string }> {
+  async testConnection(userId: number, chatId?: string): Promise<{ success: boolean; message: string }> {
     const config = await loadTelegramConfig(userId);
 
     if (!config) {
@@ -137,34 +139,51 @@ class TelegramNotifier {
       };
     }
 
-    // Get all active chats to test
-    const chats = await getActiveTelegramChats(userId);
-
-    if (chats.length === 0) {
-      return {
-        success: false,
-        message: '未配置任何接收者',
-      };
-    }
-
     try {
       const client = new TelegramClient(config.botToken);
 
-      // Test with the first chat
-      const firstChat = chats[0];
-      const success = await client.testConnection(firstChat.chatId);
-
-      if (success) {
-        log.info({ userId, chatId: firstChat.chatId }, 'Telegram connection test successful');
-        return {
-          success: true,
-          message: `连接测试成功！已发送测试消息到 ${chats.length} 个接收者。`,
-        };
+      if (chatId) {
+        // Test specific chat
+        const success = await client.testConnection(chatId);
+        if (success) {
+          log.info({ userId, chatId }, 'Telegram connection test successful');
+          return {
+            success: true,
+            message: '连接测试成功！测试消息已发送。',
+          };
+        } else {
+          return {
+            success: false,
+            message: '连接测试失败。请检查 Bot Token 和 Chat ID 是否正确。',
+          };
+        }
       } else {
-        return {
-          success: false,
-          message: '连接测试失败。请检查 Bot Token 和 Chat ID 是否正确。',
-        };
+        // Get all active chats to test
+        const chats = await getActiveTelegramChats(userId);
+
+        if (chats.length === 0) {
+          return {
+            success: false,
+            message: '未配置任何接收者',
+          };
+        }
+
+        // Test with the first chat
+        const firstChat = chats[0];
+        const success = await client.testConnection(firstChat.chatId);
+
+        if (success) {
+          log.info({ userId, chatId: firstChat.chatId }, 'Telegram connection test successful');
+          return {
+            success: true,
+            message: `连接测试成功！已发送测试消息到 ${chats.length} 个接收者。`,
+          };
+        } else {
+          return {
+            success: false,
+            message: '连接测试失败。请检查 Bot Token 和 Chat ID 是否正确。',
+          };
+        }
       }
     } catch (error) {
       log.error({

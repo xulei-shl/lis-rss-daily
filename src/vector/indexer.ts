@@ -24,7 +24,14 @@ class VectorIndexQueue {
     this.running = this.running
       .then(task)
       .catch((error) => {
-        log.error({ error }, '向量索引任务失败');
+        // 记录更详细的错误信息
+        const errMsg = error instanceof Error ? error.message : String(error);
+        const errCode = (error as any)?.code;
+        log.error({
+          error: errMsg,
+          code: errCode,
+          stack: error instanceof Error ? error.stack : undefined
+        }, '向量索引任务失败');
       });
   }
 }
@@ -52,24 +59,8 @@ async function loadArticles(articleIds: number[], userId?: number) {
       'rss_sources.user_id as rss_user_id',
     ]);
 
-  if (userId !== undefined) {
-    // 需要同时检查 RSS 来源、关键词订阅和期刊的用户 ID
-    query = query.where((eb) =>
-      eb.or([
-        eb('rss_sources.user_id', '=', userId),
-        eb.exists(
-          eb.selectFrom('keyword_subscriptions')
-            .whereRef('keyword_subscriptions.id', '=', 'articles.keyword_id')
-            .where('keyword_subscriptions.user_id', '=', userId)
-        ),
-        eb.exists(
-          eb.selectFrom('journals')
-            .whereRef('journals.id', '=', 'articles.journal_id')
-            .where('journals.user_id', '=', userId)
-        )
-      ])
-    ) as any;
-  }
+  // 注意：不在这里过滤 userId，而是在获取数据后过滤
+  // 因为复杂的 eb.or + eb.exists 组合会导致 SQL 语法错误
 
   const rows = await query.execute();
 
@@ -106,10 +97,17 @@ async function loadArticles(articleIds: number[], userId?: number) {
   }
 
   // 补充 user_id（优先级：RSS > 关键词 > 期刊）
-  return rows.map(row => ({
+  const rowsWithUserId = rows.map(row => ({
     ...row,
     user_id: row.rss_user_id || keywordUserMap.get(row.keyword_id!) || journalUserMap.get(row.journal_id!) || null
   }));
+
+  // 如果指定了 userId，在这里过滤
+  if (userId !== undefined) {
+    return rowsWithUserId.filter(r => r.user_id === userId);
+  }
+
+  return rowsWithUserId;
 }
 
 async function doIndexArticles(
@@ -117,8 +115,34 @@ async function doIndexArticles(
   userId?: number,
   onComplete?: (result: IndexResult) => void
 ): Promise<void> {
-  const rows = await loadArticles(articleIds, userId);
-  if (rows.length === 0) return;
+  let rows;
+  try {
+    rows = await loadArticles(articleIds, userId);
+  } catch (error) {
+    // 如果加载文章失败，报告所有文章为失败
+    const errMsg = error instanceof Error ? error.message : String(error);
+    log.error({ error: errMsg, articleIds }, '加载文章失败，向量化中止');
+    articleIds.forEach(id => {
+      onComplete?.({
+        articleId: id,
+        success: false,
+        error: errMsg
+      });
+    });
+    return;
+  }
+
+  if (rows.length === 0) {
+    // 没有找到文章，也报告失败
+    articleIds.forEach(id => {
+      onComplete?.({
+        articleId: id,
+        success: false,
+        error: 'Article not found or no user_id'
+      });
+    });
+    return;
+  }
 
   const groups = new Map<number, any[]>();
   for (const row of rows as any[]) {

@@ -139,11 +139,13 @@ router.put('/settings/telegram', requireAuth, requireAdmin, async (req: AuthRequ
 /**
  * POST /api/settings/telegram/test
  * 测试 Telegram 连接
+ * @param chatId - Optional specific chat ID to test. If not provided, tests all active chats.
  */
 router.post('/settings/telegram/test', requireAuth, async (req: AuthRequest, res) => {
   try {
+    const { chatId } = req.body || {};
     const notifier = getTelegramNotifier();
-    const result = await notifier.testConnection(req.userId!);
+    const result = await notifier.testConnection(req.userId!, chatId);
     res.json(result);
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to test Telegram connection');

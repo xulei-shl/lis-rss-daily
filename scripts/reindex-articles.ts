@@ -129,6 +129,46 @@ async function updateVectorStatus(articleId: number, status: string): Promise<vo
     .execute();
 }
 
+/**
+ * 检查文章是否所有主要阶段都已完成，如果是则更新 process_status
+ */
+async function checkAndCompleteArticle(articleId: number): Promise<void> {
+  const db = getDb();
+
+  const article = await db
+    .selectFrom('articles')
+    .where('id', '=', articleId)
+    .select(['process_stages', 'process_status'])
+    .executeTakeFirst();
+
+  if (!article) return;
+
+  // 只有当前状态是 processing 时才需要更新
+  if (article.process_status !== 'processing') return;
+
+  const stages = article.process_stages ? JSON.parse(article.process_stages) : {};
+
+  // 检查所有主要阶段是否都已完成
+  const allCompleted = stages.markdown === 'completed' &&
+                       stages.translate === 'completed' &&
+                       stages.vector === 'completed';
+
+  if (allCompleted) {
+    // 更新 related 为 completed，process_status 为 completed
+    stages.related = 'completed';
+
+    await db
+      .updateTable('articles')
+      .set({
+        process_status: 'completed',
+        process_stages: JSON.stringify(stages),
+        updated_at: new Date().toISOString(),
+      })
+      .where('id', '=', articleId)
+      .execute();
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
@@ -205,15 +245,17 @@ async function main() {
   const successIds: number[] = [];
 
   await new Promise<void>((resolve) => {
-    indexArticles(articleIds, undefined, (result: IndexResult) => {
+    indexArticles(articleIds, undefined, async (result: IndexResult) => {
       if (result.success) {
         successCount++;
         successIds.push(result.articleId);
-        updateVectorStatus(result.articleId, 'completed').catch(() => {});
+        await updateVectorStatus(result.articleId, 'completed');
+        // 检查是否需要更新文章状态为 completed
+        await checkAndCompleteArticle(result.articleId).catch(() => {});
         console.log(`✓ [${result.articleId}] 向量化成功`);
       } else {
         failedCount++;
-        updateVectorStatus(result.articleId, 'failed').catch(() => {});
+        await updateVectorStatus(result.articleId, 'failed').catch(() => {});
         console.log(`✗ [${result.articleId}] 向量化失败: ${result.error}`);
       }
 
@@ -234,6 +276,9 @@ async function main() {
         // 假设用户 ID 为 1（与关键词文章处理一致）
         await refreshRelatedArticles(id, 1, 5);
         relatedSuccess++;
+        // 更新 related 状态并检查是否需要完成文章
+        await updateRelatedStatus(id, 'completed').catch(() => {});
+        await checkAndCompleteArticle(id).catch(() => {});
         console.log(`✓ [${id}] 相关文章更新成功`);
       } catch (error) {
         relatedFailed++;
@@ -255,6 +300,39 @@ async function main() {
     }
     console.log('='.repeat(60));
   }
+}
+
+/**
+ * 更新文章的 related 状态
+ */
+async function updateRelatedStatus(articleId: number, status: string): Promise<void> {
+  const db = getDb();
+
+  const article = await db
+    .selectFrom('articles')
+    .where('id', '=', articleId)
+    .select('process_stages')
+    .executeTakeFirst();
+
+  if (!article) return;
+
+  const stages = article.process_stages ? JSON.parse(article.process_stages) : {
+    markdown: 'pending',
+    translate: 'pending',
+    vector: 'pending',
+    related: 'pending',
+  };
+
+  stages.related = status;
+
+  await db
+    .updateTable('articles')
+    .set({
+      process_stages: JSON.stringify(stages),
+      updated_at: new Date().toISOString(),
+    })
+    .where('id', '=', articleId)
+    .execute();
 }
 
 main().catch(console.error);

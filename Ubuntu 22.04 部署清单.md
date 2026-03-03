@@ -567,9 +567,21 @@ sudo systemctl restart lis-rss
 
 ## 项目重启最佳实践
 
+### 日常重启（代码更新、配置修改）
+
+```bash
+# 仅重启应用服务
+sudo systemctl restart lis-rss
+# 验证状态
+sudo systemctl status lis-rss --no-pager
+```
+
 ### 彻底重启流程
 
-当遇到服务异常或需要完全重新加载时，建议按以下步骤彻底重启：
+仅当遇到以下情况时需要：
+- ChromaDB 服务崩溃
+- ChromaDB 版本或配置更新
+- 端口占用无法释放
 
 ```bash
 # 1. 停止所有服务
@@ -580,7 +592,6 @@ sudo systemctl stop chromadb
 ps aux | grep -E 'chroma|tsx|node' | grep -v grep
 
 # 3. 如果有残留进程，手动终止
-# 使用 pkill 批量终止（可选）
 pkill -f chroma
 pkill -f "tsx src/index.ts"
 
@@ -638,11 +649,13 @@ sudo journalctl -u lis-rss -f
 
 | 场景 | 操作 |
 |------|------|
-| 配置文件修改 | 重启对应服务 |
-| 代码更新 | `git pull` + 重启 lis-rss |
-| 依赖更新 | `pnpm install` + 重启 lis-rss |
-| 服务卡死 | 彻底重启流程 |
-| 端口占用 | 找到进程并终止，然后重启 |
+| 应用代码更新 | `git pull` + `systemctl restart lis-rss` |
+| 应用配置修改 (.env) | `systemctl restart lis-rss` |
+| 依赖更新 | `pnpm install` + `systemctl restart lis-rss` |
+| 应用服务卡死 | `systemctl restart lis-rss` |
+| ChromaDB 配置修改 | `systemctl restart chromadb` |
+| ChromaDB 版本更新 | 重建虚拟环境 + `systemctl restart chromadb` |
+| 端口占用无法释放 | 彻底重启流程 |
 | ChromaDB 启动失败 | 重建虚拟环境 |
 
 ---
