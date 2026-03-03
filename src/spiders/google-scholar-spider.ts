@@ -6,6 +6,7 @@
  */
 
 import { spawn } from 'child_process';
+import { readFile } from 'fs/promises';
 import { logger } from '../logger.js';
 import type { SpiderResult, CrawledArticle } from './types.js';
 import { config } from '../config.js';
@@ -66,7 +67,7 @@ export class GoogleScholarSpider {
 
     log.info({ keyword, yearStart, yearEnd, numResults }, 'Starting Google Scholar search');
 
-    const args = ['scripts/cli.py', keyword, '-o', '/tmp'];
+    const args = ['scripts/cli.py', keyword, '-o', '/tmp', '--no-geoip'];
 
     // 年份范围（可选）
     if (yearStart) {
@@ -106,20 +107,33 @@ export class GoogleScholarSpider {
       proc.stdout.on('data', (data) => { stdout += data.toString(); });
       proc.stderr.on('data', (data) => { stderr += data.toString(); });
 
-      proc.on('close', (code) => {
+      proc.on('close', async (code) => {
         if (code !== 0) {
           log.error({ stderr, code }, 'Google Scholar spider failed');
           return reject(new Error(`Spider failed with code ${code}: ${stderr}`));
         }
 
         try {
+          // 从stdout提取JSON文件路径
           const lines = stdout.trim().split('\n');
-          const jsonLine = lines.find(l => l.trim().startsWith('{'));
+          const jsonLine = lines.find(l => l.includes('JSON:') && l.includes('.json'));
+
           if (!jsonLine) {
-            throw new Error('No JSON output found in spider response');
+            throw new Error('No JSON file path found in spider response');
           }
 
-          const raw: GoogleScholarResponse = JSON.parse(jsonLine);
+          // 提取JSON文件路径
+          const jsonPathMatch = jsonLine.match(/JSON:\s*(\/tmp\/[^\s]+\.json)/);
+          if (!jsonPathMatch) {
+            throw new Error('Failed to extract JSON file path');
+          }
+
+          const jsonPath = jsonPathMatch[1];
+          log.info({ jsonPath }, 'Reading JSON output file');
+
+          // 读取JSON文件
+          const jsonContent = await readFile(jsonPath, 'utf-8');
+          const raw: GoogleScholarResponse = JSON.parse(jsonContent);
 
           // 映射到标准格式
           const articles: CrawledArticle[] = raw.results?.map((r: GoogleScholarRawResult) => ({
