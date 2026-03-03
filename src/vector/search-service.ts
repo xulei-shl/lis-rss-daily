@@ -73,7 +73,9 @@ export interface SearchResult {
     published_year?: number | null;
     published_issue?: number | null;
     published_volume?: number | null;
-    source_origin?: 'rss' | 'journal';
+    source_origin?: 'rss' | 'journal' | 'keyword';
+    journal_name?: string;
+    keyword_name?: string;
   };
 }
 
@@ -254,10 +256,19 @@ async function keywordSearchOnly(
     return Math.min(score, 1);
   };
 
+  // 支持三种来源：RSS、期刊、关键词订阅
   let queryBuilder = db
     .selectFrom('articles')
-    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-    .where('rss_sources.user_id', '=', userId)
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .where((eb) =>
+      eb.or([
+        eb('rss_sources.user_id', '=', userId),
+        eb('journals.user_id', '=', userId),
+        eb('keyword_subscriptions.user_id', '=', userId),
+      ])
+    )
     .where('articles.filter_status', '=', 'passed');
 
   if (terms.length > 0) {
@@ -280,7 +291,10 @@ async function keywordSearchOnly(
       'articles.title',
       'articles.url',
       'articles.published_at',
+      'articles.source_origin',
       'rss_sources.name as rss_source_name',
+      'journals.name as journal_name',
+      'keyword_subscriptions.keyword as keyword_name',
     ])
     .orderBy('articles.published_at', 'desc')
     .limit(limit * 3)
@@ -296,7 +310,10 @@ async function keywordSearchOnly(
         url: article.url,
         summary: null,
         published_at: article.published_at,
+        source_origin: article.source_origin,
         rss_source_name: article.rss_source_name ?? undefined,
+        journal_name: article.journal_name ?? undefined,
+        keyword_name: article.keyword_name ?? undefined,
       },
     }))
     .sort((a, b) => b.score - a.score)
@@ -447,12 +464,20 @@ async function computeRelated(
 ): Promise<SearchResult[]> {
   const db = getDb();
 
-  // Get source article
+  // Get source article (支持三种来源：RSS、期刊、关键词)
   const article = await db
     .selectFrom('articles')
-    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
     .where('articles.id', '=', articleId)
-    .where('rss_sources.user_id', '=', userId)
+    .where((eb) =>
+      eb.or([
+        eb('rss_sources.user_id', '=', userId),
+        eb('journals.user_id', '=', userId),
+        eb('keyword_subscriptions.user_id', '=', userId),
+      ])
+    )
     .select([
       'articles.id',
       'articles.title',
@@ -495,14 +520,22 @@ async function computeRelated(
     ? highScoreArticles.slice(0, effectiveLimit)
     : semanticResults.slice(0, effectiveLimit);
 
-  // Load details
+  // Load details (支持三种来源)
   const topIds = topResults.map((item) => item.articleId);
   if (topIds.length === 0) return [];
 
   const rows = await db
     .selectFrom('articles')
-    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-    .where('rss_sources.user_id', '=', userId)
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .where((eb) =>
+      eb.or([
+        eb('rss_sources.user_id', '=', userId),
+        eb('journals.user_id', '=', userId),
+        eb('keyword_subscriptions.user_id', '=', userId),
+      ])
+    )
     .where('articles.filter_status', '=', 'passed')
     .where('articles.process_status', '=', 'completed')
     .where('articles.id', 'in', topIds)
@@ -511,7 +544,10 @@ async function computeRelated(
       'articles.title',
       'articles.url',
       'articles.published_at',
+      'articles.source_origin',
       'rss_sources.name as rss_source_name',
+      'journals.name as journal_name',
+      'keyword_subscriptions.keyword as keyword_name',
     ])
     .execute();
 
@@ -529,7 +565,10 @@ async function computeRelated(
         url: row.url,
         summary: null,
         published_at: row.published_at,
+        source_origin: row.source_origin,
         rss_source_name: row.rss_source_name ?? undefined,
+        journal_name: row.journal_name ?? undefined,
+        keyword_name: row.keyword_name ?? undefined,
       },
     }))
     .filter((row) => row.articleId !== articleId)
@@ -549,12 +588,21 @@ async function getRelatedFromCache(
 ): Promise<SearchResult[]> {
   const db = getDb();
 
+  // 支持三种来源：RSS、期刊、关键词订阅
   const rows = await db
     .selectFrom('article_related as ar')
     .innerJoin('articles', 'articles.id', 'ar.related_article_id')
-    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
     .where('ar.article_id', '=', articleId)
-    .where('rss_sources.user_id', '=', userId)
+    .where((eb) =>
+      eb.or([
+        eb('rss_sources.user_id', '=', userId),
+        eb('journals.user_id', '=', userId),
+        eb('keyword_subscriptions.user_id', '=', userId),
+      ])
+    )
     .where('articles.filter_status', '=', 'passed')
     .where('articles.process_status', '=', 'completed')
     .select([
@@ -562,7 +610,10 @@ async function getRelatedFromCache(
       'articles.title',
       'articles.url',
       'articles.published_at',
+      'articles.source_origin',
       'rss_sources.name as rss_source_name',
+      'journals.name as journal_name',
+      'keyword_subscriptions.keyword as keyword_name',
       'ar.score as score',
     ])
     .orderBy('ar.score', 'desc')
@@ -578,7 +629,10 @@ async function getRelatedFromCache(
       url: row.url,
       summary: null,
       published_at: row.published_at,
+      source_origin: row.source_origin,
       rss_source_name: row.rss_source_name ?? undefined,
+      journal_name: row.journal_name ?? undefined,
+      keyword_name: row.keyword_name ?? undefined,
     },
   }));
 }
@@ -618,10 +672,19 @@ async function enrichWithMetadata(
   const ids = results.map((r) => r.articleId);
   const db = getDb();
 
+  // 支持三种来源：RSS、期刊、关键词订阅
   const articles = await db
     .selectFrom('articles')
-    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-    .where('rss_sources.user_id', '=', userId)
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .where((eb) =>
+      eb.or([
+        eb('rss_sources.user_id', '=', userId),
+        eb('journals.user_id', '=', userId),
+        eb('keyword_subscriptions.user_id', '=', userId),
+      ])
+    )
     .where('articles.filter_status', '=', 'passed')
     .where('articles.id', 'in', ids)
     .select([
@@ -629,7 +692,10 @@ async function enrichWithMetadata(
       'articles.title',
       'articles.url',
       'articles.published_at',
+      'articles.source_origin',
       'rss_sources.name as rss_source_name',
+      'journals.name as journal_name',
+      'keyword_subscriptions.keyword as keyword_name',
     ])
     .execute();
 
@@ -647,7 +713,10 @@ async function enrichWithMetadata(
           url: article.url,
           summary: null,
           published_at: article.published_at,
+          source_origin: article.source_origin,
           rss_source_name: article.rss_source_name ?? undefined,
+          journal_name: article.journal_name ?? undefined,
+          keyword_name: article.keyword_name ?? undefined,
         },
       };
     });
