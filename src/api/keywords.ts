@@ -424,6 +424,10 @@ async function saveArticles(
       }
 
       // 插入新文章
+      // 字段存储策略（与RSS订阅保持一致）：
+      // - summary: null（保留给未来的AI摘要功能）
+      // - content: null（不存储原始摘要）
+      // - markdown_content: 存储原始摘要（用于翻译）
       const result = await db
         .insertInto('articles')
         .values({
@@ -431,9 +435,9 @@ async function saveArticles(
           title: article.title,
           title_normalized: titleNormalized,
           url: article.url,
-          summary: article.abstract || null,
-          content: article.abstract || null,
-          markdown_content: null,
+          summary: null,
+          content: null,
+          markdown_content: article.abstract || null,
           filter_status: 'pending',
           filter_score: null,
           filtered_at: null,
@@ -491,13 +495,14 @@ async function triggerArticleProcessing(articleId: number): Promise<void> {
     // 假设关键词文章属于 user_id = 1
     const userId = 1;
 
-    // 执行过滤
+    // 执行过滤（添加 sourceType 参数）
     const filterResult = await filterArticle({
       articleId,
       userId,
       title: article.title,
       url: article.url,
-      description: article.summary || article.content || ''
+      description: article.markdown_content || article.content || '',
+      sourceType: 'keyword' as const
     });
 
     if (!filterResult.passed) {
