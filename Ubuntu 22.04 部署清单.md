@@ -556,10 +556,96 @@ sudo journalctl -u chromadb -f
 
 ### 重启服务
 
+**简单重启：**
+
 ```bash
 sudo systemctl restart chromadb
 sudo systemctl restart lis-rss
 ```
+
+---
+
+## 项目重启最佳实践
+
+### 彻底重启流程
+
+当遇到服务异常或需要完全重新加载时，建议按以下步骤彻底重启：
+
+```bash
+# 1. 停止所有服务
+sudo systemctl stop lis-rss
+sudo systemctl stop chromadb
+
+# 2. 检查是否有残留进程
+ps aux | grep -E 'chroma|tsx|node' | grep -v grep
+
+# 3. 如果有残留进程，手动终止
+# 使用 pkill 批量终止（可选）
+pkill -f chroma
+pkill -f "tsx src/index.ts"
+
+# 4. 验证端口已释放
+sudo lsof -i :8000  # ChromaDB 端口
+sudo lsof -i :8007  # 应用端口
+
+# 5. 按依赖顺序启动服务
+sudo systemctl start chromadb
+sleep 3  # 等待 ChromaDB 完全启动
+sudo systemctl start lis-rss
+
+# 6. 验证服务状态
+sudo systemctl status chromadb
+sudo systemctl status lis-rss
+```
+
+### ChromaDB 虚拟环境修复
+
+如果 ChromaDB 服务启动失败（exit-code 203/EXEC），通常是虚拟环境损坏或缺失：
+
+```bash
+# 1. 检查虚拟环境是否存在
+test -d /opt/lis-rss-daily/lis-rss && echo "venv exists" || echo "venv missing"
+
+# 2. 重建虚拟环境
+cd /opt/lis-rss-daily
+python3 -m venv lis-rss
+
+# 3. 安装 ChromaDB
+/opt/lis-rss-daily/lis-rss/bin/pip install --upgrade pip
+/opt/lis-rss-daily/lis-rss/bin/pip install chromadb
+
+# 4. 重启 ChromaDB 服务
+sudo systemctl start chromadb
+```
+
+### 服务状态检查
+
+```bash
+# 查看服务实时状态
+sudo systemctl status chromadb --no-pager
+sudo systemctl status lis-rss --no-pager
+
+# 查看最近的日志
+sudo journalctl -u chromadb -n 50 --no-pager
+sudo journalctl -u lis-rss -n 50 --no-pager
+
+# 实时跟踪日志
+sudo journalctl -u chromadb -f
+sudo journalctl -u lis-rss -f
+```
+
+### 常见重启场景
+
+| 场景 | 操作 |
+|------|------|
+| 配置文件修改 | 重启对应服务 |
+| 代码更新 | `git pull` + 重启 lis-rss |
+| 依赖更新 | `pnpm install` + 重启 lis-rss |
+| 服务卡死 | 彻底重启流程 |
+| 端口占用 | 找到进程并终止，然后重启 |
+| ChromaDB 启动失败 | 重建虚拟环境 |
+
+---
 
 ---
 
