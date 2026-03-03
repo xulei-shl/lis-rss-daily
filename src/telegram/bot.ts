@@ -3,6 +3,7 @@
  *
  * Handles polling and processing of callback queries from Telegram inline keyboards.
  * Provides article management features: mark as read/unread, rate articles.
+ * Supports multiple chat IDs with different permission levels (admin/viewer).
  */
 
 import { logger } from '../logger.js';
@@ -16,6 +17,7 @@ import { readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { getUserLocalDate } from '../api/timezone.js';
+import { isChatAdmin, type TelegramChatConfig } from '../api/telegram-chats.js';
 
 const log = logger.child({ module: 'telegram-bot' });
 
@@ -39,7 +41,7 @@ export class TelegramBot {
   private client: TelegramClient;
   private botToken: string;
   private userId: number;
-  private chatId: string;
+  private chats: TelegramChatConfig[]; // All configured chats
   private isRunning: boolean = false;
   private latestUpdateId: number = 0;
   private pollTimeout: NodeJS.Timeout | null = null;
@@ -54,10 +56,10 @@ export class TelegramBot {
   // State file path for persistence
   private stateFilePath: string;
 
-  constructor(botToken: string, userId: number, chatId: string) {
+  constructor(botToken: string, userId: number, chats: TelegramChatConfig[]) {
     this.botToken = botToken;
     this.userId = userId;
-    this.chatId = chatId;
+    this.chats = chats;
     this.client = new TelegramClient(botToken);
     this.stateFilePath = join(STATE_DIR, `bot-state-user-${userId}.json`);
   }
@@ -100,7 +102,7 @@ export class TelegramBot {
       const state = {
         latestUpdateId: this.latestUpdateId,
         userId: this.userId,
-        chatId: this.chatId,
+        chatCount: this.chats.length,
         savedAt: new Date().toISOString(),
       };
       await writeFile(statePath, JSON.stringify(state, null, 2));
@@ -110,11 +112,33 @@ export class TelegramBot {
   }
 
   /**
+   * Check if a chat ID is in the configured chats list
+   */
+  private isAuthorizedChat(chatId: string): boolean {
+    return this.chats.some(chat => chat.chatId === chatId);
+  }
+
+  /**
+   * Check if a chat ID has admin role
+   */
+  private isAdminChat(chatId: string): boolean {
+    const chat = this.chats.find(c => c.chatId === chatId);
+    return chat?.role === 'admin';
+  }
+
+  /**
+   * Get chat config by chat ID
+   */
+  private getChatConfig(chatId: string): TelegramChatConfig | undefined {
+    return this.chats.find(c => c.chatId === chatId);
+  }
+
+  /**
    * Start polling for updates
    */
   async start(): Promise<void> {
     if (this.isRunning) {
-      log.warn({ userId: this.userId, chatId: this.chatId }, 'Bot already running');
+      log.warn({ userId: this.userId, chatCount: this.chats.length }, 'Bot already running');
       return;
     }
 
@@ -122,7 +146,12 @@ export class TelegramBot {
     await this.loadState();
 
     this.isRunning = true;
-    log.info({ userId: this.userId, chatId: this.chatId, latestUpdateId: this.latestUpdateId }, 'Starting Telegram bot polling');
+    log.info({
+      userId: this.userId,
+      chatCount: this.chats.length,
+      chats: this.chats.map(c => ({ chatId: c.chatId, role: c.role })),
+      latestUpdateId: this.latestUpdateId
+    }, 'Starting Telegram bot polling');
 
     this.poll();
   }
@@ -145,7 +174,7 @@ export class TelegramBot {
     // Abort any pending requests
     this.client.abort();
 
-    log.info({ userId: this.userId, chatId: this.chatId }, 'Telegram bot stopped');
+    log.info({ userId: this.userId, chatCount: this.chats.length }, 'Telegram bot stopped');
   }
 
   /**
@@ -283,18 +312,24 @@ export class TelegramBot {
   }
 
   /**
-   * Handle callback query with improved error handling
+   * Handle callback query with improved error handling and permission checking
    */
   private async handleCallbackQuery(callbackQuery: CallbackQuery): Promise<void> {
     const { id: queryId, from, message, data } = callbackQuery;
 
-    // Validate user (only allow configured user)
-    const chatId = String(message?.chat.id || this.chatId);
-    if (chatId !== this.chatId) {
+    // Get chat ID from message
+    const chatId = String(message?.chat.id);
+
+    // Check if this chat is authorized
+    if (!this.isAuthorizedChat(chatId)) {
       log.warn({ queryId, from: from.id, chatId }, 'Unauthorized callback query');
       await this.client.answerCallbackQuery(queryId, '❌ 无权操作', true);
       return;
     }
+
+    // Check if this chat has admin role
+    const isAdmin = this.isAdminChat(chatId);
+    const chatConfig = this.getChatConfig(chatId);
 
     // Decode callback data
     const decoded = decodeCallback(data);
@@ -307,25 +342,55 @@ export class TelegramBot {
     const { action, articleId, value } = decoded;
     const messageId = message?.message_id;
 
+    // For viewer role, only allow viewing operations, not modifications
+    if (!isAdmin) {
+      // Viewer can only view rating options, but cannot rate or mark as read
+      if (action === CallbackAction.SHOW_RATING) {
+        // Allow showing rating keyboard for viewer, but show a notice
+        await this.client.answerCallbackQuery(queryId, 'ℹ️ 您是观察者，仅管理员可评分');
+        // Still show the rating keyboard but with a visual indication
+        if (messageId !== undefined) {
+          try {
+            const keyboard = createRatingKeyboard(articleId);
+            await this.client.editMessageReplyMarkup(chatId, messageId, keyboard);
+          } catch (error) {
+            log.warn({ articleId, messageId, error }, 'Failed to show rating keyboard for viewer');
+          }
+        }
+        return;
+      }
+
+      if (action === CallbackAction.CANCEL) {
+        // Allow cancel for viewer
+        await this.client.answerCallbackQuery(queryId, '✅ 已取消');
+        return;
+      }
+
+      // All other actions require admin role
+      log.info({ queryId, chatId, action, role: chatConfig?.role }, 'Viewer attempted admin action');
+      await this.client.answerCallbackQuery(queryId, '❌ 无权限操作，仅管理员可交互', true);
+      return;
+    }
+
     try {
-      // Route to appropriate handler
+      // Route to appropriate handler (admin only)
       switch (action) {
         case CallbackAction.MARK_READ:
-          await this.handleMarkRead(queryId, articleId, messageId);
+          await this.handleMarkRead(queryId, articleId, messageId, chatId);
           break;
 
         case CallbackAction.RATE:
           if (value) {
-            await this.handleRate(queryId, articleId, parseInt(value, 10), messageId);
+            await this.handleRate(queryId, articleId, parseInt(value, 10), messageId, chatId);
           }
           break;
 
         case CallbackAction.SHOW_RATING:
-          await this.handleShowRating(queryId, articleId, messageId);
+          await this.handleShowRating(queryId, articleId, messageId, chatId);
           break;
 
         case CallbackAction.CANCEL:
-          await this.handleCancel(queryId, articleId, messageId);
+          await this.handleCancel(queryId, articleId, messageId, chatId);
           break;
 
         default:
@@ -358,7 +423,8 @@ export class TelegramBot {
   private async handleMarkRead(
     queryId: string,
     articleId: number,
-    messageId: number | undefined
+    messageId: number | undefined,
+    chatId: string
   ): Promise<void> {
     // Get current article state
     const article = await getArticleById(articleId, this.userId);
@@ -387,14 +453,14 @@ export class TelegramBot {
     if (messageId !== undefined) {
       try {
         const keyboard = createArticleKeyboard(articleId, newReadStatus, article.rating);
-        await this.client.editMessageReplyMarkup(this.chatId, messageId, keyboard);
+        await this.client.editMessageReplyMarkup(chatId, messageId, keyboard);
       } catch (error) {
         // Don't fail the operation if keyboard update fails
         log.warn({ articleId, messageId, error }, 'Failed to update keyboard after marking read');
       }
     }
 
-    log.info({ articleId, userId: this.userId, isRead: newReadStatus }, 'Article read status toggled via Telegram');
+    log.info({ articleId, userId: this.userId, isRead: newReadStatus, chatId }, 'Article read status toggled via Telegram');
   }
 
   /**
@@ -404,7 +470,8 @@ export class TelegramBot {
     queryId: string,
     articleId: number,
     rating: number,
-    messageId: number | undefined
+    messageId: number | undefined,
+    chatId: string
   ): Promise<void> {
     // Validate rating
     if (rating < 1 || rating > 5) {
@@ -428,14 +495,14 @@ export class TelegramBot {
     if (messageId !== undefined) {
       try {
         const keyboard = createArticleKeyboard(articleId, true, rating);
-        await this.client.editMessageReplyMarkup(this.chatId, messageId, keyboard);
+        await this.client.editMessageReplyMarkup(chatId, messageId, keyboard);
       } catch (error) {
         // Don't fail the operation if keyboard update fails
         log.warn({ articleId, messageId, error }, 'Failed to update keyboard after rating');
       }
     }
 
-    log.info({ articleId, userId: this.userId, rating }, 'Article rated via Telegram');
+    log.info({ articleId, userId: this.userId, rating, chatId }, 'Article rated via Telegram');
   }
 
   /**
@@ -444,7 +511,8 @@ export class TelegramBot {
   private async handleShowRating(
     queryId: string,
     articleId: number,
-    messageId: number | undefined
+    messageId: number | undefined,
+    chatId: string
   ): Promise<void> {
     // Get article to verify ownership
     const article = await getArticleById(articleId, this.userId);
@@ -461,13 +529,13 @@ export class TelegramBot {
     if (messageId !== undefined) {
       try {
         const keyboard = createRatingKeyboard(articleId);
-        await this.client.editMessageReplyMarkup(this.chatId, messageId, keyboard);
+        await this.client.editMessageReplyMarkup(chatId, messageId, keyboard);
       } catch (error) {
         log.warn({ articleId, messageId, error }, 'Failed to show rating keyboard');
       }
     }
 
-    log.debug({ articleId, userId: this.userId }, 'Rating keyboard shown via Telegram');
+    log.debug({ articleId, userId: this.userId, chatId }, 'Rating keyboard shown via Telegram');
   }
 
   /**
@@ -476,7 +544,8 @@ export class TelegramBot {
   private async handleCancel(
     queryId: string,
     articleId: number,
-    messageId: number | undefined
+    messageId: number | undefined,
+    chatId: string
   ): Promise<void> {
     // Get article to verify ownership
     const article = await getArticleById(articleId, this.userId);
@@ -493,13 +562,13 @@ export class TelegramBot {
     if (messageId !== undefined) {
       try {
         const keyboard = createArticleKeyboard(articleId, article.is_read === 1, article.rating);
-        await this.client.editMessageReplyMarkup(this.chatId, messageId, keyboard);
+        await this.client.editMessageReplyMarkup(chatId, messageId, keyboard);
       } catch (error) {
         log.warn({ articleId, messageId, error }, 'Failed to restore keyboard after cancel');
       }
     }
 
-    log.debug({ articleId, userId: this.userId }, 'Rating keyboard cancelled via Telegram');
+    log.debug({ articleId, userId: this.userId, chatId }, 'Rating keyboard cancelled via Telegram');
   }
 
   /**
@@ -508,9 +577,11 @@ export class TelegramBot {
   private async handleMessage(message: Message): Promise<void> {
     const { from, chat, text } = message;
 
-    // Validate user (only allow configured user)
+    // Get chat ID
     const chatId = String(chat.id);
-    if (chatId !== this.chatId) {
+
+    // Check if this chat is authorized
+    if (!this.isAuthorizedChat(chatId)) {
       log.warn({ from: from?.id, chatId }, 'Unauthorized message');
       await this.client.sendMessage(chatId, '❌ 无权操作');
       return;
@@ -524,24 +595,28 @@ export class TelegramBot {
     const parts = text.trim().split(/\s+/);
     const command = parts[0];
 
+    // Check if this chat has admin role for write operations
+    const isAdmin = this.isAdminChat(chatId);
+
     switch (command) {
       case '/getarticles':
-        await this.handleGetArticlesCommandWrapper(parts.slice(1).join(' '));
+        // This is a read-only command, allowed for all authorized chats
+        await this.handleGetArticlesCommandWrapper(parts.slice(1).join(' '), chatId);
         break;
 
       default:
-        log.debug({ command }, 'Unknown command');
+        log.debug({ command, chatId }, 'Unknown command');
     }
   }
 
   /**
    * Wrapper for getarticles command with error handling
    */
-  private async handleGetArticlesCommandWrapper(args: string): Promise<void> {
+  private async handleGetArticlesCommandWrapper(args: string, chatId: string): Promise<void> {
     try {
       const parsed = parseGetArticlesCommand(args);
       if (!parsed) {
-        await this.client.sendMessage(this.chatId,
+        await this.client.sendMessage(chatId,
           '❌ 格式错误。正确格式：/getarticles YYYY-MM-DD 或 YYYYMMDD\n例如：/getarticles 2026-3-1 或 /getarticles 20260301');
         return;
       }
@@ -552,21 +627,21 @@ export class TelegramBot {
       const todayStr = await getUserLocalDate(this.userId);
       const cmdDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       if (cmdDateStr > todayStr) {
-        await this.client.sendMessage(this.chatId, '❌ 日期不能是未来时间');
+        await this.client.sendMessage(chatId, '❌ 日期不能是未来时间');
         return;
       }
 
-      await this.handleGetArticlesCommand(year, month, day);
+      await this.handleGetArticlesCommand(year, month, day, chatId);
     } catch (error) {
       log.error({ error, args }, 'Error in getarticles command');
-      await this.client.sendMessage(this.chatId, '❌ 查询失败，请稍后重试');
+      await this.client.sendMessage(chatId, '❌ 查询失败，请稍后重试');
     }
   }
 
   /**
    * Handle /getarticles command
    */
-  private async handleGetArticlesCommand(year: number, month: number, day: number): Promise<void> {
+  private async handleGetArticlesCommand(year: number, month: number, day: number, chatId: string): Promise<void> {
     // Format date string (YYYY-MM-DD)
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
@@ -584,13 +659,13 @@ export class TelegramBot {
     const articles = result.articles;
 
     if (articles.length === 0) {
-      await this.client.sendMessage(this.chatId,
+      await this.client.sendMessage(chatId,
         `📭 ${year}年${month}月${day}日没有符合条件的未读文章`);
       return;
     }
 
     // Send summary
-    await this.client.sendMessage(this.chatId,
+    await this.client.sendMessage(chatId,
       `📚 找到 ${articles.length} 篇${year}年${month}月${day}日的未读文章：`);
 
     let sentCount = 0;
@@ -625,7 +700,7 @@ export class TelegramBot {
           article.rating
         );
 
-        await this.client.sendMessageWithKeyboard(this.chatId, message, keyboard, 'HTML');
+        await this.client.sendMessageWithKeyboard(chatId, message, keyboard, 'HTML');
         sentCount++;
 
         // Rate limiting: 1 second between messages
@@ -638,12 +713,12 @@ export class TelegramBot {
     }
 
     // Log result
-    log.info({ userId: this.userId, year, month, day, sentCount, failedCount },
+    log.info({ userId: this.userId, year, month, day, sentCount, failedCount, chatId },
       'Sent articles via /getarticles command');
 
     // Notify user if some articles failed to send
     if (failedCount > 0) {
-      await this.client.sendMessage(this.chatId,
+      await this.client.sendMessage(chatId,
         `⚠️ ${failedCount} 篇文章发送失败，请查看日志了解详情`);
     }
   }
@@ -652,10 +727,10 @@ export class TelegramBot {
 /**
  * Initialize Telegram Bot for a user
  */
-export function initUserBot(botToken: string, userId: number, chatId: string): TelegramBot | null {
-  if (!botToken || !chatId) {
+export function initUserBot(botToken: string, userId: number, chats: TelegramChatConfig[]): TelegramBot | null {
+  if (!botToken || chats.length === 0) {
     return null;
   }
 
-  return new TelegramBot(botToken, userId, chatId);
+  return new TelegramBot(botToken, userId, chats);
 }

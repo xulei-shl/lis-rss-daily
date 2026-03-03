@@ -3,18 +3,20 @@
  *
  * Manages multiple Telegram Bot instances for different users.
  * Provides centralized initialization and lifecycle management.
+ * Supports multiple chat IDs per user with different permission levels.
  */
 
 import { logger } from '../logger.js';
 import { TelegramBot } from './bot.js';
 import { getUserSetting } from '../api/settings.js';
+import { getActiveTelegramChats, type TelegramChatConfig } from '../api/telegram-chats.js';
 
 const log = logger.child({ module: 'telegram-bot-manager' });
 
 interface UserTelegramConfig {
   userId: number;
   botToken: string;
-  chatId: string;
+  chats: TelegramChatConfig[];
 }
 
 class TelegramBotManager {
@@ -44,7 +46,7 @@ class TelegramBotManager {
     let startedCount = 0;
     for (const config of configs) {
       try {
-        const bot = new TelegramBot(config.botToken, config.userId, config.chatId);
+        const bot = new TelegramBot(config.botToken, config.userId, config.chats);
         await bot.start();
         this.bots.set(config.userId, bot);
         startedCount++;
@@ -102,21 +104,28 @@ class TelegramBotManager {
       return [];
     }
 
-    // Get bot token and chat ID
+    // Get bot token
     const botToken = await getUserSetting(userId, 'telegram_bot_token');
-    const chatId = await getUserSetting(userId, 'telegram_chat_id');
 
-    if (botToken && chatId) {
-      return [
-        {
-          userId,
-          botToken,
-          chatId,
-        },
-      ];
+    if (!botToken) {
+      return [];
     }
 
-    return [];
+    // Get all active chats for this user
+    const chats = await getActiveTelegramChats(userId);
+
+    if (chats.length === 0) {
+      log.debug({ userId }, 'No active Telegram chats configured');
+      return [];
+    }
+
+    return [
+      {
+        userId,
+        botToken,
+        chats,
+      },
+    ];
   }
 }
 

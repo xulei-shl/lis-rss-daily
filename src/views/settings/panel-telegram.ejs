@@ -34,35 +34,22 @@
           </small>
         </div>
 
-        <div class="form-group">
-          <label for="telegramChatId">Chat ID</label>
-          <input
-            type="text"
-            id="telegramChatId"
-            name="chatId"
-            placeholder="123456789 或 @channelname"
-            autocomplete="off"
-          >
-          <small class="form-hint">
-            从 @userinfobot 获取。可以是数字或 @开头的用户名
-          </small>
-        </div>
+        <!-- Telegram Chats List -->
+        <div class="telegram-chats-section">
+          <div class="chats-header">
+            <h3>接收者列表</h3>
+            <button type="button" id="addTelegramChatBtn" class="btn btn-secondary btn-small">
+              + 添加接收者
+            </button>
+          </div>
 
-        <div class="form-group">
-          <label>
-            <input type="checkbox" id="telegramDailySummary" name="dailySummary">
-            推送每日总结
-          </label>
-        </div>
+          <div id="telegramChatsList" class="telegram-chats-list">
+            <!-- Chats will be rendered here -->
+          </div>
 
-        <div class="form-group">
-          <label>
-            <input type="checkbox" id="telegramNewArticles" name="newArticles">
-            推送新增文章
-          </label>
-          <small class="form-hint">
-            当文章过滤通过且处理完成后自动推送
-          </small>
+          <div id="telegramChatsEmpty" class="telegram-chats-empty" style="display: none;">
+            <p>暂无接收者配置。点击上方按钮添加。</p>
+          </div>
         </div>
       </div>
 
@@ -77,3 +64,202 @@
     <div id="telegramStatus" class="telegram-status"></div>
   </div>
 </section>
+
+<!-- Add/Edit Telegram Chat Modal -->
+<div id="telegramChatModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="telegramChatModalTitle">添加接收者</h3>
+      <button type="button" class="modal-close" onclick="closeTelegramChatModal()">&times;</button>
+    </div>
+    <form id="telegramChatForm">
+      <input type="hidden" id="telegramChatId" name="id">
+      <div class="form-group">
+        <label for="telegramChatChatId">Chat ID</label>
+        <input
+          type="text"
+          id="telegramChatChatId"
+          name="chatId"
+          placeholder="123456789 或 @channelname"
+          autocomplete="off"
+          required
+        >
+        <small class="form-hint">
+          从 @userinfobot 获取。可以是数字或 @开头的用户名
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="telegramChatName">显示名称（可选）</label>
+        <input
+          type="text"
+          id="telegramChatName"
+          name="chatName"
+          placeholder="例如：我的手机"
+          autocomplete="off"
+        >
+        <small class="form-hint">
+          用于在设置页面识别接收者
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="telegramChatRole">权限角色</label>
+        <select id="telegramChatRole" name="role">
+          <option value="viewer">观察者 - 只接收推送</option>
+          <option value="admin">管理员 - 可交互（标记已读、评分）</option>
+        </select>
+        <small class="form-hint">
+          观察者只能接收推送，管理员可以在 Telegram 中标记文章已读和评分
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="telegramChatDailySummary" name="dailySummary" checked>
+          接收每日总结
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="telegramChatNewArticles" name="newArticles" checked>
+          接收新增文章
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="telegramChatIsActive" name="isActive" checked>
+          启用
+        </label>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeTelegramChatModal()">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+.telegram-chats-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+}
+
+.chats-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.chats-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+.telegram-chats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.telegram-chat-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 15px;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #e0e0e0);
+}
+
+.telegram-chat-item.inactive {
+  opacity: 0.6;
+}
+
+.telegram-chat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.telegram-chat-name {
+  font-weight: 500;
+}
+
+.telegram-chat-details {
+  display: flex;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #666);
+}
+
+.telegram-chat-role {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.telegram-chat-role.admin {
+  background: var(--success-bg, #e8f5e9);
+  color: var(--success-color, #2e7d32);
+}
+
+.telegram-chat-role.viewer {
+  background: var(--info-bg, #e3f2fd);
+  color: var(--info-color, #1565c0);
+}
+
+.telegram-chat-tags {
+  display: flex;
+  gap: 5px;
+}
+
+.telegram-chat-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  background: var(--bg-tertiary, #e0e0e0);
+  color: var(--text-secondary, #666);
+}
+
+.telegram-chat-tag.disabled {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+.telegram-chat-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.telegram-chat-actions button {
+  padding: 5px 10px;
+  font-size: 0.8rem;
+}
+
+.telegram-chats-empty {
+  text-align: center;
+  padding: 30px;
+  color: var(--text-secondary, #666);
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 8px;
+  border: 1px dashed var(--border-color, #e0e0e0);
+}
+</style>

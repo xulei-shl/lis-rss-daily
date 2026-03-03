@@ -3,6 +3,7 @@ import type { AuthRequest } from '../../middleware/auth.js';
 import { requireAuth, requireAdmin } from '../../middleware/auth.js';
 import { getChromaSettings, updateChromaSettings, getTelegramSettings, updateTelegramSettings } from '../settings.js';
 import { getTelegramNotifier } from '../../telegram/index.js';
+import { getTelegramChats, hasTelegramChats } from '../telegram-chats.js';
 import { logger } from '../../logger.js';
 
 const log = logger.child({ module: 'api-routes/settings' });
@@ -68,9 +69,7 @@ router.put('/settings/chroma', requireAuth, requireAdmin, async (req: AuthReques
  * Helper to mask sensitive Telegram settings
  * Returns masked values with a `masked` flag to indicate the state
  */
-function maskTelegramSettings(settings: any) {
-  const isMasked = !!(settings.botToken || settings.chatId);
-
+function maskTelegramSettings(settings: any, hasChats: boolean) {
   // Mask bot token for security (show first 4 and last 4 characters if possible)
   let maskedBotToken = '';
   if (settings.botToken) {
@@ -82,25 +81,12 @@ function maskTelegramSettings(settings: any) {
     }
   }
 
-  // Mask chat ID for security (show first 3 and last 3 characters if possible)
-  let maskedChatId = '';
-  if (settings.chatId) {
-    const chatIdStr = String(settings.chatId);
-    if (chatIdStr.length > 6) {
-      maskedChatId = chatIdStr.substring(0, 3) + '***' + chatIdStr.substring(chatIdStr.length - 3);
-    } else {
-      maskedChatId = '***';
-    }
-  }
-
   return {
     enabled: settings.enabled,
     botToken: maskedBotToken,
-    chatId: maskedChatId,
-    dailySummary: settings.dailySummary,
-    newArticles: settings.newArticles,
+    hasChats,
     // Explicit flag to indicate if credentials are configured (masked)
-    hasCredentials: isMasked,
+    hasCredentials: !!settings.botToken,
   };
 }
 
@@ -111,7 +97,8 @@ function maskTelegramSettings(settings: any) {
 router.get('/settings/telegram', requireAuth, async (req: AuthRequest, res) => {
   try {
     const settings = await getTelegramSettings(req.userId!);
-    res.json(maskTelegramSettings(settings));
+    const hasChats = await hasTelegramChats(req.userId!);
+    res.json(maskTelegramSettings(settings, hasChats));
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to get Telegram settings');
     res.status(500).json({ error: 'Failed to get Telegram settings' });
@@ -120,11 +107,11 @@ router.get('/settings/telegram', requireAuth, async (req: AuthRequest, res) => {
 
 /**
  * PUT /api/settings/telegram
- * 更新 Telegram 配置
+ * 更新 Telegram 配置（仅全局配置，chat 配置通过 /api/telegram-chats 管理）
  */
 router.put('/settings/telegram', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const { enabled, botToken, chatId, dailySummary, newArticles } = req.body || {};
+    const { enabled, botToken } = req.body || {};
 
     // Validate botToken format (should be "数字:字符串" format from BotFather)
     if (botToken !== undefined) {
@@ -134,27 +121,15 @@ router.put('/settings/telegram', requireAuth, requireAdmin, async (req: AuthRequ
       }
     }
 
-    // Validate chatId (should be a number for private chat or group username)
-    if (chatId !== undefined && chatId !== '') {
-      const trimmedChatId = chatId?.trim() || '';
-      // Chat ID can be a number (or negative number for groups/supergroups)
-      // or a username like @channelname
-      if (trimmedChatId && !/^-?\d+$/.test(trimmedChatId) && !trimmedChatId.startsWith('@')) {
-        return res.status(400).json({ error: 'Chat ID 格式不正确（应为数字或 @开头的用户名）' });
-      }
-    }
-
     await updateTelegramSettings(req.userId!, {
       enabled: enabled !== undefined ? Boolean(enabled) : undefined,
       botToken: botToken?.trim(),
-      chatId: chatId?.trim(),
-      dailySummary: dailySummary !== undefined ? Boolean(dailySummary) : undefined,
-      newArticles: newArticles !== undefined ? Boolean(newArticles) : undefined,
     });
 
     // 获取更新后的完整配置并返回（脱敏处理）
     const updatedSettings = await getTelegramSettings(req.userId!);
-    res.json(maskTelegramSettings(updatedSettings));
+    const hasChats = await hasTelegramChats(req.userId!);
+    res.json(maskTelegramSettings(updatedSettings, hasChats));
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to update Telegram settings');
     res.status(500).json({ error: 'Failed to update Telegram settings' });

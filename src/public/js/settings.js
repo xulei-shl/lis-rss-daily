@@ -1720,6 +1720,7 @@ document.getElementById('reset-blacklist-btn')?.addEventListener('click', resetB
 // ============================================
 
 let telegramConfig = null;
+let telegramChats = [];
 // Track if credentials are already configured (exist in database)
 let hasExistingCredentials = false;
 
@@ -1728,12 +1729,21 @@ loadTelegramSettings();
 
 async function loadTelegramSettings() {
   try {
-    const res = await fetch('/api/settings/telegram', { cache: 'no-store' });
-    if (!res.ok) {
+    // Load global settings
+    const settingsRes = await fetch('/api/settings/telegram', { cache: 'no-store' });
+    if (!settingsRes.ok) {
       throw new Error('加载 Telegram 配置失败');
     }
-    telegramConfig = await res.json();
+    telegramConfig = await settingsRes.json();
+
+    // Load chats
+    const chatsRes = await fetch('/api/telegram-chats', { cache: 'no-store' });
+    if (chatsRes.ok) {
+      telegramChats = await chatsRes.json();
+    }
+
     populateTelegramForm();
+    renderTelegramChats();
   } catch (err) {
     console.error('Failed to load Telegram config:', err);
     showTelegramStatus('加载 Telegram 配置失败', 'error');
@@ -1745,9 +1755,6 @@ function populateTelegramForm() {
 
   const enabledCheckbox = document.getElementById('telegramEnabled');
   const botTokenInput = document.getElementById('telegramBotToken');
-  const chatIdInput = document.getElementById('telegramChatId');
-  const dailySummaryCheckbox = document.getElementById('telegramDailySummary');
-  const newArticlesCheckbox = document.getElementById('telegramNewArticles');
   const testBtn = document.getElementById('telegramTestBtn');
   const configFields = document.getElementById('telegramConfigFields');
 
@@ -1758,19 +1765,9 @@ function populateTelegramForm() {
   hasExistingCredentials = telegramConfig.hasCredentials || false;
 
   // Handle botToken input
-  // Only show masked placeholder if input is currently empty (user hasn't just entered a value)
   if (telegramConfig.botToken && !botTokenInput.value) {
     botTokenInput.placeholder = '已配置（点击修改）';
   }
-
-  // Handle chatId input
-  // Only show masked placeholder if input is currently empty (user hasn't just entered a value)
-  if (telegramConfig.chatId && !chatIdInput.value) {
-    chatIdInput.placeholder = '已配置（点击修改）';
-  }
-
-  dailySummaryCheckbox.checked = telegramConfig.dailySummary || false;
-  newArticlesCheckbox.checked = telegramConfig.newArticles || false;
 
   // Enable/disable config fields based on enabled state
   if (configFields) {
@@ -1779,10 +1776,60 @@ function populateTelegramForm() {
   }
 
   // Enable/disable test button based on configuration
-  if (testBtn) {
-    const hasInputValues = botTokenInput.value || chatIdInput.value;
-    testBtn.disabled = !enabledCheckbox.checked || (!hasInputValues && !hasExistingCredentials);
+  updateTelegramTestButton();
+}
+
+function renderTelegramChats() {
+  const listEl = document.getElementById('telegramChatsList');
+  const emptyEl = document.getElementById('telegramChatsEmpty');
+
+  if (!listEl) return;
+
+  if (telegramChats.length === 0) {
+    listEl.innerHTML = '';
+    if (emptyEl) emptyEl.style.display = 'block';
+    return;
   }
+
+  if (emptyEl) emptyEl.style.display = 'none';
+
+  listEl.innerHTML = telegramChats.map(chat => {
+    const roleClass = chat.role === 'admin' ? 'admin' : 'viewer';
+    const roleLabel = chat.role === 'admin' ? '管理员' : '观察者';
+    const inactiveClass = chat.isActive ? '' : 'inactive';
+
+    // Build tags
+    const tags = [];
+    if (chat.dailySummary) {
+      tags.push('<span class="telegram-chat-tag">每日总结</span>');
+    } else {
+      tags.push('<span class="telegram-chat-tag disabled">每日总结</span>');
+    }
+    if (chat.newArticles) {
+      tags.push('<span class="telegram-chat-tag">新增文章</span>');
+    } else {
+      tags.push('<span class="telegram-chat-tag disabled">新增文章</span>');
+    }
+
+    return `
+      <div class="telegram-chat-item ${inactiveClass}">
+        <div class="telegram-chat-info">
+          <div class="telegram-chat-name">
+            ${escapeHtml(chat.chatName || chat.chatId)}
+            ${chat.chatName ? '<small style="color: var(--text-secondary, #666); margin-left: 5px;">(' + escapeHtml(chat.chatId) + ')</small>' : ''}
+          </div>
+          <div class="telegram-chat-details">
+            <span class="telegram-chat-role ${roleClass}">${roleLabel}</span>
+            <div class="telegram-chat-tags">${tags.join('')}</div>
+          </div>
+        </div>
+        <div class="telegram-chat-actions">
+          <button type="button" class="btn-icon" onclick="editTelegramChat(${chat.id})">编辑</button>
+          <button type="button" class="btn-icon" onclick="deleteTelegramChat(${chat.id})">删除</button>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 async function saveTelegramSettings(e) {
@@ -1790,8 +1837,6 @@ async function saveTelegramSettings(e) {
   const success = await saveTelegramSettingsInternal();
   if (success) {
     showTelegramStatus('Telegram 配置已保存', 'success');
-    // telegramConfig 已在 saveTelegramSettingsInternal 中从后端更新
-    // 直接使用后端返回的数据重新填充表单
     populateTelegramForm();
   }
 }
@@ -1807,13 +1852,11 @@ async function testTelegramConnection() {
   try {
     // Check if user has entered new values that need to be saved first
     const botTokenInput = document.getElementById('telegramBotToken');
-    const chatIdInput = document.getElementById('telegramChatId');
     const botToken = botTokenInput.value.trim();
-    const chatId = chatIdInput.value.trim();
     const enabled = document.getElementById('telegramEnabled').checked;
 
-    // If user entered new values, save them first
-    if (botToken || chatId) {
+    // If user entered new token, save it first
+    if (botToken) {
       const saveResult = await saveTelegramSettingsInternal();
       if (!saveResult) {
         showTelegramStatus('请先正确填写配置', 'error');
@@ -1821,9 +1864,15 @@ async function testTelegramConnection() {
         testBtn.disabled = false;
         return;
       }
-      // telegramConfig 已在 saveTelegramSettingsInternal 中从后端更新
-      // 直接重新填充表单
       populateTelegramForm();
+    }
+
+    // Check if there are any chats configured
+    if (telegramChats.length === 0) {
+      showTelegramStatus('请先添加至少一个接收者', 'error');
+      testBtn.textContent = originalText;
+      testBtn.disabled = false;
+      return;
     }
 
     // Now test the connection
@@ -1851,36 +1900,23 @@ async function testTelegramConnection() {
 async function saveTelegramSettingsInternal() {
   const enabled = document.getElementById('telegramEnabled').checked;
   const botTokenInput = document.getElementById('telegramBotToken');
-  const chatIdInput = document.getElementById('telegramChatId');
   const botToken = botTokenInput.value.trim();
-  const chatId = chatIdInput.value.trim();
-  const dailySummary = document.getElementById('telegramDailySummary').checked;
-  const newArticles = document.getElementById('telegramNewArticles').checked;
 
   // Check if fields were previously configured
-  // Backend returns masked values (or empty) when credentials exist
   const hasExistingToken = !!(telegramConfig?.botToken);
-  const hasExistingChatId = !!(telegramConfig?.chatId);
 
   // Validation - only require new values if enabling and no existing value
   if (enabled && !botToken && !hasExistingToken) {
     showTelegramStatus('请填写 Bot Token', 'error');
     return false;
   }
-  if (enabled && !chatId && !hasExistingChatId) {
-    showTelegramStatus('请填写 Chat ID', 'error');
-    return false;
-  }
 
   // Build payload - only include fields that have new values
   const payload = {
     enabled,
-    dailySummary,
-    newArticles,
   };
 
   if (botToken) payload.botToken = botToken;
-  if (chatId) payload.chatId = chatId;
 
   try {
     const res = await fetch('/api/settings/telegram', {
@@ -1891,9 +1927,8 @@ async function saveTelegramSettingsInternal() {
 
     if (res.ok) {
       telegramConfig = await res.json();
-      // Clear input fields after successful save so placeholder shows
+      // Clear input field after successful save so placeholder shows
       if (botToken) botTokenInput.value = '';
-      if (chatId) chatIdInput.value = '';
       return true;
     } else {
       const result = await res.json();
@@ -1924,12 +1959,26 @@ function showTelegramStatus(message, type) {
   }
 }
 
+function updateTelegramTestButton() {
+  const testBtn = document.getElementById('telegramTestBtn');
+  const enabled = document.getElementById('telegramEnabled')?.checked || false;
+  const botTokenInput = document.getElementById('telegramBotToken');
+  const botToken = botTokenInput?.value.trim() || '';
+
+  if (testBtn) {
+    // Enable test button if:
+    // 1. Telegram is enabled AND
+    // 2. (User entered new token OR existing token exists) AND
+    // 3. There are configured chats
+    const hasToken = botToken || hasExistingCredentials;
+    const hasChats = telegramChats.length > 0;
+    testBtn.disabled = !enabled || !hasToken || !hasChats;
+  }
+}
+
 function handleTelegramEnabledChange() {
   const enabled = document.getElementById('telegramEnabled').checked;
   const configFields = document.getElementById('telegramConfigFields');
-  const botTokenInput = document.getElementById('telegramBotToken');
-  const chatIdInput = document.getElementById('telegramChatId');
-  const testBtn = document.getElementById('telegramTestBtn');
 
   // Enable/disable config fields
   if (configFields) {
@@ -1937,10 +1986,144 @@ function handleTelegramEnabledChange() {
     configFields.style.pointerEvents = enabled ? 'auto' : 'none';
   }
 
-  // Update test button state
-  if (testBtn) {
-    const hasInputValues = botTokenInput.value || chatIdInput.value;
-    testBtn.disabled = !enabled || (!hasInputValues && !hasExistingCredentials);
+  updateTelegramTestButton();
+}
+
+// ============================================
+// Telegram Chat Modal Functions
+// ============================================
+
+function openTelegramChatModal(chat = null) {
+  const modal = document.getElementById('telegramChatModal');
+  const title = document.getElementById('telegramChatModalTitle');
+  const form = document.getElementById('telegramChatForm');
+
+  if (!modal || !form) return;
+
+  // Reset form
+  form.reset();
+  document.getElementById('telegramChatId').value = '';
+
+  if (chat) {
+    // Edit mode
+    title.textContent = '编辑接收者';
+    document.getElementById('telegramChatId').value = chat.id;
+    document.getElementById('telegramChatChatId').value = chat.chatId;
+    document.getElementById('telegramChatName').value = chat.chatName || '';
+    document.getElementById('telegramChatRole').value = chat.role;
+    document.getElementById('telegramChatDailySummary').checked = chat.dailySummary;
+    document.getElementById('telegramChatNewArticles').checked = chat.newArticles;
+    document.getElementById('telegramChatIsActive').checked = chat.isActive;
+    // Disable chat ID input in edit mode
+    document.getElementById('telegramChatChatId').disabled = true;
+  } else {
+    // Add mode
+    title.textContent = '添加接收者';
+    document.getElementById('telegramChatChatId').disabled = false;
+  }
+
+  modal.classList.add('active');
+}
+
+function closeTelegramChatModal() {
+  const modal = document.getElementById('telegramChatModal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
+}
+
+function editTelegramChat(id) {
+  const chat = telegramChats.find(c => c.id === id);
+  if (chat) {
+    openTelegramChatModal(chat);
+  }
+}
+
+async function deleteTelegramChat(id) {
+  const chat = telegramChats.find(c => c.id === id);
+  if (!chat) return;
+
+  const confirmed = await showConfirm(`确定要删除接收者 "${chat.chatName || chat.chatId}" 吗？`, {
+    title: '删除接收者',
+    okText: '删除',
+    cancelText: '取消'
+  });
+
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/telegram-chats/' + id, {
+      method: 'DELETE',
+    });
+
+    if (res.ok) {
+      telegramChats = telegramChats.filter(c => c.id !== id);
+      renderTelegramChats();
+      updateTelegramTestButton();
+      showTelegramStatus('接收者已删除', 'success');
+    } else {
+      const result = await res.json();
+      showTelegramStatus(result.error || '删除失败', 'error');
+    }
+  } catch (err) {
+    showTelegramStatus('删除失败，请稍后重试', 'error');
+  }
+}
+
+async function saveTelegramChat(e) {
+  e.preventDefault();
+
+  const id = document.getElementById('telegramChatId').value;
+  const chatId = document.getElementById('telegramChatChatId').value.trim();
+  const chatName = document.getElementById('telegramChatName').value.trim();
+  const role = document.getElementById('telegramChatRole').value;
+  const dailySummary = document.getElementById('telegramChatDailySummary').checked;
+  const newArticles = document.getElementById('telegramChatNewArticles').checked;
+  const isActive = document.getElementById('telegramChatIsActive').checked;
+
+  if (!chatId) {
+    showTelegramStatus('请填写 Chat ID', 'error');
+    return;
+  }
+
+  const payload = {
+    chatId,
+    chatName: chatName || null,
+    role,
+    dailySummary,
+    newArticles,
+    isActive,
+  };
+
+  try {
+    const url = id ? `/api/telegram-chats/${id}` : '/api/telegram-chats';
+    const method = id ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
+      const savedChat = await res.json();
+      if (id) {
+        // Update existing
+        telegramChats = telegramChats.map(c => c.id === savedChat.id ? savedChat : c);
+      } else {
+        // Add new
+        telegramChats.push(savedChat);
+      }
+      renderTelegramChats();
+      updateTelegramTestButton();
+      closeTelegramChatModal();
+      showTelegramStatus('接收者已保存', 'success');
+    } else {
+      const result = await res.json();
+      showTelegramStatus(result.error || '保存失败', 'error');
+    }
+  } catch (err) {
+    showTelegramStatus('保存失败，请稍后重试', 'error');
   }
 }
 
@@ -1948,26 +2131,16 @@ function handleTelegramEnabledChange() {
 document.getElementById('telegramForm')?.addEventListener('submit', saveTelegramSettings);
 document.getElementById('telegramEnabled')?.addEventListener('change', handleTelegramEnabledChange);
 document.getElementById('telegramTestBtn')?.addEventListener('click', testTelegramConnection);
+document.getElementById('addTelegramChatBtn')?.addEventListener('click', () => openTelegramChatModal());
+document.getElementById('telegramChatForm')?.addEventListener('submit', saveTelegramChat);
 
-// Enable/disable test button when inputs change
-document.getElementById('telegramBotToken')?.addEventListener('input', () => {
-  const enabled = document.getElementById('telegramEnabled').checked;
-  const botToken = document.getElementById('telegramBotToken').value.trim();
-  const chatId = document.getElementById('telegramChatId').value.trim();
-  const testBtn = document.getElementById('telegramTestBtn');
-  if (testBtn) {
-    const hasInputValues = botToken || chatId;
-    testBtn.disabled = !enabled || (!hasInputValues && !hasExistingCredentials);
-  }
-});
-document.getElementById('telegramChatId')?.addEventListener('input', () => {
-  const enabled = document.getElementById('telegramEnabled').checked;
-  const botToken = document.getElementById('telegramBotToken').value.trim();
-  const chatId = document.getElementById('telegramChatId').value.trim();
-  const testBtn = document.getElementById('telegramTestBtn');
-  if (testBtn) {
-    const hasInputValues = botToken || chatId;
-    testBtn.disabled = !enabled || (!hasInputValues && !hasExistingCredentials);
+// Enable/disable test button when bot token input changes
+document.getElementById('telegramBotToken')?.addEventListener('input', updateTelegramTestButton);
+
+// Close modal when clicking outside
+document.getElementById('telegramChatModal')?.addEventListener('click', function(e) {
+  if (e.target === this) {
+    closeTelegramChatModal();
   }
 });
 

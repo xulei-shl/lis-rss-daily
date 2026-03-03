@@ -517,6 +517,68 @@ CREATE TABLE IF NOT EXISTS journal_crawl_logs (
         continue;
       }
 
+      // ============================================================
+      // 024: 添加 telegram_chats 表（多用户权限支持）
+      // ============================================================
+      if (file === '024_telegram_chats.sql') {
+        const hasTelegramChats = hasTable(db, 'telegram_chats');
+
+        if (!hasTelegramChats) {
+          // 1. 创建 telegram_chats 表
+          db.exec(`
+CREATE TABLE IF NOT EXISTS telegram_chats (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  chat_id TEXT NOT NULL,
+  chat_name TEXT,
+  role TEXT DEFAULT 'viewer' CHECK(role IN ('admin', 'viewer')),
+  daily_summary INTEGER DEFAULT 1,
+  new_articles INTEGER DEFAULT 1,
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(user_id, chat_id)
+);`);
+          db.exec('CREATE INDEX IF NOT EXISTS idx_telegram_chats_user_id ON telegram_chats(user_id);');
+          db.exec('CREATE INDEX IF NOT EXISTS idx_telegram_chats_is_active ON telegram_chats(is_active);');
+          db.exec('CREATE INDEX IF NOT EXISTS idx_telegram_chats_role ON telegram_chats(role);');
+          console.log('      → Created telegram_chats table');
+
+          // 2. 迁移现有 telegram_chat_id 到新表
+          const existingChats = db.prepare(`
+            SELECT s.user_id, s.value AS chat_id,
+              (SELECT value FROM settings WHERE user_id = s.user_id AND key = 'telegram_daily_summary') AS daily_summary,
+              (SELECT value FROM settings WHERE user_id = s.user_id AND key = 'telegram_new_articles') AS new_articles
+            FROM settings s
+            WHERE s.key = 'telegram_chat_id'
+              AND s.value IS NOT NULL
+              AND s.value != ''
+          `).all() as Array<{ user_id: number; chat_id: string; daily_summary: string | null; new_articles: string | null }>;
+
+          if (existingChats.length > 0) {
+            const insertChat = db.prepare(`
+              INSERT INTO telegram_chats (user_id, chat_id, role, daily_summary, new_articles, is_active)
+              VALUES (?, ?, 'admin', ?, ?, 1)
+            `);
+
+            for (const chat of existingChats) {
+              const dailySummary = chat.daily_summary === 'true' ? 1 : 0;
+              const newArticles = chat.new_articles === 'true' ? 1 : 0;
+              insertChat.run(chat.user_id, chat.chat_id, dailySummary, newArticles);
+            }
+            console.log(`      → Migrated ${existingChats.length} existing Telegram chat(s) to new table`);
+          } else {
+            console.log('      → No existing Telegram chats to migrate');
+          }
+
+          console.log('      → Migration 024 completed');
+        } else {
+          console.log('      → Skipped (telegram_chats table already exists)');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

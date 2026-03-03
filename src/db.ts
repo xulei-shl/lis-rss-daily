@@ -45,6 +45,7 @@ export interface DatabaseTable {
   rss_fetch_logs: RssFetchLogsTable;
   keyword_subscriptions: KeywordSubscriptionsTable;
   keyword_crawl_logs: KeywordCrawlLogsTable;
+  telegram_chats: TelegramChatsTable;
 }
 
 export interface UsersTable {
@@ -286,6 +287,19 @@ export interface KeywordCrawlLogsTable {
   created_at: Generated<string>;
 }
 
+export interface TelegramChatsTable {
+  id: Generated<number>;
+  user_id: number;
+  chat_id: string;
+  chat_name: string | null;
+  role: 'admin' | 'viewer';
+  daily_summary: number;
+  new_articles: number;
+  is_active: number;
+  created_at: Generated<string>;
+  updated_at: string;
+}
+
 export type DB = Kysely<DatabaseTable>;
 
 // Selection result types (unwraps Generated<T> to T)
@@ -302,6 +316,7 @@ export type JournalCrawlLogsSelection = SelectionType<JournalCrawlLogsTable>;
 export type RssFetchLogsSelection = SelectionType<RssFetchLogsTable>;
 export type KeywordSubscriptionsSelection = SelectionType<KeywordSubscriptionsTable>;
 export type KeywordCrawlLogsSelection = SelectionType<KeywordCrawlLogsTable>;
+export type TelegramChatsSelection = SelectionType<TelegramChatsTable>;
 
 let _db: DB | null = null;
 

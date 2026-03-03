@@ -426,7 +426,31 @@ CREATE INDEX IF NOT EXISTS idx_keyword_crawl_logs_created_at ON keyword_crawl_lo
 CREATE INDEX IF NOT EXISTS idx_keyword_crawl_logs_status ON keyword_crawl_logs(status);
 
 -- ===========================================
--- 18. Schema Metadata Table
+-- 18. Telegram Chats Table (多用户权限支持)
+-- ===========================================
+-- 存储多个 Telegram Chat ID 及其权限配置
+-- 支持 admin（完整功能）和 viewer（只接收推送）两种角色
+CREATE TABLE IF NOT EXISTS telegram_chats (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  chat_id TEXT NOT NULL,
+  chat_name TEXT,                    -- 显示名称
+  role TEXT DEFAULT 'viewer' CHECK(role IN ('admin', 'viewer')),
+  daily_summary INTEGER DEFAULT 1,
+  new_articles INTEGER DEFAULT 1,
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(user_id, chat_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_telegram_chats_user_id ON telegram_chats(user_id);
+CREATE INDEX IF NOT EXISTS idx_telegram_chats_is_active ON telegram_chats(is_active);
+CREATE INDEX IF NOT EXISTS idx_telegram_chats_role ON telegram_chats(role);
+
+-- ===========================================
+-- 19. Schema Metadata Table
 -- ===========================================
 -- 用于跟踪数据库 schema 版本和配置版本
 CREATE TABLE IF NOT EXISTS schema_metadata (

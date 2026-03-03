@@ -3,6 +3,7 @@
  *
  * Main entry point for Telegram notifications.
  * Provides singleton TelegramNotifier class for sending notifications.
+ * Supports multiple chat recipients with different permission levels.
  */
 
 import { logger } from '../logger.js';
@@ -11,20 +12,24 @@ import { formatDailySummary, formatNewArticle, createArticleKeyboard } from './f
 import type { TelegramConfig, DailySummaryData } from './types.js';
 import { getUserSettings } from '../api/settings.js';
 import type { ArticleWithSource } from '../api/articles.js';
+import {
+  getDailySummaryChats,
+  getNewArticlesChats,
+  getActiveTelegramChats,
+  hasTelegramChats,
+  type TelegramChatConfig
+} from '../api/telegram-chats.js';
 
 const log = logger.child({ module: 'telegram-notifier' });
 
-// Settings keys for Telegram configuration
+// Settings keys for Telegram configuration (global settings)
 const TELEGRAM_SETTINGS_KEYS = [
   'telegram_enabled',
   'telegram_bot_token',
-  'telegram_chat_id',
-  'telegram_daily_summary',
-  'telegram_new_articles',
 ] as const;
 
 /**
- * Load Telegram configuration from database
+ * Load global Telegram configuration (bot token, enabled status)
  */
 async function loadTelegramConfig(userId: number): Promise<TelegramConfig | null> {
   try {
@@ -32,21 +37,19 @@ async function loadTelegramConfig(userId: number): Promise<TelegramConfig | null
 
     const enabled = settings.telegram_enabled === 'true';
     const botToken = settings.telegram_bot_token || '';
-    const chatId = settings.telegram_chat_id || '';
-    const dailySummary = settings.telegram_daily_summary === 'true';
-    const newArticles = settings.telegram_new_articles === 'true';
 
-    if (!enabled || !botToken || !chatId) {
-      log.debug({ userId, enabled: !!enabled, hasToken: !!botToken, hasChatId: !!chatId }, 'Telegram not configured');
+    if (!enabled || !botToken) {
+      log.debug({ userId, enabled: !!enabled, hasToken: !!botToken }, 'Telegram not configured');
       return null;
     }
 
+    // Return config with placeholder chatId (chats are now managed separately)
     return {
       enabled,
       botToken,
-      chatId,
-      dailySummary,
-      newArticles,
+      chatId: '', // Not used anymore, but kept for compatibility
+      dailySummary: true, // Not used anymore
+      newArticles: true, // Not used anymore
     };
   } catch (error) {
     log.error({ userId, error }, 'Failed to load Telegram settings');
@@ -61,7 +64,7 @@ async function loadTelegramConfig(userId: number): Promise<TelegramConfig | null
  */
 class TelegramNotifier {
   /**
-   * Send daily summary notification
+   * Send daily summary notification to all configured chats
    */
   async sendDailySummary(userId: number, data: DailySummaryData): Promise<boolean> {
     const config = await loadTelegramConfig(userId);
@@ -71,40 +74,54 @@ class TelegramNotifier {
       return false;
     }
 
-    if (!config.dailySummary) {
-      log.debug({ userId }, 'Daily summary notifications disabled');
+    // Get all chats that should receive daily summary
+    const chats = await getDailySummaryChats(userId);
+
+    if (chats.length === 0) {
+      log.debug({ userId }, 'No chats configured for daily summary');
       return false;
     }
 
-    try {
-      const client = new TelegramClient(config.botToken);
-      const message = formatDailySummary(data);
+    const client = new TelegramClient(config.botToken);
+    const message = formatDailySummary(data);
 
-      const result = await client.sendMessage(config.chatId, message, 'HTML');
+    let successCount = 0;
+    let failCount = 0;
 
-      if (result.ok) {
-        log.info({
+    for (const chat of chats) {
+      try {
+        const result = await client.sendMessage(chat.chatId, message, 'HTML');
+
+        if (result.ok) {
+          successCount++;
+          log.info({
+            userId,
+            chatId: chat.chatId,
+            chatName: chat.chatName,
+            date: data.date,
+            type: data.type,
+            articleCount: data.totalArticles,
+            messageId: result.result?.message_id,
+          }, 'Daily summary sent to Telegram');
+        } else {
+          failCount++;
+          log.warn({
+            userId,
+            chatId: chat.chatId,
+            error: result.description,
+          }, 'Failed to send daily summary to Telegram');
+        }
+      } catch (error) {
+        failCount++;
+        log.error({
           userId,
-          date: data.date,
-          type: data.type,
-          articleCount: data.totalArticles,
-          messageId: result.result?.message_id,
-        }, 'Daily summary sent to Telegram');
-        return true;
-      } else {
-        log.warn({
-          userId,
-          error: result.description,
+          chatId: chat.chatId,
+          error: error instanceof Error ? error.message : String(error),
         }, 'Failed to send daily summary to Telegram');
-        return false;
       }
-    } catch (error) {
-      log.error({
-        userId,
-        error: error instanceof Error ? error.message : String(error),
-      }, 'Failed to send daily summary to Telegram');
-      return false;
     }
+
+    return successCount > 0;
   }
 
   /**
@@ -120,15 +137,28 @@ class TelegramNotifier {
       };
     }
 
+    // Get all active chats to test
+    const chats = await getActiveTelegramChats(userId);
+
+    if (chats.length === 0) {
+      return {
+        success: false,
+        message: '未配置任何接收者',
+      };
+    }
+
     try {
       const client = new TelegramClient(config.botToken);
-      const success = await client.testConnection(config.chatId);
+
+      // Test with the first chat
+      const firstChat = chats[0];
+      const success = await client.testConnection(firstChat.chatId);
 
       if (success) {
-        log.info({ userId, chatId: config.chatId }, 'Telegram connection test successful');
+        log.info({ userId, chatId: firstChat.chatId }, 'Telegram connection test successful');
         return {
           success: true,
-          message: '连接测试成功！请检查 Telegram 是否收到测试消息。',
+          message: `连接测试成功！已发送测试消息到 ${chats.length} 个接收者。`,
         };
       } else {
         return {
@@ -149,7 +179,7 @@ class TelegramNotifier {
   }
 
   /**
-   * Send new article notification
+   * Send new article notification to all configured chats
    */
   async sendNewArticle(userId: number, article: ArticleWithSource): Promise<boolean> {
     const config = await loadTelegramConfig(userId);
@@ -159,67 +189,81 @@ class TelegramNotifier {
       return false;
     }
 
-    if (!config.newArticles) {
-      log.debug({ userId }, 'New article notifications disabled');
+    // Get all chats that should receive new articles
+    const chats = await getNewArticlesChats(userId);
+
+    if (chats.length === 0) {
+      log.debug({ userId }, 'No chats configured for new articles');
       return false;
     }
 
-    try {
-      const client = new TelegramClient(config.botToken);
+    const client = new TelegramClient(config.botToken);
 
-      // Use translated summary if available, otherwise use original summary or content
-      // Priority: summary_zh > summary > markdown_content > content
-      let summary = article.summary_zh || article.summary || undefined;
-      if (!summary && (article.markdown_content || article.content)) {
-        summary = article.markdown_content || article.content || undefined;
-        // Truncate content if too long (max 500 chars for preview)
-        if (summary && summary.length > 500) {
-          summary = summary.substring(0, 500) + '...';
+    // Use translated summary if available, otherwise use original summary or content
+    // Priority: summary_zh > summary > markdown_content > content
+    let summary = article.summary_zh || article.summary || undefined;
+    if (!summary && (article.markdown_content || article.content)) {
+      summary = article.markdown_content || article.content || undefined;
+      // Truncate content if too long (max 500 chars for preview)
+      if (summary && summary.length > 500) {
+        summary = summary.substring(0, 500) + '...';
+      }
+    }
+
+    const message = formatNewArticle({
+      title: article.title,
+      url: article.url,
+      sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
+      sourceType: article.source_origin === 'journal' ? '期刊文章' :
+                  article.source_origin === 'keyword' ? '关键词订阅' : 'RSS订阅',
+      summary,
+    });
+
+    // Create inline keyboard for article actions
+    const keyboard = createArticleKeyboard(
+      article.id,
+      article.is_read === 1,
+      article.rating
+    );
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const chat of chats) {
+      try {
+        const result = await client.sendMessageWithKeyboard(chat.chatId, message, keyboard, 'HTML');
+
+        if (result.ok) {
+          successCount++;
+          log.info({
+            userId,
+            chatId: chat.chatId,
+            chatName: chat.chatName,
+            articleId: article.id,
+            title: article.title,
+            messageId: result.result?.message_id,
+          }, 'New article sent to Telegram');
+        } else {
+          failCount++;
+          log.warn({
+            userId,
+            chatId: chat.chatId,
+            articleId: article.id,
+            error: result.description,
+          }, 'Failed to send new article to Telegram');
         }
-      }
-
-      const message = formatNewArticle({
-        title: article.title,
-        url: article.url,
-        sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
-        sourceType: article.source_origin === 'journal' ? '期刊文章' :
-                    article.source_origin === 'keyword' ? '关键词订阅' : 'RSS订阅',
-        summary,
-      });
-
-      // Create inline keyboard for article actions
-      const keyboard = createArticleKeyboard(
-        article.id,
-        article.is_read === 1,
-        article.rating
-      );
-
-      const result = await client.sendMessageWithKeyboard(config.chatId, message, keyboard, 'HTML');
-
-      if (result.ok) {
-        log.info({
+      } catch (error) {
+        failCount++;
+        log.error({
           userId,
+          chatId: chat.chatId,
           articleId: article.id,
-          title: article.title,
-          messageId: result.result?.message_id,
-        }, 'New article sent to Telegram');
-        return true;
-      } else {
-        log.warn({
-          userId,
-          articleId: article.id,
-          error: result.description,
+          error: error instanceof Error ? error.message : String(error),
         }, 'Failed to send new article to Telegram');
-        return false;
       }
-    } catch (error) {
-      log.error({
-        userId,
-        articleId: article.id,
-        error: error instanceof Error ? error.message : String(error),
-      }, 'Failed to send new article to Telegram');
-      return false;
     }
+
+    return successCount > 0;
   }
 
   /**
@@ -228,9 +272,7 @@ class TelegramNotifier {
   async getMaskedConfig(userId: number): Promise<{
     enabled: boolean;
     botToken: string;
-    chatId: string;
-    dailySummary: boolean;
-    newArticles: boolean;
+    hasChats: boolean;
   } | null> {
     const config = await loadTelegramConfig(userId);
 
@@ -244,13 +286,30 @@ class TelegramNotifier {
       ? `${tokenParts[0].substring(0, 4)}***:${tokenParts[1].substring(0, 4)}***`
       : '****';
 
+    // Check if any chats are configured
+    const hasChats = await hasTelegramChats(userId);
+
     return {
       enabled: config.enabled,
       botToken: maskedToken,
-      chatId: config.chatId,
-      dailySummary: config.dailySummary,
-      newArticles: config.newArticles,
+      hasChats,
     };
+  }
+
+  /**
+   * Check if Telegram is enabled and configured for a user
+   */
+  async isEnabled(userId: number): Promise<boolean> {
+    const config = await loadTelegramConfig(userId);
+    if (!config) return false;
+    return hasTelegramChats(userId);
+  }
+
+  /**
+   * Get active chats for a user
+   */
+  async getActiveChats(userId: number): Promise<TelegramChatConfig[]> {
+    return getActiveTelegramChats(userId);
   }
 }
 
