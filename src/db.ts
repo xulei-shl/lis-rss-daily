@@ -323,6 +323,7 @@ export function initDb(): DB {
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('synchronous = NORMAL');
   sqlite.pragma('cache_size = -64000'); // 64MB cache
+  sqlite.pragma('foreign_keys = ON'); // Enable foreign key constraints
 
   _db = new Kysely<DatabaseTable>({
     dialect: new SqliteDialect({

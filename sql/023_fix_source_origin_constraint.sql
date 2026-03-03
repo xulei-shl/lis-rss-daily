@@ -11,8 +11,19 @@
 -- 1. 更新 source_origin 约束为 ('rss', 'journal', 'keyword')
 -- 2. 创建 keyword_id 的外键约束（ON DELETE SET NULL）
 -- 3. 保留所有现有数据
+--
+-- 重要说明：
+-- 由于以下表有 ON DELETE CASCADE 外键指向 articles 表：
+-- - article_filter_logs
+-- - article_process_logs
+-- - article_related
+-- - article_translations
+-- 必须在 DROP TABLE 前禁用外键约束，否则会级联删除所有相关数据！
 
 BEGIN TRANSACTION;
+
+-- 禁用外键约束，防止 DROP TABLE 时级联删除数据
+PRAGMA foreign_keys = OFF;
 
 -- ===========================================
 -- 1. 创建新的 articles 表（包含完整约束）
@@ -95,6 +106,9 @@ CREATE INDEX IF NOT EXISTS idx_articles_rating ON articles(rating) WHERE rating 
 -- 5. 重建唯一索引（title_normalized 去重）
 -- ===========================================
 CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_title_normalized ON articles(title_normalized) WHERE title_normalized IS NOT NULL;
+
+-- 恢复外键约束
+PRAGMA foreign_keys = ON;
 
 COMMIT;
 
