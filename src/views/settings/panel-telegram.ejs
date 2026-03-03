@@ -22,13 +22,18 @@
       <div id="telegramConfigFields" class="telegram-config-fields">
         <div class="form-group">
           <label for="telegramBotToken">Bot Token</label>
-          <input
-            type="password"
-            id="telegramBotToken"
-            name="botToken"
-            placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-            autocomplete="off"
-          >
+          <div class="input-with-action">
+            <input
+              type="password"
+              id="telegramBotToken"
+              name="botToken"
+              placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+              autocomplete="off"
+            >
+            <button type="button" id="telegramSaveTokenBtn" class="btn btn-secondary btn-small">
+              保存
+            </button>
+          </div>
           <small class="form-hint">
             从 @BotFather 获取。格式：数字:字符串
           </small>
@@ -52,13 +57,6 @@
           </div>
         </div>
       </div>
-
-      <div class="telegram-actions">
-        <button type="button" id="telegramTestBtn" class="btn btn-secondary" disabled>
-          测试连接
-        </button>
-        <button type="submit" class="btn btn-primary">保存</button>
-      </div>
     </form>
 
     <div id="telegramStatus" class="telegram-status"></div>
@@ -66,8 +64,8 @@
 </section>
 
 <!-- Add/Edit Telegram Chat Modal -->
-<div id="telegramChatModal" class="modal">
-  <div class="modal-content">
+<div class="modal-overlay" id="telegramChatModal">
+  <div class="modal">
     <div class="modal-header">
       <h3 id="telegramChatModalTitle">添加接收者</h3>
       <button type="button" class="modal-close" onclick="closeTelegramChatModal()">&times;</button>
@@ -135,7 +133,7 @@
         </label>
       </div>
 
-      <div class="modal-actions">
+      <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeTelegramChatModal()">取消</button>
         <button type="submit" class="btn btn-primary">保存</button>
       </div>
@@ -144,99 +142,139 @@
 </div>
 
 <style>
+/* Input with action button */
+.input-with-action {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.input-with-action input {
+  flex: 1;
+}
+
+/* Telegram Chats Section */
 .telegram-chats-section {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border-color, #e0e0e0);
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
 }
 
 .chats-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: var(--space-4);
 }
 
 .chats-header h3 {
   margin: 0;
-  font-size: 1rem;
+  font-family: var(--font-heading);
+  font-size: var(--text-base);
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .btn-small {
-  padding: 6px 12px;
-  font-size: 0.85rem;
+  height: 36px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
 }
 
+/* Chats List */
 .telegram-chats-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .telegram-chat-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 15px;
-  background: var(--bg-secondary, #f5f5f5);
-  border-radius: 8px;
-  border: 1px solid var(--border-color, #e0e0e0);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.telegram-chat-item:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
 }
 
 .telegram-chat-item.inactive {
   opacity: 0.6;
+  background: var(--bg-subtle);
 }
 
 .telegram-chat-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
+  flex: 1;
 }
 
 .telegram-chat-name {
-  font-weight: 500;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-meta);
 }
 
 .telegram-chat-details {
   display: flex;
-  gap: 10px;
-  font-size: 0.85rem;
-  color: var(--text-secondary, #666);
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
+/* Role Badge */
 .telegram-chat-role {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-meta);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 .telegram-chat-role.admin {
-  background: var(--success-bg, #e8f5e9);
-  color: var(--success-color, #2e7d32);
+  color: var(--green);
+  background: rgba(5, 150, 105, 0.1);
+  border: 1px solid rgba(5, 150, 105, 0.2);
 }
 
 .telegram-chat-role.viewer {
-  background: var(--info-bg, #e3f2fd);
-  color: var(--info-color, #1565c0);
+  color: var(--accent-primary);
+  background: var(--accent-subtle);
+  border: 1px solid rgba(26, 77, 122, 0.2);
 }
 
+/* Tags */
 .telegram-chat-tags {
   display: flex;
-  gap: 5px;
+  gap: 4px;
 }
 
 .telegram-chat-tag {
   display: inline-flex;
   align-items: center;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.7rem;
-  background: var(--bg-tertiary, #e0e0e0);
-  color: var(--text-secondary, #666);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-meta);
+  font-size: 0.65rem;
+  font-weight: 500;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
 }
 
 .telegram-chat-tag.disabled {
@@ -244,22 +282,31 @@
   opacity: 0.5;
 }
 
+/* Actions */
 .telegram-chat-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
+  margin-left: var(--space-3);
 }
 
-.telegram-chat-actions button {
-  padding: 5px 10px;
-  font-size: 0.8rem;
+.telegram-chat-actions .btn-icon {
+  height: 32px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
 }
 
+/* Empty State */
 .telegram-chats-empty {
   text-align: center;
-  padding: 30px;
-  color: var(--text-secondary, #666);
-  background: var(--bg-secondary, #f5f5f5);
-  border-radius: 8px;
-  border: 1px dashed var(--border-color, #e0e0e0);
+  padding: var(--space-8) var(--space-5);
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+.telegram-chats-empty p {
+  margin: 0;
+  font-size: var(--text-sm);
 }
 </style>
