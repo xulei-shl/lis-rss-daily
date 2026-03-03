@@ -2084,6 +2084,7 @@ function showKeywordAddModal() {
   document.getElementById('keywordModalTitle').textContent = '添加关键词订阅';
   document.getElementById('keywordId').value = '';
   document.getElementById('keywordText').value = '';
+  document.getElementById('keywordText').disabled = false;
   document.getElementById('yearStart').value = '';
   document.getElementById('yearEnd').value = '';
   document.getElementById('spiderType').value = 'google_scholar';
@@ -2100,6 +2101,7 @@ async function showKeywordEditModal(id) {
   document.getElementById('keywordModalTitle').textContent = '编辑关键词订阅';
   document.getElementById('keywordId').value = keyword.id;
   document.getElementById('keywordText').value = keyword.keyword;
+  document.getElementById('keywordText').disabled = true;  // 关键词创建后不可修改
   document.getElementById('yearStart').value = keyword.year_start || '';
   document.getElementById('yearEnd').value = keyword.year_end || '';
   document.getElementById('spiderType').value = keyword.spider_type;
@@ -2123,8 +2125,8 @@ async function saveKeyword() {
   const numResults = parseInt(document.getElementById('numResults').value);
   const isActive = document.getElementById('keywordActive').checked;
 
-  // 验证
-  if (!keyword) {
+  // 验证：新建时关键词必填
+  if (!id && !keyword) {
     showStatusMessage('请输入关键词', 'error');
     return;
   }
@@ -2134,14 +2136,19 @@ async function saveKeyword() {
     return;
   }
 
+  // 编辑模式下不发送 keyword 字段（关键词创建后不可修改）
   const data = {
-    keyword,
     yearStart: yearStart ? parseInt(yearStart) : null,
     yearEnd: yearEnd ? parseInt(yearEnd) : null,
     spiderType,
     numResults,
     isActive
   };
+
+  // 新建时才发送 keyword 字段
+  if (!id) {
+    data.keyword = keyword;
+  }
 
   try {
     const url = id ? `/api/keywords/${id}` : '/api/keywords';

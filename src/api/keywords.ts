@@ -27,9 +27,9 @@ export interface CreateKeywordParams {
 
 /**
  * 关键词更新参数
+ * 注意：关键词文本创建后不可修改，只能修改年份、数量、启用状态
  */
 export interface UpdateKeywordParams {
-  keyword?: string;
   yearStart?: number | null;
   yearEnd?: number | null;
   spiderType?: 'google_scholar' | 'cnki';
@@ -205,10 +205,6 @@ export async function updateKeyword(userId: number, keywordId: number, params: U
   const updateData: Record<string, any> = {
     updated_at: new Date().toISOString()
   };
-
-  if (params.keyword !== undefined) {
-    updateData.keyword = params.keyword.trim();
-  }
 
   if (params.yearStart !== undefined) {
     updateData.year_start = params.yearStart;

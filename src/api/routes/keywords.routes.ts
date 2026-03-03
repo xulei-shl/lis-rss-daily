@@ -129,14 +129,12 @@ router.put('/keywords/:id', requireAuth, requireAdmin, async (req: AuthRequest, 
 
     const { keyword, yearStart, yearEnd, spiderType, numResults, isActive } = req.body;
 
-    const updateData: keywordsService.UpdateKeywordParams = {};
-
+    // 关键词文本创建后不可修改
     if (keyword !== undefined) {
-      if (typeof keyword !== 'string' || keyword.trim().length === 0) {
-        return res.status(400).json({ error: '关键词不能为空' });
-      }
-      updateData.keyword = keyword.trim();
+      return res.status(400).json({ error: '关键词创建后不可修改，如需更换请删除后重新创建' });
     }
+
+    const updateData: keywordsService.UpdateKeywordParams = {};
 
     if (yearStart !== undefined) {
       if (yearStart !== null && (typeof yearStart !== 'number' || yearStart < 1900 || yearStart > 2100)) {
