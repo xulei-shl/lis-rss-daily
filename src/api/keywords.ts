@@ -454,6 +454,7 @@ async function saveArticles(
           journal_id: null,
           keyword_id: keywordId,
           rating: null,
+          created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
         .executeTakeFirst();

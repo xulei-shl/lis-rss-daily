@@ -8,6 +8,7 @@ import { deleteArticle as deleteVectorArticle } from '../../vector/indexer.js';
 import { getActiveConfigByType } from '../llm-configs.js';
 import { getClient } from '../../vector/chroma-client.js';
 import { getChromaSettings } from '../settings.js';
+import { getUserTimezone, buildUtcRangeFromLocalDate } from '../timezone.js';
 
 const log = logger.child({ module: 'api-routes/articles' });
 
@@ -158,16 +159,20 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
     // Use effectiveUserId so guest users can see admin's data
     const userId = req.effectiveUserId!;
 
-    // Get today's new articles count (using UTC to match database)
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    // Get today's new articles count (using user's timezone)
+    const userTimezone = await getUserTimezone(userId);
+    const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: userTimezone });
+    const [todayStartUtc] = buildUtcRangeFromLocalDate(todayLocal, userTimezone);
+
+    log.info({ userId, userTimezone, todayLocal, todayStartUtc }, 'Today stats query params');
+
     const todayCountResult = await db
       .selectFrom('articles')
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
       .where(buildUserArticlePermissionCondition(userId))
-      .where('articles.created_at', '>=', today.toISOString())
+      .where('articles.created_at', '>=', todayStartUtc)
       .select((eb) => eb.fn.count('articles.id').as('count'))
       .executeTakeFirst();
 
