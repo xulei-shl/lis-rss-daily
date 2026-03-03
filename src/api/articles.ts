@@ -782,6 +782,7 @@ export async function getUserArticles(
     'articles.id',
     'articles.rss_source_id',
     'articles.journal_id',
+    'articles.keyword_id',
     'articles.title',
     'articles.url',
     'articles.summary',
@@ -804,6 +805,7 @@ export async function getUserArticles(
     'articles.updated_at',
     'rss_sources.name as rss_source_name',
     'journals.name as journal_name',
+    'keyword_subscriptions.keyword as keyword_name',
     'article_translations.summary_zh',
   ]);
 
@@ -818,10 +820,10 @@ export async function getUserArticles(
     .offset(offset)
     .execute();
 
-  // 合并来源名称
+  // 合并来源名称：关键词订阅文章优先显示关键词名称
   const articlesWithSourceName = articles.map((article: any) => ({
     ...article,
-    source_name: article.journal_name || article.rss_source_name || 'Unknown',
+    source_name: article.keyword_name || article.journal_name || article.rss_source_name || 'Unknown',
   }));
 
   const normalizedArticles = articlesWithSourceName.map((article) => normalizeArticleDates(article)!) as ArticleWithSource[];
@@ -1116,6 +1118,8 @@ export async function markAllAsRead(
     rssSourceIds?: number[];
     journalId?: number;
     journalIds?: number[];
+    keywordId?: number;
+    keywordIds?: number[];
     processStatus?: 'pending' | 'processing' | 'completed' | 'failed';
     isRead?: boolean;
     search?: string;
@@ -1129,6 +1133,7 @@ export async function markAllAsRead(
   const userTimezone = needsLocalDateFilter ? await getUserTimezone(userId) : undefined;
   const rssSourceIds = buildIdList(options.rssSourceIds, options.rssSourceId);
   const journalIds = buildIdList(options.journalIds, options.journalId);
+  const keywordIds = buildIdList(options.keywordIds, options.keywordId);
 
   // 使用左连接同时支持 RSS、期刊和关键词文章
   let query = db
@@ -1163,15 +1168,33 @@ export async function markAllAsRead(
     query = query.where('filter_status', '=', options.filterStatus);
   }
 
-  if (rssSourceIds && rssSourceIds.length > 0 && journalIds && journalIds.length > 0) {
+  if (rssSourceIds && rssSourceIds.length > 0 && journalIds && journalIds.length > 0 && keywordIds && keywordIds.length > 0) {
     query = query.where((eb) => eb.or([
       eb('rss_source_id', 'in', rssSourceIds),
       eb('journal_id', 'in', journalIds),
+      eb('keyword_id', 'in', keywordIds),
+    ]));
+  } else if (rssSourceIds && rssSourceIds.length > 0 && journalIds && journalIds.length > 0) {
+    query = query.where((eb) => eb.or([
+      eb('rss_source_id', 'in', rssSourceIds),
+      eb('journal_id', 'in', journalIds),
+    ]));
+  } else if (rssSourceIds && rssSourceIds.length > 0 && keywordIds && keywordIds.length > 0) {
+    query = query.where((eb) => eb.or([
+      eb('rss_source_id', 'in', rssSourceIds),
+      eb('keyword_id', 'in', keywordIds),
+    ]));
+  } else if (journalIds && journalIds.length > 0 && keywordIds && keywordIds.length > 0) {
+    query = query.where((eb) => eb.or([
+      eb('journal_id', 'in', journalIds),
+      eb('keyword_id', 'in', keywordIds),
     ]));
   } else if (rssSourceIds && rssSourceIds.length > 0) {
     query = query.where('rss_source_id', 'in', rssSourceIds);
   } else if (journalIds && journalIds.length > 0) {
     query = query.where('journal_id', 'in', journalIds);
+  } else if (keywordIds && keywordIds.length > 0) {
+    query = query.where('keyword_id', 'in', keywordIds);
   }
 
   if (options.processStatus !== undefined) {

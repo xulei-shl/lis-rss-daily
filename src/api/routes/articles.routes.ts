@@ -493,6 +493,8 @@ router.post('/articles/mark-all-read', requireAuth, requireWriteAccess, async (r
       rssSourceIds: bodyRssSourceIds,
       journalId,
       journalIds: bodyJournalIds,
+      keywordId,
+      keywordIds: bodyKeywordIds,
       processStatus,
       isRead,
       search,
@@ -502,8 +504,10 @@ router.post('/articles/mark-all-read', requireAuth, requireWriteAccess, async (r
 
     const normalizedRssSourceIds = normalizeBodyIds(bodyRssSourceIds);
     const normalizedJournalIds = normalizeBodyIds(bodyJournalIds);
+    const normalizedKeywordIds = normalizeBodyIds(bodyKeywordIds);
     const singleRssSourceId = parseOptionalNumber(rssSourceId);
     const singleJournalId = parseOptionalNumber(journalId);
+    const singleKeywordId = parseOptionalNumber(keywordId);
 
     const count = await articleService.markAllAsRead(req.effectiveUserId!, {
       filterStatus,
@@ -512,6 +516,8 @@ router.post('/articles/mark-all-read', requireAuth, requireWriteAccess, async (r
       rssSourceIds: normalizedRssSourceIds,
       journalId: singleJournalId,
       journalIds: normalizedJournalIds,
+      keywordId: singleKeywordId,
+      keywordIds: normalizedKeywordIds,
       processStatus,
       isRead,
       search,

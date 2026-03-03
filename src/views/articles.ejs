@@ -293,18 +293,22 @@ const pageActions = isGuest ? '' : `
       // 日期范围优先于默认的 daysAgo
       const hasDateRange = dateFrom || dateTo;
 
-      // 解析来源 ID（格式: "rss:{id}" 或 "journal:{id}" 或 "mixed:{id}"）
+      // 解析来源 ID（格式: "rss:{id}" 或 "journal:{id}" 或 "mixed:{id}" 或 "keyword:{id}"）
       if (sourceId) {
         const [type, rawId] = sourceId.split(':');
         const selectedSource = findSourceById(sourceId);
         const hasRssIds = selectedSource ? appendIdList(params, 'rssSourceIds', selectedSource.rssIds) : false;
         const hasJournalIds = selectedSource ? appendIdList(params, 'journalIds', selectedSource.journalIds) : false;
+        const hasKeywordIds = selectedSource ? appendIdList(params, 'keywordIds', selectedSource.keywordIds) : false;
 
         if (!hasRssIds && (type === 'rss' || type === 'mixed') && rawId) {
           params.append('rssSourceIds', rawId);
         }
         if (!hasJournalIds && (type === 'journal' || type === 'mixed') && rawId) {
           params.append('journalIds', rawId);
+        }
+        if (!hasKeywordIds && type === 'keyword' && rawId) {
+          params.append('keywordIds', rawId);
         }
       }
       if (filterStatus) params.append('filterStatus', filterStatus);
@@ -737,7 +741,7 @@ async function markAllAsRead() {
     const dateTo = document.getElementById('dateTo').value;
 
     const body = { filterStatus: 'passed', daysAgo: 30 };
-    // 解析来源 ID（格式: "rss:{id}" 或 "journal:{id}" 或 "mixed:{id}"）
+    // 解析来源 ID（格式: "rss:{id}" 或 "journal:{id}" 或 "mixed:{id}" 或 "keyword:{id}"）
     if (sourceId) {
       const [type, idValue] = sourceId.split(':');
       const selectedSource = findSourceById(sourceId);
@@ -746,6 +750,9 @@ async function markAllAsRead() {
         : undefined;
       const journalIds = selectedSource && selectedSource.journalIds && selectedSource.journalIds.length > 0
         ? selectedSource.journalIds
+        : undefined;
+      const keywordIds = selectedSource && selectedSource.keywordIds && selectedSource.keywordIds.length > 0
+        ? selectedSource.keywordIds
         : undefined;
 
       if (rssIds) {
@@ -763,6 +770,15 @@ async function markAllAsRead() {
         const parsed = parseInt(idValue, 10);
         if (!Number.isNaN(parsed)) {
           body.journalIds = [parsed];
+        }
+      }
+
+      if (keywordIds) {
+        body.keywordIds = keywordIds;
+      } else if (type === 'keyword' && idValue) {
+        const parsed = parseInt(idValue, 10);
+        if (!Number.isNaN(parsed)) {
+          body.keywordIds = [parsed];
         }
       }
     }

@@ -871,15 +871,6 @@ function renderPromptVariables(variables) {
   tableBody.innerHTML = html || '<tr><td colspan="2">暂无变量定义</td></tr>';
 }
 
-/**
- * HTML 转义，防止 XSS
- */
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
 function renderSystemPromptsTable() {
   const tbody = document.getElementById('systemPromptsBody');
   const emptyState = document.getElementById('systemPromptsEmpty');
@@ -2036,9 +2027,11 @@ function renderKeywordsTable() {
       <td>${kw.total_articles || 0}</td>
       <td>${kw.is_active ? '<span class="badge-active">启用</span>' : '<span class="badge-inactive">停用</span>'}</td>
       <td>
-        <button class="btn btn-sm btn-secondary" onclick="crawlKeywordNow(${kw.id})" title="立即爬取">爬取</button>
-        <button class="btn btn-sm btn-secondary" onclick="showKeywordEditModal(${kw.id})" title="编辑">编辑</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteKeyword(${kw.id})" title="删除">删除</button>
+        <div class="action-buttons">
+          <button class="btn-icon" onclick="crawlKeywordNow(${kw.id})" title="立即爬取">爬取</button>
+          <button class="btn-icon" onclick="showKeywordEditModal(${kw.id})" title="编辑">编辑</button>
+          <button class="btn-icon" onclick="deleteKeyword(${kw.id})" title="删除">删除</button>
+        </div>
       </td>
     </tr>
   `).join('');
@@ -2096,7 +2089,7 @@ function showKeywordAddModal() {
   document.getElementById('spiderType').value = 'google_scholar';
   document.getElementById('numResults').value = '20';
   document.getElementById('keywordActive').checked = true;
-  document.getElementById('keywordModal').style.display = 'flex';
+  document.getElementById('keywordModal').classList.add('active');
 }
 
 // 显示编辑关键词模态框
@@ -2112,12 +2105,12 @@ async function showKeywordEditModal(id) {
   document.getElementById('spiderType').value = keyword.spider_type;
   document.getElementById('numResults').value = keyword.num_results;
   document.getElementById('keywordActive').checked = keyword.is_active === 1;
-  document.getElementById('keywordModal').style.display = 'flex';
+  document.getElementById('keywordModal').classList.add('active');
 }
 
 // 关闭关键词模态框
 function closeKeywordModal() {
-  document.getElementById('keywordModal').style.display = 'none';
+  document.getElementById('keywordModal').classList.remove('active');
 }
 
 // 保存关键词
@@ -2176,17 +2169,30 @@ async function saveKeyword() {
 
 // 删除关键词
 async function deleteKeyword(id) {
-  if (!confirm('确定要删除这个关键词订阅吗？')) return;
+  const confirmed = await showConfirm('确定要删除这个关键词订阅吗？', {
+    title: '删除关键词',
+    okText: '删除',
+    cancelText: '取消'
+  });
+  if (!confirmed) return;
 
   try {
     const res = await fetch(`/api/keywords/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to delete keyword');
 
     await loadKeywords(keywordsPagination.page);
-    showStatusMessage('关键词已删除', 'success');
+    await showConfirm('关键词已删除', {
+      title: '删除成功',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   } catch (err) {
     console.error('删除关键词失败:', err);
-    showStatusMessage('删除关键词失败', 'error');
+    await showConfirm('删除失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 }
 
@@ -2195,11 +2201,14 @@ async function crawlKeywordNow(id) {
   const keyword = keywords.find(k => k.id === id);
   if (!keyword) return;
 
-  if (!confirm(`确定要立即爬取关键词 "${keyword.keyword}" 吗？`)) return;
+  const confirmed = await showConfirm(`确定要立即爬取关键词 "${keyword.keyword}" 吗？`, {
+    title: '爬取关键词',
+    okText: '爬取',
+    cancelText: '取消'
+  });
+  if (!confirmed) return;
 
   try {
-    showStatusMessage('正在爬取，请稍候...', 'info');
-
     const res = await fetch(`/api/keywords/${id}/crawl`, { method: 'POST' });
     if (!res.ok) throw new Error('Failed to crawl keyword');
 
@@ -2207,13 +2216,25 @@ async function crawlKeywordNow(id) {
 
     if (result.success) {
       await loadKeywords(keywordsPagination.page);
-      showStatusMessage(`爬取完成！获取 ${result.articlesCount} 篇文章，新增 ${result.newArticlesCount} 篇`, 'success');
+      await showConfirm(`爬取完成！获取 ${result.articlesCount} 篇文章，新增 ${result.newArticlesCount} 篇`, {
+        title: '爬取成功',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     } else {
-      showStatusMessage(`爬取失败：${result.error || '未知错误'}`, 'error');
+      await showConfirm(`爬取失败：${result.error || '未知错误'}`, {
+        title: '爬取失败',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
     }
   } catch (err) {
     console.error('爬取关键词失败:', err);
-    showStatusMessage('爬取关键词失败', 'error');
+    await showConfirm('操作失败，请稍后重试', {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
   }
 }
 
