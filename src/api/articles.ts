@@ -52,6 +52,7 @@ export interface ArticleWithSource {
   title: string;
   url: string;
   summary: string | null;
+  ai_summary: string | null;  // AI 总结
   content: string | null;
   markdown_content: string | null;
   summary_zh: string | null;  // 翻译摘要
@@ -367,6 +368,7 @@ export async function getArticleById(
       'articles.title',
       'articles.url',
       'articles.summary',
+      'articles.ai_summary',
       'articles.content',
       'articles.markdown_content',
       'article_translations.summary_zh',
