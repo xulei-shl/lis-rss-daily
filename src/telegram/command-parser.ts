@@ -4,18 +4,25 @@
  * Parses and validates command arguments for Telegram bot commands.
  */
 
-export interface GetArticlesCommand {
+export interface GetArticlesDateCommand {
+  type: 'date';
   year: number;
   month: number;
   day: number;
 }
 
+export interface GetArticlesSourceCommand {
+  type: 'source';
+  name: string;
+}
+
+export type GetArticlesCommand = GetArticlesDateCommand | GetArticlesSourceCommand;
+
 /**
  * Parse /getarticles command arguments
  * Supported formats:
- * - YYYY-M-D (e.g., 2026-3-1)
- * - YYYY-MM-DD (e.g., 2026-03-01)
- * - YYYYMMDD (e.g., 20260301)
+ * - Date: YYYY-M-D (e.g., 2026-3-1), YYYY-MM-DD (e.g., 2026-03-01), YYYYMMDD (e.g., 20260301)
+ * - Source: any non-date string (e.g., "MIT Technology Review", "关键词: 人工智能")
  */
 export function parseGetArticlesCommand(args: string): GetArticlesCommand | null {
   if (!args || args.trim() === '') {
@@ -24,12 +31,27 @@ export function parseGetArticlesCommand(args: string): GetArticlesCommand | null
 
   const trimmed = args.trim();
 
+  // Try to parse as date first
+  const dateMatch = tryParseDate(trimmed);
+  if (dateMatch) {
+    return { type: 'date', ...dateMatch };
+  }
+
+  // Not a date format, treat as source name
+  return { type: 'source', name: trimmed };
+}
+
+/**
+ * Try to parse input as a date
+ * @returns Date components or null if not a valid date
+ */
+function tryParseDate(input: string): { year: number; month: number; day: number } | null {
   // Try YYYY-MM-DD format (flexible: YYYY-M-D or YYYY-MM-DD)
-  let match = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  let match = input.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
 
   // Try YYYYMMDD format
   if (!match) {
-    match = trimmed.match(/^(\d{4})(\d{2})(\d{2})$/);
+    match = input.match(/^(\d{4})(\d{2})(\d{2})$/);
   }
 
   if (!match) {

@@ -8,11 +8,11 @@
 
 import { logger } from '../logger.js';
 import { TelegramClient } from './client.js';
-import { getArticleById, updateArticleReadStatus, updateArticleRating, getUserArticles } from '../api/articles.js';
+import { getArticleById, updateArticleReadStatus, updateArticleRating, getUserArticles, getMergedSources, type MergedSourceOption } from '../api/articles.js';
 import { decodeCallback, CallbackAction } from './callback-encoder.js';
 import { createArticleKeyboard, createRatingKeyboard, createEmptyKeyboard, formatNewArticle } from './formatters.js';
 import type { CallbackQuery, TelegramUpdate, InlineKeyboardMarkup, Message } from './types.js';
-import { parseGetArticlesCommand } from './command-parser.js';
+import { parseGetArticlesCommand, type GetArticlesCommand, type GetArticlesDateCommand, type GetArticlesSourceCommand } from './command-parser.js';
 import { readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -55,6 +55,11 @@ export class TelegramBot {
 
   // State file path for persistence
   private stateFilePath: string;
+
+  // Source cache for matching
+  private sourcesCache: MergedSourceOption[] | null = null;
+  private sourcesCacheTime: number = 0;
+  private readonly SOURCES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
   constructor(botToken: string, userId: number, chats: TelegramChatConfig[]) {
     this.botToken = botToken;
@@ -131,6 +136,59 @@ export class TelegramBot {
    */
   private getChatConfig(chatId: string): TelegramChatConfig | undefined {
     return this.chats.find(c => c.chatId === chatId);
+  }
+
+  /**
+   * Get sources list with caching
+   */
+  private async getSources(): Promise<MergedSourceOption[]> {
+    const now = Date.now();
+    if (this.sourcesCache && (now - this.sourcesCacheTime) < this.SOURCES_CACHE_TTL) {
+      return this.sourcesCache;
+    }
+
+    this.sourcesCache = await getMergedSources(this.userId);
+    this.sourcesCacheTime = now;
+    return this.sourcesCache;
+  }
+
+  /**
+   * Match source name with fuzzy matching
+   * @param name - User input source name
+   * @param sources - List of available sources
+   * @returns Matched source or null
+   */
+  private matchSourceName(name: string, sources: MergedSourceOption[]): MergedSourceOption | null {
+    // 1. Exact match
+    let match = sources.find(s => s.name === name);
+    if (match) return match;
+
+    // 2. Case-insensitive match
+    const lowerName = name.toLowerCase();
+    match = sources.find(s => s.name.toLowerCase() === lowerName);
+    if (match) return match;
+
+    // 3. Source name contains input (e.g., "MIT" matches "MIT Technology Review")
+    match = sources.find(s => s.name.includes(name));
+    if (match) return match;
+
+    // 4. Input contains source name (e.g., "Technology Review" matches "MIT Technology Review")
+    match = sources.find(s => name.includes(s.name));
+    if (match) return match;
+
+    return null;
+  }
+
+  /**
+   * Escape HTML special characters
+   */
+  private escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
   /**
@@ -617,21 +675,18 @@ export class TelegramBot {
       const parsed = parseGetArticlesCommand(args);
       if (!parsed) {
         await this.client.sendMessage(chatId,
-          '❌ 格式错误。正确格式：/getarticles YYYY-MM-DD 或 YYYYMMDD\n例如：/getarticles 2026-3-1 或 /getarticles 20260301');
+          '❌ 格式错误。\n' +
+          '按日期：/getarticles YYYY-MM-DD 或 YYYYMMDD\n' +
+          '按来源：/getarticles 来源名称\n' +
+          '例如：/getarticles 2026-3-1 或 /getarticles MIT Technology Review');
         return;
       }
 
-      const { year, month, day } = parsed;
-
-      // Validate not in future (use user's timezone)
-      const todayStr = await getUserLocalDate(this.userId);
-      const cmdDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      if (cmdDateStr > todayStr) {
-        await this.client.sendMessage(chatId, '❌ 日期不能是未来时间');
-        return;
+      if (parsed.type === 'date') {
+        await this.handleGetArticlesByDate(parsed, chatId);
+      } else {
+        await this.handleGetArticlesBySource(parsed, chatId);
       }
-
-      await this.handleGetArticlesCommand(year, month, day, chatId);
     } catch (error) {
       log.error({ error, args }, 'Error in getarticles command');
       await this.client.sendMessage(chatId, '❌ 查询失败，请稍后重试');
@@ -639,9 +694,10 @@ export class TelegramBot {
   }
 
   /**
-   * Handle /getarticles command
+   * Handle /getarticles command by date
    */
-  private async handleGetArticlesCommand(year: number, month: number, day: number, chatId: string): Promise<void> {
+  private async handleGetArticlesByDate(command: GetArticlesDateCommand, chatId: string): Promise<void> {
+    const { year, month, day } = command;
     // Format date string (YYYY-MM-DD)
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
@@ -715,6 +771,99 @@ export class TelegramBot {
     // Log result
     log.info({ userId: this.userId, year, month, day, sentCount, failedCount, chatId },
       'Sent articles via /getarticles command');
+
+    // Notify user if some articles failed to send
+    if (failedCount > 0) {
+      await this.client.sendMessage(chatId,
+        `⚠️ ${failedCount} 篇文章发送失败，请查看日志了解详情`);
+    }
+  }
+
+  /**
+   * Handle /getarticles command by source name
+   */
+  private async handleGetArticlesBySource(command: GetArticlesSourceCommand, chatId: string): Promise<void> {
+    const sources = await this.getSources();
+    const matchedSource = this.matchSourceName(command.name, sources);
+
+    if (!matchedSource) {
+      await this.client.sendMessage(chatId,
+        `❌ 未找到来源 "${this.escapeHtml(command.name)}"\n` +
+        `提示：可以使用完整的来源名称，例如 "MIT Technology Review"`);
+      return;
+    }
+
+    // Build query parameters
+    const queryParams: any = {
+      isRead: false,
+      filterStatus: 'passed',
+      limit: 5,
+      page: 1,
+      randomOrder: true,
+    };
+
+    if (matchedSource.rssIds) queryParams.rssSourceIds = matchedSource.rssIds;
+    if (matchedSource.journalIds) queryParams.journalIds = matchedSource.journalIds;
+    if (matchedSource.keywordIds) queryParams.keywordIds = matchedSource.keywordIds;
+
+    const result = await getUserArticles(this.userId, queryParams);
+
+    if (result.articles.length === 0) {
+      await this.client.sendMessage(chatId,
+        `📭 来源 "${this.escapeHtml(matchedSource.name)}" 没有符合条件的未读文章`);
+      return;
+    }
+
+    await this.client.sendMessage(chatId,
+      `📚 找到 ${result.articles.length} 篇来自 "${this.escapeHtml(matchedSource.name)}" 的未读文章：`);
+
+    let sentCount = 0;
+    let failedCount = 0;
+
+    // Send articles with delay to avoid rate limits
+    for (const article of result.articles) {
+      try {
+        // Use translated summary if available, otherwise use original summary or content
+        // Priority: summary_zh > summary > markdown_content > content
+        let summary = article.summary_zh || article.summary || undefined;
+        if (!summary && (article.markdown_content || article.content)) {
+          summary = article.markdown_content || article.content || undefined;
+          // Truncate content if too long (max 500 chars for preview)
+          if (summary && summary.length > 500) {
+            summary = summary.substring(0, 500) + '...';
+          }
+        }
+
+        const message = formatNewArticle({
+          title: article.title,
+          url: article.url,
+          sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
+          sourceType: article.source_origin === 'journal' ? '期刊文章' :
+                      article.source_origin === 'keyword' ? '关键词订阅' : 'RSS订阅',
+          summary,
+        });
+
+        const keyboard = createArticleKeyboard(
+          article.id,
+          article.is_read === 1,
+          article.rating
+        );
+
+        await this.client.sendMessageWithKeyboard(chatId, message, keyboard, 'HTML');
+        sentCount++;
+
+        // Rate limiting: 1 second between messages
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        failedCount++;
+        log.error({ error, articleId: article.id, title: article.title }, 'Failed to send article via /getarticles by source');
+        // Continue with next article instead of stopping
+      }
+    }
+
+    // Log result
+    log.info({ userId: this.userId, sourceName: matchedSource.name, sentCount, failedCount, chatId },
+      'Sent articles via /getarticles command by source');
 
     // Notify user if some articles failed to send
     if (failedCount > 0) {
