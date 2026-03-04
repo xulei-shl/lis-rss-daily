@@ -230,6 +230,7 @@ class TelegramNotifier {
     }
 
     const message = formatNewArticle({
+      id: article.id,
       title: article.title,
       url: article.url,
       sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',

@@ -120,6 +120,7 @@ function escapeHtml(text: string): string {
  * Format new article notification (for future use)
  */
 export function formatNewArticle(data: {
+  id?: number;
   title: string;
   url: string;
   sourceName: string;
@@ -127,6 +128,12 @@ export function formatNewArticle(data: {
   summary?: string;
 }): string {
   let message = '🆕 新文献推荐\n\n';
+
+  // Add article ID if provided
+  if (data.id !== undefined) {
+    message += `<b>ID:</b> ${data.id}\n`;
+  }
+
   message += `【${escapeHtml(data.sourceType)}】${escapeHtml(data.sourceName)}\n\n`;
   message += `标题: ${escapeHtml(data.title)}\n`;
 
