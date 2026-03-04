@@ -1,8 +1,9 @@
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, requireWriteAccess } from '../../middleware/auth.js';
 import { logger } from '../../logger.js';
 import { search, SearchMode } from '../../vector/search.js';
+import { generateSearchSummary } from '../daily-summary.js';
 
 const log = logger.child({ module: 'api-routes/search' });
 
@@ -18,7 +19,7 @@ const router = express.Router();
  * - page: page number (default: 1)
  * - limit: results per page (default: 10)
  */
-router.get('/search', requireAuth, async (req: AuthRequest, res) => {
+router.get('/', requireAuth, async (req: AuthRequest, res) => {
   try {
     const query = req.query.q as string;
     const mode = (req.query.mode as string) || 'mixed';
@@ -68,6 +69,36 @@ router.get('/search', requireAuth, async (req: AuthRequest, res) => {
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to search articles');
     res.status(500).json({ error: 'Failed to search articles' });
+  }
+});
+
+/**
+ * POST /api/search/summary
+ * Generate AI summary from selected articles
+ * Requires admin access (write permission)
+ */
+router.post('/summary', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
+  try {
+    const { articleIds } = req.body;
+
+    // Validation
+    if (!articleIds || !Array.isArray(articleIds)) {
+      return res.status(400).json({ error: '请提供文章 ID 列表' });
+    }
+    if (articleIds.length === 0) {
+      return res.status(400).json({ error: '请选择至少一篇文章' });
+    }
+    if (articleIds.length > 50) {
+      return res.status(400).json({ error: '最多选择 50 篇文章' });
+    }
+
+    // Generate summary (automatically saved to database)
+    const result = await generateSearchSummary(req.userId!, articleIds);
+
+    res.json(result);
+  } catch (error) {
+    log.error({ error, userId: req.userId }, 'Failed to generate search summary');
+    res.status(500).json({ error: '生成总结失败' });
   }
 });
 

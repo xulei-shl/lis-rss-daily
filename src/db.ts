@@ -204,7 +204,7 @@ export interface DailySummariesTable {
   id: Generated<number>;
   user_id: number;
   summary_date: string;
-  summary_type: 'journal' | 'blog_news' | 'all';
+  summary_type: 'journal' | 'blog_news' | 'all' | 'search';
   article_count: number;
   summary_content: string;
   articles_data: string;

@@ -19,8 +19,9 @@ const log = logger.child({ module: 'daily-summary-service' });
  * - journal: 期刊类总结
  * - blog_news: 博客资讯类总结
  * - all: 综合总结（历史兼容）
+ * - search: 搜索总结（用户手动选择文章生成）
  */
-export type SummaryType = 'journal' | 'blog_news' | 'all';
+export type SummaryType = 'journal' | 'blog_news' | 'all' | 'search';
 
 export interface DailySummaryArticle {
   id: number;
@@ -446,4 +447,135 @@ export async function getTodaySummary(
 ): Promise<DailySummariesSelection | undefined> {
   const today = await getUserLocalDate(userId);
   return getDailySummaryByDate(userId, today, type);
+}
+
+/**
+ * 根据文章 ID 列表生成搜索总结
+ * @param userId - 用户 ID
+ * @param articleIds - 文章 ID 列表
+ */
+export async function generateSearchSummary(
+  userId: number,
+  articleIds: number[]
+): Promise<DailySummaryResult> {
+  const db = getDb();
+
+  // 查询文章
+  const articles = await db
+    .selectFrom('articles')
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .where('articles.id', 'in', articleIds)
+    .where((eb) => eb.or([
+      eb('rss_sources.user_id', '=', userId),
+      eb('journals.user_id', '=', userId),
+      eb('keyword_subscriptions.user_id', '=', userId),
+    ]))
+    .select((eb: any) => [
+      'articles.id',
+      'articles.title',
+      'articles.url',
+      'articles.summary',
+      'articles.markdown_content',
+      'articles.published_at',
+      'articles.source_origin',
+      eb.fn.coalesce('rss_sources.name', 'journals.name', 'keyword_subscriptions.keyword').as('source_name'),
+      eb.fn.coalesce('rss_sources.source_type', eb.val('journal')).as('source_type'),
+    ])
+    .execute();
+
+  if (articles.length === 0) {
+    const today = await getUserLocalDate(userId);
+    return {
+      date: today,
+      type: 'search',
+      totalArticles: 0,
+      articlesByType: { journal: [], blog: [], news: [] },
+      summary: '未找到选中的文章。',
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  // 转换为 DailySummaryArticle 格式
+  const summaryArticles: DailySummaryArticle[] = articles.map((row: any) => {
+    let sourceName = row.source_name || '未知来源';
+    if (row.source_origin === 'keyword') {
+      sourceName = `关键词: ${row.source_name}`;
+    }
+    return {
+      id: row.id,
+      title: row.title,
+      url: row.url,
+      summary: row.summary,
+      markdown_content: row.markdown_content,
+      source_name: sourceName,
+      source_type: row.source_type || 'blog',
+      published_at: row.published_at,
+    };
+  });
+
+  // 按类型分组
+  const articlesByType = {
+    journal: summaryArticles.filter(a => a.source_type === 'journal'),
+    blog: summaryArticles.filter(a => a.source_type === 'blog'),
+    news: summaryArticles.filter(a => a.source_type === 'news'),
+  };
+
+  // 构建文章列表文本
+  const articlesText = buildArticlesListText(articlesByType);
+
+  // 获取系统提示词并渲染
+  const today = await getUserLocalDate(userId);
+  const promptTemplate = await resolveSystemPrompt(
+    userId,
+    'daily_summary',
+    `你是专业的内容总结助手。请根据以下文章列表生成总结。
+
+## 文章列表
+${articlesText}
+
+## 输出要求
+1. 生成 500-800 字的中文总结
+2. 按主题领域归纳文章内容
+3. 使用清晰的层次结构（Markdown 格式）`,
+    {
+      ARTICLES_LIST: articlesText,
+      DATE_RANGE: today,
+    }
+  );
+
+  // 调用 LLM 生成总结
+  const llm = await getUserLLMProvider(userId, 'daily_summary');
+  const summary = await llm.chat(
+    [
+      { role: 'system', content: promptTemplate },
+      { role: 'user', content: '请生成这些文章的总结。' },
+    ],
+    {
+      temperature: 0.3,
+      label: 'search_summary',
+    }
+  );
+
+  log.info({ userId, articleCount: articles.length }, 'Search summary generated');
+
+  // 保存到数据库（使用当前日期作为 summary_date）
+  await saveDailySummary({
+    userId,
+    date: today,
+    type: 'search',
+    articleCount: articles.length,
+    summaryContent: summary,
+    articlesData: articlesByType,
+  });
+
+  return {
+    date: today,
+    type: 'search',
+    totalArticles: articles.length,
+    articlesByType,
+    summary,
+    generatedAt: new Date().toISOString(),
+  };
 }

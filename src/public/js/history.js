@@ -26,7 +26,8 @@
   const typeLabels = {
     journal: '期刊精选',
     blog_news: '博客资讯',
-    all: '综合'
+    all: '综合',
+    search: '搜索总结'
   };
 
   // Initialize
@@ -439,7 +440,7 @@
       ? ['journal']
       : summaryType === 'blog_news'
       ? ['blog', 'news']
-      : ['journal', 'blog', 'news'];
+      : ['journal', 'blog', 'news']; // 'all' and 'search' show all types
 
     const articleTypeLabels = {
       journal: '期刊精选',
@@ -482,7 +483,7 @@
       ? ['journal']
       : summaryType === 'blog_news'
       ? ['blog', 'news']
-      : ['journal', 'blog', 'news'];
+      : ['journal', 'blog', 'news']; // 'all' and 'search' show all types
 
     const articleTypeLabels = {
       journal: '期刊精选',

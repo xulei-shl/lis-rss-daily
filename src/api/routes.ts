@@ -32,7 +32,7 @@ router.use(filterRoutes);
 router.use(schedulerRoutes);
 router.use(articleRoutes);
 router.use(articleProcessRoutes);
-router.use(searchRoutes);
+router.use('/search', searchRoutes);
 router.use(settingsRoutes);
 router.use(systemPromptRoutes);
 router.use(dailySummaryRoutes);

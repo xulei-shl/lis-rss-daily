@@ -17,6 +17,17 @@
 
   <!-- Results Container -->
   <div id="resultsContainer">
+    <!-- Results Actions Bar (Hidden by default) -->
+    <div class="results-actions" id="resultsActions" style="display: none;">
+      <div class="selection-controls">
+        <label class="checkbox-wrapper">
+          <input type="checkbox" id="selectAll">
+          <span>全选</span>
+        </label>
+        <span class="selected-count">已选 <span id="selectedCount">0</span> 篇</span>
+      </div>
+      <button id="aiSummaryBtn" class="btn btn-primary">AI 总结</button>
+    </div>
     <!-- Initial State -->
     <div class="empty-state" id="initialState">
       <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -33,7 +44,7 @@
 
     <!-- Loading State (Hidden) -->
     <div class="loading" id="loadingState" style="display: none;">
-      搜索中
+      <span id="loadingText">搜索中</span>
     </div>
 
     <!-- Results Area (Hidden) -->
@@ -60,6 +71,21 @@
     </div>
   </div>
 
+  <!-- Summary Modal -->
+  <div class="modal-overlay" id="summaryModal">
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h3>AI 总结</h3>
+        <button class="modal-close" id="closeSummaryModal">×</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeSummaryModal()">关闭</button>
+        <button class="btn btn-primary" onclick="copySummary()">复制内容</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ============================================
     // SEARCH PAGE LOGIC
@@ -68,8 +94,14 @@
     let currentQuery = '';
     let currentPage = 1;
     let totalPages = 1;
-    const perPage = 10;
+    const perPage = 50;  // Increase to show more results per page
     let searchTimeout = null;
+
+    // State management for article selection
+    let selectedArticles = new Set();  // Cross-page selection
+    let currentResults = [];  // Current page results
+    const isAdmin = window.userRole !== 'guest';
+    const MAX_SELECTION = 50;
 
     // Load on page ready
     document.addEventListener('DOMContentLoaded', () => {
@@ -110,7 +142,245 @@
         searchInput.value = urlQuery;
         performSearch();
       }
+
+      // Setup selection controls (admin only)
+      if (isAdmin) {
+        setupSelectionControls();
+      }
     });
+
+    // Setup selection controls
+    function setupSelectionControls() {
+      // Select all checkbox
+      document.getElementById('selectAll').addEventListener('change', toggleSelectAll);
+
+      // AI Summary button
+      document.getElementById('aiSummaryBtn').addEventListener('click', generateAISummary);
+
+      // Close modal
+      document.getElementById('closeSummaryModal').addEventListener('click', closeSummaryModal);
+      document.getElementById('summaryModal').addEventListener('click', (e) => {
+        if (e.target.id === 'summaryModal') closeSummaryModal();
+      });
+
+      // Close modal on Escape
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeSummaryModal();
+      });
+    }
+
+    // Toggle select all
+    function toggleSelectAll() {
+      const selectAll = document.getElementById('selectAll');
+      const checkboxes = document.querySelectorAll('.article-checkbox');
+      checkboxes.forEach(cb => cb.checked = selectAll.checked);
+      updateSelection();
+    }
+
+    // Update selection state (sync single checkbox with Set)
+    function updateSelection() {
+      const checkboxes = document.querySelectorAll('.article-checkbox');
+      checkboxes.forEach(cb => {
+        const id = parseInt(cb.dataset.id);
+        if (cb.checked) {
+          selectedArticles.add(id);
+        } else {
+          selectedArticles.delete(id);
+        }
+      });
+      updateSelectionUI();
+    }
+
+    // Update selection UI
+    function updateSelectionUI() {
+      const count = selectedArticles.size;
+      document.getElementById('selectedCount').textContent = count;
+      document.getElementById('resultsActions').style.display = count > 0 ? 'flex' : 'none';
+
+      // Sync select all checkbox state
+      const checkboxes = document.querySelectorAll('.article-checkbox');
+      const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
+      document.getElementById('selectAll').checked = allChecked;
+    }
+
+    // Generate AI summary
+    async function generateAISummary() {
+      const ids = Array.from(selectedArticles);
+      if (ids.length > MAX_SELECTION) {
+        showToast(\`最多选择 \${MAX_SELECTION} 篇文章\`, 'error');
+        return;
+      }
+
+      // Show loading in modal
+      document.getElementById('modalBody').innerHTML = '<div class="loading">生成中...</div>';
+      document.getElementById('summaryModal').classList.add('active');
+
+      try {
+        const res = await fetch('/api/search/summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ articleIds: ids })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          renderSummaryInModal(data);
+        } else {
+          document.getElementById('modalBody').innerHTML = \`
+            <div class="empty-state">
+              <div class="empty-state-title">生成失败</div>
+              <div class="empty-state-desc">\${escapeHtml(data.error || '未知错误')}</div>
+            </div>
+          \`;
+        }
+      } catch (err) {
+        console.error('Failed to generate summary:', err);
+        document.getElementById('modalBody').innerHTML = \`
+          <div class="empty-state">
+            <div class="empty-state-title">生成失败</div>
+            <div class="empty-state-desc">请稍后重试</div>
+          </div>
+        \`;
+      }
+    }
+
+    // Render summary in modal
+    function renderSummaryInModal(data) {
+      const summary = data.summary || '';
+      const articlesByType = data.articlesByType || { journal: [], blog: [], news: [] };
+
+      // Build full content for copy
+      let fullContent = summary + '\\n\\n## 文章列表\\n\\n';
+      ['journal', 'blog', 'news'].forEach(type => {
+        const articles = articlesByType[type] || [];
+        if (articles.length === 0) return;
+
+        const labels = { journal: '期刊精选', blog: '博客推荐', news: '资讯动态' };
+        fullContent += \`### \${labels[type]}\\n\`;
+        articles.forEach((article, index) => {
+          fullContent += \`\${index + 1}. [\${article.title}](\${article.url}) - \${article.source_name}\\n\`;
+        });
+        fullContent += '\\n';
+      });
+
+      // Render markdown
+      const html = renderMarkdown(summary);
+
+      // Build articles list HTML
+      let articlesHtml = '';
+      ['journal', 'blog', 'news'].forEach(type => {
+        const articles = articlesByType[type] || [];
+        if (articles.length === 0) return;
+
+        const labels = { journal: '期刊精选', blog: '博客推荐', news: '资讯动态' };
+        articlesHtml += \`
+          <div class="articles-subsection">
+            <h4 class="articles-subsection-title">\${labels[type]}</h4>
+            <ul class="articles-list">
+              \${articles.map(article => \`
+                <li class="articles-list-item">
+                  <a href="\${escapeHtml(article.url)}" target="_blank" rel="noopener" class="article-link">
+                    \${escapeHtml(article.title)}
+                  </a>
+                  <span class="article-source">\${escapeHtml(article.source_name)}</span>
+                </li>
+              \`).join('')}
+            </ul>
+          </div>
+        \`;
+      });
+
+      document.getElementById('modalBody').innerHTML = \`
+        <div class="summary-detail">
+          <div class="summary-detail-content" data-full-content="\${escapeHtml(fullContent)}">
+            \${html}
+            \${articlesHtml ? \`<div class="summary-articles-section">\${articlesHtml}</div>\` : ''}
+          </div>
+        </div>
+      \`;
+    }
+
+    // Render markdown
+    function renderMarkdown(text) {
+      if (!text) return '';
+
+      let html = escapeHtml(text);
+
+      // Headers
+      html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+      html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+      html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+      // Lists
+      html = html.replace(/^- (.*$)/gim, '<li>$1</li>');
+      html = html.replace(/(<li>.*<\\/li>)/s, '<ul>$1</ul>');
+
+      // Bold
+      html = html.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>');
+
+      // Paragraphs
+      html = html.split('\\n\\n').map(p => {
+        if (p.startsWith('<h') || p.startsWith('<ul')) return p;
+        if (!p.trim()) return '';
+        return '<p>' + p.replace(/\\n/g, '<br>') + '</p>';
+      }).join('');
+
+      return html;
+    }
+
+    // Close summary modal
+    function closeSummaryModal() {
+      document.getElementById('summaryModal').classList.remove('active');
+    }
+
+    // Copy summary (with fallback for non-secure contexts)
+    async function copySummary() {
+      const contentEl = document.querySelector('.summary-detail-content');
+      const textToCopy = contentEl?.dataset.fullContent || contentEl?.innerText || '';
+
+      if (!textToCopy) return;
+
+      // Try modern clipboard API first
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(textToCopy);
+          showToast('已复制到剪贴板', 'success');
+          return;
+        } catch (err) {
+          console.error('Clipboard API failed:', err);
+        }
+      }
+
+      // Fallback to older method
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = textToCopy;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textarea);
+
+        if (successful) {
+          showToast('已复制到剪贴板', 'success');
+        } else {
+          showToast('复制失败，请重试', 'error');
+        }
+      } catch (err) {
+        console.error('Copy fallback failed:', err);
+        showToast('复制失败，请重试', 'error');
+      }
+    }
+
+    // Show toast notification
+    function showToast(message, type = 'info') {
+      if (window.toast) {
+        window.toast[type](message);
+      } else {
+        alert(message);
+      }
+    }
 
     // Perform search
     async function performSearch(page = 1) {
@@ -131,8 +401,9 @@
       if (page > 1) url.searchParams.set('page', page);
       window.history.replaceState({}, '', url);
 
-      // Show loading
-      showLoading();
+      // Show loading - use different message for pagination
+      const loadingMessage = page > 1 ? '加载中' : '搜索中';
+      showLoading(loadingMessage);
 
       try {
         const params = new URLSearchParams({
@@ -162,8 +433,9 @@ function showInitialState() {
 }
 
 // Show loading state
-function showLoading() {
+function showLoading(message = '搜索中') {
   hideAllStates();
+  document.getElementById('loadingText').textContent = message;
   document.getElementById('loadingState').style.display = 'block';
 }
 
@@ -187,6 +459,11 @@ function showResults(data) {
   resultsList.innerHTML = data.results.map((result, index) =>
     renderSearchResult(result, index)
   ).join('');
+
+  // Restore selection UI state after rendering
+  if (isAdmin) {
+    updateSelectionUI();
+  }
 
   // Update pagination
   totalPages = Math.ceil((data.total || data.results.length) / perPage);
@@ -233,12 +510,23 @@ function renderSearchResult(result, index) {
     sourceName = result.rss_source_name || 'Unknown';
   }
 
+  // Checkbox state (admin only)
+  const checked = selectedArticles.has(result.id) ? 'checked' : '';
+  const checkboxHtml = isAdmin ? \`
+    <label class="checkbox-label">
+      <input type="checkbox" class="article-checkbox" data-id="\${result.id}" \${checked} onchange="updateSelection()">
+    </label>
+  \` : '';
+
   return \`
     <div class="search-result fade-in-up" style="animation-delay: \${index * 30}ms">
       <div class="search-result-header">
-        <h3 class="search-result-title">
-          <a href="/articles/\${result.id}">\${highlightedTitle}</a>
-        </h3>
+        <div class="search-result-header-left">
+          \${checkboxHtml}
+          <h3 class="search-result-title">
+            <a href="/articles/\${result.id}">\${highlightedTitle}</a>
+          </h3>
+        </div>
         <div class="relevance-score \${scoreClass}">
           相关度 \${scorePercent}%
         </div>

@@ -92,7 +92,8 @@ export interface SearchResponse {
 
 /* ── Configuration ── */
 
-const DEFAULT_LIMIT = 10;
+const DEFAULT_LIMIT = 50;  // Increased from 10 to show more results
+const MAX_RESULTS = 200;   // Maximum results to fetch from vector DB
 const DEFAULT_SEMANTIC_WEIGHT = 0.7;
 const DEFAULT_KEYWORD_WEIGHT = 0.3;
 
@@ -206,7 +207,7 @@ async function semanticSearchOnly(
   limit: number
 ): Promise<SearchResult[]> {
   const embedding = await getEmbedding(query, userId);
-  const hits = await queryVector(userId, embedding, Math.max(limit * 3, limit), {
+  const hits = await queryVector(userId, embedding, MAX_RESULTS, {
     user_id: userId,
   });
 
@@ -218,17 +219,17 @@ async function semanticSearchOnly(
       document: hit.document,
     }));
 
-  // Rerank
-  let finalList = candidates.slice(0, limit);
+  // Rerank all candidates (up to MAX_RESULTS)
+  let finalList = candidates;
   if (candidates.length > 0) {
     const rerankResults = await rerank(
       query,
       candidates.map((c) => c.document),
       userId,
-      Math.min(limit, candidates.length)
+      Math.min(MAX_RESULTS, candidates.length)
     );
     if (rerankResults) {
-      finalList = applyRerank(candidates, rerankResults, limit);
+      finalList = applyRerank(candidates, rerankResults, MAX_RESULTS);
     }
   }
 
@@ -297,7 +298,7 @@ async function keywordSearchOnly(
       'keyword_subscriptions.keyword as keyword_name',
     ])
     .orderBy('articles.published_at', 'desc')
-    .limit(limit * 3)
+    .limit(MAX_RESULTS)
     .execute();
 
   return articles
@@ -316,8 +317,7 @@ async function keywordSearchOnly(
         keyword_name: article.keyword_name ?? undefined,
       },
     }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+    .sort((a, b) => b.score - a.score);
 }
 
 /* ── Hybrid Search ── */
@@ -408,8 +408,7 @@ async function hybridSearch(
   }
 
   const results = Array.from(mergedByArticleId.values())
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+    .sort((a, b) => b.score - a.score);
 
   return { results, fallback: false };
 }
