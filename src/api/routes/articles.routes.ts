@@ -571,4 +571,38 @@ router.patch('/articles/:id/rating', requireAuth, requireWriteAccess, async (req
   }
 });
 
+/**
+ * PATCH /api/articles/:id/ai-summary
+ * Update article AI summary
+ * Requires admin role (not guest)
+ */
+router.patch('/articles/:id/ai-summary', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
+  try {
+    const idParam = req.params.id;
+    if (typeof idParam !== 'string') {
+      return res.status(400).json({ error: 'Invalid article ID' });
+    }
+    const id = parseInt(idParam);
+
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid article ID' });
+    }
+
+    const { ai_summary } = req.body;
+    if (typeof ai_summary !== 'string') {
+      return res.status(400).json({ error: 'ai_summary must be a string' });
+    }
+
+    await articleService.updateArticleAiSummary(id, req.effectiveUserId!, ai_summary);
+
+    res.json({ success: true, ai_summary });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Article not found') {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    log.error({ error, userId: req.userId }, 'Failed to update article AI summary');
+    res.status(500).json({ error: 'Failed to update article AI summary' });
+  }
+});
+
 export default router;

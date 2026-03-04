@@ -94,6 +94,7 @@ export interface ArticlesTable {
   journal_id: number | null;  // 期刊ID（RSS/关键词文章为 null）
   keyword_id: number | null;  // 关键词订阅ID（RSS/期刊文章为 null）
   rating: number | null;  // 文章评级（1-5星）
+  ai_summary: string | null;  // AI 生成的文章总结
   created_at: Generated<string>;
   updated_at: string;
 }

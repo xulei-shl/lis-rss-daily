@@ -175,6 +175,13 @@ function renderArticle(article) {
       '<p>' + escapeHtml(article.translation.summary_zh) + '</p>';
   }
 
+  // AI 总结
+  const aiSummarySection = document.getElementById('aiSummarySection');
+  if (article.ai_summary) {
+    aiSummarySection.style.display = 'block';
+    document.getElementById('aiSummary').innerHTML = '<p>' + escapeHtml(article.ai_summary) + '</p>';
+  }
+
   // 过滤匹配
   const filterSection = document.getElementById('filterSection');
   const filterList = document.getElementById('filterList');

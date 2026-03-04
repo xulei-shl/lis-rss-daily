@@ -579,6 +579,20 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
         continue;
       }
 
+      // ============================================================
+      // 025: 添加 ai_summary 字段（AI 生成的文章总结）
+      // ============================================================
+      if (file === '025_add_ai_summary.sql') {
+        const hasAiSummary = hasColumn(db, 'articles', 'ai_summary');
+        if (!hasAiSummary) {
+          db.exec('ALTER TABLE articles ADD COLUMN ai_summary TEXT;');
+          console.log('      → Added ai_summary column to articles table');
+        } else {
+          console.log('      → Skipped (ai_summary column already exists)');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

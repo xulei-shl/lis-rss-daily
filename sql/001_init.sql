@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS articles (
   keyword_id INTEGER,  -- 关键词订阅ID（关键词文章使用）
   error_message TEXT,
   rating INTEGER CHECK(rating IS NULL OR (rating >= 1 AND rating <= 5)),
+  ai_summary TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (rss_source_id) REFERENCES rss_sources(id) ON DELETE CASCADE,

@@ -1501,3 +1501,53 @@ export async function updateArticleRating(
 
   log.info({ articleId, userId, rating }, 'Article rating updated');
 }
+
+/**
+ * Update article AI summary
+ * @param articleId - Article ID
+ * @param userId - User ID (for permission check)
+ * @param aiSummary - AI summary text
+ */
+export async function updateArticleAiSummary(
+  articleId: number,
+  userId: number,
+  aiSummary: string
+): Promise<void> {
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  const result = await db
+    .updateTable('articles')
+    .set({
+      ai_summary: aiSummary,
+      updated_at: now,
+    })
+    .where('id', '=', articleId)
+    .where((eb) => eb.or([
+      eb.and([
+        eb('articles.rss_source_id', 'is not', null),
+        eb('articles.rss_source_id', 'in', (eb) =>
+          eb.selectFrom('rss_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.journal_id', 'is not', null),
+        eb('articles.journal_id', 'in', (eb) =>
+          eb.selectFrom('journals').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.keyword_id', 'is not', null),
+        eb('articles.keyword_id', 'in', (eb) =>
+          eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+    ]))
+    .executeTakeFirst();
+
+  if (result.numUpdatedRows === 0n) {
+    throw new Error('Article not found');
+  }
+
+  log.info({ articleId, userId, summaryLength: aiSummary.length }, 'Article AI summary updated');
+}
