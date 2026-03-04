@@ -466,6 +466,50 @@ CHROMA_PATH=./data/vector/chroma
 | POST | `/api/articles/:id/retry` | 重试失败文章 |
 | GET | `/api/articles/:id/related` | 获取相关文章列表 |
 | POST | `/api/articles/:id/related/refresh` | 手动刷新相关文章 |
+| PATCH | `/api/articles/:id/ai-summary` | 更新文章 AI 总结 |
+
+#### AI 总结接口说明
+
+**`PATCH /api/articles/:id/ai-summary`**
+
+更新指定文章的 AI 总结内容。
+
+**权限要求：** 需要登录 + 写权限（非 guest 用户）
+
+**请求体：**
+```json
+{
+  "ai_summary": "这是 AI 生成的文章总结..."
+}
+```
+
+**响应：**
+```json
+{
+  "success": true,
+  "ai_summary": "这是 AI 生成的文章总结..."
+}
+```
+
+**错误响应：**
+- `400` - 参数错误（文章 ID 无效或 ai_summary 不是字符串）
+- `401` - 未登录
+- `403` - 权限不足（guest 用户）
+- `404` - 文章不存在
+
+**调用示例：**
+```bash
+# 获取登录 token
+TOKEN=$(curl -s -X POST http://10.40.92.18:8007/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}' | jq -r '.token')
+
+# 更新文章 AI 总结
+curl -X PATCH http://10.40.92.18:8007/api/articles/123/ai-summary \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"ai_summary":"本文提出了一种新的深度学习架构..."}'
+```
 
 ### 过滤配置
 
