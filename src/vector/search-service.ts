@@ -93,7 +93,7 @@ export interface SearchResponse {
 /* ── Configuration ── */
 
 const DEFAULT_LIMIT = 50;  // Increased from 10 to show more results
-const MAX_RESULTS = 200;   // Maximum results to fetch from vector DB
+const MAX_RESULTS = 100;   // Maximum results to fetch from vector DB (optimized for performance)
 const DEFAULT_SEMANTIC_WEIGHT = 0.7;
 const DEFAULT_KEYWORD_WEIGHT = 0.3;
 
