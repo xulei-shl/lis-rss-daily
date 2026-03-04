@@ -179,7 +179,7 @@ function renderArticle(article) {
   const aiSummarySection = document.getElementById('aiSummarySection');
   if (article.ai_summary) {
     aiSummarySection.style.display = 'block';
-    document.getElementById('aiSummary').innerHTML = '<p>' + escapeHtml(article.ai_summary) + '</p>';
+    document.getElementById('aiSummary').innerHTML = formatMarkdown(article.ai_summary);
   }
 
   // 过滤匹配
@@ -333,33 +333,96 @@ async function deleteArticle() {
   }
 }
 
-// 简易 Markdown 格式化（基础实现）
+// 简易 Markdown 格式化（支持表格、列表、标题等）
 function formatMarkdown(text) {
   if (!text) return '';
 
-  // 先转义反斜杠，避免处理异常
-  let result = text
-    // 标题
-    .replace(new RegExp('^### (.+)$', 'gm'), '<h3>$1</h3>')
-    .replace(new RegExp('^## (.+)$', 'gm'), '<h2>$1</h2>')
-    .replace(new RegExp('^# (.+)$', 'gm'), '<h1>$1</h1>')
-    // 粗体（使用字符类避免转义问题）
-    .replace(/[*][*]([^*]+?)[*][*]/g, '<strong>$1</strong>')
-    // 斜体
-    .replace(/[*]([^*]+?)[*]/g, '<em>$1</em>')
-    // 行内代码
-    .replace(/`([^`]+?)`/g, '<code>$1</code>')
-    // 链接
-    .replace(/\[([^\]]+?)\]\(([^\)]+?)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // 分割成块进行处理
+  const blocks = text.split(/\n\n+/);
+  const result = [];
 
-  // 按双换行分段并包裹为段落
-  return result.split(new RegExp('\\n\\n', 'g')).map(para => {
-    para = para.trim();
-    if (!para) return '';
-    // 如果已是 HTML 标签则跳过包裹
-    if (para.startsWith('<')) return para;
-    return '<p>' + para + '</p>';
-  }).join('');
+  for (let block of blocks) {
+    block = block.trim();
+    if (!block) continue;
+
+    // 检测表格
+    if (block.includes('|') && block.includes('\n')) {
+      const tableHtml = formatTable(block);
+      if (tableHtml) {
+        result.push(tableHtml);
+        continue;
+      }
+    }
+
+    // 检测无序列表
+    const lines = block.split('\n');
+    if (lines.every(line => line.trim().startsWith('- ') || line.trim().match(/^\*\*.*\*\*$/))) {
+      result.push('<ul>' + lines.map(line => {
+        const content = line.replace(/^-\s+/, '').trim();
+        // 处理列表项中的粗体
+        return '<li>' + formatInline(escapeHtml(content)) + '</li>';
+      }).join('') + '</ul>');
+      continue;
+    }
+
+    // 处理标题和段落
+    if (block.startsWith('#### ')) {
+      result.push('<h4>' + formatInline(escapeHtml(block.slice(5))) + '</h4>');
+    } else if (block.startsWith('### ')) {
+      result.push('<h3>' + formatInline(escapeHtml(block.slice(4))) + '</h3>');
+    } else if (block.startsWith('## ')) {
+      result.push('<h2>' + formatInline(escapeHtml(block.slice(3))) + '</h2>');
+    } else if (block.startsWith('# ')) {
+      result.push('<h1>' + formatInline(escapeHtml(block.slice(2))) + '</h1>');
+    } else {
+      result.push('<p>' + formatInline(escapeHtml(block)) + '</p>');
+    }
+  }
+
+  return result.join('');
+}
+
+// 格式化表格
+function formatTable(block) {
+  const lines = block.trim().split('\n').filter(l => l.trim());
+  if (lines.length < 2) return null;
+
+  // 检查是否是分隔行（Markdown 表格分隔行格式：|---|、|:---|、|---:|、|:---:|）
+  const isSeparator = (line) => /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/.test(line);
+  if (lines.length < 3 || !isSeparator(lines[1])) return null;
+
+  const rows = lines.map(line =>
+    line.split('|').map(cell => cell.trim()).filter(cell => cell)
+  );
+
+  if (rows.length < 2) return null;
+
+  let html = '<table><thead><tr>';
+  // 表头
+  rows[0].forEach(cell => {
+    html += '<th>' + formatInline(escapeHtml(cell)) + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+
+  // 数据行
+  for (let i = 2; i < rows.length; i++) {
+    html += '<tr>';
+    rows[i].forEach(cell => {
+      html += '<td>' + formatInline(escapeHtml(cell)) + '</td>';
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  return html;
+}
+
+// 格式化行内元素（粗体、斜体、链接、代码）
+function formatInline(text) {
+  return text
+    .replace(/[*][*]([^*]+?)[*][*]/g, '<strong>$1</strong>')
+    .replace(/[*]([^*]+?)[*]/g, '<em>$1</em>')
+    .replace(/`([^`]+?)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+?)\]\(([^\)]+?)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 }
 
 // 工具函数
