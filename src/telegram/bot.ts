@@ -786,10 +786,9 @@ export class TelegramBot {
     const sources = await this.getSources();
     const matchedSource = this.matchSourceName(command.name, sources);
 
+    // Fallback: if no source matched, treat as keyword search
     if (!matchedSource) {
-      await this.client.sendMessage(chatId,
-        `❌ 未找到来源 "${this.escapeHtml(command.name)}"\n` +
-        `提示：可以使用完整的来源名称，例如 "MIT Technology Review"`);
+      await this.handleGetArticlesBySearch(command.name, chatId);
       return;
     }
 
@@ -864,6 +863,87 @@ export class TelegramBot {
     // Log result
     log.info({ userId: this.userId, sourceName: matchedSource.name, sentCount, failedCount, chatId },
       'Sent articles via /getarticles command by source');
+
+    // Notify user if some articles failed to send
+    if (failedCount > 0) {
+      await this.client.sendMessage(chatId,
+        `⚠️ ${failedCount} 篇文章发送失败，请查看日志了解详情`);
+    }
+  }
+
+  /**
+   * Handle /getarticles command by keyword search
+   * (fallback when source name is not found)
+   */
+  private async handleGetArticlesBySearch(keyword: string, chatId: string): Promise<void> {
+    const queryParams: any = {
+      search: keyword,
+      isRead: false,
+      filterStatus: 'passed',
+      limit: 5,
+      page: 1,
+      randomOrder: true,
+      skipDaysFilterForSearch: true,  // Skip time filter for full-text search
+    };
+
+    const result = await getUserArticles(this.userId, queryParams);
+
+    if (result.articles.length === 0) {
+      await this.client.sendMessage(chatId,
+        `📭 关键词 "${this.escapeHtml(keyword)}" 没有找到符合条件的未读文章`);
+      return;
+    }
+
+    await this.client.sendMessage(chatId,
+      `🔍 关键词 "${this.escapeHtml(keyword)}" 找到 ${result.articles.length} 篇未读文章：`);
+
+    let sentCount = 0;
+    let failedCount = 0;
+
+    // Send articles with delay to avoid rate limits
+    for (const article of result.articles) {
+      try {
+        // Use translated summary if available, otherwise use original summary or content
+        // Priority: summary_zh > summary > markdown_content > content
+        let summary = article.summary_zh || article.summary || undefined;
+        if (!summary && (article.markdown_content || article.content)) {
+          summary = article.markdown_content || article.content || undefined;
+          // Truncate content if too long (max 500 chars for preview)
+          if (summary && summary.length > 500) {
+            summary = summary.substring(0, 500) + '...';
+          }
+        }
+
+        const message = formatNewArticle({
+          title: article.title,
+          url: article.url,
+          sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
+          sourceType: article.source_origin === 'journal' ? '期刊文章' :
+                      article.source_origin === 'keyword' ? '关键词订阅' : 'RSS订阅',
+          summary,
+        });
+
+        const keyboard = createArticleKeyboard(
+          article.id,
+          article.is_read === 1,
+          article.rating
+        );
+
+        await this.client.sendMessageWithKeyboard(chatId, message, keyboard, 'HTML');
+        sentCount++;
+
+        // Rate limiting: 1 second between messages
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        failedCount++;
+        log.error({ error, articleId: article.id, title: article.title }, 'Failed to send article via /getarticles by search');
+        // Continue with next article instead of stopping
+      }
+    }
+
+    // Log result
+    log.info({ userId: this.userId, keyword, sentCount, failedCount, chatId },
+      'Sent articles via /getarticles command by keyword search');
 
     // Notify user if some articles failed to send
     if (failedCount > 0) {
