@@ -1,4 +1,4 @@
-<%- include('layout', { pageTitle: pageTitle, pageStyles: '<link rel="stylesheet" href="/css/pages/search.css">' , body:
+<%- include('layout', { pageTitle: pageTitle, pageStyles: '<link rel="stylesheet" href="/css/pages/search.css">', user: user, body:
   ` <!-- Page Header -->
   <div class="page-header">
     <h1 class="page-title">语义搜索</h1>
@@ -101,10 +101,17 @@
     // State management for article selection
     let selectedArticles = new Set();  // Cross-page selection
     let currentResults = [];  // Current page results
+
+    // Fallback: if window.userRole is not set by layout, infer from page elements
+    if (!window.userRole || window.userRole === 'undefined') {
+      // Check if admin links exist in the nav
+      const hasAdminLinks = document.querySelector('a[href="/settings"]') || document.querySelector('a[href="/topics"]');
+      window.userRole = hasAdminLinks ? 'admin' : 'guest';
+    }
+
     const isAdmin = window.userRole !== 'guest';
     const MAX_SELECTION = 50;
 
-    // Load on page ready
     document.addEventListener('DOMContentLoaded', () => {
       const searchInput = document.getElementById('searchInput');
       const searchButton = document.getElementById('searchButton');
@@ -199,7 +206,7 @@
     function updateSelectionUI() {
       const count = selectedArticles.size;
       document.getElementById('selectedCount').textContent = count;
-      document.getElementById('resultsActions').style.display = count > 0 ? 'flex' : 'none';
+      document.getElementById('resultsActions').style.display = (count > 0 && isAdmin) ? 'flex' : 'none';
 
       // Sync select all checkbox state
       const checkboxes = document.querySelectorAll('.article-checkbox');
