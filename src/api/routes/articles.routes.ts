@@ -178,6 +178,20 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
 
     const todayNew = Number(todayCountResult?.count || 0);
 
+    // Get today's passed articles count
+    const todayPassedResult = await db
+      .selectFrom('articles')
+      .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+      .leftJoin('journals', 'journals.id', 'articles.journal_id')
+      .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .where(buildUserArticlePermissionCondition(userId))
+      .where('articles.created_at', '>=', todayStartUtc)
+      .where('articles.filter_status', '=', 'passed')
+      .select((eb) => eb.fn.count('articles.id').as('count'))
+      .executeTakeFirst();
+
+    const todayPassed = Number(todayPassedResult?.count || 0);
+
     // Get pending articles count (filter_status=pending means waiting for AI analysis)
     const pendingResult = await db
       .selectFrom('articles')
@@ -245,6 +259,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
 
     res.json({
       todayNew,
+      todayPassed,
       pending,
       analyzed,
       passRate,

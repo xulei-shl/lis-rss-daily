@@ -32,7 +32,7 @@ async function loadStats() {
 
     const stats = await res.json();
 
-    document.getElementById('todayNew').textContent = stats.todayNew || 0;
+    document.getElementById('todayNew').textContent = (stats.todayPassed || 0) + '/' + (stats.todayNew || 0);
     document.getElementById('pendingCount').textContent = stats.pending || 0;
     document.getElementById('analyzedCount').textContent = stats.analyzed || 1;
     document.getElementById('passRate').textContent = stats.passRate
