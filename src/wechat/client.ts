@@ -2,8 +2,10 @@
  * 企业微信 API Client
  *
  * HTTP client for WeChat Work Webhook API.
+ * 使用 node-fetch，不使用代理（企业微信不需要代理）。
  */
 
+import fetch from 'node-fetch';
 import { logger } from '../logger.js';
 
 const log = logger.child({ module: 'wechat-client' });
@@ -55,7 +57,7 @@ export class WeChatClient {
           },
           body: JSON.stringify(message),
           signal: this.abortController.signal,
-        });
+        } as any);
 
         const data = await response.json() as WeChatApiResponse;
 

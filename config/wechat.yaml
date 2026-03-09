@@ -1,9 +1,16 @@
-# 企业微信推送配置
-version: "1.0"
-
-webhooks: []
-
+version: '1.0'
+webhooks:
+  - name: 典藏LIS-RSS
+    url: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=61fecfdc-0702-47a2-9004-696b7e8e16fa
+    enabled: true
+    push_types:
+      daily_summary: false
+      journal_all: true
+      new_articles: false
+    id: webhook-1773061649022-aqmqb0j19
+    created_at: '2026-03-09T13:07:29.022Z'
+    updated_at: '2026-03-09T13:08:20.684Z'
 metadata:
-  created_at: "2026-03-09T00:00:00Z"
-  updated_at: "2026-03-09T00:00:00Z"
-  schema_version: "1.0"
+  created_at: '2026-03-09T00:00:00Z'
+  updated_at: '2026-03-09T13:08:20.684Z'
+  schema_version: '1.0'

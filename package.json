@@ -25,6 +25,7 @@
     "jsonwebtoken": "^9.0.3",
     "kysely": "^0.28.11",
     "node-cron": "^3.0.3",
+    "node-fetch": "^3.3.2",
     "openai": "^4.80.0",
     "pino": "^10.3.0",
     "pino-pretty": "^13.1.3",
