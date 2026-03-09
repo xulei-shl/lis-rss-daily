@@ -19,6 +19,7 @@ import keywordsRoutes from './routes/keywords.routes.js';
 import logsRoutes from './routes/logs.routes.js';
 import blacklistRoutes from './routes/blacklist.routes.js';
 import telegramChatsRoutes from './routes/telegram-chats.routes.js';
+import wechatRoutes from './routes/wechat.routes.js';
 
 const router = express.Router();
 
@@ -42,5 +43,6 @@ router.use(keywordsRoutes);
 router.use(logsRoutes);
 router.use(blacklistRoutes);
 router.use(telegramChatsRoutes);
+router.use(wechatRoutes);
 
 export default router;

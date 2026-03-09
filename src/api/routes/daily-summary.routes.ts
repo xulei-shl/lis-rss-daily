@@ -14,7 +14,7 @@ const log = logger.child({ module: 'api-routes/daily-summary' });
 const router = express.Router();
 
 // 有效的总结类型
-const VALID_SUMMARY_TYPES: SummaryType[] = ['journal', 'blog_news', 'all'];
+const VALID_SUMMARY_TYPES: SummaryType[] = ['journal', 'blog_news', 'all', 'journal_all'];
 
 /**
  * 验证并获取总结类型参数
@@ -343,6 +343,95 @@ router.post('/daily-summary/cli', requireCliAuth, async (req: AuthRequest, res) 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to generate daily summary';
     log.error({ error, userId: req.userId }, 'CLI: Failed to generate daily summary');
+    res.status(500).json({
+      status: 'error',
+      error: message,
+    });
+  }
+});
+
+/**
+ * POST /api/daily-summary/journal-all/generate
+ * 生成全部期刊总结（包含未通过的文章）
+ *
+ * Body 参数:
+ * - date: 可选，日期 (YYYY-MM-DD)
+ */
+router.post('/daily-summary/journal-all/generate', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
+  try {
+    const { date } = req.body || {};
+
+    const result = await dailySummaryService.generateJournalAllSummary({
+      userId: req.userId!,
+      date,
+    });
+
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to generate journal all summary';
+    log.error({ error, userId: req.userId }, 'Failed to generate journal all summary');
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
+ * POST /api/daily-summary/journal-all/cli
+ * CLI 专用端点：生成全部期刊总结
+ */
+router.post('/daily-summary/journal-all/cli', requireCliAuth, async (req: AuthRequest, res) => {
+  try {
+    const { date } = req.body || {};
+    const targetDate = date || await getUserLocalDate(req.userId!);
+
+    // 先检查是否已存在
+    const existing = await dailySummaryService.getDailySummaryByDate(req.userId!, targetDate, 'journal_all');
+
+    if (existing) {
+      log.info({ userId: req.userId, date: targetDate }, 'CLI: Returning cached journal all summary');
+      const articlesData = JSON.parse(existing.articles_data);
+      return res.json({
+        status: 'success',
+        cached: true,
+        data: {
+          date: existing.summary_date,
+          type: existing.summary_type,
+          totalArticles: existing.article_count,
+          articlesByType: articlesData,
+          summary: existing.summary_content,
+          generatedAt: existing.created_at,
+        },
+      });
+    }
+
+    // 生成新的总结
+    log.info({ userId: req.userId, date: targetDate }, 'CLI: Generating new journal all summary');
+    const result = await dailySummaryService.generateJournalAllSummary({
+      userId: req.userId!,
+      date: targetDate,
+    });
+
+    if (result.totalArticles === 0) {
+      res.json({
+        status: 'empty',
+        cached: false,
+        message: '当日暂无期刊文章',
+        data: {
+          date: result.date,
+          type: result.type,
+          totalArticles: result.totalArticles,
+          articlesByType: result.articlesByType,
+        },
+      });
+    } else {
+      res.json({
+        status: 'success',
+        cached: false,
+        data: result,
+      });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to generate journal all summary';
+    log.error({ error, userId: req.userId }, 'CLI: Failed to generate journal all summary');
     res.status(500).json({
       status: 'error',
       error: message,

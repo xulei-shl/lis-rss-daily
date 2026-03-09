@@ -7,6 +7,7 @@
   <button class="settings-tab" data-tab="keywords">关键词订阅</button>
   <button class="settings-tab" data-tab="blacklist">黑名单</button>
   <button class="settings-tab" data-tab="telegram">Telegram 通知</button>
+  <button class="settings-tab" data-tab="wechat">企业微信推送</button>
 </div>
 
 <%- include('panel-rss') %>
@@ -17,6 +18,8 @@
 <%- include('panel-keywords') %>
 <%- include('panel-blacklist') %>
 <%- include('panel-telegram') %>
+<%- include('panel-wechat') %>
 <%- include('modals') %>
 
 <script src="/js/settings.js"></script>
+<script src="/js/wechat-settings.js"></script>

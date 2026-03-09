@@ -1,0 +1,283 @@
+<!-- 企业微信设置 Section -->
+<section class="settings-panel" data-tab="wechat">
+  <div class="wechat-section">
+    <div class="section-header">
+      <h2>企业微信通知</h2>
+      <p class="section-description">
+        配置企业微信群机器人接收每日总结推送。
+        <a href="https://developer.work.weixin.qq.com/document/path/91770" target="_blank" rel="noopener">
+          如何创建群机器人？
+        </a>
+      </p>
+    </div>
+
+    <!-- Webhooks List -->
+    <div class="wechat-webhooks-section">
+      <div class="webhooks-header">
+        <h3>Webhook 列表</h3>
+        <button type="button" id="addWeChatWebhookBtn" class="btn btn-secondary btn-small">
+          + 添加 Webhook
+        </button>
+      </div>
+
+      <div id="wechatWebhooksList" class="wechat-webhooks-list">
+        <!-- Webhooks will be rendered here -->
+      </div>
+
+      <div id="wechatWebhooksEmpty" class="wechat-webhooks-empty" style="display: none;">
+        <p>暂无 Webhook 配置。点击上方按钮添加。</p>
+      </div>
+    </div>
+
+    <div id="wechatStatus" class="wechat-status"></div>
+  </div>
+</section>
+
+<!-- 添加/编辑企业微信 Webhook 模态框 -->
+<div class="modal-overlay" id="wechatWebhookModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="wechatWebhookModalTitle">添加 Webhook</h3>
+      <button type="button" class="modal-close" onclick="closeWeChatWebhookModal()">&times;</button>
+    </div>
+    <form id="wechatWebhookForm">
+      <input type="hidden" id="wechatWebhookId" name="id">
+      <div class="form-group">
+        <label for="wechatWebhookName">名称</label>
+        <input
+          type="text"
+          id="wechatWebhookName"
+          name="name"
+          placeholder="例如：工作群"
+          autocomplete="off"
+          required
+        >
+        <small class="form-hint">
+          用于在设置页面识别此 Webhook
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="wechatWebhookUrl">Webhook URL</label>
+        <input
+          type="text"
+          id="wechatWebhookUrl"
+          name="url"
+          placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+          autocomplete="off"
+          required
+        >
+        <small class="form-hint">
+          企业微信群机器人 Webhook 地址
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label>推送类型</label>
+        <div class="checkbox-group">
+          <label>
+            <input type="checkbox" id="wechatWebhookDailySummary" name="daily_summary" checked>
+            接收每日总结（通过的期刊/资讯）
+          </label>
+          <label>
+            <input type="checkbox" id="wechatWebhookJournalAll" name="journal_all" checked>
+            接收全部期刊总结（包含未通过的）
+          </label>
+          <label>
+            <input type="checkbox" id="wechatWebhookNewArticles" name="new_articles" checked>
+            接收新增文章
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="wechatWebhookEnabled" name="enabled" checked>
+          启用
+        </label>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeWeChatWebhookModal()">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+/* WeChat Section */
+.wechat-webhooks-section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+.webhooks-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.webhooks-header h3 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.btn-small {
+  height: 36px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
+}
+
+/* Webhooks List */
+.wechat-webhooks-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.wechat-webhook-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.wechat-webhook-item:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.wechat-webhook-item.inactive {
+  opacity: 0.6;
+  background: var(--bg-subtle);
+}
+
+.wechat-webhook-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+}
+
+.wechat-webhook-name {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-meta);
+}
+
+.wechat-webhook-url {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.wechat-webhook-details {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* Tags */
+.wechat-webhook-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.wechat-webhook-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-meta);
+  font-size: 0.65rem;
+  font-weight: 500;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.wechat-webhook-tag.daily-summary {
+  background: rgba(26, 77, 122, 0.1);
+  color: var(--accent-primary);
+  border-color: rgba(26, 77, 122, 0.2);
+}
+
+.wechat-webhook-tag.journal-all {
+  background: rgba(5, 150, 105, 0.1);
+  color: var(--green);
+  border-color: rgba(5, 150, 105, 0.2);
+}
+
+.wechat-webhook-tag.new-articles {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--orange);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.wechat-webhook-tag.disabled {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+/* Actions */
+.wechat-webhook-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-left: var(--space-3);
+}
+
+.wechat-webhook-actions .btn-icon {
+  height: 32px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
+}
+
+/* Empty State */
+.wechat-webhooks-empty {
+  text-align: center;
+  padding: var(--space-8) var(--space-5);
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+.wechat-webhooks-empty p {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+/* Checkbox Group */
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 400;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: auto;
+}
+</style>
