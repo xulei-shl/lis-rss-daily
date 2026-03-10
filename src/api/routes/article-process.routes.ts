@@ -57,4 +57,12 @@ router.get('/articles/failed', requireAuth, async (req: AuthRequest, res) => {
   await articleProcessService.getFailedArticles(req, res);
 });
 
+/**
+ * POST /api/articles/filter-and-process-batch
+ * Filter pending articles and process all ready articles
+ */
+router.post('/articles/filter-and-process-batch', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
+  await articleProcessService.filterAndProcessBatch(req, res);
+});
+
 export default router;

@@ -10,6 +10,7 @@ import { processArticle, processBatchArticles, retryFailedArticle, getPendingArt
 import { getUserArticles, type ArticleWithSource } from './articles.js';
 import { logger } from '../logger.js';
 import type { Request, Response } from 'express';
+import type { SourceType } from '../constants/source-types.js';
 
 const log = logger.child({ module: 'article-process-api' });
 
@@ -266,6 +267,195 @@ export async function getFailedArticles(req: Request, res: Response): Promise<vo
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
     log.error({ userId, error: errMsg }, '[API] Get failed articles failed');
+    res.status(500).json({ error: errMsg });
+  }
+}
+
+/**
+ * Filter and process batch articles.
+ * POST /api/articles/filter-and-process-batch
+ *
+ * This endpoint handles articles that need filtering (filter_status=pending)
+ * as well as articles that are ready for processing (filter_status=passed).
+ */
+export async function filterAndProcessBatch(req: Request, res: Response): Promise<void> {
+  const userId = (req as any).userId;
+  const options: BatchOptions = req.body || {};
+  const limit = options.limit || 50;
+
+  try {
+    log.info({ userId, limit }, '[API] Filter and process batch started');
+
+    const { getDb } = await import('../db.js');
+    const { filterArticle } = await import('../filter.js');
+    const db = getDb();
+
+    // Step 1: Get pending articles that need filtering (from RSS sources)
+    const pendingRssArticles = await db
+      .selectFrom('articles')
+      .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+      .where('articles.filter_status', '=', 'pending')
+      .where('articles.process_status', '=', 'pending')
+      .where('rss_sources.user_id', '=', userId)
+      .select(['articles.id', 'articles.title', 'articles.url', 'articles.content', 'articles.markdown_content', 'rss_sources.source_type'])
+      .limit(limit)
+      .execute();
+
+    // Step 2: Get pending articles from journals
+    const pendingJournalArticles = await db
+      .selectFrom('articles')
+      .innerJoin('journals', 'journals.id', 'articles.journal_id')
+      .where('articles.filter_status', '=', 'pending')
+      .where('articles.process_status', '=', 'pending')
+      .where('journals.user_id', '=', userId)
+      .select(['articles.id', 'articles.title', 'articles.url', 'articles.content', 'articles.markdown_content'])
+      .limit(limit)
+      .execute();
+
+    // Step 3: Get pending articles from keywords
+    const pendingKeywordArticles = await db
+      .selectFrom('articles')
+      .innerJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .where('articles.filter_status', '=', 'pending')
+      .where('articles.process_status', '=', 'pending')
+      .where('keyword_subscriptions.user_id', '=', userId)
+      .select(['articles.id', 'articles.title', 'articles.url', 'articles.content', 'articles.markdown_content'])
+      .limit(limit)
+      .execute();
+
+    let filteredCount = 0;
+    let rejectedCount = 0;
+    const passedArticleIds: number[] = [];
+
+    // Step 4: Filter RSS pending articles
+    for (const article of pendingRssArticles) {
+      try {
+        const input = {
+          articleId: article.id,
+          userId,
+          url: article.url || '',
+          title: article.title,
+          description: article.content || '',
+          content: article.markdown_content || article.content || '',
+          sourceType: (article as any).source_type || 'rss',
+        };
+
+        const result = await filterArticle(input);
+
+        if (result.passed) {
+          filteredCount++;
+          passedArticleIds.push(article.id);
+        } else {
+          rejectedCount++;
+          log.debug({ articleId: article.id, reason: result.filterReason }, 'Article rejected by filter');
+        }
+      } catch (error) {
+        log.warn({ articleId: article.id, error }, 'Failed to filter article');
+        rejectedCount++;
+      }
+    }
+
+    // Step 5: Filter Journal pending articles
+    for (const article of pendingJournalArticles) {
+      try {
+        const input = {
+          articleId: article.id,
+          userId,
+          url: article.url || '',
+          title: article.title,
+          description: article.content || '',
+          content: article.markdown_content || article.content || '',
+          sourceType: 'journal' as const,
+        };
+
+        const result = await filterArticle(input);
+
+        if (result.passed) {
+          filteredCount++;
+          passedArticleIds.push(article.id);
+        } else {
+          rejectedCount++;
+          log.debug({ articleId: article.id, reason: result.filterReason }, 'Article rejected by filter');
+        }
+      } catch (error) {
+        log.warn({ articleId: article.id, error }, 'Failed to filter article');
+        rejectedCount++;
+      }
+    }
+
+    // Step 6: Filter Keyword pending articles
+    for (const article of pendingKeywordArticles) {
+      try {
+        const input = {
+          articleId: article.id,
+          userId,
+          url: article.url || '',
+          title: article.title,
+          description: article.content || '',
+          content: article.markdown_content || article.content || '',
+          sourceType: 'blog' as SourceType,
+        };
+
+        const result = await filterArticle(input);
+
+        if (result.passed) {
+          filteredCount++;
+          passedArticleIds.push(article.id);
+        } else {
+          rejectedCount++;
+          log.debug({ articleId: article.id, reason: result.filterReason }, 'Article rejected by filter');
+        }
+      } catch (error) {
+        log.warn({ articleId: article.id, error }, 'Failed to filter article');
+        rejectedCount++;
+      }
+    }
+
+    // Step 7: Get already passed articles that need processing
+    const passedArticlesResult = await getPendingArticleIds(userId, limit);
+    const allArticleIds = [...passedArticleIds, ...passedArticlesResult];
+
+    // Remove duplicates
+    const uniqueArticleIds = [...new Set(allArticleIds)];
+
+    if (uniqueArticleIds.length === 0) {
+      res.json({
+        success: true,
+        filtered: filteredCount,
+        rejected: rejectedCount,
+        processed: 0,
+        skipped: 0,
+      });
+      return;
+    }
+
+    // Step 8: Process all passed articles
+    processBatchArticles(uniqueArticleIds, userId, {
+      maxConcurrent: options.maxConcurrent,
+    })
+      .then((results) => {
+        const processed = results.filter((r) => r.status === 'completed').length;
+        const skipped = results.filter((r) => r.status === 'skipped').length;
+
+        log.info(
+          { userId, filtered: filteredCount, rejected: rejectedCount, processed, skipped },
+          '[API] Filter and process batch completed'
+        );
+      })
+      .catch((error) => {
+        log.error({ userId, error: error.message }, '[API] Filter and process batch failed');
+      });
+
+    res.json({
+      success: true,
+      filtered: filteredCount,
+      rejected: rejectedCount,
+      processed: uniqueArticleIds.length,
+      message: `正在处理 ${uniqueArticleIds.length} 篇文章`,
+    });
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    log.error({ userId, error: errMsg }, '[API] Filter and process batch failed');
     res.status(500).json({ error: errMsg });
   }
 }

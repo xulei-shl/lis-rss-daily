@@ -498,8 +498,62 @@ function goToPage(page) {
 }
 
 // Process single article
-async function processArticle(id) {
+async function processArticle(id, forceFilter = false) {
   try {
+    // If forceFilter is true, or if we need to check status, first get article info
+    if (forceFilter) {
+      // Get article details to check filter_status
+      const articleRes = await fetch(\`/api/articles/\${id}\`, { credentials: 'same-origin' });
+      if (!articleRes.ok) {
+        await showConfirm('获取文章信息失败', { title: '错误', okText: '知道了', okButtonType: 'btn-secondary' });
+        return;
+      }
+      const articleData = await articleRes.json();
+      
+      // If filter_status is pending, we need to filter first
+      if (articleData.filter_status === 'pending') {
+        await showConfirm('该文章待筛选，是否先进行关键词过滤？', {
+          title: '需要过滤',
+          okText: '过滤并处理',
+          cancelText: '取消'
+        });
+        
+        // Call filter API
+        const filterRes = await fetch('/api/filter/article', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            articleId: id,
+            title: articleData.title,
+            description: articleData.content || '',
+            content: articleData.markdown_content || articleData.content || '',
+            url: articleData.url
+          })
+        });
+        
+        const filterResult = await filterRes.json();
+        
+        if (!filterRes.ok || !filterResult.passed) {
+          await showConfirm(\`文章未通过关键词过滤: \${filterResult.filterReason || '不符合关键词规则'}\`, {
+            title: '过滤失败',
+            okText: '知道了',
+            okButtonType: 'btn-secondary'
+          });
+          loadArticles();
+          return;
+        }
+        
+        // After filtering passed, proceed to process
+        await showConfirm('过滤通过，正在处理...', {
+          title: '等待处理',
+          okText: '知道了',
+          okButtonType: 'btn-secondary'
+        });
+      }
+    }
+    
+    // Now process the article
     const res = await fetch(\`/api/articles/\${id}/process\`, { method: 'POST' });
     const result = await res.json();
 
@@ -526,22 +580,66 @@ async function processArticle(id) {
   }
 }
 
-// Process batch articles
+// Process batch articles - handles both pending (need filter) and passed articles
 async function processBatch() {
-  const confirmed = await showConfirm('确定要将所有待处理文章加入处理队列吗？', {
-    title: '批量处理',
-    okText: '确认处理',
-    cancelText: '取消'
-  });
-  if (!confirmed) return;
-
+  // First, try to get counts of pending and passed articles that need processing
   try {
-    const res = await fetch('/api/articles/process-batch', { method: 'POST' });
+    const pendingRes = await fetch('/api/articles?processStatus=pending&filterStatus=pending&limit=1', { credentials: 'same-origin' });
+    const passedRes = await fetch('/api/articles?processStatus=pending&filterStatus=passed&limit=1', { credentials: 'same-origin' });
+    
+    const pendingData = await pendingRes.json();
+    const passedData = await passedRes.json();
+    
+    const pendingCount = pendingData.total || 0;
+    const passedCount = passedData.total || 0;
+    
+    if (pendingCount === 0 && passedCount === 0) {
+      await showConfirm('没有待处理的文章', {
+        title: '提示',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
+      return;
+    }
+    
+    let confirmMsg = '';
+    if (pendingCount > 0 && passedCount > 0) {
+      confirmMsg = \`找到 \${pendingCount} 篇待筛选文章和 \${passedCount} 篇待处理文章。\\n\\n将依次进行过滤和处理，是否继续？\`;
+    } else if (pendingCount > 0) {
+      confirmMsg = \`找到 \${pendingCount} 篇待筛选文章，将先过滤后处理，是否继续？\`;
+    } else {
+      confirmMsg = \`找到 \${passedCount} 篇待处理文章，是否继续？\`;
+    }
+    
+    const confirmed = await showConfirm(confirmMsg, {
+      title: '批量处理',
+      okText: '确认处理',
+      cancelText: '取消'
+    });
+    if (!confirmed) return;
+    
+    // Use the new batch filter-and-process API
+    const res = await fetch('/api/articles/filter-and-process-batch', { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin'
+    });
     const result = await res.json();
 
     if (res.ok) {
-      await showConfirm(\`已将 \${result.count || 0} 篇文章加入处理队列\`, {
-        title: '批量处理',
+      const filtered = result.filtered || 0;
+      const rejected = result.rejected || 0;
+      const processed = result.processed || 0;
+      const skipped = result.skipped || 0;
+      
+      let msg = '';
+      if (filtered > 0) msg += \`过滤通过: \${filtered} 篇\\n\`;
+      if (rejected > 0) msg += \`过滤拒绝: \${rejected} 篇\\n\`;
+      if (processed > 0) msg += \`已处理: \${processed} 篇\\n\`;
+      if (skipped > 0) msg += \`跳过: \${skipped} 篇\\n\`;
+      
+      await showConfirm(msg || '处理完成', {
+        title: '批量处理完成',
         okText: '知道了',
         okButtonType: 'btn-secondary'
       });
