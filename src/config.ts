@@ -45,6 +45,11 @@ export interface Config {
   relatedRefreshBatchSize: number;
   relatedRefreshStaleDays: number;
 
+  // Daily Summary Push
+  dailySummaryPushEnabled: boolean;
+  dailySummaryPushSchedule: string;
+  dailySummaryPushTypes: string[];
+
   // Logging
   logLevel: string;
   logFile?: string;
@@ -165,6 +170,11 @@ function getConfig(): Config {
     keywordCrawlSchedule: process.env.KEYWORD_CRAWL_SCHEDULE || '15 3 * * 6',
     keywordInterval: parseInt(process.env.KEYWORD_INTERVAL || '300000', 10),
     keywordIntervalRandom: parseInt(process.env.KEYWORD_INTERVAL_RANDOM || '30000', 10),
+
+    // Daily Summary Push
+    dailySummaryPushEnabled: process.env.DAILY_SUMMARY_PUSH_ENABLED !== 'false',
+    dailySummaryPushSchedule: process.env.DAILY_SUMMARY_PUSH_SCHEDULE || '0 9 * * *',
+    dailySummaryPushTypes: (process.env.DAILY_SUMMARY_PUSH_TYPES || 'journal,blog_news').split(','),
   };
 }
 

@@ -13,6 +13,7 @@ import { initRSSScheduler } from './rss-scheduler.js';
 import { initRelatedScheduler } from './related-scheduler.js';
 import { initJournalScheduler } from './journal-scheduler.js';
 import { initKeywordScheduler } from './keyword-scheduler.js';
+import { initDailySummaryScheduler } from './daily-summary-scheduler.js';
 import { initTelegramBotManager } from './telegram/bot-manager.js';
 import { config } from './config.js';
 import { createApp, startServer } from './api/web.js';
@@ -38,6 +39,8 @@ async function main() {
     rssFetchSchedule: config.rssFetchSchedule,
     relatedRefreshEnabled: config.relatedRefreshEnabled,
     relatedRefreshSchedule: config.relatedRefreshSchedule,
+    dailySummaryPushEnabled: config.dailySummaryPushEnabled,
+    dailySummaryPushSchedule: config.dailySummaryPushSchedule,
   }, 'Configuration loaded');
 
   // Initialize database
@@ -105,6 +108,15 @@ async function main() {
     log.info('🔑 Keyword scheduler disabled');
   }
 
+  // Initialize and start Daily Summary Push scheduler
+  const dailySummaryScheduler = initDailySummaryScheduler();
+  if (config.dailySummaryPushEnabled) {
+    dailySummaryScheduler.start();
+    log.info(`📨 Daily summary push scheduler started (schedule: ${config.dailySummaryPushSchedule}, types: ${config.dailySummaryPushTypes.join(',')})`);
+  } else {
+    log.info('📨 Daily summary push scheduler disabled');
+  }
+
   // Initialize and start Telegram Bot
   const telegramBotManager = await initTelegramBotManager();
   if (telegramBotManager) {
@@ -135,6 +147,10 @@ async function main() {
     // Stop keyword scheduler
     await keywordScheduler.stop();
     log.info('🔑 Keyword scheduler stopped');
+
+    // Stop daily summary push scheduler
+    await dailySummaryScheduler.stop();
+    log.info('📨 Daily summary push scheduler stopped');
 
     // Stop Telegram bot manager
     if (telegramBotManager) {
