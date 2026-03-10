@@ -2,7 +2,7 @@
  * Telegram API Client
  *
  * HTTP client for Telegram Bot API with proxy support.
- * Uses undici ProxyAgent for proxy support.
+ * Uses undici ProxyAgent for proxy support (per-request, not global).
  */
 
 import { logger } from '../logger.js';
@@ -11,7 +11,7 @@ import type {
   InlineKeyboardMarkup,
   GetUpdatesResponse,
 } from './types.js';
-import { setGlobalDispatcher, ProxyAgent } from 'undici';
+import { ProxyAgent } from 'undici';
 
 const log = logger.child({ module: 'telegram-client' });
 
@@ -22,11 +22,12 @@ const MAX_RETRIES = 3;
 // Read proxy from environment variable
 const TELEGRAM_PROXY = process.env.TELEGRAM_PROXY || null;
 
+// Create proxy agent only for Telegram requests (not global)
+let telegramProxyAgent: ProxyAgent | null = null;
+
 if (TELEGRAM_PROXY) {
   log.info({ proxy: TELEGRAM_PROXY }, 'Telegram client configured with proxy');
-  // Set global proxy dispatcher for undici (used by Node.js fetch)
-  const agent = new ProxyAgent(TELEGRAM_PROXY);
-  setGlobalDispatcher(agent);
+  telegramProxyAgent = new ProxyAgent(TELEGRAM_PROXY);
 } else {
   log.warn('No Telegram proxy configured (TELEGRAM_PROXY not set)');
 }
@@ -74,7 +75,9 @@ export class TelegramClient {
           },
           body,
           signal: this.abortController.signal,
-        });
+          // Only use proxy for Telegram requests (not global)
+          dispatcher: telegramProxyAgent,
+        } as any);
 
         const data = await response.json() as TelegramMessageResponse;
 

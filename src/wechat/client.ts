@@ -2,16 +2,16 @@
  * 企业微信 API Client
  *
  * HTTP client for WeChat Work Webhook API.
- * 使用 node-fetch，不使用代理（企业微信不需要代理）。
+ * 使用 Node.js 内置 fetch，不使用代理（企业微信不需要代理）。
  */
 
-import fetch from 'node-fetch';
 import { logger } from '../logger.js';
 
 const log = logger.child({ module: 'wechat-client' });
 
 const DEFAULT_TIMEOUT = 30000;
 const MAX_RETRIES = 2;
+const MAX_MESSAGE_LENGTH = 4096; // 企业微信 Markdown 消息最大字节数
 
 /**
  * 企业微信 API 响应接口
@@ -23,6 +23,109 @@ interface WeChatApiResponse {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 计算 UTF-8 字节长度
+ */
+function getByteLength(str: string): number {
+  return new TextEncoder().encode(str).length;
+}
+
+/**
+ * 在合适的位置截断字符串（避免在单词或 Markdown 标记中间截断）
+ * 返回截断后的字符串和实际截断位置
+ */
+function smartTruncate(str: string, maxBytes: number): { truncated: string; remaining: string } {
+  const encoder = new TextEncoder();
+  const totalBytes = getByteLength(str);
+
+  if (totalBytes <= maxBytes) {
+    return { truncated: str, remaining: '' };
+  }
+
+  // 二分查找找到最大安全截断点
+  let low = 0;
+  let high = str.length;
+  let bestLen = 0;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const sliced = str.substring(0, mid);
+    const bytes = encoder.encode(sliced).length;
+
+    if (bytes <= maxBytes) {
+      bestLen = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  // 尝试在换行、标点符号或空格处截断
+  let truncateLen = bestLen;
+  const slice = str.substring(0, bestLen);
+
+  // 优先在换行处截断
+  const lastNewline = slice.lastIndexOf('\n');
+  if (lastNewline > bestLen * 0.5) {
+    truncateLen = lastNewline + 1;
+  } else {
+    // 其次在句号、感叹号等标点处
+    const lastPunc = Math.max(
+      slice.lastIndexOf('。'),
+      slice.lastIndexOf('！'),
+      slice.lastIndexOf('？'),
+      slice.lastIndexOf('. '),
+      slice.lastIndexOf('! '),
+      slice.lastIndexOf('? ')
+    );
+    if (lastPunc > bestLen * 0.5) {
+      truncateLen = lastPunc + 1;
+    } else {
+      // 最后在空格处
+      const lastSpace = slice.lastIndexOf(' ');
+      if (lastSpace > bestLen * 0.7) {
+        truncateLen = lastSpace + 1;
+      }
+    }
+  }
+
+  return {
+    truncated: str.substring(0, truncateLen),
+    remaining: str.substring(truncateLen)
+  };
+}
+
+/**
+ * 将长消息拆分为多条消息
+ * 每条消息都在合适的位置截断，避免破坏 Markdown 格式
+ */
+function splitMessage(content: string, maxBytes: number): string[] {
+  const chunks: string[] = [];
+  let remaining = content;
+
+  while (remaining.length > 0) {
+    const { truncated, remaining: newRemaining } = smartTruncate(remaining, maxBytes);
+    if (truncated.trim().length > 0) {
+      chunks.push(truncated);
+    }
+    remaining = newRemaining;
+
+    // 防止无限循环
+    if (remaining === content) {
+      // 如果无法智能截断，就硬截断
+      const encoder = new TextEncoder();
+      let len = 1;
+      while (len < content.length && encoder.encode(content.substring(0, len + 1)).length <= maxBytes) {
+        len++;
+      }
+      chunks.push(content.substring(0, len));
+      remaining = content.substring(len);
+    }
+  }
+
+  return chunks;
 }
 
 /**
@@ -102,10 +205,10 @@ export class WeChatClient {
   }
 
   /**
-   * 发送 Markdown 消息
+   * 发送单条 Markdown 消息（不自动拆分）
    * @param content - Markdown 格式的内容，最长不超过 4096 个字节
    */
-  async sendMarkdown(content: string): Promise<boolean> {
+  private async sendSingleMarkdown(content: string): Promise<boolean> {
     try {
       const message = {
         msgtype: 'markdown',
@@ -117,6 +220,48 @@ export class WeChatClient {
       log.error({ error }, 'Failed to send Markdown message');
       return false;
     }
+  }
+
+  /**
+   * 发送 Markdown 消息（自动拆分超长消息）
+   * @param content - Markdown 格式的内容，超长时自动拆分为多条发送
+   */
+  async sendMarkdown(content: string): Promise<boolean> {
+    const byteLength = getByteLength(content);
+
+    if (byteLength <= MAX_MESSAGE_LENGTH) {
+      return await this.sendSingleMarkdown(content);
+    }
+
+    log.info({ byteLength, maxLength: MAX_MESSAGE_LENGTH }, 'Message too long, splitting into chunks');
+
+    // 拆分为多条消息
+    const chunks = splitMessage(content, MAX_MESSAGE_LENGTH);
+    log.info({ chunkCount: chunks.length }, 'Split message into chunks');
+
+    let allSuccess = true;
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      // 添加序号标记
+      const markedChunk = chunks.length > 1
+        ? `**[${i + 1}/${chunks.length}]**\n\n${chunk}`
+        : chunk;
+
+      log.debug({ chunkIndex: i + 1, totalChunks: chunks.length }, 'Sending message chunk');
+
+      const success = await this.sendSingleMarkdown(markedChunk);
+      if (!success) {
+        allSuccess = false;
+        log.error({ chunkIndex: i + 1 }, 'Failed to send message chunk');
+      }
+
+      // 多条消息之间添加短暂延迟，避免触发频率限制
+      if (i < chunks.length - 1) {
+        await sleep(300);
+      }
+    }
+
+    return allSuccess;
   }
 
   /**

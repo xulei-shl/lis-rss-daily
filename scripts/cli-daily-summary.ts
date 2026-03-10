@@ -13,7 +13,7 @@
 
 export {};
 
-type SummaryType = 'journal' | 'blog_news' | 'all';
+type SummaryType = 'journal' | 'blog_news' | 'all' | 'journal_all';
 
 interface CliResponse {
   status: 'success' | 'empty' | 'error';
@@ -68,8 +68,8 @@ function parseArgs(args: string[]): {
       case '--type':
       case '-t':
         if (!nextArg) throw new Error('--type 需要一个值');
-        if (!['journal', 'blog_news', 'all'].includes(nextArg)) {
-          throw new Error('--type 必须是 journal, blog_news 或 all');
+        if (!['journal', 'blog_news', 'all', 'journal_all'].includes(nextArg)) {
+          throw new Error('--type 必须是 journal, blog_news, all 或 journal_all');
         }
         result.type = nextArg;
         i++;
@@ -133,8 +133,8 @@ function printHelp() {
 
 可选参数:
   --date, -d        日期 (YYYY-MM-DD 格式，默认今天)
-  --limit, -l       文章数量限制 (默认 30)
-  --type, -t        总结类型: journal(期刊) | blog_news(博客资讯) | all(综合)
+  --limit, -l       文章数量限制 (默认 30，不适用于 journal_all)
+  --type, -t        总结类型: journal(期刊) | blog_news(博客资讯) | all(综合) | journal_all(全部期刊)
   --all, -a         同时生成期刊和博客资讯两类总结
   --base-url        服务地址 (默认 http://localhost:8007)
   --json            输出纯 JSON 格式
@@ -149,6 +149,7 @@ function printHelp() {
   tsx scripts/cli-daily-summary.ts --user-id 1 --api-key mykey
   tsx scripts/cli-daily-summary.ts -u 1 -d 2025-02-11 -l 50 --json
   tsx scripts/cli-daily-summary.ts -u 1 --type journal          # 仅期刊类总结
+  tsx scripts/cli-daily-summary.ts -u 1 --type journal_all      # 全部期刊总结(含未通过)
   tsx scripts/cli-daily-summary.ts -u 1 --all                   # 生成两类总结
   `);
 }
@@ -157,16 +158,21 @@ async function main() {
   try {
     const args = parseArgs(process.argv.slice(2));
 
-    // 构建请求 URL 和 Body
-    const url = new URL(`${args.baseUrl}/api/daily-summary/cli`);
+    // 根据类型选择不同的 API 端点
+    let url: URL;
+    if (args.type === 'journal_all') {
+      url = new URL(`${args.baseUrl}/api/daily-summary/journal-all/cli`);
+    } else {
+      url = new URL(`${args.baseUrl}/api/daily-summary/cli`);
+    }
     url.searchParams.append('user_id', args.userId.toString());
     url.searchParams.append('api_key', args.apiKey);
 
     const body: any = {};
     if (args.date) body.date = args.date;
-    if (args.limit) body.limit = args.limit;
-    if (args.type) body.type = args.type;
-    if (args.generateAll) body.generateAll = true;
+    if (args.limit && args.type !== 'journal_all') body.limit = args.limit;
+    if (args.type && args.type !== 'journal_all') body.type = args.type;
+    if (args.generateAll && args.type !== 'journal_all') body.generateAll = true;
 
     // 发送请求
     const response = await fetch(url.toString(), {
@@ -222,6 +228,7 @@ function printPrettyResults(data: CliResponse): void {
     journal: '期刊精选',
     blog_news: '博客资讯',
     all: '综合',
+    journal_all: '全部期刊',
   };
 
   console.log(`${GREEN}${BOLD}✓ 每日总结生成完成${RESET}\n`);
@@ -266,6 +273,7 @@ function printPrettyResult(data: CliResponse): void {
     journal: '期刊精选',
     blog_news: '博客资讯',
     all: '综合',
+    journal_all: '全部期刊',
   };
   const typeLabel = typeLabels[result.type] || '综合';
 

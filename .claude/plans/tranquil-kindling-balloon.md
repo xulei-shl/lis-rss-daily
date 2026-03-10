@@ -118,12 +118,23 @@ metadata:
 
 ### Phase 3: 扩展每日总结服务
 
-#### 3.1 扩展总结类型
-**文件**: `src/api/daily-summary.ts`
+#### 3.1 扩展总结类型和数据库表结构
+**文件**: `src/api/daily-summary.ts` 和 `src/db.ts`
 - 在 `SummaryType` 中添加 `'journal_all'` 类型（全部期刊总结）
 - 当前类型：`'journal' | 'blog_news' | 'all' | 'search' | 'journal_all'`
   - `journal_all` 新增，用于保存全部期刊总结到数据库
   - `wechat_journal` 不是数据库类型，仅用于推送区分
+- 更新 `src/db.ts` 中的 `DailySummariesTable` 类型，将 `summary_type` 字段类型更新为包含 `'journal_all'`
+
+#### 3.1.1 数据库存储说明
+**表**: `daily_summaries`
+- `summary_type`: 使用 `'journal_all'` 标识全部期刊总结
+- `summary_content`: 存储 LLM 生成的总结内容（Markdown格式）
+- `articles_data`: 存储期刊文章列表（JSON格式），结构为：
+  ```json
+  {"journal": [...期刊文章列表...], "blog": [], "news": []}
+  ```
+- 与现有 `journal` 类型的区别：`journal_all` 包含所有期刊文章（无论 `filter_status` 是否通过）
 
 #### 3.2 实现获取所有期刊文章函数
 **文件**: `src/api/daily-summary.ts`

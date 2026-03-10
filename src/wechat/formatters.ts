@@ -6,8 +6,8 @@
 
 import type { SummaryType, DailySummaryArticle } from '../api/daily-summary.js';
 
-const MAX_MESSAGE_LENGTH = 4096;
-const MAX_SUMMARY_LENGTH = 3800; // 留出头部和尾部空间
+// 注意：现在 client.ts 会自动处理超长消息分条发送
+// 这里不再需要截断逻辑，保持消息完整即可
 
 /**
  * 企业微信每日总结数据接口
@@ -70,38 +70,8 @@ function convertToWeChatMarkdown(markdown: string): string {
   return result;
 }
 
-/**
- * 截断 UTF-8 字符串到指定字节数
- * 企业微信限制 Markdown 消息为 4096 字节
- */
-function truncateToBytes(str: string, maxBytes: number): string {
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode(str);
-
-  if (bytes.length <= maxBytes) {
-    return str;
-  }
-
-  // 二分查找找到合适的截断点
-  let low = 0;
-  let high = str.length;
-  let best = 0;
-
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    const sliced = str.substring(0, mid);
-    const slicedBytes = encoder.encode(sliced);
-
-    if (slicedBytes.length <= maxBytes - 6) { // 留出 "..." 的空间
-      best = mid;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-
-  return str.substring(0, best) + '...';
-}
+// 截断函数已废弃，不再使用
+// 现在由 client.ts 自动处理超长消息分条发送
 
 /**
  * 格式化每日总结消息（通过的期刊/资讯）
@@ -139,19 +109,7 @@ export function formatDailySummary(data: WeChatDailySummaryData): string {
   // 总结内容
   message += '## 📝 内容摘要\n';
   const processedSummary = convertToWeChatMarkdown(summary);
-
-  // 先拼接看看长度
-  const tempMessage = message + processedSummary;
-  const encoder = new TextEncoder();
-
-  if (encoder.encode(tempMessage).length <= MAX_MESSAGE_LENGTH) {
-    message = tempMessage;
-  } else {
-    // 需要截断总结
-    const headerBytes = encoder.encode(message).length;
-    const remainingBytes = MAX_MESSAGE_LENGTH - headerBytes;
-    message += truncateToBytes(processedSummary, remainingBytes);
-  }
+  message += processedSummary;
 
   return message;
 }
@@ -173,48 +131,22 @@ export function formatJournalAllSummary(data: JournalAllSummaryData): string {
   // 总结内容
   message += '## 📝 内容摘要\n';
   const processedSummary = convertToWeChatMarkdown(summary);
+  message += processedSummary;
 
   // 文章列表（最多 20 篇）
-  const articleSection = '\n## 📄 文章列表\n';
-  let articleList = '';
-
-  const maxArticles = Math.min(articles.length, 20);
-  for (let i = 0; i < maxArticles; i++) {
-    const article = articles[i];
-    const safeTitle = article.title.replace(/\[/g, '[').replace(/\]/g, ']');
-    articleList += `${i + 1}. [${safeTitle}](${article.url})\n`;
-    articleList += `   来源：${article.source_name}\n\n`;
-  }
-
-  if (articles.length > 20) {
-    articleList += `... 还有 ${articles.length - 20} 篇文章\n`;
-  }
-
-  // 计算长度并截断
-  const encoder = new TextEncoder();
-  const baseMessage = message + processedSummary;
-  const baseBytes = encoder.encode(baseMessage).length;
-  const articleSectionBytes = encoder.encode(articleSection + articleList).length;
-
-  if (baseBytes + articleSectionBytes <= MAX_MESSAGE_LENGTH) {
-    message = baseMessage + articleSection + articleList;
-  } else if (baseBytes <= MAX_SUMMARY_LENGTH) {
-    // 先加上总结，然后用剩余空间放文章列表
-    message = baseMessage;
-    const remainingBytes = MAX_MESSAGE_LENGTH - baseBytes - encoder.encode(articleSection).length;
-    if (remainingBytes > 100) {
-      message += articleSection;
-      message += truncateToBytes(articleList, remainingBytes);
+  if (articles.length > 0) {
+    message += '\n## 📄 文章列表\n';
+    const maxArticles = Math.min(articles.length, 20);
+    for (let i = 0; i < maxArticles; i++) {
+      const article = articles[i];
+      const safeTitle = article.title.replace(/\[/g, '[').replace(/\]/g, ']');
+      message += `${i + 1}. [${safeTitle}](${article.url})\n`;
+      message += `   来源：${article.source_name}\n\n`;
     }
-  } else {
-    // 只放截断的总结
-    const headerBytes = encoder.encode('# 📚 期刊文章每日总结\n\n**日期：** ' + date + '\n\n## 📊 统计\n- 文章总数：' + totalArticles + ' 篇\n\n## 📝 内容摘要\n').length;
-    message = '# 📚 期刊文章每日总结\n\n';
-    message += `**日期：** ${date}\n\n`;
-    message += '## 📊 统计\n';
-    message += `- 文章总数：${totalArticles} 篇\n\n`;
-    message += '## 📝 内容摘要\n';
-    message += truncateToBytes(processedSummary, MAX_MESSAGE_LENGTH - headerBytes);
+
+    if (articles.length > 20) {
+      message += `... 还有 ${articles.length - 20} 篇文章\n`;
+    }
   }
 
   return message;
@@ -247,12 +179,6 @@ export function formatNewArticle(data: NewArticleData): string {
   }
 
   message += `\n🔗 [查看原文](${data.url})`;
-
-  // 确保总长度在限制内
-  const encoder = new TextEncoder();
-  if (encoder.encode(message).length > MAX_MESSAGE_LENGTH) {
-    message = truncateToBytes(message, MAX_MESSAGE_LENGTH);
-  }
 
   return message;
 }
