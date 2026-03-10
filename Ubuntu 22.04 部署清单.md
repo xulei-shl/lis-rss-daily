@@ -488,6 +488,28 @@ sudo netstat -tulpn | grep 8007
 sudo lsof -i :8007
 ```
 
+### tsx 依赖模块路径错误
+
+**症状**：服务启动后立即退出，日志中可能出现 `MODULE_NOT_FOUND` 错误，提示找不到 tsx 模块。
+
+**原因**：tsx 依赖版本不匹配或 pnpm 虚拟存储路径失效。
+
+```bash
+# 查看当前 tsx 版本
+pnpm list tsx
+
+# 重新安装依赖（使用 CI 模式避免交互提示）
+CI=true pnpm install
+
+# 重启服务
+sudo systemctl restart lis-rss
+```
+
+**验证**：
+```bash
+sudo systemctl status lis-rss --no-pager
+```
+
 ---
 
 ## 维护操作
