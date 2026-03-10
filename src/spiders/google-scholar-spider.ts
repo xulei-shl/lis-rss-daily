@@ -2,7 +2,7 @@
  * Google Scholar Spider Adapter
  *
  * 调用项目内的 Google Scholar 爬虫进行学术检索
- * 支持通过环境变量传递代理配置（复用 TELEGRAM_PROXY）
+ * 支持通过 HTTP_PROXY 环境变量传递代理配置
  */
 
 import { spawn } from 'child_process';
@@ -80,8 +80,8 @@ export class GoogleScholarSpider {
       args.push('-n', String(numResults));
     }
 
-    // 代理配置（复用 TELEGRAM_PROXY）
-    const proxy = config.telegramProxy;
+    // 代理配置（复用 HTTP_PROXY）
+    const proxy = config.httpProxy;
 
     return new Promise((resolve, reject) => {
       // 构建环境变量

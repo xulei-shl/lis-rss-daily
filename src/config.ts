@@ -70,7 +70,7 @@ export interface Config {
   defaultTimezone: string;
 
   // Telegram
-  telegramProxy?: string;
+  httpProxy?: string;
 
   // Journal Crawler
   journalCrawlEnabled: boolean;
@@ -156,7 +156,7 @@ function getConfig(): Config {
     defaultTimezone: process.env.DEFAULT_TIMEZONE || 'Asia/Shanghai',
 
     // Telegram
-    telegramProxy: process.env.TELEGRAM_PROXY,
+    httpProxy: process.env.HTTP_PROXY,
 
     // Journal Crawler
     journalCrawlEnabled: process.env.JOURNAL_CRAWL_ENABLED !== 'false',

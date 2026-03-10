@@ -20,16 +20,16 @@ const DEFAULT_TIMEOUT = 30000;
 const MAX_RETRIES = 3;
 
 // Read proxy from environment variable
-const TELEGRAM_PROXY = process.env.TELEGRAM_PROXY || null;
+const HTTP_PROXY = process.env.HTTP_PROXY || null;
 
 // Create proxy agent only for Telegram requests (not global)
-let telegramProxyAgent: ProxyAgent | null = null;
+let httpProxyAgent: ProxyAgent | null = null;
 
-if (TELEGRAM_PROXY) {
-  log.info({ proxy: TELEGRAM_PROXY }, 'Telegram client configured with proxy');
-  telegramProxyAgent = new ProxyAgent(TELEGRAM_PROXY);
+if (HTTP_PROXY) {
+  log.info({ proxy: HTTP_PROXY }, 'Telegram client configured with proxy');
+  httpProxyAgent = new ProxyAgent(HTTP_PROXY);
 } else {
-  log.warn('No Telegram proxy configured (TELEGRAM_PROXY not set)');
+  log.warn('No HTTP proxy configured (HTTP_PROXY not set)');
 }
 
 function sleep(ms: number): Promise<void> {
@@ -76,7 +76,7 @@ export class TelegramClient {
           body,
           signal: this.abortController.signal,
           // Only use proxy for Telegram requests (not global)
-          dispatcher: telegramProxyAgent,
+          dispatcher: httpProxyAgent,
         } as any);
 
         const data = await response.json() as TelegramMessageResponse;

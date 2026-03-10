@@ -9,9 +9,12 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../logger.js';
+import { config } from '../config.js';
 import type { JournalSourceType, SpiderRunParams, SpiderResult, CrawledArticle } from './types.js';
 
 const log = logger.child({ module: 'python-spider-runner' });
+
+const HTTP_PROXY = process.env.HTTP_PROXY || null;
 
 /**
  * Python 爬虫运行器
@@ -64,13 +67,28 @@ export class PythonSpiderRunner {
       const script = scriptMap[spiderType];
       const args = this.buildArgs(spiderType, params);
 
-      log.info({ script, args, cwd: this.scriptsDir }, 'Running Python spider');
+      log.info({ script, args, cwd: this.scriptsDir, proxy: HTTP_PROXY ? 'enabled' : 'disabled' }, 'Running Python spider');
 
       const startTime = Date.now();
+
+      // 构建环境变量，传递代理配置
+      const env = {
+        ...process.env,
+        // 传递 HTTP_PROXY 到 Python 进程
+        ...(HTTP_PROXY && { HTTP_PROXY }),
+        ...(HTTP_PROXY && { HTTPS_PROXY: HTTP_PROXY }),
+        ...(HTTP_PROXY && { http_proxy: HTTP_PROXY }),
+        ...(HTTP_PROXY && { https_proxy: HTTP_PROXY }),
+      };
+
+      if (HTTP_PROXY) {
+        log.info({ proxy: HTTP_PROXY }, 'Passing proxy to Python spider');
+      }
 
       const proc = spawn(this.pythonPath, [script, ...args], {
         cwd: this.scriptsDir,
         stdio: ['pipe', 'pipe', 'pipe'],
+        env,
       });
 
       let stdout = '';

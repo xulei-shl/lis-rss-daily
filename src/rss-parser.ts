@@ -7,13 +7,12 @@
  */
 
 import Parser from 'rss-parser';
-import { ProxyAgent } from 'undici';
 import { logger } from './logger.js';
+import { config } from './config.js';
 
 const log = logger.child({ module: 'rss-parser' });
 
-// Proxy configuration from environment variable
-const PROXY_URL = process.env.HTTP_PROXY || process.env.http_proxy || null;
+const HTTP_PROXY = process.env.HTTP_PROXY || null;
 
 /**
  * RSS feed item structure
@@ -70,39 +69,20 @@ export class RSSParserImpl {
   private parser: Parser;
 
   constructor() {
-    // Configure proxy if available
-    if (PROXY_URL) {
-      log.info({ proxy: PROXY_URL }, 'Configuring RSS parser with proxy');
-      const proxyAgent = new ProxyAgent(PROXY_URL);
-      this.parser = new Parser({
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/rss+xml, application/rdf+xml, application/atom+xml, application/xml, text/xml, */*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Cache-Control': 'no-cache',
-        },
-        customFields: {
-          item: ['author', 'categories'],
-        },
-        requestOptions: {
-          agent: proxyAgent as any,
-        },
-      });
-    } else {
-      this.parser = new Parser({
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/rss+xml, application/rdf+xml, application/atom+xml, application/xml, text/xml, */*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Cache-Control': 'no-cache',
-        },
-        customFields: {
-          item: ['author', 'categories'],
-        },
-      });
-    }
+    // rss-parser uses node-fetch under the hood which doesn't support undici ProxyAgent
+    // Proxy configuration should be handled via environment variables for node-fetch
+    this.parser = new Parser({
+      timeout: 10000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/rdf+xml, application/atom+xml, application/xml, text/xml, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+      },
+      customFields: {
+        item: ['author', 'categories'],
+      },
+    });
   }
 
   /**
@@ -114,7 +94,7 @@ export class RSSParserImpl {
     const startTime = Date.now();
 
     try {
-      log.debug({ url, proxy: PROXY_URL ? 'enabled' : 'disabled' }, 'Parsing RSS feed');
+      log.debug({ url, proxy: HTTP_PROXY ? 'enabled' : 'disabled' }, 'Parsing RSS feed');
 
       const feed = await this.parser.parseURL(url);
       const elapsed = Date.now() - startTime;
