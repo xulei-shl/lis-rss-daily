@@ -173,7 +173,7 @@ function getConfig(): Config {
 
     // Daily Summary Push
     dailySummaryPushEnabled: process.env.DAILY_SUMMARY_PUSH_ENABLED !== 'false',
-    dailySummaryPushSchedule: process.env.DAILY_SUMMARY_PUSH_SCHEDULE || '0 9 * * *',
+    dailySummaryPushSchedule: process.env.DAILY_SUMMARY_PUSH_SCHEDULE || '0 7 * * *',
     dailySummaryPushTypes: (process.env.DAILY_SUMMARY_PUSH_TYPES || 'journal,blog_news').split(','),
   };
 }

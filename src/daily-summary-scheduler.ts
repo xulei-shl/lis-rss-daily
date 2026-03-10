@@ -3,7 +3,7 @@
  *
  * Scheduled daily summary generation and push (WeChat + Telegram).
  * Features:
- * - Configurable schedule (default: 9:00 AM daily)
+ * - Configurable schedule (default: 7:00 AM daily)
  * - Supports multiple summary types (journal, blog_news)
  * - Graceful shutdown
  */
@@ -355,7 +355,7 @@ export class DailySummaryScheduler {
 export function initDailySummaryScheduler(): DailySummaryScheduler {
   const config: DailySummarySchedulerConfig = {
     enabled: process.env.DAILY_SUMMARY_PUSH_ENABLED !== 'false',
-    schedule: process.env.DAILY_SUMMARY_PUSH_SCHEDULE || '0 9 * * *',
+    schedule: process.env.DAILY_SUMMARY_PUSH_SCHEDULE || '0 7 * * *',
     types: (process.env.DAILY_SUMMARY_PUSH_TYPES || 'journal,blog_news').split(','),
     userId: parseInt(process.env.DAILY_SUMMARY_USER_ID || '1', 10),
   };

@@ -133,10 +133,10 @@ export function formatJournalAllSummary(data: JournalAllSummaryData): string {
   const processedSummary = convertToWeChatMarkdown(summary);
   message += processedSummary;
 
-  // 文章列表（最多 20 篇）
+  // 文章列表（最多 50 篇）
   if (articles.length > 0) {
     message += '\n## 📄 文章列表\n';
-    const maxArticles = Math.min(articles.length, 20);
+    const maxArticles = Math.min(articles.length, 50);
     for (let i = 0; i < maxArticles; i++) {
       const article = articles[i];
       const safeTitle = article.title.replace(/\[/g, '[').replace(/\]/g, ']');
@@ -144,8 +144,8 @@ export function formatJournalAllSummary(data: JournalAllSummaryData): string {
       message += `   来源：${article.source_name}\n\n`;
     }
 
-    if (articles.length > 20) {
-      message += `... 还有 ${articles.length - 20} 篇文章\n`;
+    if (articles.length > 50) {
+      message += `... 还有 ${articles.length - 50} 篇文章\n`;
     }
   }
 
