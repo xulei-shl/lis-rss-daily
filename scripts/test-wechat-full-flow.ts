@@ -1,12 +1,13 @@
 #!/usr/bin/env tsx
 /**
- * 企业微信推送完整流程测试脚本
+ * 企业微信 + Telegram 推送完整流程测试脚本
  *
  * 测试内容：
  * 1. 获取当天的全部期刊文章列表
  * 2. 调用 LLM 生成总结
  * 3. 写入数据库 (daily_summaries 表)
  * 4. 推送到企业微信
+ * 5. 推送到 Telegram
  *
  * 使用方式:
  *   tsx scripts/test-wechat-full-flow.ts --user-id 1 [--date 2026-03-09] [--skip-push] [--skip-llm]
@@ -14,7 +15,7 @@
  * 参数说明:
  *   --user-id, -u    用户 ID (必需)
  *   --date, -d       日期 (YYYY-MM-DD 格式，默认今天)
- *   --skip-push      跳过微信推送（只生成总结和写入数据库）
+ *   --skip-push      跳过所有推送（只生成总结和写入数据库）
  *   --skip-llm       跳过 LLM 生成（只用模拟总结，不消耗 token）
  *   --help, -h       显示帮助信息
  */
@@ -32,7 +33,9 @@ import {
 } from '../src/api/daily-summary.js';
 import { getUserLocalDate } from '../src/api/timezone.js';
 import { getWeChatNotifier } from '../src/wechat/index.js';
+import { getTelegramNotifier } from '../src/telegram/index.js';
 import { getWebhooksForPushType } from '../src/config/wechat-config.js';
+import { getJournalAllChats } from '../src/api/telegram-chats.js';
 import { logger } from '../src/logger.js';
 
 const log = logger.child({ module: 'test-wechat-full-flow' });
@@ -51,13 +54,14 @@ const COLORS = {
 
 function printHelp() {
   console.log(`
-${COLORS.bold}企业微信推送完整流程测试脚本${COLORS.reset}
+${COLORS.bold}企业微信 + Telegram 推送完整流程测试脚本${COLORS.reset}
 
 测试内容：
   1. 获取当天的全部期刊文章列表
   2. 调用 LLM 生成总结
   3. 写入数据库 (daily_summaries 表)
   4. 推送到企业微信
+  5. 推送到 Telegram
 
 ${COLORS.bold}使用方式:${COLORS.reset}
   tsx scripts/test-wechat-full-flow.ts --user-id 1 [选项]
@@ -67,7 +71,7 @@ ${COLORS.bold}必需参数:${COLORS.reset}
 
 ${COLORS.bold}可选参数:${COLORS.reset}
   --date, -d       日期 (YYYY-MM-DD 格式，默认今天)
-  --skip-push      跳过微信推送（只生成总结和写入数据库）
+  --skip-push      跳过所有推送（只生成总结和写入数据库）
   --skip-llm       跳过 LLM 生成（只用模拟总结，不消耗 token）
   --help, -h       显示此帮助信息
 
@@ -259,6 +263,43 @@ async function step4PushToWeChat(
   if (success) {
     console.log(`${COLORS.green}✓ 推送成功${COLORS.reset}`);
   } else {
+    console.log(`${COLORS.red}✗ 推送送失败，请查看日志${COLORS.reset}`);
+  }
+}
+
+async function step5PushToTelegram(
+  userId: number,
+  summaryResult: Awaited<ReturnType<typeof step2GenerateSummary>>
+) {
+  console.log(`\n${COLORS.cyan}${COLORS.bold}═══ 步骤 5: 推送 Telegram ═══${COLORS.reset}`);
+
+  // 检查配置的 chats
+  const chats = await getJournalAllChats(userId);
+  console.log(`${COLORS.blue}配置的 chat 数量:${COLORS.reset} ${chats.length}`);
+
+  if (chats.length === 0) {
+    console.log(`${COLORS.yellow}没有配置启用了"全部期刊总结"的 chat，跳过推送${COLORS.reset}`);
+    return;
+  }
+
+  chats.forEach((chat) => {
+    console.log(`  - ${chat.chatName} (${chat.chatId})`);
+  });
+
+  console.log(`\n${COLORS.blue}发送推送...${COLORS.reset}`);
+
+  const notifier = getTelegramNotifier();
+  const success = await notifier.sendJournalAllSummary(userId, {
+    date: summaryResult.date,
+    type: 'journal_all',
+    totalArticles: summaryResult.totalArticles,
+    summary: summaryResult.summary,
+    articlesByType: summaryResult.articlesByType,
+  });
+
+  if (success) {
+    console.log(`${COLORS.green}✓ 推送成功${COLORS.reset}`);
+  } else {
     console.log(`${COLORS.red}✗ 推送失败，请查看日志${COLORS.reset}`);
   }
 }
@@ -266,7 +307,7 @@ async function step4PushToWeChat(
 async function main() {
   console.log(`${COLORS.magenta}${COLORS.bold}
 ╔══════════════════════════════════════════════════════════════╗
-║           企业微信推送 - 完整流程测试                          ║
+║        企业微信 + Telegram 推送 - 完整流程测试               ║
 ╚══════════════════════════════════════════════════════════════╝
 ${COLORS.reset}`);
 
@@ -296,11 +337,12 @@ ${COLORS.reset}`);
     // 步骤 3: 写入数据库
     await step3SaveToDatabase(args.userId, summaryResult);
 
-    // 步骤 4: 推送微信
+    // 步骤 4-5: 推送
     if (!args.skipPush) {
       await step4PushToWeChat(args.userId, summaryResult, articles);
+      await step5PushToTelegram(args.userId, summaryResult);
     } else {
-      console.log(`\n${COLORS.yellow}跳过微信推送${COLORS.reset}`);
+      console.log(`\n${COLORS.yellow}跳过推送${COLORS.reset}`);
     }
 
     console.log(`\n${COLORS.green}${COLORS.bold}✓ 测试完成!${COLORS.reset}`);
