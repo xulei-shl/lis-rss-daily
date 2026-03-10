@@ -14,6 +14,7 @@ import { getUserSettings } from '../api/settings.js';
 import type { ArticleWithSource } from '../api/articles.js';
 import {
   getDailySummaryChats,
+  getJournalAllChats,
   getNewArticlesChats,
   getActiveTelegramChats,
   hasTelegramChats,
@@ -118,6 +119,72 @@ class TelegramNotifier {
           chatId: chat.chatId,
           error: error instanceof Error ? error.message : String(error),
         }, 'Failed to send daily summary to Telegram');
+      }
+    }
+
+    return successCount > 0;
+  }
+
+  /**
+   * Send journal all summary notification to all configured chats
+   */
+  async sendJournalAllSummary(userId: number, data: DailySummaryData): Promise<boolean> {
+    const config = await loadTelegramConfig(userId);
+
+    if (!config) {
+      log.debug({ userId }, 'Telegram not configured, skipping journal all summary');
+      return false;
+    }
+
+    // Get all chats that should receive journal all summary
+    const chats = await getJournalAllChats(userId);
+
+    if (chats.length === 0) {
+      log.debug({ userId }, 'No chats configured for journal all summary');
+      return false;
+    }
+
+    const client = new TelegramClient(config.botToken);
+    const message = formatDailySummary({
+      date: data.date,
+      type: 'journal_all',
+      totalArticles: data.totalArticles,
+      summary: data.summary,
+      articlesByType: data.articlesByType,
+    });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const chat of chats) {
+      try {
+        const result = await client.sendMessage(chat.chatId, message, 'HTML');
+
+        if (result.ok) {
+          successCount++;
+          log.info({
+            userId,
+            chatId: chat.chatId,
+            chatName: chat.chatName,
+            date: data.date,
+            articleCount: data.totalArticles,
+            messageId: result.result?.message_id,
+          }, 'Journal all summary sent to Telegram');
+        } else {
+          failCount++;
+          log.warn({
+            userId,
+            chatId: chat.chatId,
+            error: result.description,
+          }, 'Failed to send journal all summary to Telegram');
+        }
+      } catch (error) {
+        failCount++;
+        log.error({
+          userId,
+          chatId: chat.chatId,
+          error: error instanceof Error ? error.message : String(error),
+        }, 'Failed to send journal all summary to Telegram');
       }
     }
 

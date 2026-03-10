@@ -12,7 +12,7 @@ export interface TelegramConfig {
 
 export interface DailySummaryData {
   date: string;
-  type: 'journal' | 'blog_news' | 'all';
+  type: 'journal' | 'blog_news' | 'all' | 'journal_all' | 'search';
   totalArticles: number;
   summary: string;
   articlesByType: {

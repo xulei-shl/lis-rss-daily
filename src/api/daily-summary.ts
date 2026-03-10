@@ -794,5 +794,20 @@ ${articlesText}
     log.warn({ error: err }, 'Failed to send journal all summary to WeChat');
   });
 
+  // 推送到 Telegram（异步，不阻塞主流程）
+  getTelegramNotifier().sendJournalAllSummary(userId, {
+    date: result.date,
+    type: result.type,
+    totalArticles: result.totalArticles,
+    summary: result.summary,
+    articlesByType: {
+      journal: result.articlesByType.journal.length,
+      blog: 0,
+      news: 0,
+    },
+  }).catch(err => {
+    log.warn({ error: err }, 'Failed to send journal all summary to Telegram');
+  });
+
   return result;
 }

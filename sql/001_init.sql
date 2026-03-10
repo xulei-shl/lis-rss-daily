@@ -437,8 +437,9 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
   chat_id TEXT NOT NULL,
   chat_name TEXT,                    -- 显示名称
   role TEXT DEFAULT 'viewer' CHECK(role IN ('admin', 'viewer')),
-  daily_summary INTEGER DEFAULT 1,
-  new_articles INTEGER DEFAULT 1,
+  daily_summary INTEGER DEFAULT 1,     -- 接收每日总结（通过的期刊 + 资讯）
+  journal_all INTEGER DEFAULT 0,        -- 接收全部期刊总结（包含未通过）
+  new_articles INTEGER DEFAULT 1,        -- 接收新增文章
   is_active INTEGER DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,

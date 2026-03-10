@@ -15,8 +15,8 @@ const MAX_SUMMARY_LENGTH = 3500; // Leave room for header and footer
 export function formatDailySummary(data: DailySummaryData): string {
   const { date, type, totalArticles, summary, articlesByType } = data;
 
-  // Header
-  let message = '📅 每日文献总结\n';
+  // Header - change for journal_all type
+  let message = type === 'journal_all' ? '📅 全部期刊总结\n' : '📅 每日文献总结\n';
   message += `🗓 ${date}\n\n`;
 
   // Type label
@@ -24,6 +24,7 @@ export function formatDailySummary(data: DailySummaryData): string {
     journal: '期刊精选',
     blog_news: '博客资讯',
     all: '综合总结',
+    journal_all: '全部期刊（含未通过）',
   };
   message += `📋 <b>类型：</b>${typeLabels[type] || type}\n\n`;
 

@@ -593,6 +593,20 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
         continue;
       }
 
+      // ============================================================
+      // 026: 添加 journal_all 字段到 telegram_chats 表
+      // ============================================================
+      if (file === '026_telegram_journal_all.sql') {
+        const hasJournalAll = hasColumn(db, 'telegram_chats', 'journal_all');
+        if (!hasJournalAll) {
+          db.exec('ALTER TABLE telegram_chats ADD COLUMN journal_all INTEGER DEFAULT 0;');
+          console.log('      → Added journal_all column to telegram_chats table');
+        } else {
+          console.log('      → Skipped (journal_all column already exists)');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

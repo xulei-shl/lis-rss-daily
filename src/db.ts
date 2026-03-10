@@ -295,6 +295,7 @@ export interface TelegramChatsTable {
   chat_name: string | null;
   role: 'admin' | 'viewer';
   daily_summary: number;
+  journal_all: number;  // 接收全部期刊总结（包含未通过）
   new_articles: number;
   is_active: number;
   created_at: Generated<string>;

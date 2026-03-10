@@ -37,7 +37,7 @@ router.get('/telegram-chats', requireAuth, async (req: AuthRequest, res) => {
  */
 router.post('/telegram-chats', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const { chatId, chatName, role, dailySummary, newArticles, isActive } = req.body || {};
+    const { chatId, chatName, role, dailySummary, journalAll, newArticles, isActive } = req.body || {};
 
     // Validate chatId
     if (!chatId || typeof chatId !== 'string') {
@@ -64,6 +64,7 @@ router.post('/telegram-chats', requireAuth, requireAdmin, async (req: AuthReques
       chatName,
       role: role as TelegramChatRole | undefined,
       dailySummary,
+      journalAll,
       newArticles,
       isActive,
     };
@@ -91,7 +92,7 @@ router.put('/telegram-chats/:id', requireAuth, requireAdmin, async (req: AuthReq
       return res.status(400).json({ error: '无效的 ID' });
     }
 
-    const { chatName, role, dailySummary, newArticles, isActive } = req.body || {};
+    const { chatName, role, dailySummary, journalAll, newArticles, isActive } = req.body || {};
 
     // Validate role
     if (role !== undefined && !['admin', 'viewer'].includes(role)) {
@@ -102,6 +103,7 @@ router.put('/telegram-chats/:id', requireAuth, requireAdmin, async (req: AuthReq
       chatName,
       role: role as TelegramChatRole | undefined,
       dailySummary,
+      journalAll,
       newArticles,
       isActive,
     };
