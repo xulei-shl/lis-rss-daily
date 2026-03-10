@@ -1797,12 +1797,17 @@ function renderTelegramChats() {
     // Build tags
     const tags = [];
     if (chat.dailySummary) {
-      tags.push('<span class="telegram-chat-tag">每日总结</span>');
+      tags.push('<span class="telegram-chat-tag daily-summary">每日总结</span>');
     } else {
       tags.push('<span class="telegram-chat-tag disabled">每日总结</span>');
     }
+    if (chat.journalAll) {
+      tags.push('<span class="telegram-chat-tag journal-all">全部期刊</span>');
+    } else {
+      tags.push('<span class="telegram-chat-tag disabled">全部期刊</span>');
+    }
     if (chat.newArticles) {
-      tags.push('<span class="telegram-chat-tag">新增文章</span>');
+      tags.push('<span class="telegram-chat-tag new-articles">新增文章</span>');
     } else {
       tags.push('<span class="telegram-chat-tag disabled">新增文章</span>');
     }
@@ -1948,6 +1953,7 @@ function openTelegramChatModal(chat = null) {
     document.getElementById('telegramChatName').value = chat.chatName || '';
     document.getElementById('telegramChatRole').value = chat.role;
     document.getElementById('telegramChatDailySummary').checked = chat.dailySummary;
+    document.getElementById('telegramChatJournalAll').checked = chat.journalAll;
     document.getElementById('telegramChatNewArticles').checked = chat.newArticles;
     document.getElementById('telegramChatIsActive').checked = chat.isActive;
     // Disable chat ID input in edit mode
@@ -2013,6 +2019,7 @@ async function saveTelegramChat(e) {
   const chatName = document.getElementById('telegramChatName').value.trim();
   const role = document.getElementById('telegramChatRole').value;
   const dailySummary = document.getElementById('telegramChatDailySummary').checked;
+  const journalAll = document.getElementById('telegramChatJournalAll').checked;
   const newArticles = document.getElementById('telegramChatNewArticles').checked;
   const isActive = document.getElementById('telegramChatIsActive').checked;
 
@@ -2026,6 +2033,7 @@ async function saveTelegramChat(e) {
     chatName: chatName || null,
     role,
     dailySummary,
+    journalAll,
     newArticles,
     isActive,
   };
