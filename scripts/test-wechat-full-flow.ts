@@ -30,6 +30,7 @@ import {
   getDailySummaryByDate,
   saveDailySummary,
   type DailySummaryArticle,
+  type DailySummaryResult,
 } from '../src/api/daily-summary.js';
 import { getUserLocalDate } from '../src/api/timezone.js';
 import { getWeChatNotifier } from '../src/wechat/index.js';
@@ -152,13 +153,41 @@ async function step1GetArticles(userId: number, date: string): Promise<DailySumm
   return articles;
 }
 
+interface GenerateSummaryResult {
+  summaryResult: DailySummaryResult;
+  fromCache: boolean;
+}
+
 async function step2GenerateSummary(
   userId: number,
   date: string,
   articles: DailySummaryArticle[],
   skipLlm: boolean
-) {
+): Promise<GenerateSummaryResult> {
   console.log(`\n${COLORS.cyan}${COLORS.bold}═══ 步骤 2: 生成总结 ═══${COLORS.reset}`);
+
+  // 先检查数据库中是否已存在
+  const existing = await getDailySummaryByDate(userId, date, 'journal_all');
+  if (existing) {
+    console.log(`${COLORS.green}✓ 数据库中已存在该日期的总结，直接使用${COLORS.reset}`);
+    console.log(`${COLORS.blue}创建时间:${COLORS.reset} ${new Date(existing.created_at).toLocaleString('zh-CN')}`);
+    console.log(`\n${COLORS.bold}总结预览:${COLORS.reset}`);
+    console.log('─'.repeat(60));
+    console.log(existing.summary_content.substring(0, 500) + (existing.summary_content.length > 500 ? '...' : ''));
+    console.log('─'.repeat(60));
+
+    return {
+      summaryResult: {
+        date,
+        type: 'journal_all',
+        totalArticles: existing.article_count,
+        articlesByType: existing.articles_data as DailySummaryResult['articlesByType'],
+        summary: existing.summary_content,
+        generatedAt: existing.created_at,
+      },
+      fromCache: true,
+    };
+  }
 
   if (skipLlm) {
     console.log(`${COLORS.yellow}跳过 LLM 生成，使用模拟总结${COLORS.reset}`);
@@ -175,16 +204,19 @@ async function step2GenerateSummary(
 *由测试脚本生成于 ${new Date().toLocaleString('zh-CN')}*`;
 
     return {
-      date,
-      type: 'journal_all' as const,
-      totalArticles: articles.length,
-      articlesByType: {
-        journal: articles,
-        blog: [],
-        news: [],
+      summaryResult: {
+        date,
+        type: 'journal_all',
+        totalArticles: articles.length,
+        articlesByType: {
+          journal: articles,
+          blog: [],
+          news: [],
+        },
+        summary: mockSummary,
+        generatedAt: new Date().toISOString(),
       },
-      summary: mockSummary,
-      generatedAt: new Date().toISOString(),
+      fromCache: false,
     };
   }
 
@@ -197,14 +229,24 @@ async function step2GenerateSummary(
   console.log(result.summary.substring(0, 500) + (result.summary.length > 500 ? '...' : ''));
   console.log('─'.repeat(60));
 
-  return result;
+  return {
+    summaryResult: result,
+    fromCache: false,
+  };
 }
 
 async function step3SaveToDatabase(
   userId: number,
-  summaryResult: Awaited<ReturnType<typeof step2GenerateSummary>>
+  summaryResult: DailySummaryResult,
+  fromCache: boolean
 ) {
   console.log(`\n${COLORS.cyan}${COLORS.bold}═══ 步骤 3: 写入数据库 ═══${COLORS.reset}`);
+
+  // 如果是从缓存加载的，跳过保存
+  if (fromCache) {
+    console.log(`${COLORS.yellow}总结从数据库缓存加载，跳过保存${COLORS.reset}`);
+    return;
+  }
 
   // 检查是否已存在
   const existing = await getDailySummaryByDate(userId, summaryResult.date, 'journal_all');
@@ -232,7 +274,7 @@ async function step3SaveToDatabase(
 
 async function step4PushToWeChat(
   userId: number,
-  summaryResult: Awaited<ReturnType<typeof step2GenerateSummary>>,
+  summaryResult: DailySummaryResult,
   articles: DailySummaryArticle[]
 ) {
   console.log(`\n${COLORS.cyan}${COLORS.bold}═══ 步骤 4: 推送企业微信 ═══${COLORS.reset}`);
@@ -269,7 +311,7 @@ async function step4PushToWeChat(
 
 async function step5PushToTelegram(
   userId: number,
-  summaryResult: Awaited<ReturnType<typeof step2GenerateSummary>>
+  summaryResult: DailySummaryResult
 ) {
   console.log(`\n${COLORS.cyan}${COLORS.bold}═══ 步骤 5: 推送 Telegram ═══${COLORS.reset}`);
 
@@ -332,10 +374,10 @@ ${COLORS.reset}`);
     }
 
     // 步骤 2: 生成总结
-    const summaryResult = await step2GenerateSummary(args.userId, date, articles, args.skipLlm);
+    const { summaryResult, fromCache } = await step2GenerateSummary(args.userId, date, articles, args.skipLlm);
 
     // 步骤 3: 写入数据库
-    await step3SaveToDatabase(args.userId, summaryResult);
+    await step3SaveToDatabase(args.userId, summaryResult, fromCache);
 
     // 步骤 4-5: 推送
     if (!args.skipPush) {

@@ -105,23 +105,34 @@ function splitMessage(content: string, maxBytes: number): string[] {
   const chunks: string[] = [];
   let remaining = content;
 
-  while (remaining.length > 0) {
+  // 防止无限循环的计数器
+  let loopCount = 0;
+  const MAX_LOOPS = content.length; // 最多循环字符数次
+
+  while (remaining.length > 0 && loopCount < MAX_LOOPS) {
+    loopCount++;
+
     const { truncated, remaining: newRemaining } = smartTruncate(remaining, maxBytes);
+
+    // 只有当截断部分包含实际内容时才添加到块中
     if (truncated.trim().length > 0) {
       chunks.push(truncated);
     }
-    remaining = newRemaining;
 
-    // 防止无限循环
-    if (remaining === content) {
-      // 如果无法智能截断，就硬截断
+    // 如果截断后剩余部分和原来一样，说明无法截断，需要强制截断
+    if (newRemaining === remaining) {
       const encoder = new TextEncoder();
       let len = 1;
-      while (len < content.length && encoder.encode(content.substring(0, len + 1)).length <= maxBytes) {
+      while (len < remaining.length && encoder.encode(remaining.substring(0, len + 1)).length <= maxBytes) {
         len++;
       }
-      chunks.push(content.substring(0, len));
-      remaining = content.substring(len);
+      const forceChunk = remaining.substring(0, len);
+      if (forceChunk.trim().length > 0) {
+        chunks.push(forceChunk);
+      }
+      remaining = remaining.substring(len);
+    } else {
+      remaining = newRemaining;
     }
   }
 
@@ -235,28 +246,48 @@ export class WeChatClient {
 
     log.info({ byteLength, maxLength: MAX_MESSAGE_LENGTH }, 'Message too long, splitting into chunks');
 
-    // 拆分为多条消息
-    const chunks = splitMessage(content, MAX_MESSAGE_LENGTH);
-    log.info({ chunkCount: chunks.length }, 'Split message into chunks');
+    // 预留标记空间：**[X/Y]**\n\n 最多约 15 字节（考虑数字）
+    // 先按预留空间拆分
+    const reservedSpace = 20;
+    const initialChunks = splitMessage(content, MAX_MESSAGE_LENGTH - reservedSpace);
+    log.info({ chunkCount: initialChunks.length }, 'Split message into chunks');
 
     let allSuccess = true;
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
+    for (let i = 0; i < initialChunks.length; i++) {
+      let chunk = initialChunks[i];
+
       // 添加序号标记
-      const markedChunk = chunks.length > 1
-        ? `**[${i + 1}/${chunks.length}]**\n\n${chunk}`
+      const marker = `**[${i + 1}/${initialChunks.length}]**\n\n`;
+      const markedChunk = initialChunks.length > 1
+        ? marker + chunk
         : chunk;
 
-      log.debug({ chunkIndex: i + 1, totalChunks: chunks.length }, 'Sending message chunk');
-
-      const success = await this.sendSingleMarkdown(markedChunk);
-      if (!success) {
-        allSuccess = false;
-        log.error({ chunkIndex: i + 1 }, 'Failed to send message chunk');
+      // 再次检查：如果添加标记后仍然超长，需要进一步截断
+      if (getByteLength(markedChunk) > MAX_MESSAGE_LENGTH) {
+        log.warn(
+          { chunkIndex: i + 1, byteLength: getByteLength(markedChunk) },
+          'Chunk still too long after adding marker, truncating further'
+        );
+        // 计算可以保留的长度
+        const markerBytes = getByteLength(marker);
+        const maxContentBytes = MAX_MESSAGE_LENGTH - markerBytes;
+        const { truncated } = smartTruncate(chunk, maxContentBytes);
+        const finalChunk = marker + truncated;
+        const success = await this.sendSingleMarkdown(finalChunk);
+        if (!success) {
+          allSuccess = false;
+          log.error({ chunkIndex: i + 1 }, 'Failed to send message chunk');
+        }
+      } else {
+        const success = await this.sendSingleMarkdown(markedChunk);
+        if (!success) {
+          allSuccess = false;
+          log.error({ chunkIndex: i + 1 }, 'Failed to send message chunk');
+        }
       }
 
       // 多条消息之间添加短暂延迟，避免触发频率限制
-      if (i < chunks.length - 1) {
+      if (i < initialChunks.length - 1) {
         await sleep(300);
       }
     }
