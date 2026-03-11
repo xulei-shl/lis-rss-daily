@@ -177,6 +177,31 @@ export function requireWriteAccess(req: AuthRequest, res: Response, next: NextFu
 }
 
 /**
+ * Require search summary access middleware
+ * Allows guest access if config permits, otherwise requires admin
+ */
+export function requireSearchSummaryAccess(req: AuthRequest, res: Response, next: NextFunction): void {
+  // If config allows guest access, skip permission check
+  if (config.searchAiSummaryGuestEnabled) {
+    return next();
+  }
+
+  // Otherwise, require admin access
+  if (!hasRole(req.user?.role, 'admin')) {
+    if (req.path.startsWith('/api/')) {
+      res.status(403).json({ error: '权限不足，需要管理员权限' });
+      return;
+    }
+    res.status(403).render('error', {
+      pageTitle: '权限不足',
+      error: '您没有权限访问此页面',
+    });
+    return;
+  }
+  next();
+}
+
+/**
  * Login result type
  */
 export interface LoginResult {

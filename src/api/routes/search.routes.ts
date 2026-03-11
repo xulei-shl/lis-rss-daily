@@ -1,6 +1,6 @@
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth, requireWriteAccess } from '../../middleware/auth.js';
+import { requireAuth, requireWriteAccess, requireSearchSummaryAccess } from '../../middleware/auth.js';
 import { logger } from '../../logger.js';
 import { search, SearchMode } from '../../vector/search.js';
 import { generateSearchSummary } from '../daily-summary.js';
@@ -75,9 +75,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
 /**
  * POST /api/search/summary
  * Generate AI summary from selected articles
- * Requires admin access (write permission)
+ * Requires admin access (or guest access if configured)
  */
-router.post('/summary', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
+router.post('/summary', requireAuth, requireSearchSummaryAccess, async (req: AuthRequest, res) => {
   try {
     const { articleIds } = req.body;
 

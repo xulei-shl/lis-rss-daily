@@ -110,6 +110,7 @@
     }
 
     const isAdmin = window.userRole !== 'guest';
+    const hasSummaryAccess = isAdmin || window.guestSummaryEnabled;
     const MAX_SELECTION = 50;
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -151,8 +152,8 @@
         performSearch();
       }
 
-      // Setup selection controls (admin only)
-      if (isAdmin) {
+      // Setup selection controls (admin or guest with permission)
+      if (hasSummaryAccess) {
         setupSelectionControls();
       }
     });
@@ -206,7 +207,7 @@
     function updateSelectionUI() {
       const count = selectedArticles.size;
       document.getElementById('selectedCount').textContent = count;
-      document.getElementById('resultsActions').style.display = (count > 0 && isAdmin) ? 'flex' : 'none';
+      document.getElementById('resultsActions').style.display = (count > 0 && hasSummaryAccess) ? 'flex' : 'none';
 
       // Sync select all checkbox state
       const checkboxes = document.querySelectorAll('.article-checkbox');
@@ -481,7 +482,7 @@ function showResults(data) {
   ).join('');
 
   // Restore selection UI state after rendering
-  if (isAdmin) {
+  if (hasSummaryAccess) {
     updateSelectionUI();
   }
 
@@ -530,9 +531,9 @@ function renderSearchResult(result, index) {
     sourceName = result.rss_source_name || 'Unknown';
   }
 
-  // Checkbox state (admin only)
+  // Checkbox state (admin or guest with permission)
   const checked = selectedArticles.has(result.id) ? 'checked' : '';
-  const checkboxHtml = isAdmin ? \`
+  const checkboxHtml = hasSummaryAccess ? \`
     <label class="checkbox-label">
       <input type="checkbox" class="article-checkbox" data-id="\${result.id}" \${checked} onchange="updateSelection()">
     </label>

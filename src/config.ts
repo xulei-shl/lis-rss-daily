@@ -50,6 +50,9 @@ export interface Config {
   dailySummarySchedule: string;
   dailySummaryTypes: string[];
 
+  // Search AI Summary
+  searchAiSummaryGuestEnabled: boolean;
+
   // Logging
   logLevel: string;
   logFile?: string;
@@ -175,6 +178,9 @@ function getConfig(): Config {
     dailySummaryEnabled: process.env.DAILY_SUMMARY_ENABLED !== 'false',
     dailySummarySchedule: process.env.DAILY_SUMMARY_SCHEDULE || '0 7 * * *',
     dailySummaryTypes: (process.env.DAILY_SUMMARY_TYPES || 'journal,blog_news,journal_all').split(','),
+
+    // Search AI Summary
+    searchAiSummaryGuestEnabled: process.env.SEARCH_AI_SUMMARY_GUEST_ENABLED === 'true',
   };
 }
 
