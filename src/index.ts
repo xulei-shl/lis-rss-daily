@@ -39,8 +39,8 @@ async function main() {
     rssFetchSchedule: config.rssFetchSchedule,
     relatedRefreshEnabled: config.relatedRefreshEnabled,
     relatedRefreshSchedule: config.relatedRefreshSchedule,
-    dailySummaryPushEnabled: config.dailySummaryPushEnabled,
-    dailySummaryPushSchedule: config.dailySummaryPushSchedule,
+    dailySummaryEnabled: config.dailySummaryEnabled,
+    dailySummarySchedule: config.dailySummarySchedule,
   }, 'Configuration loaded');
 
   // Initialize database
@@ -108,13 +108,13 @@ async function main() {
     log.info('🔑 Keyword scheduler disabled');
   }
 
-  // Initialize and start Daily Summary Push scheduler
+  // Initialize and start Daily Summary scheduler
   const dailySummaryScheduler = initDailySummaryScheduler();
-  if (config.dailySummaryPushEnabled) {
+  if (config.dailySummaryEnabled) {
     dailySummaryScheduler.start();
-    log.info(`📨 Daily summary push scheduler started (schedule: ${config.dailySummaryPushSchedule}, types: ${config.dailySummaryPushTypes.join(',')})`);
+    log.info(`📨 Daily summary scheduler started (schedule: ${config.dailySummarySchedule}, types: ${config.dailySummaryTypes.join(',')})`);
   } else {
-    log.info('📨 Daily summary push scheduler disabled');
+    log.info('📨 Daily summary scheduler disabled');
   }
 
   // Initialize and start Telegram Bot

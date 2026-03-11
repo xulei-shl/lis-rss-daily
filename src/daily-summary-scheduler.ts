@@ -188,15 +188,22 @@ export class DailySummaryScheduler {
     try {
       const results: Array<{ type: string; success: boolean; articleCount?: number; error?: string }> = [];
 
-      // 1. 生成普通总结 (journal, blog_news) - 推送到 Telegram 和配置了 daily_summary 的 WeChat
+      // 生成各类总结
       for (const type of this.config.types) {
         try {
           runLog.info({ type }, 'Generating daily summary');
 
-          const result = await generateDailySummary({
-            userId: this.config.userId,
-            type: type as any,
-          });
+          let result;
+          if (type === 'journal_all') {
+            result = await generateJournalAllSummary({
+              userId: this.config.userId,
+            });
+          } else {
+            result = await generateDailySummary({
+              userId: this.config.userId,
+              type: type as any,
+            });
+          }
 
           results.push({
             type,
@@ -221,38 +228,6 @@ export class DailySummaryScheduler {
             'Failed to generate/push daily summary'
           );
         }
-      }
-
-      // 2. 生成全部期刊总结 (journal_all) - 推送到配置了 journal_all 的 WeChat
-      try {
-        runLog.info({ type: 'journal_all' }, 'Generating journal all summary');
-
-        const result = await generateJournalAllSummary({
-          userId: this.config.userId,
-        });
-
-        results.push({
-          type: 'journal_all',
-          success: true,
-          articleCount: result.totalArticles,
-        });
-
-        runLog.info(
-          { type: 'journal_all', articleCount: result.totalArticles },
-          'Journal all summary generated and pushed successfully'
-        );
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        results.push({
-          type: 'journal_all',
-          success: false,
-          error: errorMessage,
-        });
-
-        runLog.error(
-          { type: 'journal_all', error: errorMessage },
-          'Failed to generate/push journal all summary'
-        );
       }
 
       const allSuccess = results.every(r => r.success);
@@ -306,15 +281,21 @@ export class DailySummaryScheduler {
 
     const typesToRun = types || this.config.types;
 
-    // 生成普通总结
     for (const type of typesToRun) {
       try {
         log.info({ type }, 'Generating daily summary (manual)');
 
-        const result = await generateDailySummary({
-          userId: this.config.userId,
-          type: type as any,
-        });
+        let result;
+        if (type === 'journal_all') {
+          result = await generateJournalAllSummary({
+            userId: this.config.userId,
+          });
+        } else {
+          result = await generateDailySummary({
+            userId: this.config.userId,
+            type: type as any,
+          });
+        }
 
         log.info(
           { type, articleCount: result.totalArticles },
@@ -327,25 +308,6 @@ export class DailySummaryScheduler {
         );
       }
     }
-
-    // 生成全部期刊总结
-    try {
-      log.info({ type: 'journal_all' }, 'Generating journal all summary (manual)');
-
-      const result = await generateJournalAllSummary({
-        userId: this.config.userId,
-      });
-
-      log.info(
-        { type: 'journal_all', articleCount: result.totalArticles },
-        'Journal all summary generated and pushed successfully (manual)'
-      );
-    } catch (error) {
-      log.error(
-        { type: 'journal_all', error },
-        'Failed to generate/push journal all summary (manual)'
-      );
-    }
   }
 }
 
@@ -354,9 +316,9 @@ export class DailySummaryScheduler {
  */
 export function initDailySummaryScheduler(): DailySummaryScheduler {
   const config: DailySummarySchedulerConfig = {
-    enabled: process.env.DAILY_SUMMARY_PUSH_ENABLED !== 'false',
-    schedule: process.env.DAILY_SUMMARY_PUSH_SCHEDULE || '0 7 * * *',
-    types: (process.env.DAILY_SUMMARY_PUSH_TYPES || 'journal,blog_news').split(','),
+    enabled: process.env.DAILY_SUMMARY_ENABLED !== 'false',
+    schedule: process.env.DAILY_SUMMARY_SCHEDULE || '0 7 * * *',
+    types: (process.env.DAILY_SUMMARY_TYPES || 'journal,blog_news,journal_all').split(','),
     userId: parseInt(process.env.DAILY_SUMMARY_USER_ID || '1', 10),
   };
 
