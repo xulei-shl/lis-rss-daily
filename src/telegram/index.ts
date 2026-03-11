@@ -64,10 +64,39 @@ async function loadTelegramConfig(userId: number): Promise<TelegramConfig | null
  * Singleton class for sending Telegram notifications.
  */
 class TelegramNotifier {
+  private sentCache = new Map<string, number>();
+  private readonly CACHE_TTL = 60000;
+
+  private getCacheKey(userId: number, type: string, date: string): string {
+    return `${userId}:${type}:${date}`;
+  }
+
+  private checkAndSetCache(key: string): boolean {
+    const now = Date.now();
+    const lastSent = this.sentCache.get(key);
+    if (lastSent && now - lastSent < this.CACHE_TTL) {
+      return true;
+    }
+    this.sentCache.set(key, now);
+    if (this.sentCache.size > 100) {
+      const oldestKey = this.sentCache.keys().next().value;
+      if (oldestKey) {
+        this.sentCache.delete(oldestKey);
+      }
+    }
+    return false;
+  }
+
   /**
    * Send daily summary notification to all configured chats
    */
   async sendDailySummary(userId: number, data: DailySummaryData): Promise<boolean> {
+    const cacheKey = this.getCacheKey(userId, data.type, data.date);
+    if (this.checkAndSetCache(cacheKey)) {
+      log.info({ userId, type: data.type, date: data.date }, '[DEBUG] Skipping duplicate sendDailySummary');
+      return false;
+    }
+
     const config = await loadTelegramConfig(userId);
 
     if (!config) {
@@ -129,6 +158,12 @@ class TelegramNotifier {
    * Send journal all summary notification to all configured chats
    */
   async sendJournalAllSummary(userId: number, data: DailySummaryData): Promise<boolean> {
+    const cacheKey = this.getCacheKey(userId, 'journal_all', data.date);
+    if (this.checkAndSetCache(cacheKey)) {
+      log.info({ userId, date: data.date }, 'Skipping duplicate sendJournalAllSummary');
+      return false;
+    }
+
     const config = await loadTelegramConfig(userId);
 
     if (!config) {
