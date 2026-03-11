@@ -773,7 +773,7 @@ export class RSSScheduler {
 export function initRSSScheduler(): RSSScheduler {
   const config: SchedulerConfig = {
     enabled: process.env.RSS_FETCH_ENABLED !== 'false',
-    schedule: process.env.RSS_FETCH_SCHEDULE || '0 9 * * *',
+    schedule: process.env.RSS_FETCH_SCHEDULE || '0 2 * * *',
     maxConcurrent: parseInt(process.env.RSS_MAX_CONCURRENT || '5', 10),
     fetchTimeout: parseInt(process.env.RSS_FETCH_TIMEOUT || '30000', 10),
     maxRetries: 3,

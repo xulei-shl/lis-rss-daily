@@ -124,7 +124,7 @@ function getConfig(): Config {
     llmEncryptionKey,
 
     // RSS
-    rssFetchSchedule: process.env.RSS_FETCH_SCHEDULE || '0 9 * * *',
+    rssFetchSchedule: process.env.RSS_FETCH_SCHEDULE || '0 2 * * *',
     rssFetchEnabled: process.env.RSS_FETCH_ENABLED !== 'false',
     rssMaxConcurrent: parseInt(process.env.RSS_MAX_CONCURRENT || '5', 10),
     rssFetchTimeout: parseInt(process.env.RSS_FETCH_TIMEOUT || '30000', 10),
