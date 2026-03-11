@@ -241,7 +241,8 @@ async function semanticSearchOnly(
 async function keywordSearchOnly(
   userId: number,
   query: string,
-  limit: number
+  limit: number,
+  includeRejected: boolean = true  // 默认包含未通过的文章
 ): Promise<SearchResult[]> {
   const db = getDb();
   const lowerQuery = query.toLowerCase();
@@ -258,6 +259,7 @@ async function keywordSearchOnly(
   };
 
   // 支持三种来源：RSS、期刊、关键词订阅
+  // 默认包含所有状态的文章（passed + rejected），除非 includeRejected 为 false
   let queryBuilder = db
     .selectFrom('articles')
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
@@ -269,8 +271,12 @@ async function keywordSearchOnly(
         eb('journals.user_id', '=', userId),
         eb('keyword_subscriptions.user_id', '=', userId),
       ])
-    )
-    .where('articles.filter_status', '=', 'passed');
+    );
+
+  // 只有当 includeRejected 为 false 时才过滤只返回 passed 的文章
+  if (!includeRejected) {
+    queryBuilder = queryBuilder.where('articles.filter_status', '=', 'passed');
+  }
 
   if (terms.length > 0) {
     queryBuilder = queryBuilder.where((eb) =>
