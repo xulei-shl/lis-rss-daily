@@ -51,7 +51,7 @@
   <!-- User Role Data (for guest mode) -->
   <script>
     window.userRole = <%- user ? `"${user.role}"` : '"guest"' %>;
-    window.guestSummaryEnabled = <%- (typeof guestSummaryEnabled !== 'undefined') ? guestSummaryEnabled : 'false' %>;
+    window.guestSummaryEnabled = <%- (typeof guestSummaryEnabled !== 'undefined' ? (guestSummaryEnabled ? 'true' : 'false') : 'false') %>;
   </script>
 
   <!-- Common JavaScript Components -->
