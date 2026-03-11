@@ -14,7 +14,7 @@ const log = logger.child({ module: 'api-routes/daily-summary' });
 const router = express.Router();
 
 // 有效的总结类型
-const VALID_SUMMARY_TYPES: SummaryType[] = ['journal', 'blog_news', 'all', 'journal_all'];
+const VALID_SUMMARY_TYPES: SummaryType[] = ['journal', 'blog_news', 'all', 'journal_all', 'search'];
 
 /**
  * 验证并获取总结类型参数

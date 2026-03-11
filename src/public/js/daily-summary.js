@@ -219,7 +219,9 @@
     const typeLabels = {
       journal: '期刊精选',
       blog_news: '博客资讯',
-      all: '综合'
+      all: '综合',
+      search: '搜索总结',
+      journal_all: '全部期刊'
     };
     const typeLabel = typeLabels[summaryType] || '综合';
 
@@ -402,7 +404,9 @@
       const typeLabels = {
         journal: '期刊',
         blog_news: '博客资讯',
-        all: '综合'
+        all: '综合',
+        search: '搜索',
+        journal_all: '全部期刊'
       };
 
       historyList.innerHTML = history.map(item => `
