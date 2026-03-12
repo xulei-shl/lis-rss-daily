@@ -84,6 +84,8 @@ export interface SchedulerConfig {
   maxRetries: number;
   retryDelay: number;
   retryBackoffMultiplier: number;
+  // Force fetch all sources when scheduled task runs, ignoring fetch_interval
+  forceOnSchedule: boolean;
 }
 
 /**
@@ -256,15 +258,27 @@ export class RSSScheduler {
         return;
       }
 
-      // Filter sources by fetch interval
-      const sourcesToFetch = await this.filterSourcesByFetchInterval(sources);
-      runLog.info(
-        { sourceCount: sourcesToFetch.length },
-        'Sources to fetch after interval check'
-      );
+      // Filter sources by fetch interval (skip if forceOnSchedule is true)
+      let sourcesToFetch: Array<{ id: number; user_id: number; url: string; name: string; isFirstFetch: boolean }>;
+      if (this.config.forceOnSchedule) {
+        runLog.info('Force mode enabled: fetching all active sources');
+        sourcesToFetch = sources.map((source) => ({
+          id: source.id,
+          user_id: source.user_id,
+          url: source.url,
+          name: source.name,
+          isFirstFetch: source.isFirstFetch,
+        }));
+      } else {
+        sourcesToFetch = await this.filterSourcesByFetchInterval(sources);
+        runLog.info(
+          { sourceCount: sourcesToFetch.length },
+          'Sources to fetch after interval check'
+        );
+      }
 
       if (sourcesToFetch.length === 0) {
-        runLog.info('No sources due for fetching');
+        runLog.info('No sources to fetch');
         return;
       }
 
@@ -779,6 +793,7 @@ export function initRSSScheduler(): RSSScheduler {
     maxRetries: 3,
     retryDelay: 5000, // 5 seconds
     retryBackoffMultiplier: 2,
+    forceOnSchedule: process.env.RSS_FETCH_FORCE_ON_SCHEDULE === 'true',
   };
 
   return RSSScheduler.getInstance(config);
