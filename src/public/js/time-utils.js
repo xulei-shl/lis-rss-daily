@@ -1,7 +1,9 @@
 (function (global) {
   'use strict';
 
-  const TIME_ZONE = 'Asia/Shanghai';
+  // 使用用户浏览器本地时区，而不是硬编码的 Asia/Shanghai
+  // 这样可以适应不同地区的用户
+  const TIME_ZONE = undefined; // undefined 表示使用浏览器本地时区
 
   function parseDate(input) {
     if (!input) return null;
@@ -14,11 +16,15 @@
 
   function formatWithOptions(date, options) {
     if (!date) return '';
-    const formatter = new Intl.DateTimeFormat('zh-CN', {
-      timeZone: TIME_ZONE,
+    const formatOptions = {
       hour12: false,
       ...options,
-    });
+    };
+    // 只有时区被显式设置时才添加（支持浏览器本地时区）
+    if (TIME_ZONE) {
+      formatOptions.timeZone = TIME_ZONE;
+    }
+    const formatter = new Intl.DateTimeFormat('zh-CN', formatOptions);
     return formatter.format(date);
   }
 
@@ -82,7 +88,7 @@
   }
 
   global.timeUtils = {
-    timeZone: TIME_ZONE,
+    timeZone: TIME_ZONE || 'local',
     formatDateTime,
     formatDate,
     formatMonthDayTime,

@@ -1,0 +1,90 @@
+"use strict";
+/**
+ * Configuration management
+ *
+ * Centralized configuration with environment variable support.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.config = void 0;
+var path_1 = require("path");
+var url_1 = require("url");
+var __filename = (0, url_1.fileURLToPath)(import.meta.url);
+var __dirname = path_1.default.dirname(__filename);
+function getConfig() {
+    // LLM Encryption Key with security warning
+    var llmEncryptionKey = process.env.LLM_ENCRYPTION_KEY || '0000000000000000000000000000000000000000000000000000000000000000';
+    var DEFAULT_ENCRYPTION_KEY = '0000000000000000000000000000000000000000000000000000000000000000';
+    if (llmEncryptionKey === DEFAULT_ENCRYPTION_KEY) {
+        console.warn('⚠️  警告: 使用默认的 LLM 加密密钥。生产环境请设置 LLM_ENCRYPTION_KEY 环境变量。');
+    }
+    // JWT Secret with security warning
+    var jwtSecret = process.env.JWT_SECRET || 'change-this-secret-in-production';
+    if (jwtSecret === 'change-this-secret-in-production') {
+        console.warn('⚠️  警告: 使用默认的 JWT 密钥。生产环境请设置 JWT_SECRET 环境变量。');
+    }
+    return {
+        // Server
+        host: process.env.HOST || '0.0.0.0',
+        port: parseInt(process.env.PORT || '3000', 10),
+        baseUrl: process.env.BASE_URL || 'http://localhost:3000',
+        // Database
+        databasePath: process.env.DATABASE_PATH || path_1.default.join(process.cwd(), 'data', 'rss-tracker.db'),
+        // JWT
+        jwtSecret: jwtSecret,
+        jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+        // LLM
+        llmProvider: process.env.LLM_PROVIDER || 'openai',
+        openaiApiKey: process.env.OPENAI_API_KEY,
+        openaiBaseUrl: process.env.OPENAI_BASE_URL,
+        openaiDefaultModel: process.env.OPENAI_DEFAULT_MODEL || 'gpt-4o-mini',
+        geminiApiKey: process.env.GEMINI_API_KEY,
+        geminiModel: process.env.GEMINI_MODEL || 'gemini-1.5-flash',
+        llmEncryptionKey: llmEncryptionKey,
+        // RSS
+        rssFetchSchedule: process.env.RSS_FETCH_SCHEDULE || '0 2 * * *',
+        rssFetchEnabled: process.env.RSS_FETCH_ENABLED !== 'false',
+        rssMaxConcurrent: parseInt(process.env.RSS_MAX_CONCURRENT || '5', 10),
+        rssFetchTimeout: parseInt(process.env.RSS_FETCH_TIMEOUT || '30000', 10),
+        rssFirstRunMaxArticles: parseInt(process.env.RSS_FIRST_RUN_MAX_ARTICLES || '50', 10),
+        // Related Articles Refresh
+        relatedRefreshEnabled: process.env.RELATED_REFRESH_ENABLED !== 'false',
+        relatedRefreshSchedule: process.env.RELATED_REFRESH_SCHEDULE || '0 2 * * *',
+        relatedRefreshBatchSize: parseInt(process.env.RELATED_REFRESH_BATCH_SIZE || '100', 10),
+        relatedRefreshStaleDays: parseInt(process.env.RELATED_REFRESH_STALE_DAYS || '7', 10),
+        // Logging
+        logLevel: process.env.LOG_LEVEL || 'info',
+        logFile: process.env.LOG_FILE,
+        llmLogFile: process.env.LLM_LOG_FILE,
+        llmLogFullPrompt: process.env.LLM_LOG_FULL_PROMPT === 'true',
+        llmLogFullSampleRate: parseInt(process.env.LLM_LOG_FULL_SAMPLE_RATE || '20', 10),
+        // LLM Rate Limiting
+        llmRateLimitEnabled: process.env.LLM_RATE_LIMIT_ENABLED !== 'false',
+        llmRateLimitRequestsPerMinute: parseInt(process.env.LLM_RATE_LIMIT_REQUESTS_PER_MINUTE || '60', 10),
+        llmRateLimitBurstCapacity: parseInt(process.env.LLM_RATE_LIMIT_BURST_CAPACITY || '10', 10),
+        llmRateLimitQueueTimeout: parseInt(process.env.LLM_RATE_LIMIT_QUEUE_TIMEOUT || '30000', 10),
+        // Staggered Delay (for auto-filter after RSS fetch)
+        staggerDelayMaxMinutes: parseInt(process.env.STAGGER_DELAY_MAX_MINUTES || '30', 10),
+        // Timezone
+        defaultTimezone: process.env.DEFAULT_TIMEZONE || 'Asia/Shanghai',
+        // Telegram
+        httpProxy: process.env.HTTP_PROXY,
+        // Journal Crawler
+        journalCrawlEnabled: process.env.JOURNAL_CRAWL_ENABLED !== 'false',
+        journalCrawlSchedule: process.env.JOURNAL_CRAWL_SCHEDULE || '15 2 * * 6',
+        journalInterval: parseInt(process.env.JOURNAL_INTERVAL || '480000', 10),
+        journalIntervalRandom: parseInt(process.env.JOURNAL_INTERVAL_RANDOM || '0', 10),
+        spiderTimeout: parseInt(process.env.SPIDER_TIMEOUT || '430000', 10),
+        // Keyword Crawler
+        keywordCrawlEnabled: process.env.KEYWORD_CRAWL_ENABLED !== 'false',
+        keywordCrawlSchedule: process.env.KEYWORD_CRAWL_SCHEDULE || '15 3 * * 6',
+        keywordInterval: parseInt(process.env.KEYWORD_INTERVAL || '300000', 10),
+        keywordIntervalRandom: parseInt(process.env.KEYWORD_INTERVAL_RANDOM || '30000', 10),
+        // Daily Summary
+        dailySummaryEnabled: process.env.DAILY_SUMMARY_ENABLED !== 'false',
+        dailySummarySchedule: process.env.DAILY_SUMMARY_SCHEDULE || '0 7 * * *',
+        dailySummaryTypes: (process.env.DAILY_SUMMARY_TYPES || 'journal,blog_news,journal_all').split(','),
+        // Search AI Summary
+        searchAiSummaryGuestEnabled: process.env.SEARCH_AI_SUMMARY_GUEST_ENABLED === 'true',
+    };
+}
+exports.config = getConfig();

@@ -237,6 +237,7 @@
       try {
         const res = await fetch('/api/search/summary', {
           method: 'POST',
+          credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ articleIds: ids })
         });
@@ -431,19 +432,19 @@
           limit: perPage
         });
 
-        const res = await fetch(\`/api/search?\${params}\`);
-    const data = await res.json();
+        const res = await fetch(\`/api/search?\${params}\`, { credentials: 'same-origin' });
+        const data = await res.json();
 
-    if (data.results && data.results.length > 0) {
-      showResults(data);
-    } else {
-      showNoResults();
+        if (data.results && data.results.length > 0) {
+          showResults(data);
+        } else {
+          showNoResults();
+        }
+      } catch (err) {
+        console.error('Search failed:', err);
+        showNoResults();
+      }
     }
-  } catch (err) {
-    console.error('Search failed:', err);
-    showNoResults();
-  }
-}
 
 // Show initial state
 function showInitialState() {

@@ -480,6 +480,8 @@ export async function generateSearchSummary(
 ): Promise<DailySummaryResult> {
   const db = getDb();
 
+  console.log('[generateSearchSummary] userId:', userId, 'articleIds:', articleIds);
+
   // 查询文章
   const articles = await db
     .selectFrom('articles')
@@ -504,6 +506,8 @@ export async function generateSearchSummary(
       eb.fn.coalesce('rss_sources.source_type', eb.val('journal')).as('source_type'),
     ])
     .execute();
+
+  console.log('[generateSearchSummary] found articles:', articles.length);
 
   if (articles.length === 0) {
     const today = await getUserLocalDate(userId);

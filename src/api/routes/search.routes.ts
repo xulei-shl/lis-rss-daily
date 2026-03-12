@@ -93,7 +93,9 @@ router.post('/summary', optionalAuth, requireSearchSummaryAccess, async (req: Au
     }
 
     // Generate summary (automatically saved to database)
-    const result = await generateSearchSummary(req.userId!, articleIds);
+    // Use effectiveUserId so guest users can generate summary from admin's data
+    log.info({ userId: req.userId, effectiveUserId: req.effectiveUserId, articleIds }, 'AI summary request');
+    const result = await generateSearchSummary(req.effectiveUserId!, articleIds);
 
     res.json(result);
   } catch (error) {
