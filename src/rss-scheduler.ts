@@ -178,6 +178,7 @@ export class RSSScheduler {
         {
           schedule: this.config.schedule,
           maxConcurrent: this.config.maxConcurrent,
+          forceOnSchedule: this.config.forceOnSchedule,
         },
         'RSS scheduler started'
       );

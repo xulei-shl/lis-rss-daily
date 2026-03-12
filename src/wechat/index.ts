@@ -33,10 +33,38 @@ const log = logger.child({ module: 'wechat-notifier' });
  * 单例类用于发送企业微信通知。
  */
 class WeChatNotifier {
+  private sentCache = new Map<string, number>();
+  private readonly CACHE_TTL = 60000; // 60秒
+
+  private getCacheKey(userId: number, type: string, date: string): string {
+    return `${userId}:${type}:${date}`;
+  }
+
+  private checkAndSetCache(key: string): boolean {
+    const now = Date.now();
+    const lastSent = this.sentCache.get(key);
+    if (lastSent && now - lastSent < this.CACHE_TTL) {
+      return true;
+    }
+    this.sentCache.set(key, now);
+    if (this.sentCache.size > 100) {
+      const oldestKey = this.sentCache.keys().next().value;
+      if (oldestKey) {
+        this.sentCache.delete(oldestKey);
+      }
+    }
+    return false;
+  }
+
   /**
    * 发送每日总结通知到所有配置了该类型的 webhook
    */
   async sendDailySummary(userId: number, data: WeChatDailySummaryData): Promise<boolean> {
+    const cacheKey = this.getCacheKey(userId, data.type, data.date);
+    if (this.checkAndSetCache(cacheKey)) {
+      log.info({ userId, type: data.type, date: data.date }, '[DEBUG] Skipping duplicate sendDailySummary');
+      return false;
+    }
     const webhooks = getWebhooksForPushType('daily_summary');
 
     if (webhooks.length === 0) {
@@ -102,6 +130,12 @@ class WeChatNotifier {
       articles: DailySummaryArticle[];
     }
   ): Promise<boolean> {
+    const cacheKey = this.getCacheKey(userId, 'journal_all', data.date);
+    if (this.checkAndSetCache(cacheKey)) {
+      log.info({ userId, date: data.date }, '[DEBUG] Skipping duplicate sendJournalAllSummary');
+      return false;
+    }
+
     const webhooks = getWebhooksForPushType('journal_all');
 
     if (webhooks.length === 0) {

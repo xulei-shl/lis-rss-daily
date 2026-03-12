@@ -331,6 +331,16 @@ Environment="TERM=dumb"  # 支持 systemd 环境下的 clear 命令
 ExecStart=/bin/bash /opt/lis-rss-daily/scripts/start-app.sh
 Restart=always
 RestartSec=10
+
+# --- 防止进程残留配置 ---
+# 确保停止服务时，杀死该服务启动的所有子进程
+KillMode=control
+# 发送 SIGINT 信号，让 Node 进程有机会优雅退出
+KillSignal=SIGINT
+# 等待 10 秒让进程退出，如果还没退出则强制 SIGKILL
+TimeoutStopSec=10
+# ------------------------------
+
 StandardOutput=append:/opt/lis-rss-daily/logs/app.log
 StandardError=append:/opt/lis-rss-daily/logs/error.log
 
@@ -487,6 +497,41 @@ sudo journalctl -u lis-rss -f
 sudo netstat -tulpn | grep 8007
 sudo lsof -i :8007
 ```
+
+### 每日总结重复推送
+
+**症状**：每日总结消息被重复推送 2-3 次（WeChat 和 Telegram 都出现）。
+
+**原因**：有双重调度机制同时运行：
+1. **crontab 定时任务**：通过 HTTP API 调用触发总结
+2. **应用内置调度器**：在 `.env` 中配置的 `DAILY_SUMMARY_SCHEDULE` 定时任务
+
+**排查**：
+```bash
+# 检查 crontab 中是否有每日总结任务
+crontab -l | grep daily-summary
+
+# 检查应用内置调度器配置
+grep DAILY_SUMMARY_ENABLED /opt/lis-rss-daily/.env
+```
+
+**解决**：删除 crontab 中的任务，只使用应用内置调度器：
+```bash
+# 编辑 crontab
+sudo crontab -e
+
+# 删除或注释掉以下行：
+# 30 5 * * * /opt/lis-rss-daily/scripts/auto-daily-summary.sh journal ...
+# 35 5 * * * /opt/lis-rss-daily/scripts/auto-daily-summary.sh blog_news ...
+
+# 保存后重启服务
+sudo systemctl restart lis-rss
+```
+
+**说明**：
+- 应用内置调度器在 `.env` 中配置：`DAILY_SUMMARY_SCHEDULE=0 7 * * *`
+- 内置调度器支持多种总结类型：`journal`、`blog_news`、`journal_all`
+- WeChat 和 Telegram 通知器都有 60 秒防重复机制，但多进程同时运行时会失效
 
 ### tsx 依赖模块路径错误
 
