@@ -1,16 +1,16 @@
 (function (global) {
   'use strict';
 
-  // 使用用户浏览器本地时区，而不是硬编码的 Asia/Shanghai
-  // 这样可以适应不同地区的用户
-  const TIME_ZONE = undefined; // undefined 表示使用浏览器本地时区
+  // 使用 Asia/Shanghai 时区，确保正确显示北京时间
+  const TIME_ZONE = 'Asia/Shanghai';
 
   function parseDate(input) {
     if (!input) return null;
     if (input instanceof Date) {
       return Number.isNaN(input.getTime()) ? null : input;
     }
-    const date = new Date(input);
+    // 假设输入是 UTC 时间字符串，添加 Z 后缀确保正确解析
+    const date = new Date(input + (input.includes('Z') ? '' : 'Z'));
     return Number.isNaN(date.getTime()) ? null : date;
   }
 

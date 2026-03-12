@@ -434,7 +434,7 @@
     if (window.timeUtils && typeof window.timeUtils.formatRelativeTime === 'function') {
       return window.timeUtils.formatRelativeTime(dateStr);
     }
-    const date = new Date(dateStr);
+    const date = new Date(dateStr + 'Z');
     const now = new Date();
     const diff = now - date;
 
@@ -446,7 +446,8 @@
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      timeZone: 'Asia/Shanghai'
     });
   }
 

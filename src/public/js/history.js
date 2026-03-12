@@ -344,7 +344,7 @@
               <circle cx="12" cy="12" r="10"></circle>
               <polyline points="12 6 12 12 16 14"></polyline>
             </svg>
-            <span>生成于 ${new Date(summaryData.created_at).toLocaleString('zh-CN')}</span>
+            <span>生成于 ${new Date(summaryData.created_at + 'Z').toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</span>
           </div>
           <button class="summary-meta-action" onclick="window.historyPage.copySummary()" title="复制内容">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -412,7 +412,7 @@
     if (window.timeUtils && typeof window.timeUtils.formatRelativeTime === 'function') {
       return window.timeUtils.formatRelativeTime(dateStr);
     }
-    const date = new Date(dateStr);
+    const date = new Date(dateStr + 'Z');
     const now = new Date();
     const diff = now - date;
 
@@ -424,7 +424,8 @@
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      timeZone: 'Asia/Shanghai'
     });
   }
 
