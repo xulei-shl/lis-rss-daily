@@ -1,6 +1,6 @@
 import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
-import { requireAuth, requireWriteAccess, requireSearchSummaryAccess } from '../../middleware/auth.js';
+import { optionalAuth, requireWriteAccess, requireSearchSummaryAccess } from '../../middleware/auth.js';
 import { logger } from '../../logger.js';
 import { search, SearchMode } from '../../vector/search.js';
 import { generateSearchSummary } from '../daily-summary.js';
@@ -19,7 +19,7 @@ const router = express.Router();
  * - page: page number (default: 1)
  * - limit: results per page (default: 10)
  */
-router.get('/', requireAuth, async (req: AuthRequest, res) => {
+router.get('/', optionalAuth, async (req: AuthRequest, res) => {
   try {
     const query = req.query.q as string;
     const mode = (req.query.mode as string) || 'mixed';
@@ -77,7 +77,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
  * Generate AI summary from selected articles
  * Requires admin access (or guest access if configured)
  */
-router.post('/summary', requireAuth, requireSearchSummaryAccess, async (req: AuthRequest, res) => {
+router.post('/summary', optionalAuth, requireSearchSummaryAccess, async (req: AuthRequest, res) => {
   try {
     const { articleIds } = req.body;
 

@@ -191,12 +191,9 @@ export function createApp(): express.Express {
 
   // Search page
   app.get('/search', optionalAuth, (req: any, res: Response) => {
-    if (!req.userId) {
-      return res.redirect('/login');
-    }
     res.render('search', {
       pageTitle: '语义搜索 - LIS-RSS Literature Tracker',
-      user: req.user,
+      user: req.user || null,
       guestSummaryEnabled: config.searchAiSummaryGuestEnabled,
     });
   });

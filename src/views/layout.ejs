@@ -18,6 +18,12 @@
   <% } %>
 
   <script src="/js/time-utils.js"></script>
+
+  <!-- User Role Data - defined early for JS access -->
+  <script>
+    window.userRole = <%- user ? `"${user.role}"` : 'null' %>;
+    window.guestSummaryEnabled = <%- (typeof guestSummaryEnabled !== 'undefined' ? (guestSummaryEnabled ? '"true"' : '"false"') : '"false"') %>;
+  </script>
   <!-- Page-Specific Styles -->
   <%- pageStyles %>
 </head>
@@ -47,12 +53,6 @@
   <div class="page-body">
     <%- body %>
   </div>
-
-  <!-- User Role Data (for guest mode) -->
-  <script>
-    window.userRole = <%- user ? `"${user.role}"` : '"guest"' %>;
-    window.guestSummaryEnabled = <%- (typeof guestSummaryEnabled !== 'undefined' ? (guestSummaryEnabled ? 'true' : 'false') : 'false') %>;
-  </script>
 
   <!-- Common JavaScript Components -->
   <script src="/js/confirm-dialog.js"></script>
