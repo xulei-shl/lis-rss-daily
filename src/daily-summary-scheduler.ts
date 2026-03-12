@@ -11,7 +11,7 @@
 import cron from 'node-cron';
 import { logger } from './logger.js';
 import { config } from './config.js';
-import { generateDailySummary, generateJournalAllSummary } from './api/daily-summary.js';
+import { generateDailySummary, saveDailySummary, generateJournalAllSummary } from './api/daily-summary.js';
 
 const log = logger.child({ module: 'daily-summary-scheduler' });
 
@@ -203,6 +203,18 @@ export class DailySummaryScheduler {
               userId: this.config.userId,
               type: type as any,
             });
+
+            // 保存到数据库（journal_all 类型内部已保存）
+            if (result.totalArticles > 0) {
+              await saveDailySummary({
+                userId: this.config.userId,
+                date: result.date,
+                type: result.type,
+                articleCount: result.totalArticles,
+                summaryContent: result.summary,
+                articlesData: result.articlesByType,
+              });
+            }
           }
 
           results.push({
@@ -295,6 +307,18 @@ export class DailySummaryScheduler {
             userId: this.config.userId,
             type: type as any,
           });
+
+          // 保存到数据库（journal_all 类型内部已保存）
+          if (result.totalArticles > 0) {
+            await saveDailySummary({
+              userId: this.config.userId,
+              date: result.date,
+              type: result.type,
+              articleCount: result.totalArticles,
+              summaryContent: result.summary,
+              articlesData: result.articlesByType,
+            });
+          }
         }
 
         log.info(
