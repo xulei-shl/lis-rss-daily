@@ -334,8 +334,16 @@ export class JournalScheduler {
         'Journal crawl completed'
       );
 
-      // 更新期刊爬取状态
-      await updateJournalCrawlStatus(journal.id, year, issue, volume);
+      // 只有当实际爬取到文章时，才更新期刊的 last_year/last_issue/last_volume
+      // 这样可以避免将未发布的期号标记为已爬取
+      if (newCount > 0) {
+        await updateJournalCrawlStatus(journal.id, year, issue, volume);
+      } else {
+        crawlLog.warn(
+          { articlesCount: spiderResult.articles.length, newCount, year, issue },
+          'No new articles crawled, not updating last_year/last_issue'
+        );
+      }
 
       // 记录成功日志
       await createCrawlLog({
