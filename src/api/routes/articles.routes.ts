@@ -620,4 +620,33 @@ router.patch('/articles/:id/ai-summary', requireAuth, requireWriteAccess, async 
   }
 });
 
+/**
+ * DELETE /api/articles/:id/ai-summary
+ * Delete article AI summary
+ * Requires admin role (not guest)
+ */
+router.delete('/articles/:id/ai-summary', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
+  try {
+    const idParam = req.params.id;
+    if (typeof idParam !== 'string') {
+      return res.status(400).json({ error: 'Invalid article ID' });
+    }
+    const id = parseInt(idParam);
+
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid article ID' });
+    }
+
+    await articleService.updateArticleAiSummary(id, req.effectiveUserId!, null);
+
+    res.json({ success: true });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Article not found') {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    log.error({ error, userId: req.userId }, 'Failed to delete article AI summary');
+    res.status(500).json({ error: 'Failed to delete article AI summary' });
+  }
+});
+
 export default router;

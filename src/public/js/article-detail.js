@@ -53,6 +53,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (deleteBtn) deleteBtn.style.display = 'none';
   }
 
+  // Admin 模式：显示 AI 总结操作按钮
+  if (window.userRole === 'admin') {
+    const aiSummaryActions = document.getElementById('aiSummaryActions');
+    if (aiSummaryActions) {
+      aiSummaryActions.style.display = 'flex';
+    }
+
+    // 绑定编辑和删除按钮事件
+    document.getElementById('editAiSummaryBtn').addEventListener('click', editAiSummary);
+    document.getElementById('deleteAiSummaryBtn').addEventListener('click', deleteAiSummary);
+  }
+
   if (!isNaN(articleId)) {
     loadArticle(articleId);
   } else {
@@ -550,5 +562,110 @@ async function toggleReadStatus(isRead) {
   } catch (err) {
     console.error('Failed to toggle read status:', err);
     window.toast.error('操作失败，请稍后重试');
+  }
+}
+
+// 编辑 AI 总结
+async function editAiSummary() {
+  if (!articleData) return;
+
+  const aiSummarySection = document.getElementById('aiSummarySection');
+  const aiSummaryDiv = document.getElementById('aiSummary');
+  const currentContent = articleData.ai_summary || '';
+
+  // 创建编辑界面
+  aiSummaryDiv.innerHTML =
+    '<textarea id="aiSummaryTextarea" class="edit-textarea">' + escapeHtml(currentContent) + '</textarea>' +
+    '<div class="edit-actions">' +
+      '<button id="saveAiSummaryBtn" class="btn btn-primary">保存</button>' +
+      '<button id="cancelAiSummaryBtn" class="btn btn-secondary">取消</button>' +
+    '</div>';
+
+  // 绑定保存和取消按钮
+  document.getElementById('saveAiSummaryBtn').addEventListener('click', saveAiSummary);
+  document.getElementById('cancelAiSummaryBtn').addEventListener('click', cancelEditAiSummary);
+}
+
+// 保存 AI 总结
+async function saveAiSummary() {
+  if (!articleData) return;
+
+  const textarea = document.getElementById('aiSummaryTextarea');
+  const newContent = textarea.value;
+
+  try {
+    const res = await fetch('/api/articles/' + articleData.id + '/ai-summary', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ai_summary: newContent })
+    });
+
+    if (!res.ok) {
+      const result = await res.json();
+      throw new Error(result.error || '保存失败');
+    }
+
+    // 更新本地数据
+    articleData.ai_summary = newContent;
+
+    // 恢复显示模式
+    if (newContent) {
+      document.getElementById('aiSummary').innerHTML = formatMarkdown(newContent);
+    } else {
+      // 如果内容为空，隐藏整个区域
+      document.getElementById('aiSummarySection').style.display = 'none';
+    }
+
+    window.toast.success('AI 总结已更新');
+  } catch (err) {
+    console.error('Failed to save AI summary:', err);
+    window.toast.error(err.message || '保存失败，请稍后重试');
+  }
+}
+
+// 取消编辑
+function cancelEditAiSummary() {
+  if (!articleData) return;
+
+  // 恢复显示模式
+  if (articleData.ai_summary) {
+    document.getElementById('aiSummary').innerHTML = formatMarkdown(articleData.ai_summary);
+  } else {
+    document.getElementById('aiSummarySection').style.display = 'none';
+  }
+}
+
+// 删除 AI 总结
+async function deleteAiSummary() {
+  if (!articleData) return;
+
+  const confirmed = await showConfirm('确定要删除 AI 总结吗？此操作不可撤销。', {
+    title: '删除 AI 总结',
+    okText: '删除',
+    cancelText: '取消'
+  });
+
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/articles/' + articleData.id + '/ai-summary', {
+      method: 'DELETE'
+    });
+
+    if (!res.ok) {
+      const result = await res.json();
+      throw new Error(result.error || '删除失败');
+    }
+
+    // 更新本地数据
+    articleData.ai_summary = null;
+
+    // 隐藏 AI 总结区域
+    document.getElementById('aiSummarySection').style.display = 'none';
+
+    window.toast.success('AI 总结已删除');
+  } catch (err) {
+    console.error('Failed to delete AI summary:', err);
+    window.toast.error(err.message || '删除失败，请稍后重试');
   }
 }

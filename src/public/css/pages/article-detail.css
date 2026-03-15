@@ -360,3 +360,71 @@
         flex-direction: column;
     }
 }
+
+/* Section header with actions */
+.section-header-with-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-3);
+}
+
+.section-header {
+    margin-bottom: 0;
+}
+
+.section-actions {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-1);
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.icon-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.icon-btn-danger:hover {
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+}
+
+/* Edit textarea */
+.edit-textarea {
+    width: 100%;
+    min-height: 200px;
+    padding: var(--space-3);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    line-height: 1.6;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    resize: vertical;
+}
+
+.edit-textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+/* Edit actions */
+.edit-actions {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+}

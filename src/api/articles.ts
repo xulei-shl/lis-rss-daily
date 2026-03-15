@@ -1508,12 +1508,12 @@ export async function updateArticleRating(
  * Update article AI summary
  * @param articleId - Article ID
  * @param userId - User ID (for permission check)
- * @param aiSummary - AI summary text
+ * @param aiSummary - AI summary text (or null to delete)
  */
 export async function updateArticleAiSummary(
   articleId: number,
   userId: number,
-  aiSummary: string
+  aiSummary: string | null
 ): Promise<void> {
   const db = getDb();
   const now = new Date().toISOString();
@@ -1551,5 +1551,5 @@ export async function updateArticleAiSummary(
     throw new Error('Article not found');
   }
 
-  log.info({ articleId, userId, summaryLength: aiSummary.length }, 'Article AI summary updated');
+  log.info({ articleId, userId, summaryLength: aiSummary?.length || 0 }, 'Article AI summary updated');
 }
