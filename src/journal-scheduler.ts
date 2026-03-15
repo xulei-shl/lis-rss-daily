@@ -334,8 +334,27 @@ export class JournalScheduler {
         'Journal crawl completed'
       );
 
-      // 更新期刊爬取状态
-      await updateJournalCrawlStatus(journal.id, year, issue, volume);
+      // 只有当实际爬取到文章，且当前期号大于数据库记录的期号时，才更新
+      // 这避免：1) 未发布的期号被标记为已爬取 2) 手动爬取历史期号回退最新记录
+      const shouldUpdate = newCount > 0 && this.isNewerThanLastRecord(journal, year, issue);
+
+      if (shouldUpdate) {
+        await updateJournalCrawlStatus(journal.id, year, issue, volume);
+        crawlLog.info(
+          { lastYear: journal.last_year, lastIssue: journal.last_issue, newYear: year, newIssue: issue },
+          'Updated last_year/last_issue'
+        );
+      } else if (newCount === 0) {
+        crawlLog.warn(
+          { articlesCount: spiderResult.articles.length, newCount, year, issue },
+          'No new articles crawled, not updating last_year/last_issue'
+        );
+      } else {
+        crawlLog.info(
+          { lastYear: journal.last_year, lastIssue: journal.last_issue, currentYear: year, currentIssue: issue },
+          'Current issue not newer than last record, not updating'
+        );
+      }
 
       // 记录成功日志
       await createCrawlLog({
@@ -543,6 +562,33 @@ export class JournalScheduler {
     }
 
     log.info({ journalId, total: articles.length, passed: passedCount }, 'Auto-filter completed');
+  }
+
+  /**
+   * 判断当前期号是否比数据库记录的期号新
+   * @param journal 期刊信息
+   * @param year 当前年份
+   * @param issue 当前期号
+   * @returns 如果数据库没有记录或当前期号新于记录，返回 true
+   */
+  private isNewerThanLastRecord(journal: JournalInfo, year: number, issue: number): boolean {
+    // 如果从未爬取过，肯定要更新
+    if (!journal.last_year || !journal.last_issue) {
+      return true;
+    }
+
+    // 年份比较：当前年份大于记录年份
+    if (year > journal.last_year) {
+      return true;
+    }
+
+    // 年份相同：当前期期号大于记录期号
+    if (year === journal.last_year && issue > journal.last_issue) {
+      return true;
+    }
+
+    // 当前期号不新于记录期号
+    return false;
   }
 
   /**
