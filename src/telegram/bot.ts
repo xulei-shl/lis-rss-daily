@@ -172,9 +172,8 @@ export class TelegramBot {
     match = sources.find(s => s.name.includes(name));
     if (match) return match;
 
-    // 4. Input contains source name (e.g., "Technology Review" matches "MIT Technology Review")
-    match = sources.find(s => name.includes(s.name));
-    if (match) return match;
+    // Note: removed "input contains source name" matching to prevent keyword searches
+    // from being mistakenly treated as source name matches (e.g., "档案学知识图谱" matching "档案学")
 
     return null;
   }
