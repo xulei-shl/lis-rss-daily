@@ -19,32 +19,28 @@ const TELEGRAM_API_BASE = 'https://api.telegram.org';
 const DEFAULT_TIMEOUT = 30000;
 const MAX_RETRIES = 3;
 
-// Read proxy from environment variable
-const HTTP_PROXY = process.env.HTTP_PROXY || null;
-
-// Create proxy agent only for Telegram requests (not global)
-let httpProxyAgent: ProxyAgent | null = null;
-
-if (HTTP_PROXY) {
-  log.info({ proxy: HTTP_PROXY }, 'Telegram client configured with proxy');
-  httpProxyAgent = new ProxyAgent(HTTP_PROXY);
-} else {
-  log.warn('No HTTP proxy configured (HTTP_PROXY not set)');
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * Telegram Bot API Client
+ * Telegram Bot API Client Client
  */
 export class TelegramClient {
   private botToken: string;
   private abortController: AbortController | null = null;
+  private httpProxyAgent: ProxyAgent | null = null;
 
   constructor(botToken: string) {
     this.botToken = botToken;
+    // Initialize proxy agent in constructor to ensure .env is loaded
+    const httpProxy = process.env.HTTP_PROXY;
+    if (httpProxy) {
+      log.info({ proxy: httpProxy }, 'Telegram client configured with proxy');
+      this.httpProxyAgent = new ProxyAgent(httpProxy);
+    } else {
+      log.warn('No HTTP proxy configured (HTTP_PROXY not set)');
+    }
   }
 
   /**
@@ -54,7 +50,7 @@ export class TelegramClient {
     method: string,
     params: Record<string, any>
   ): Promise<TelegramMessageResponse> {
-    const url = `${TELEGRAM_API_BASE}/bot${this.botToken}/${method}`;
+    const url = \`\${TELEGRAM_API_BASE}/bot\${this.botToken}/\${method}\`;
 
     // Build body for POST request
     const body = JSON.stringify(params);
@@ -76,7 +72,7 @@ export class TelegramClient {
           body,
           signal: this.abortController.signal,
           // Only use proxy for Telegram requests (not global)
-          dispatcher: httpProxyAgent,
+          dispatcher: this.httpProxyAgent,
         } as any);
 
         const data = await response.json() as TelegramMessageResponse;
@@ -87,7 +83,7 @@ export class TelegramClient {
           const errorDesc = data.description || '';
 
           // Don't retry for "message is not modified" errors - this is expected when
-          // the new keyboard is the same as the current one
+          // new keyboard is the same as current one
           if (statusCode === 400 && errorDesc.includes('message is not modified')) {
             log.debug({ method, statusCode }, 'Message not modified, skipping update');
             return data;
@@ -96,9 +92,9 @@ export class TelegramClient {
           const retryable = statusCode >= 500 || statusCode === 429;
 
           if (!retryable || attempt === MAX_RETRIES) {
-            const error = data.description || `HTTP ${statusCode}`;
+            const error = data.description || `HTTP \${statusCode}`;
             log.error({ method, statusCode, error }, 'Telegram API request failed');
-            throw new Error(`Telegram API error: ${error}`);
+            throw new Error(`Telegram API error: \${error}`);
           }
 
           // Exponential backoff: 500ms * 2^attempt
@@ -249,7 +245,7 @@ export class TelegramClient {
   }
 
   /**
-   * Test the connection by sending a simple message
+   * Test connection by sending a simple message
    */
   async testConnection(chatId: string): Promise<boolean> {
     try {
