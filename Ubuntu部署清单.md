@@ -533,6 +533,98 @@ sudo systemctl restart lis-rss
 - 内置调度器支持多种总结类型：`journal`、`blog_news`、`journal_all`
 - WeChat 和 Telegram 通知器都有 60 秒防重复机制，但多进程同时运行时会失效
 
+### Telegram 推送失败
+
+**症状**：每日总结或文章推送时，WeChat 正常但 Telegram 失败，日志中出现 `fetch failed` 或 `assert(dispatcher)` 错误。
+
+**常见原因**：
+1. **环境变量未正确加载**：直接运行 `node` 命令时不会加载 `.env` 文件
+2. **HTTP_PROXY 未配置**：需要通过代理访问 Telegram API
+3. **多个 Bot 实例冲突**：日志中出现 `Conflict: terminated by other getUpdates request`
+
+**排查步骤**：
+
+1. **检查环境变量配置**：
+```bash
+# 检查 .env 文件中是否有 HTTP_PROXY
+cat .env | grep HTTP_PROXY
+
+# 检查运行时的环境变量（需要通过主服务检查，不能单独用 node 测试）
+# 在主服务日志中搜索 "proxy" 关键字
+grep -i "proxy" logs/app.log | tail -10
+```
+
+2. **用 curl 快速测试**（隔离问题）：
+```bash
+# 获取 Bot token 和频道 ID（从 .env 或数据库中）
+BOT_TOKEN="你的_BOT_TOKEN"
+CHANNEL="@lisrsstracker"
+
+# 测试发送消息（使用代理）
+curl -x http://127.0.0.1:7890 -X POST \
+  "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+  -H "Content-Type: application/json" \
+  -d '{"chat_id": "'$CHANNEL'", "text": "Test from curl", "parse_mode": "HTML"}'
+```
+
+3. **检查是否有多个 Bot 实例**：
+```bash
+# 搜索日志中的冲突错误
+grep -i "terminated by other getUpdates request" logs/app.log
+
+# 检查残留进程
+ps aux | grep -E "tsx.*src/index" | grep -v grep
+```
+
+4. **手动触发推送测试**：
+```bash
+# 使用 CLI API 触发推送
+CLI_API_KEY="你的_CLI_API_KEY"
+curl -X POST "http://localhost:8007/api/daily-summary/journal-all/cli?user_id=1&api_key=$CLI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"date": "2026-03-16"}'
+```
+
+**解决方案**：
+
+1. **确保环境变量正确配置**：
+```bash
+# 检查 .env 文件内容
+cat .env | grep -E "HTTP_PROXY|TELEGRAM_BOT_TOKEN"
+
+# 重启服务确保环境变量重新加载
+sudo systemctl restart lis-rss
+```
+
+2. **清理残留进程并重启**：
+```bash
+# 停止服务
+sudo systemctl stop lis-rss
+
+# 清理残留的 tsx 进程
+pkill -f "tsx.*src/index"
+
+# 重新启动
+sudo systemctl start lis-rss
+
+# 验证服务状态
+sudo systemctl status lis-rss --no-pager
+```
+
+3. **检查 Telegram Bot 配置**：
+```bash
+# 查看数据库中的 Telegram 配置
+sqlite3 data/rss-tracker.db "SELECT user_id, chat_id, chat_name, journal_all, is_daily_summary FROM telegram_chats;"
+```
+
+**最佳实践**：
+- 调试时先用 `curl` 测试，快速确认代理和配置是否正确
+- 不要直接用 `node` 命令测试应用代码，必须通过主服务或使用 `pnpm exec`
+- 每次配置修改后重启服务，确保环境变量正确加载
+- 日志中看到 `No HTTP proxy configured` 时，检查 `.env` 文件是否被正确读取
+
+---
+
 ### tsx 依赖模块路径错误
 
 **症状**：服务启动后立即退出，日志中可能出现 `MODULE_NOT_FOUND` 错误，提示找不到 tsx 模块。
