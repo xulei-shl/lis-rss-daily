@@ -50,7 +50,7 @@ export class TelegramClient {
     method: string,
     params: Record<string, any>
   ): Promise<TelegramMessageResponse> {
-    const url = \`\${TELEGRAM_API_BASE}/bot\${this.botToken}/\${method}\`;
+    const url = `${TELEGRAM_API_BASE}/bot${this.botToken}/${method}`;
 
     // Build body for POST request
     const body = JSON.stringify(params);
