@@ -381,7 +381,8 @@ async def upload_all(
     article_id: int,
     article_title: str,
     config: Dict,
-    source_name: Optional[str] = None
+    source_name: Optional[str] = None,
+    skip_lis_rss: bool = False
 ) -> Dict[str, bool]:
     """
     并行执行所有上传子系统
@@ -421,10 +422,20 @@ async def upload_all(
     # 创建异步任务
     tasks = [
         upload_to_hiagent_rag(md_path, config),
-        upload_to_lis_rss(article_id, md_content, config),
+    ]
+
+    # 只有当 skip_lis_rss 为 False 且 article_id 有效时才添加 LIS-RSS 任务
+    if skip_lis_rss:
+        print(f"[跳过] LIS-RSS上传已禁用（直接处理模式且未提供文章ID）")
+        tasks.append(asyncio.sleep(0))  # 占位符，保持结果索引一致性
+    else:
+        print(f"[信息] LIS-RSS上传已启用")
+        tasks.append(upload_to_lis_rss(article_id, md_content, config))
+
+    tasks.extend([
         upload_to_memos(article_title, md_content, config),
         upload_to_wechat(md_content, article_id, article_title, source_name, config)
-    ]
+    ])
 
     # 并行执行
     results = await asyncio.gather(*tasks, return_exceptions=True)

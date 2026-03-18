@@ -188,12 +188,30 @@ WECHAT_WEBHOOK_KEY=your_wechat_webhook_key_here
 
 ## 使用方法
 
-### 完整工作流
+### 完整工作流（数据库模式）
 
 ```bash
 # 使用 xulei 用户运行（推荐）
 sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/xulei/.pyenvs/env_camoufox/bin/python main.py"
 ```
+
+### 直接处理指定论文
+
+跳过数据库查询，直接处理指定的论文。
+
+```bash
+# 带文章ID：包含 LIS-RSS API 调用
+sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/xulei/.pyenvs/env_camoufox/bin/python main.py --title '论文题名' --id 1984"
+
+# 不带文章ID：跳过 LIS-RSS API 调用
+sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/xulei/.pyenvs/env_camoufox/bin/python main.py --title '论文题名'"
+```
+
+**参数说明**：
+- `--title`：论文题名（PDF 下载检索词，必需）
+- `--id`：文章 ID（可选）
+  - 提供 ID：执行完整流程，包含 LIS-RSS API 调用
+  - 不提供 ID：跳过 LIS-RSS API 调用，只执行 HiAgent RAG、Memos、微信推送
 
 ### 定时任务配置
 

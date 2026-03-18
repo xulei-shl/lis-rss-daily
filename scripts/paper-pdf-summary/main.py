@@ -14,6 +14,7 @@
 import sys
 import os
 import asyncio
+import argparse
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -70,7 +71,58 @@ def print_article_info(article: Dict):
     print(f"  来源: {article.get('source_name', '未知')}")
 
 
-def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyLogger) -> Dict:
+def process_direct_article(title: str, article_id: Optional[int], config: Dict, logger: DailyLogger, today: str) -> None:
+    """
+    直接处理指定的文章（跳过数据库查询）
+
+    Args:
+        title: 论文题名（PDF下载检索词）
+        article_id: 文章ID（可选），如果未提供则跳过LIS-RSS上传
+        config: 配置字典
+        logger: 日志记录器
+        today: 当日日期字符串
+    """
+    # 创建当日工作目录
+    download_root = config['storage']['download_root']
+    daily_dir = create_download_directory(download_root, today)
+    print(f"  工作目录: {daily_dir}")
+
+    # 构造文章数据
+    article = {
+        'id': article_id if article_id else 0,
+        'title': title,
+        'source_name': '手动指定'
+    }
+
+    # 决定是否跳过LIS-RSS上传
+    skip_lis_rss = article_id is None
+
+    print(f"\n{'#'*60}")
+    print(f"# 处理直接指定的文章")
+    print('#'*60)
+
+    result = process_article(article, config, daily_dir, logger, skip_lis_rss=skip_lis_rss)
+
+    if result['success']:
+        print(f"\n[进度] 成功: 1, 失败: 0")
+    else:
+        print(f"\n[进度] 成功: 0, 失败: 1")
+
+    # 生成最终报告
+    print_section("生成每日报告")
+    report_path = logger.generate_report()
+
+    # 输出摘要
+    print(f"\n{'='*60}")
+    print(f"  处理完成")
+    print('='*60)
+    print(f"  成功: {1 if result['success'] else 0}")
+    print(f"  失败: {1 if not result['success'] else 0}")
+    print(f"  报告: {report_path}")
+    print('='*60)
+
+
+def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyLogger, skip_lis_rss: bool = False) -> Dict:
     """
     处理单篇文章
     
@@ -78,7 +130,7 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
     1. 下载PDF（按优先级尝试多个脚本）
     2. 验证PDF文件名匹配
     3. 生成PDF总结（MD）
-    4. 并行上传到四个子系统（包含LIS-RSS数据库更新）
+    4. 并行上传到四个子系统（包含LIS-RSS数据库更新，可跳过）
     
     Args:
         article: 文章数据
@@ -169,7 +221,8 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
             article_id=article_id,
             article_title=title,
             source_name=source_name,
-            config=config
+            config=config,
+            skip_lis_rss=skip_lis_rss
         ))
         
         result['stages']['upload'] = upload_results
@@ -193,27 +246,41 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
 
 def main():
     """主入口函数"""
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='论文PDF摘要工作流')
+    parser.add_argument('--title', help='论文题名（PDF下载检索词）')
+    parser.add_argument('--id', type=int, help='文章ID（可选，跳过LIS-RSS上传如果未提供）')
+    args = parser.parse_args()
+
     print_section("论文PDF摘要工作流启动")
-    
+
     # 加载配置
     print("[加载配置...]")
     config = load_workflow_config()
     print(f"  数据库: {config['database']['path']}")
     print(f"  每日处理限制: {config['daily_process_limit']}")
-    
+
     # 获取当日日期
     today = datetime.now().strftime("%Y-%m-%d")
     print(f"  处理日期: {today}")
-    
-    # 加载期刊白名单
-    journals_path = config['data_sources']['journals_list']
-    journals = load_journals_list(journals_path)
-    print(f"  期刊白名单: {len(journals)}个")
-    
+
     # 初始化日志
     logs_root = config['storage']['logs_root']
     logger = DailyLogger(today, logs_root)
     print(f"  日志文件: {logger.log_file}")
+
+    # 直接处理模式
+    if args.title:
+        print(f"\n[模式] 直接处理模式")
+        print(f"  题名: {args.title}")
+        print(f"  文章ID: {args.id if args.id else '未提供（将跳过LIS-RSS上传）'}")
+        process_direct_article(args.title, args.id, config, logger, today)
+        return
+
+    # 加载期刊白名单
+    journals_path = config['data_sources']['journals_list']
+    journals = load_journals_list(journals_path)
+    print(f"  期刊白名单: {len(journals)}个")
     
     # 获取待处理数据
     print_section("获取待处理数据")
