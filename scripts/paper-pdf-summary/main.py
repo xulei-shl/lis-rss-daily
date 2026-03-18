@@ -1,0 +1,299 @@
+#!/usr/bin/env python3
+"""
+论文PDF摘要工作流 - 主入口
+
+功能：
+1. 从数据库获取待处理数据
+2. 下载PDF
+3. 验证PDF文件名匹配
+4. 生成PDF总结（MD）
+5. 并行上传到三个子系统
+6. 生成每日处理报告
+"""
+
+import sys
+import os
+import asyncio
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional
+
+# 添加项目根目录到Python路径
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
+
+# 导入工具模块
+from utils.database import (
+    load_journals_list,
+    fetch_pending_articles,
+    get_source_name,
+    get_connection
+)
+from utils.pdf_downloader import load_config, create_download_directory, download_pdf
+from utils.pdf_validator import validate_and_cleanup, get_pdf_info
+from utils.pdf_summarizer import summarize_pdf
+from utils.summary_uploader import upload_all as parallel_upload
+from utils.logger import DailyLogger
+import yaml
+
+
+def load_workflow_config(config_path: str = "config/config.yaml") -> Dict:
+    """
+    加载工作流配置
+    
+    Args:
+        config_path: 配置文件路径
+        
+    Returns:
+        配置字典
+    """
+    config_path = Path(config_path)
+    if not config_path.exists():
+        raise FileNotFoundError(f"配置文件不存在: {config_path}")
+    
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+
+def print_section(title: str):
+    """打印分节标题"""
+    print(f"\n{'='*60}")
+    print(f"  {title}")
+    print('='*60)
+
+
+def print_article_info(article: Dict):
+    """打印文章基本信息"""
+    print(f"\n[文章信息]")
+    print(f"  ID: {article.get('id')}")
+    print(f"  标题: {article.get('title', '')[:50]}...")
+    print(f"  来源: {article.get('source_name', '未知')}")
+
+
+def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyLogger) -> Dict:
+    """
+    处理单篇文章
+    
+    处理流程：
+    1. 下载PDF（按优先级尝试多个脚本）
+    2. 验证PDF文件名匹配
+    3. 生成PDF总结（MD）
+    4. 并行上传到四个子系统（包含LIS-RSS数据库更新）
+    
+    Args:
+        article: 文章数据
+        config: 配置字典
+        daily_dir: 当日工作目录
+        logger: 日志记录器
+        
+    Returns:
+        处理结果字典
+    """
+    article_id = article['id']
+    title = article['title']
+    
+    print_article_info(article)
+    
+    result = {
+        'article_id': article_id,
+        'title': title,
+        'success': False,
+        'stages': {}
+    }
+    
+    # ===== 步骤1: PDF下载 =====
+    print_section("步骤1: PDF下载")
+    
+    pdf_path = download_pdf(
+        title=title,
+        output_dir=str(daily_dir),
+        config=config
+    )
+    
+    if not pdf_path:
+        reason = "PDF下载失败（所有脚本均失败）"
+        print(f"[失败] {reason}")
+        logger.log_failure(article, reason)
+        result['reason'] = reason
+        return result
+    
+    result['stages']['pdf_download'] = 'success'
+    print(f"[成功] PDF已下载: {pdf_path}")
+    
+    # ===== 步骤2: 验证PDF文件名匹配 =====
+    print_section("步骤2: 验证PDF文件名匹配")
+    
+    threshold = config.get('pdf_download', {}).get('match_threshold', 0)
+    matched, match_reason = validate_and_cleanup(
+        pdf_path=pdf_path,
+        original_title=title,
+        threshold=threshold,
+        delete_on_mismatch=True
+    )
+    
+    if not matched:
+        reason = f"PDF文件名不匹配: {match_reason}"
+        print(f"[失败] {reason}")
+        logger.log_failure(article, reason)
+        result['stages']['pdf_validate'] = 'failed'
+        result['reason'] = reason
+        return result
+    
+    result['stages']['pdf_validate'] = 'success'
+    print(f"[成功] PDF验证通过")
+    
+    # ===== 步骤3: PDF总结 =====
+    print_section("步骤3: PDF总结")
+    
+    md_path = summarize_pdf(pdf_path, config)
+    
+    if not md_path:
+        reason = "PDF总结失败"
+        print(f"[失败] {reason}")
+        logger.log_failure(article, reason)
+        result['stages']['pdf_summary'] = 'failed'
+        result['reason'] = reason
+        return result
+    
+    result['stages']['pdf_summary'] = 'success'
+    result['md_path'] = md_path
+    print(f"[成功] MD文件已生成: {md_path}")
+    
+    # ===== 步骤4: 并行上传 =====
+    print_section("步骤4: 并行上传到四个子系统")
+
+    try:
+        source_name = article.get('source_name')
+        upload_results = asyncio.run(parallel_upload(
+            md_path=md_path,
+            article_id=article_id,
+            article_title=title,
+            source_name=source_name,
+            config=config
+        ))
+        
+        result['stages']['upload'] = upload_results
+        print(f"[结果] 上传结果: {upload_results}")
+        
+    except Exception as e:
+        reason = f"上传过程异常: {e}"
+        print(f"[失败] {reason}")
+        logger.log_failure(article, reason)
+        result['stages']['upload'] = {'error': str(e)}
+        result['reason'] = reason
+        return result
+
+    # ===== 完成 =====
+    result['success'] = True
+    print_section("处理完成")
+    logger.log_success(article)
+    
+    return result
+
+
+def main():
+    """主入口函数"""
+    print_section("论文PDF摘要工作流启动")
+    
+    # 加载配置
+    print("[加载配置...]")
+    config = load_workflow_config()
+    print(f"  数据库: {config['database']['path']}")
+    print(f"  每日处理限制: {config['daily_process_limit']}")
+    
+    # 获取当日日期
+    today = datetime.now().strftime("%Y-%m-%d")
+    print(f"  处理日期: {today}")
+    
+    # 加载期刊白名单
+    journals_path = config['data_sources']['journals_list']
+    journals = load_journals_list(journals_path)
+    print(f"  期刊白名单: {len(journals)}个")
+    
+    # 初始化日志
+    logs_root = config['storage']['logs_root']
+    logger = DailyLogger(today, logs_root)
+    print(f"  日志文件: {logger.log_file}")
+    
+    # 获取待处理数据
+    print_section("获取待处理数据")
+    
+    db_path = config['database']['path']
+    limit = config['daily_process_limit']
+    
+    # 首先尝试获取优先数据
+    articles = fetch_pending_articles(
+        db_path=db_path,
+        journals=journals,
+        limit=limit,
+        use_priority=True
+    )
+    
+    if not articles:
+        print("[警告] 没有找到待处理的数据")
+        logger.generate_report()
+        return
+    
+    print(f"获取到 {len(articles)} 条待处理数据")
+    
+    # 创建当日工作目录（只有在有数据时才创建）
+    download_root = config['storage']['download_root']
+    daily_dir = create_download_directory(download_root, today)
+    print(f"  工作目录: {daily_dir}")
+    
+    # 获取来源名称
+    conn = get_connection(db_path)
+    for article in articles:
+        article['source_name'] = get_source_name(article, conn)
+    conn.close()
+    
+    # 逐条处理
+    print_section("开始处理数据")
+    
+    success_count = 0
+    failure_count = 0
+    
+    for i, article in enumerate(articles, 1):
+        print(f"\n{'#'*60}")
+        print(f"# 处理第 {i}/{len(articles)} 条")
+        print('#'*60)
+        
+        result = process_article(article, config, daily_dir, logger)
+        
+        if result['success']:
+            success_count += 1
+        else:
+            failure_count += 1
+        
+        print(f"\n[进度] 成功: {success_count}, 失败: {failure_count}")
+        
+        # 检查是否达到每日处理上限
+        if success_count >= limit:
+            print(f"\n[信息] 已达到每日处理上限 ({limit})，停止处理")
+            break
+    
+    # 生成最终报告
+    print_section("生成每日报告")
+    report_path = logger.generate_report()
+    
+    # 输出摘要
+    print(f"\n{'='*60}")
+    print(f"  处理完成")
+    print('='*60)
+    print(f"  成功: {success_count}")
+    print(f"  失败: {failure_count}")
+    print(f"  报告: {report_path}")
+    print('='*60)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n[中断] 用户取消执行")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n[错误] {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

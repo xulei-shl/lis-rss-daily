@@ -1,0 +1,65 @@
+# 论文PDF摘要工作流配置文件
+
+# 数据库配置
+database:
+  # SQLite数据库文件路径
+  path: "/opt/lis-rss-daily/data/rss-tracker.db"
+
+# 每日处理限制
+daily_process_limit: 5
+
+# 文件存储配置
+storage:
+  # PDF和MD文件下载保存根目录
+  download_root: "download"
+  # 每日日志文件保存根目录
+  logs_root: "logs"
+
+# PDF下载配置
+pdf_download:
+  # 下载脚本优先级顺序（按顺序尝试，成功则停止）
+  priority_scripts:
+    - "pdf-download/zhesheke_pdf_download.py"
+    - "pdf-download/wanfang_pdf_download.py"
+    - "pdf-download/cnki_pdf_download.py"
+  # 每个脚本最大重试次数
+  max_retries: 1
+  # PDF文件名匹配验证：允许的误差字符数（0表示完全匹配）
+  match_threshold: 0
+
+# 数据源配置
+data_sources:
+  # 期刊名称列表配置文件
+  journals_list: "config/journals_list.yaml"
+
+# PDF总结配置
+pdf_summary:
+  # PDF总结脚本路径
+  script: "pdf-summary/hiagent_upload.py"
+  # 上传后是否删除本地PDF文件
+  delete_pdf: true
+
+# 总结上传配置（并行执行）
+summary_upload:
+  # HiAgent RAG知识库上传
+  hiagent_rag:
+    enabled: true
+    script: "summary-update/hiagent-rag-upload/upload_knowledge.py"
+    delete_md: true
+  
+  # LIS-RSS系统更新
+  lis_rss:
+    enabled: true
+    script: "summary-update/lis-rss-summary-update/update_summary.py"
+  
+  # Memos上传
+  memos:
+    enabled: true
+    script: "summary-update/memos/memos_client.py"
+
+  # 企业微信推送
+  wechat:
+    enabled: true
+    # webhook_url 通过环境变量 WECHAT_WEBHOOK_KEY 自动组装
+    timeout: 30
+    max_retries: 2

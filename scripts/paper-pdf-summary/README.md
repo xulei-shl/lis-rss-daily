@@ -1,0 +1,336 @@
+# 论文 PDF 摘要工作流
+
+自动化论文 PDF 下载、AI 总结和多系统分发的完整工作流系统。
+
+## 功能特性
+
+- **多 PDF 源下载**：支持智社科、万方、CNKI 等多个数据库
+- **智能 PDF 验证**：自动验证下载的 PDF 文件名与文章标题匹配
+- **AI 摘要生成**：通过 HiAgent 自动生成论文摘要（Markdown 格式）
+- **多系统并行上传**：同时上传到摘要到 HiAgent RAG、LIS-RSS、Memos
+- **企业微信推送**：自动推送论文摘要到企业微信群
+- **自动数据库更新**：更新数据库的 ai_summary 字段
+- **每日处理报告**：生成详细的每日处理结果报告
+- **断点恢复机制**：支持中断后恢复处理
+
+## 项目结构
+
+```
+paper-pdf-summary/
+├── config/                    # 配置文件目录
+│   ├── config.yaml           # 主配置文件
+│   └── journals_list.yaml    # 期刊白名单
+├── pdf-download/               # PDF 下载脚本
+│   ├── zhesheke_pdf_download.py
+│   ├── wanfang_pdf_download.py
+│   └── cnki_pdf_download.py
+├── pdf-summary/              # PDF 总结脚本
+│   └── hiagent_upload.py
+├── summary-update/            # 上传脚本
+│   ├── hiagent-rag-upload/
+│   ├── lis-rss-summary-update/
+│   └── memos/
+├── wechat/                   # 企业微信推送模块
+│   ├── client.py             # WeChat 客户端
+│   └── message_formatter.py   # 消息格式化器
+├── utils/                    # 工具模块
+│   ├── database.py          # 数据库操作
+│   ├── pdf_downloader.py     # PDF 下载器
+│   ├── pdf_validator.py     # PDF 验证器
+│   ├── pdf_summarizer.py   # PDF 总结器
+│   ├── summary_uploader.py  # 并行上传器
+│   └── logger.py           # 日志记录器
+├── download/                  # 下载文件存储目录
+├── logs/                     # 每日日志目录
+├── main.py                   # 主入口脚本
+├── .env.example              # 环境变量模板
+└── README.md                 # 本文档
+```
+
+## 安装
+
+### 1. 克隆项目
+
+```bash
+cd /opt/lis-rss-daily/scripts/paper-pdf-summary
+```
+
+### 2. 配置环境变量
+
+复制环境变量模板并填写实际值：
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env` 文件，配置以下以下服务：
+
+#### Memos 配置
+```env
+MEMOS_BASE_URL=https://your-memos-instance.com
+MEMOS_ACCESS_TOKEN=memos_pat_your_token_here
+```
+
+#### LIS-RSS 配置
+```env
+LIS_RSS_API_URL=https://your-lis-rss.com
+LIS_RSS_USERNAME=your_username
+LIS_RSS_PASSWORD=your_password
+```
+
+#### HiAgent RAG 知识库配置
+```env
+WorkspaceType=personal
+WorkspaceID=your_workspace_id
+DatasetID=your_knowledge_id
+```
+
+#### HiAgent PDF 总结配置
+```env
+HIAGENT_PDF_URL=https://your-hiagent-pdf-url.com
+```
+
+#### 企业微信推送配置
+```env
+WECHAT_WEBHOOK_KEY=your_wechat_webhook_key_here
+```
+
+### 3. 配置虚拟环境
+
+```bash
+# 使用已有的虚拟环境
+export PYTHONPATH=/home/xulei/.pyenvs/env_camoufox/bin/python
+```
+
+### 4. 安装依赖
+
+```bash
+# 安装 Camoufox（如需要需要的）
+pip install camoufox[geoip]
+
+# 安装 Playwright 浏览器
+playwright install chromium
+
+# 安装企业微信推送依赖
+pip install aiohttp
+```
+
+## 配置说明
+
+### config.yaml
+
+主配置文件包含以下部分：
+
+#### 数据库配置
+```yaml
+database:
+  path: "/opt/lis-rss-daily/data/rss-tracker.db"
+```
+
+#### 处理限制
+```yaml
+daily_process_limit: 1  # 每日最多处理的文章数量
+```
+
+#### PDF 下载配置
+```yaml
+pdf_download:
+  priority_scripts:          # 下载脚本优先级
+    - "pdf-download/zhesheke_pdf_download.py"
+    - "pdf-download/wanfang_pdf_download.py"
+    - "pdf-download/cnki_pdf_download.py"
+  max_retries: 1            # 每个脚本最大重试次数
+  match_threshold: 0          # PDF 文件名匹配阈值（0=完全匹配）
+```
+
+#### PDF 总结配置
+```yaml
+pdf_summary:
+  script: "pdf-summary/hiagent_upload.py"
+  delete_pdf: true            # 总结后是否删除原 PDF
+```
+
+#### 上传配置
+```yaml
+summary_upload:
+  hiagent_rag:
+    enabled: true
+    script: "summary-update/hiagent-rag-upload/upload_knowledge.py"
+    delete_md: true
+
+  lis_rss:
+    enabled: true
+    script: "summary-update/lis-rss-summary-update/update_summary.py"
+
+  memos:
+    enabled: true
+    script: "summary-update/memos/memos_client.py"
+
+  wechat:
+    enabled: true
+    # webhook_url 通过环境变量 WECHAT_WEBHOOK_KEY 自动组装
+    timeout: 30
+    max_retries: 2
+```
+
+##### 企业微信推送配置说明
+- `enabled`: 是否启用企业微信推送
+- `webhook_url`: 通过 `.env` 文件中的 `WECHAT_WEBHOOK_KEY` 环境变量自动组装
+- `timeout`: 请求超时时间（秒）
+- `max_retries`: 失败重试次数
+
+**环境变量配置**：在 `.env` 文件中添加：
+```env
+WECHAT_WEBHOOK_KEY=your_wechat_webhook_key_here
+```
+
+**消息格式**：自动生成 Markdown 格式的推送消息，包含论文 ID、来源、标题和摘要内容。超长消息会自动拆分为多条发送。
+
+## 使用方法
+
+### 完整工作流
+
+```bash
+# 使用 xulei 用户运行（推荐）
+sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/xulei/.pyenvs/env_camoufox/bin/python main.py"
+```
+
+### 定时任务配置
+
+系统已配置为每天早上 7:00 自动执行脚本，使用 xulei 用户的 crontab。
+
+**当前配置：**
+- 执行时间：每天早上 7:00
+- 执行用户：xulei
+- 虚拟环境：`/home/xulei/.pyenvs/env_camoufox/bin/python`
+- 脚本：`main.py`
+- 日志：`/opt/lis-rss-daily/scripts/paper-pdf-summary/logs/cron.log`
+
+**Crontab 条目：**
+```cron
+0 7 * * * cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/xulei/.pyenvs/env_camoufox/bin/python main.py >> /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/cron.log 2>&1
+```
+
+**常用操作：**
+```bash
+# 查定时任务
+sudo -u xulei crontab -l
+
+# 编辑定时任务
+sudo -u xulei crontab -e
+
+# 删除定时任务（小心！）
+sudo -u xulei crontab -r
+
+# 查看执行日志
+tail -f /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/cron.log
+```
+
+### 处理流程
+
+工作流自动执行以下步骤：
+
+1. **获取待处理数据**：从数据库查询符合期刊白名单的待处理文章
+2. **PDF 下载**：按优先级尝试多个下载源
+3. **PDF 验证**：验证文件名与文章标题匹配
+4. **AI 总结**：调用 HiAgent 生成 Markdown 格式摘要
+5. **并行上传**：同时上传到四个子系统
+   - HiAgent RAG 知识库
+   - LIS-RSS 系统（更新 ai_summary 字段）
+   - Memos（创建论文笔记）
+   - 企业微信（推送论文摘要）
+6. **生成报告**：生成每日处理报告
+
+## 日志和报告
+
+### 每日日志
+
+日志文件保存在 `logs/` 目录，按日期命名：
+
+```
+logs/2026-03-18.md
+```
+
+### 处理报告
+
+每日报告包含：
+- 处理概览（成功/失败统计）
+- 成功记录列表
+- 失败记录列表（含失败原因）
+
+## 故障排查
+
+### PDF 下载失败
+
+检查：
+1. 网络连接是否正常
+2. 下载源网站是否可访问
+3. PDF 下载脚本配置是否正确
+
+### PDF 验证失败
+
+检查：
+1. 下载的 PDF 文件名是否正确
+2. 文件名匹配阈值配置（`match_threshold`）
+3. 查看日志中的详细匹配原因
+
+### PDF 总结超时
+
+系统支持自动恢复机制：
+- 即使脚本超时，只要 MD 文件已生成，会继续处理
+- 检查 `download/` 目录下的 MD 文件是否有效
+
+### 上传失败
+
+检查：
+1. 对应服务的环境变量是否正确配置
+2. 服务是否可访问
+3. 查看各子系统的详细错误日志
+
+## 技术栈
+
+- **Python 3.12+**
+- **Playwright**：浏览器自动化
+- **Camoufox**：反检测浏览器
+- **PyYAML**：配置文件解析
+- **Asyncio**：异步并行处理
+
+## 开发
+
+### 添加新的 PDF 下载源
+
+1. 在 `pdf-download/` 目录创建新的下载脚本
+2. 在 `config/config.yaml` 中添加到 `priority_scripts`
+
+### 添加新的上传子系统
+
+1. 在 `summary-update/` 创建新的上传模块
+2. 在 `utils/summary_uploader.py` 添加新的上传函数
+3. 在 `config/config.yaml` 中配置启用
+
+## 许可证
+
+内部项目，仅供授权使用
+
+## 维护
+
+### 常见任务
+
+**清理旧日志**：
+```bash
+find logs/ -name "*.md" -mtime +30 -delete
+```
+
+**清理下载文件**：
+```bash
+find download/ -type f -mtime +7 -delete
+```
+
+**备份配置**：
+```bash
+tar -czf config-backup-$(date +%Y%m%d).tar.gz config/
+```
+
+## 联系支持
+
+如有问题，请联系系统管理员或查看项目文档目录 `docs/`。
