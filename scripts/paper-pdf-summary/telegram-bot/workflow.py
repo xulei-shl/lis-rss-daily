@@ -154,7 +154,8 @@ class Workflow:
             "/usr/bin/xvfb-run", "-a",
             PYTHON_ENV,
             str(SCRIPT_DIR / "main.py"),
-            "--title", title
+            "--title", title,
+            "--stop-after-summary"
         ]
 
         if article_id is not None:
@@ -178,7 +179,7 @@ class Workflow:
                 cwd=str(SCRIPT_DIR)
             )
 
-            stdout, _ = process.communicate(timeout=900)
+            stdout, _ = process.communicate(timeout=600)
 
             print(f"[Workflow] Process output:\n{stdout}")
 
@@ -188,6 +189,25 @@ class Workflow:
                     error=f"脚本执行失败 (返回码: {process.returncode})"
                 )
 
+            # 解析JSON输出
+            import json
+            import re
+            json_match = re.search(r'SUMMARY_RESULT_JSON\s*\n(.*?)\n={60}', stdout, re.DOTALL)
+            if json_match:
+                try:
+                    json_text = json_match.group(1).strip()
+                    data = json.loads(json_text)
+                    return WorkflowResult(
+                        success=data.get('success', False),
+                        md_content=data.get('md_content'),
+                        md_path=data.get('md_path'),
+                        article_id=data.get('article_id'),
+                        error=data.get('reason')
+                    )
+                except json.JSONDecodeError as e:
+                    print(f"[Workflow] Failed to parse JSON: {e}")
+
+            # 回退：尝试查找MD文件
             md_path = self._find_md_file(title)
             if md_path:
                 md_content = md_path.read_text(encoding="utf-8")
@@ -207,7 +227,7 @@ class Workflow:
             process.kill()
             return WorkflowResult(
                 success=False,
-                error="执行超时（超过15分钟）"
+                error="执行超时（超过10分钟）"
             )
 
         except Exception as e:

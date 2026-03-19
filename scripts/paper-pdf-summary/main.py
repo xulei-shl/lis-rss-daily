@@ -71,7 +71,7 @@ def print_article_info(article: Dict):
     print(f"  来源: {article.get('source_name', '未知')}")
 
 
-def process_direct_article(title: str, article_id: Optional[int], config: Dict, logger: DailyLogger, today: str, skip_wechat: bool = False) -> None:
+def process_direct_article(title: str, article_id: Optional[int], config: Dict, logger: DailyLogger, today: str, skip_wechat: bool = False, stop_after_summary: bool = False) -> Optional[Dict]:
     """
     直接处理指定的文章（跳过数据库查询）
 
@@ -82,6 +82,10 @@ def process_direct_article(title: str, article_id: Optional[int], config: Dict, 
         logger: 日志记录器
         today: 当日日期字符串
         skip_wechat: 是否跳过企业微信推送
+        stop_after_summary: 步骤3成功后立即返回，不执行步骤4
+
+    Returns:
+        如果 stop_after_summary=True，返回包含md_content等信息的字典；否则返回None
     """
     # 创建当日工作目录
     download_root = config['storage']['download_root']
@@ -102,6 +106,10 @@ def process_direct_article(title: str, article_id: Optional[int], config: Dict, 
     print(f"# 处理直接指定的文章")
     print('#'*60)
 
+    # 如果只需要步骤3，立即执行并返回
+    if stop_after_summary:
+        return process_article_summary_only(article, config, daily_dir, skip_wechat)
+
     result = process_article(article, config, daily_dir, logger, skip_lis_rss=skip_lis_rss, skip_wechat=skip_wechat)
 
     if result['success']:
@@ -121,6 +129,100 @@ def process_direct_article(title: str, article_id: Optional[int], config: Dict, 
     print(f"  失败: {1 if not result['success'] else 0}")
     print(f"  报告: {report_path}")
     print('='*60)
+
+
+def process_article_summary_only(article: Dict, config: Dict, daily_dir: Path, skip_wechat: bool = False) -> Dict:
+    """
+    仅执行步骤1-3，返回MD内容用于立即推送
+
+    Args:
+        article: 文章数据
+        config: 配置字典
+        daily_dir: 当日工作目录
+        skip_wechat: 是否跳过企业微信推送
+
+    Returns:
+        包含 md_path, md_content, article_id, title 等信息的字典
+    """
+    article_id = article['id']
+    title = article['title']
+
+    print_article_info(article)
+
+    result = {
+        'article_id': article_id,
+        'title': title,
+        'success': False,
+        'md_path': None,
+        'md_content': None,
+        'skip_wechat': skip_wechat,
+        'stages': {}
+    }
+
+    # ===== 步骤1: PDF下载 =====
+    print_section("步骤1: PDF下载")
+
+    pdf_path = download_pdf(
+        title=title,
+        output_dir=str(daily_dir),
+        config=config
+    )
+
+    if not pdf_path:
+        reason = "PDF下载失败（所有脚本均失败）"
+        print(f"[失败] {reason}")
+        result['reason'] = reason
+        return result
+
+    result['stages']['pdf_download'] = 'success'
+    print(f"[成功] PDF已下载: {pdf_path}")
+
+    # ===== 步骤2: 验证PDF文件名匹配 =====
+    print_section("步骤2: 验证PDF文件名匹配")
+
+    threshold = config.get('pdf_download', {}).get('match_threshold', 0)
+    matched, match_reason = validate_and_cleanup(
+        pdf_path=pdf_path,
+        original_title=title,
+        threshold=threshold,
+        delete_on_mismatch=True
+    )
+
+    if not matched:
+        reason = f"PDF文件名不匹配: {match_reason}"
+        print(f"[失败] {reason}")
+        result['stages']['pdf_validate'] = 'failed'
+        result['reason'] = reason
+        return result
+
+    result['stages']['pdf_validate'] = 'success'
+    print(f"[成功] PDF验证通过")
+
+    # ===== 步骤3: PDF总结 =====
+    print_section("步骤3: PDF总结")
+
+    md_path = summarize_pdf(pdf_path, config)
+
+    if not md_path:
+        reason = "PDF总结失败"
+        print(f"[失败] {reason}")
+        result['stages']['pdf_summary'] = 'failed'
+        result['reason'] = reason
+        return result
+
+    result['stages']['pdf_summary'] = 'success'
+    result['md_path'] = str(md_path)
+    print(f"[成功] MD文件已生成: {md_path}")
+
+    # 读取MD内容
+    md_content = md_path.read_text(encoding='utf-8')
+    result['md_content'] = md_content
+    result['success'] = True
+
+    print(f"[完成] 步骤3成功，MD内容已准备好（{len(md_content)} 字符）")
+    print(f"[提示] 步骤4上传将在后台继续执行...")
+
+    return result
 
 
 def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyLogger, skip_lis_rss: bool = False, skip_wechat: bool = False) -> Dict:
@@ -253,6 +355,7 @@ def main():
     parser.add_argument('--title', help='论文题名（PDF下载检索词）')
     parser.add_argument('--id', type=int, help='文章ID（可选，跳过LIS-RSS上传如果未提供）')
     parser.add_argument('--skip-wechat', action='store_true', help='跳过企业微信推送（Telegram发起时使用）')
+    parser.add_argument('--stop-after-summary', action='store_true', help='步骤3成功后立即返回，不执行步骤4上传')
     args = parser.parse_args()
 
     print_section("论文PDF摘要工作流启动")
@@ -278,7 +381,52 @@ def main():
         print(f"  题名: {args.title}")
         print(f"  文章ID: {args.id if args.id else '未提供（将跳过LIS-RSS上传）'}")
         print(f"  跳过微信: {'是' if args.skip_wechat else '否'}")
-        process_direct_article(args.title, args.id, config, logger, today, skip_wechat=args.skip_wechat)
+        print(f"  立即返回（步骤3后）: {'是' if args.stop_after_summary else '否'}")
+        
+        summary_result = process_direct_article(
+            args.title, args.id, config, logger, today,
+            skip_wechat=args.skip_wechat,
+            stop_after_summary=args.stop_after_summary
+        )
+        
+        # 如果是 stop_after_summary 模式，输出JSON结果
+        if args.stop_after_summary and summary_result:
+            import json
+            print("\n" + "="*60)
+            print("  SUMMARY_RESULT_JSON")
+            print("="*60)
+            # 输出关键信息供 workflow.py 捕获
+            output = {
+                'success': summary_result.get('success', False),
+                'md_path': summary_result.get('md_path'),
+                'md_content': summary_result.get('md_content'),
+                'article_id': summary_result.get('article_id'),
+                'title': summary_result.get('title'),
+                'reason': summary_result.get('reason')
+            }
+            print(json.dumps(output, ensure_ascii=False))
+            print("="*60)
+            
+            # 后台上传步骤4
+            if summary_result.get('success'):
+                print(f"\n[后台] 开始执行步骤4上传...")
+                from threading import Thread
+                def background_upload():
+                    asyncio.run(parallel_upload(
+                        md_path=summary_result['md_path'],
+                        article_id=summary_result.get('article_id'),
+                        article_title=summary_result.get('title'),
+                        source_name='手动指定',
+                        config=config,
+                        skip_lis_rss=summary_result.get('article_id') is None,
+                        skip_wechat=True
+                    ))
+                    print(f"[后台] 步骤4上传完成")
+                
+                upload_thread = Thread(target=background_upload, daemon=True)
+                upload_thread.start()
+            return
+
         return
 
     # 加载期刊白名单
