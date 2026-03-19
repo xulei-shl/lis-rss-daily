@@ -389,42 +389,12 @@ def main():
             stop_after_summary=args.stop_after_summary
         )
         
-        # 如果是 stop_after_summary 模式，输出JSON结果
+        # 如果是 stop_after_summary 模式，步骤3成功后立即返回
         if args.stop_after_summary and summary_result:
-            import json
-            print("\n" + "="*60)
-            print("  SUMMARY_RESULT_JSON")
-            print("="*60)
-            # 输出关键信息供 workflow.py 捕获
-            output = {
-                'success': summary_result.get('success', False),
-                'md_path': summary_result.get('md_path'),
-                'md_content': summary_result.get('md_content'),
-                'article_id': summary_result.get('article_id'),
-                'title': summary_result.get('title'),
-                'reason': summary_result.get('reason')
-            }
-            print(json.dumps(output, ensure_ascii=False))
-            print("="*60)
-            
-            # 后台上传步骤4
             if summary_result.get('success'):
-                print(f"\n[后台] 开始执行步骤4上传...")
-                from threading import Thread
-                def background_upload():
-                    asyncio.run(parallel_upload(
-                        md_path=summary_result['md_path'],
-                        article_id=summary_result.get('article_id'),
-                        article_title=summary_result.get('title'),
-                        source_name='手动指定',
-                        config=config,
-                        skip_lis_rss=summary_result.get('article_id') is None,
-                        skip_wechat=True
-                    ))
-                    print(f"[后台] 步骤4上传完成")
-                
-                upload_thread = Thread(target=background_upload, daemon=True)
-                upload_thread.start()
+                print("\n" + "="*60)
+                print(f"SUMMARY_SUCCESS|{summary_result.get('md_path')}|{summary_result.get('article_id')}|{summary_result.get('title')}")
+                print("="*60)
             return
 
         return

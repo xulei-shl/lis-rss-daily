@@ -192,21 +192,69 @@ class Workflow:
             # 解析JSON输出
             import json
             import re
-            json_match = re.search(r'SUMMARY_RESULT_JSON\s*\n={5,}\n(.*?)\n={5,}', stdout, re.DOTALL)
-            if json_match:
-                try:
-                    json_text = json_match.group(1).strip()
-                    data = json.loads(json_text)
-                    return WorkflowResult(
-                        success=data.get('success', False),
-                        md_content=data.get('md_content'),
-                        md_path=data.get('md_path'),
-                        article_id=data.get('article_id'),
-                        error=data.get('reason')
-                    )
-                except json.JSONDecodeError as e:
-                    print(f"[Workflow] Failed to parse JSON: {e}")
-
+            success_line = None
+            for line in stdout.split('\n'):
+                if 'SUMMARY_SUCCESS|' in line:
+                    success_line = line.strip()
+                    break
+            
+            if success_line:
+                parts = success_line.split('|')
+                if len(parts) >= 4:
+                    md_path = parts[1]
+                    article_id = int(parts[2]) if parts[2].isdigit() else None
+                    title = parts[3]
+                    
+                    md_file = Path(md_path)
+                    if md_file.exists():
+                        md_content = md_file.read_text(encoding="utf-8")
+                        
+                        # 立即发送Telegram
+                        from bot import TelegramBot
+                        import yaml
+                        
+                        config = load_config()
+                        bot = TelegramBot(
+                            bot_token=config['telegram']['bot_token'],
+                            user_id=config['telegram']['user_id'],
+                            chat_id=config['telegram']['chat_id']
+                        )
+                        
+                        asyncio.run(bot._send_message("✅ 处理完成！正在发送摘要..."))
+                        max_length = 4000
+                        if len(md_content) > max_length:
+                            asyncio.run(bot._send_long_message(md_content))
+                        else:
+                            asyncio.run(bot._send_message("📄 **摘要内容**\n\n" + md_content))
+                        asyncio.run(bot._send_message("✅ **处理完成**\n\n_摘要已生成并发送_"))
+                        
+                        # 后台执行步骤4
+                        from threading import Thread
+                        import sys
+                        sys.path.insert(0, str(SCRIPT_DIR))
+                        from utils.summary_uploader import upload_all
+                        
+                        def background_upload():
+                            asyncio.run(upload_all(
+                                md_path=md_path,
+                                article_id=article_id,
+                                article_title=title,
+                                source_name='手动指定',
+                                config=config,
+                                skip_lis_rss=article_id is None,
+                                skip_wechat=True
+                            ))
+                        
+                        upload_thread = Thread(target=background_upload, daemon=True)
+                        upload_thread.start()
+                        
+                        return WorkflowResult(
+                            success=True,
+                            md_content=md_content,
+                            md_path=md_path,
+                            article_id=article_id
+                        )
+            
             # 回退：尝试查找MD文件
             md_path = self._find_md_file(title)
             if md_path:
