@@ -236,8 +236,8 @@ class TelegramBot:
                             chat_id = message.get("chat", {}).get("id")
                             text = message.get("text", "")
 
-                            if chat_id == self.chat_id:
-                                await self.handle_command(text)
+                        if chat_id == self.chat_id:
+                            await self.handle_command(text)
 
                         offset = update_id + 1
 

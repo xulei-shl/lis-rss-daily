@@ -151,6 +151,7 @@ class Workflow:
             WorkflowResult 结果对象
         """
         cmd = [
+            "/usr/bin/xvfb-run", "-a",
             PYTHON_ENV,
             str(SCRIPT_DIR / "main.py"),
             "--title", title

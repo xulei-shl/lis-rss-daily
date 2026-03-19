@@ -8,7 +8,7 @@ User=xulei
 WorkingDirectory=/opt/lis-rss-daily/scripts/paper-pdf-summary
 Environment="HTTP_PROXY=http://127.0.0.1:7890"
 Environment="PYTHON_ENV=/home/xulei/.pyenvs/env_camoufox/bin/python"
-ExecStart=/home/xulei/.pyenvs/env_camoufox/bin/python /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot/main.py
+ExecStart=/home/xulei/.pyenvs/env_camoufox/bin/python -u /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot/main.py
 Restart=always
 RestartSec=10
 StandardOutput=append:/opt/lis-rss-daily/scripts/paper-pdf-summary/logs/telegram-bot.log

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 
 TELEGRAM_API_BASE = "https://api.telegram.org"
-DEFAULT_TIMEOUT = 30
+DEFAULT_TIMEOUT = 15
 MAX_RETRIES = 3
 MAX_MESSAGE_LENGTH = 4096
 
