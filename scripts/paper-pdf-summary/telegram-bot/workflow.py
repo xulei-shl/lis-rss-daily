@@ -192,7 +192,7 @@ class Workflow:
             # 解析JSON输出
             import json
             import re
-            json_match = re.search(r'SUMMARY_RESULT_JSON\s*\n(.*?)\n={60}', stdout, re.DOTALL)
+            json_match = re.search(r'SUMMARY_RESULT_JSON\s*\n={5,}\n(.*?)\n={5,}', stdout, re.DOTALL)
             if json_match:
                 try:
                     json_text = json_match.group(1).strip()
