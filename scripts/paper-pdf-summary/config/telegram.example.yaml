@@ -1,0 +1,28 @@
+# Telegram Bot 配置示例
+# 
+# 将以下配置添加到 config/config.yaml 的末尾
+#
+# 获取 bot_token:
+#   1. 在 Telegram 搜索 @BotFather
+#   2. 发送 /newbot
+#   3. 按提示设置机器人名称
+#   4. 获取 bot_token
+#
+# 获取 user_id 和 chat_id:
+#   1. 在 Telegram 搜索 @userinfobot
+#   2. 发送任意消息
+#   3. 获取你的 User ID
+#   4. 通常 user_id 和 chat_id 是相同的值
+
+telegram:
+  # 是否启用 Telegram Bot (true/false)
+  enabled: true
+  
+  # Bot Token (从 @BotFather 获取)
+  bot_token: "YOUR_BOT_TOKEN_HERE"
+  
+  # 允许使用 Bot 的用户 ID (Telegram User ID)
+  user_id: 123456789
+  
+  # 发送消息的默认 Chat ID (通常与 user_id 相同)
+  chat_id: 123456789

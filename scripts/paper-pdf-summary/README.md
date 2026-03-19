@@ -9,7 +9,6 @@
 - **AI 摘要生成**：通过 HiAgent 自动生成论文摘要（Markdown 格式）
 - **多系统并行上传**：同时上传到摘要到 HiAgent RAG、LIS-RSS、Memos
 - **企业微信推送**：自动推送论文摘要到企业微信群
-- **自动数据库更新**：更新数据库的 ai_summary 字段
 - **每日处理报告**：生成详细的每日处理结果报告
 - **断点恢复机制**：支持中断后恢复处理
 
@@ -30,6 +29,13 @@ paper-pdf-summary/
 │   ├── hiagent-rag-upload/
 │   ├── lis-rss-summary-update/
 │   └── memos/
+├── telegram-bot/             # Telegram Bot 模块
+│   ├── bot.py               # Bot 主类
+│   ├── client.py            # Telegram API 客户端
+│   ├── command_parser.py    # 命令解析器
+│   ├── state.py             # 状态管理
+│   ├── workflow.py          # 工作流封装
+│   └── main.py              # 启动入口
 ├── wechat/                   # 企业微信推送模块
 │   ├── client.py             # WeChat 客户端
 │   └── message_formatter.py   # 消息格式化器
@@ -42,6 +48,8 @@ paper-pdf-summary/
 │   └── logger.py           # 日志记录器
 ├── download/                  # 下载文件存储目录
 ├── logs/                     # 每日日志目录
+├── docs/                     # 文档目录
+│   └── telegram-bot.service # systemd 服务文件
 ├── main.py                   # 主入口脚本
 ├── .env.example              # 环境变量模板
 └── README.md                 # 本文档
@@ -186,6 +194,23 @@ WECHAT_WEBHOOK_KEY=your_wechat_webhook_key_here
 
 **消息格式**：自动生成 Markdown 格式的推送消息，包含论文 ID、来源、标题和摘要内容。超长消息会自动拆分为多条发送。
 
+#### Telegram Bot 配置
+```yaml
+telegram:
+  enabled: true              # 是否启用 Telegram Bot
+  bot_token: "xxx:xxx"     # Bot Token（从 @BotFather 获取）
+  user_id: 123456789        # 允许使用 Bot 的用户 ID
+  chat_id: 123456789        # 发送消息的默认 Chat ID
+```
+
+**配置步骤**：
+1. 在 Telegram 搜索 @BotFather，发送 `/newbot` 创建机器人
+2. 获取 bot_token 并填入配置
+3. 在 Telegram 搜索 @userinfobot 获取你的 User ID
+4. 设置 `enabled: true` 启用 Bot
+
+**代理配置**：如需代理，在 systemd 服务文件中设置 `HTTP_PROXY` 环境变量
+
 ## 使用方法
 
 ### 完整工作流（数据库模式）
@@ -212,6 +237,55 @@ sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/
 - `--id`：文章 ID（可选）
   - 提供 ID：执行完整流程，包含 LIS-RSS API 调用
   - 不提供 ID：跳过 LIS-RSS API 调用，只执行 HiAgent RAG、Memos、微信推送
+- `--skip-wechat`：跳过企业微信推送（默认 false）
+
+### Telegram Bot 交互
+
+通过 Telegram Bot 远程触发论文处理命令。
+
+**启动服务**：
+```bash
+# 安装服务
+sudo cp docs/telegram-bot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable paper-pdf-summary-telegram
+sudo systemctl start paper-pdf-summary-telegram
+```
+
+```
+开机启动验证：
+sudo systemctl is-enabled paper-pdf-summary-telegram
+# 输出:enabled
+如果你不想开机自启，可以禁用：
+sudo systemctl disable paper-pdf-summary-telegram
+```
+
+**Bot 命令**：
+```
+/papers help              # 查看帮助信息
+/papers <论文题名>        # 处理论文（跳过 LIS-RSS 和微信推送）
+/papers <论文题名> @<ID>  # 处理论文并同步到 LIS-RSS
+```
+
+**服务管理**：
+```bash
+# 查看状态
+sudo systemctl status paper-pdf-summary-telegram
+
+# 查看日志
+sudo journalctl -u paper-pdf-summary-telegram -f
+
+# 重启服务
+sudo systemctl restart paper-pdf-summary-telegram
+
+# 停止服务
+sudo systemctl stop paper-pdf-summary-telegram
+```
+
+**注意事项**：
+- Telegram 发起的处理会自动跳过企业微信推送
+- 处理时间约 5-10 分钟，请耐心等待
+- 处理完成后会自动发送摘要内容到 Telegram
 
 ### 定时任务配置
 
@@ -326,9 +400,6 @@ logs/2026-03-18.md
 2. 在 `utils/summary_uploader.py` 添加新的上传函数
 3. 在 `config/config.yaml` 中配置启用
 
-## 许可证
-
-内部项目，仅供授权使用
 
 ## 维护
 
@@ -348,7 +419,3 @@ find download/ -type f -mtime +7 -delete
 ```bash
 tar -czf config-backup-$(date +%Y%m%d).tar.gz config/
 ```
-
-## 联系支持
-
-如有问题，请联系系统管理员或查看项目文档目录 `docs/`。

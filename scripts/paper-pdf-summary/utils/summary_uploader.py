@@ -382,7 +382,8 @@ async def upload_all(
     article_title: str,
     config: Dict,
     source_name: Optional[str] = None,
-    skip_lis_rss: bool = False
+    skip_lis_rss: bool = False,
+    skip_wechat: bool = False
 ) -> Dict[str, bool]:
     """
     并行执行所有上传子系统
@@ -432,10 +433,15 @@ async def upload_all(
         print(f"[信息] LIS-RSS上传已启用")
         tasks.append(upload_to_lis_rss(article_id, md_content, config))
 
-    tasks.extend([
-        upload_to_memos(article_title, md_content, config),
-        upload_to_wechat(md_content, article_id, article_title, source_name, config)
-    ])
+    tasks.append(upload_to_memos(article_title, md_content, config))
+
+    # 只有当 skip_wechat 为 False 时才添加 WeChat 任务
+    if skip_wechat:
+        print(f"[跳过] WeChat推送已禁用（Telegram发起）")
+        tasks.append(asyncio.sleep(0))  # 占位符，保持结果索引一致性
+    else:
+        print(f"[信息] WeChat推送已启用")
+        tasks.append(upload_to_wechat(md_content, article_id, article_title, source_name, config))
 
     # 并行执行
     results = await asyncio.gather(*tasks, return_exceptions=True)

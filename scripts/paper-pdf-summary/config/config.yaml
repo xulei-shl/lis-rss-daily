@@ -6,7 +6,7 @@ database:
   path: "/opt/lis-rss-daily/data/rss-tracker.db"
 
 # 每日处理限制
-daily_process_limit: 5
+daily_process_limit: 3
 
 # 文件存储配置
 storage:
@@ -63,3 +63,14 @@ summary_upload:
     # webhook_url 通过环境变量 WECHAT_WEBHOOK_KEY 自动组装
     timeout: 30
     max_retries: 2
+
+# Telegram Bot 配置
+telegram:
+  # 是否启用 Telegram Bot
+  enabled: true
+  # Bot Token (从 @BotFather 获取)
+  bot_token: "8400389419:AAFqzjLMF96XlJL2vKdYH43s9Xkm2eIP1Sc"
+  # 允许使用 Bot 的用户 ID (Telegram User ID)
+  user_id: 5156588042
+  # 发送消息的默认 Chat ID (通常与 user_id 相同)
+  chat_id: 5156588042

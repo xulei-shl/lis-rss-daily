@@ -71,7 +71,7 @@ def print_article_info(article: Dict):
     print(f"  来源: {article.get('source_name', '未知')}")
 
 
-def process_direct_article(title: str, article_id: Optional[int], config: Dict, logger: DailyLogger, today: str) -> None:
+def process_direct_article(title: str, article_id: Optional[int], config: Dict, logger: DailyLogger, today: str, skip_wechat: bool = False) -> None:
     """
     直接处理指定的文章（跳过数据库查询）
 
@@ -81,6 +81,7 @@ def process_direct_article(title: str, article_id: Optional[int], config: Dict, 
         config: 配置字典
         logger: 日志记录器
         today: 当日日期字符串
+        skip_wechat: 是否跳过企业微信推送
     """
     # 创建当日工作目录
     download_root = config['storage']['download_root']
@@ -101,7 +102,7 @@ def process_direct_article(title: str, article_id: Optional[int], config: Dict, 
     print(f"# 处理直接指定的文章")
     print('#'*60)
 
-    result = process_article(article, config, daily_dir, logger, skip_lis_rss=skip_lis_rss)
+    result = process_article(article, config, daily_dir, logger, skip_lis_rss=skip_lis_rss, skip_wechat=skip_wechat)
 
     if result['success']:
         print(f"\n[进度] 成功: 1, 失败: 0")
@@ -122,7 +123,7 @@ def process_direct_article(title: str, article_id: Optional[int], config: Dict, 
     print('='*60)
 
 
-def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyLogger, skip_lis_rss: bool = False) -> Dict:
+def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyLogger, skip_lis_rss: bool = False, skip_wechat: bool = False) -> Dict:
     """
     处理单篇文章
     
@@ -222,7 +223,8 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
             article_title=title,
             source_name=source_name,
             config=config,
-            skip_lis_rss=skip_lis_rss
+            skip_lis_rss=skip_lis_rss,
+            skip_wechat=skip_wechat
         ))
         
         result['stages']['upload'] = upload_results
@@ -250,6 +252,7 @@ def main():
     parser = argparse.ArgumentParser(description='论文PDF摘要工作流')
     parser.add_argument('--title', help='论文题名（PDF下载检索词）')
     parser.add_argument('--id', type=int, help='文章ID（可选，跳过LIS-RSS上传如果未提供）')
+    parser.add_argument('--skip-wechat', action='store_true', help='跳过企业微信推送（Telegram发起时使用）')
     args = parser.parse_args()
 
     print_section("论文PDF摘要工作流启动")
@@ -274,7 +277,8 @@ def main():
         print(f"\n[模式] 直接处理模式")
         print(f"  题名: {args.title}")
         print(f"  文章ID: {args.id if args.id else '未提供（将跳过LIS-RSS上传）'}")
-        process_direct_article(args.title, args.id, config, logger, today)
+        print(f"  跳过微信: {'是' if args.skip_wechat else '否'}")
+        process_direct_article(args.title, args.id, config, logger, today, skip_wechat=args.skip_wechat)
         return
 
     # 加载期刊白名单
