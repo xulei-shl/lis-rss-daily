@@ -17,6 +17,13 @@ from typing import Optional, Dict, Any, Tuple, Callable, List
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
+# 添加 utils 目录到路径
+sys.path.insert(0, str(Path(__file__).parent.parent / "utils"))
+try:
+    from summary_uploader import upload_all
+except ImportError:
+    upload_all = None
+
 
 SCRIPT_DIR = Path(__file__).parent.parent
 PYTHON_ENV = os.getenv("PYTHON_ENV", "/home/xlei/.pyenvs/env_camoufox/bin/python")
@@ -130,21 +137,6 @@ class Workflow:
 
         return None
 
-    def _find_md_file(self, title: str) -> Optional[Path]:
-        """查找生成的 MD 文件"""
-        today = self._get_today()
-        download_dir = Path(self.download_root) / today
-
-        if not download_dir.exists():
-            return None
-
-        title_lower = title.lower()
-
-        for md_file in download_dir.glob("*.md"):
-            if title_lower[:20] in md_file.stem.lower():
-                return md_file
-
-        return None
 
     async def run(
         self,
@@ -222,7 +214,6 @@ class Workflow:
         env = os.environ.copy()
         env["PYTHONPATH"] = str(SCRIPT_DIR)
 
-        last_progress_time = 0
         last_stage = ""
         output_lines = []
 
@@ -251,17 +242,14 @@ class Workflow:
                         output_lines.append(line)
                         print(f"[Workflow] {line}")
 
-                        current_time = time_module.time()
-                        if current_time - last_progress_time >= 30:
-                            for pattern, message in PROGRESS_STAGES:
-                                if re.search(pattern, line, re.IGNORECASE):
-                                    if current_stage != message:
-                                        current_stage = message
-                                        self._emit_progress("处理中", message)
-                                        if progress_callback:
-                                            progress_callback(WorkflowProgress(stage="处理中", message=message))
-                                        last_progress_time = current_time
-                                    break
+                        for pattern, message in PROGRESS_STAGES:
+                            if re.search(pattern, line, re.IGNORECASE):
+                                if current_stage != message:
+                                    current_stage = message
+                                    self._emit_progress("处理中", message)
+                                    if progress_callback:
+                                        progress_callback(WorkflowProgress(stage="处理中", message=message))
+                                break
 
             stdout = "\n".join(output_lines)
             process.wait()
@@ -274,40 +262,35 @@ class Workflow:
                     error=f"脚本执行失败 (返回码: {process.returncode})"
                 )
 
-            json_match = re.search(r'SUMMARY_SUCCESS\|([^\|]+)\|(\d+)\|(.+)', stdout)
-            if json_match:
-                md_path = json_match.group(1)
-                article_id_result = int(json_match.group(2))
-                title_result = json_match.group(3)
-                
+            # 从输出中解析 hiagent_upload.py 输出的 JSON
+            md_path_from_json = None
+            for line in output_lines:
+                try:
+                    data = json.loads(line.strip())
+                    if data.get('status') == 'success' and data.get('md_path'):
+                        md_path_from_json = data['md_path']
+                        break
+                except json.JSONDecodeError:
+                    pass
+
+            if md_path_from_json:
                 self._emit_progress("完成", "处理成功！")
-                
+
                 md_content = ""
-                if Path(md_path).exists():
-                    md_content = Path(md_path).read_text(encoding="utf-8")
+                if Path(md_path_from_json).exists():
+                    md_content = Path(md_path_from_json).read_text(encoding="utf-8")
 
                 return WorkflowResult(
                     success=True,
                     md_content=md_content,
-                    md_path=md_path,
-                    article_id=article_id_result,
+                    md_path=md_path_from_json,
+                    article_id=article_id,
                     error=None
-                )
-
-            md_path = self._find_md_file(title)
-            if md_path:
-                md_content = md_path.read_text(encoding="utf-8")
-                self._emit_progress("完成", "处理成功！")
-                return WorkflowResult(
-                    success=True,
-                    md_content=md_content,
-                    md_path=str(md_path),
-                    article_id=article_id
                 )
             else:
                 return WorkflowResult(
                     success=False,
-                    error="未找到生成的 MD 文件"
+                    error="未从输出中解析到 MD 文件路径"
                 )
 
         except subprocess.TimeoutExpired:
@@ -350,3 +333,45 @@ def load_config(config_path: str = "config/config.yaml") -> Dict[str, Any]:
 
     with open(config_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+async def upload_summary_async(
+    md_path: str,
+    article_id: Optional[int],
+    title: str,
+    config: Dict[str, Any]
+) -> Dict[str, bool]:
+    """
+    异步上传摘要到各子系统
+
+    这个函数应该在推送给用户摘要后，在后台执行。
+
+    Args:
+        md_path: MD 文件路径
+        article_id: 文章 ID（可选）
+        title: 文章标题
+        config: 配置字典
+
+    Returns:
+        各子系统上传结果字典
+    """
+    if upload_all is None:
+        print("[Workflow] upload_all not available, skipping upload")
+        return {}
+
+    try:
+        print(f"[Workflow] Starting background upload: {md_path}")
+        results = await upload_all(
+            md_path=md_path,
+            article_id=article_id or 0,
+            article_title=title,
+            config=config,
+            source_name=None,
+            skip_lis_rss=(article_id is None),
+            skip_wechat=True
+        )
+        print(f"[Workflow] Upload completed: {results}")
+        return results
+    except Exception as e:
+        print(f"[Workflow] Upload error: {e}")
+        return {"error": str(e)}

@@ -21,7 +21,7 @@ sys.path.insert(0, str(bot_dir))
 from client import TelegramClient
 from state import StateManager, ProcessingLock
 from command_parser import parse_papers_command, format_help_text
-from workflow import Workflow, load_config, WorkflowResult, WorkflowProgress
+from workflow import Workflow, load_config, WorkflowResult, WorkflowProgress, upload_summary_async
 
 
 class TelegramBot:
@@ -33,7 +33,7 @@ class TelegramBot:
     ACTIVE_INTERVAL = 1
     IDLE_THRESHOLD = 300
     MESSAGE_INTERVAL = 1.0
-    PROGRESS_INTERVAL = 45
+    PROGRESS_INTERVAL = 5
 
     def __init__(
         self,
@@ -151,7 +151,7 @@ class TelegramBot:
             result = await self._run_workflow_with_progress(title, article_id)
 
             if result.success:
-                await self._handle_success(result)
+                await self._handle_success(result, title)
             else:
                 await self._handle_error(result, title)
 
@@ -167,7 +167,11 @@ class TelegramBot:
             nonlocal last_progress_message, last_progress_time
             current_time = time.time()
 
-            if progress.message != last_progress_message and current_time - last_progress_time >= self.PROGRESS_INTERVAL:
+            # 阶段变化时立即通知，否则遵守间隔限制
+            is_stage_change = progress.message != last_progress_message
+            should_notify = is_stage_change or current_time - last_progress_time >= self.PROGRESS_INTERVAL
+
+            if should_notify and progress.message != last_progress_message:
                 last_progress_message = progress.message
                 last_progress_time = current_time
                 asyncio.create_task(self._send_progress_message(progress.stage, progress.message))
@@ -183,7 +187,7 @@ class TelegramBot:
         except Exception as e:
             print(f"[Bot] Failed to send progress message: {e}")
 
-    async def _handle_success(self, result: WorkflowResult):
+    async def _handle_success(self, result: WorkflowResult, title: str):
         """处理成功"""
         if result.md_content:
             await self._send_message("✅ 处理完成！正在发送摘要...")
@@ -196,11 +200,47 @@ class TelegramBot:
                 await self._send_message(header + result.md_content)
 
             await self._send_message(
-                f"✅ **处理完成**\n\n"
-                f"_摘要已生成并发送_"
+                f"✅ **摘要已发送**\n\n"
+                f"_正在后台上传到各子系统..._"
             )
+
+            # 后台执行步骤4上传
+            asyncio.create_task(self._background_upload(result, title))
         else:
             await self._send_message("✅ 处理完成，但未生成摘要内容")
+
+    async def _background_upload(self, result: WorkflowResult, title: str):
+        """后台上传到各子系统"""
+        try:
+            if result.md_path and result.md_content:
+                print(f"[Bot] Starting background upload for: {title}")
+                upload_results = await upload_summary_async(
+                    md_path=result.md_path,
+                    article_id=result.article_id,
+                    title=title,
+                    config=self.config
+                )
+                print(f"[Bot] Upload results: {upload_results}")
+
+                # 可选：通知用户上传结果（可能太频繁，先注释掉）
+                # await self._send_message(
+                #     f"📤 **上传完成**\n\n"
+                #     f"{self._format_upload_results(upload_results)}"
+                # )
+        except Exception as e:
+            print(f"[Bot] Background upload error: {e}")
+
+    def _format_upload_results(self, results: Dict[str, bool]) -> str:
+        """格式化上传结果"""
+        if not results:
+            return "上传模块未加载"
+
+        lines = []
+        for subsystem, success in results.items():
+            status = "✅" if success else "❌"
+            lines.append(f"{status} {subsystem}")
+
+        return "\n".join(lines)
 
     async def _handle_error(self, result: WorkflowResult, title: str):
         """处理错误"""
