@@ -21,7 +21,7 @@ sys.path.insert(0, str(bot_dir))
 from client import TelegramClient
 from state import StateManager, ProcessingLock
 from command_parser import parse_papers_command, format_help_text
-from workflow import Workflow, load_config, WorkflowResult
+from workflow import Workflow, load_config, WorkflowResult, WorkflowProgress
 
 
 class TelegramBot:
@@ -32,6 +32,8 @@ class TelegramBot:
     IDLE_INTERVAL = 10
     ACTIVE_INTERVAL = 1
     IDLE_THRESHOLD = 300
+    MESSAGE_INTERVAL = 1.0
+    PROGRESS_INTERVAL = 45
 
     def __init__(
         self,
@@ -53,6 +55,7 @@ class TelegramBot:
         self.latest_update_id = 0
         self.last_activity_time = time.time()
         self.poll_thread: Optional[threading.Thread] = None
+        self._last_message_time = 0.0
 
     def _verify_bot(self) -> bool:
         """验证 Bot Token"""
@@ -139,12 +142,13 @@ class TelegramBot:
             status_text = "📥 收到处理请求\n\n"
             status_text += f"**标题**: {title}\n"
             status_text += f"**文章ID**: {article_id if article_id else '未指定（跳过LIS-RSS上传）'}\n\n"
-            status_text += "⏳ 正在开始处理（预计5-10分钟）...\n\n"
-            status_text += "_处理完成后会自动发送结果_"
+            status_text += "⏳ 正在开始处理...\n\n"
+            status_text += "_此过程约需 5-10 分钟_\n"
+            status_text += "_PDF下载、验证、摘要生成，进度会实时通知_"
 
             await self._send_message(status_text)
 
-            result = await self.workflow.run(title, article_id, skip_wechat=True)
+            result = await self._run_workflow_with_progress(title, article_id)
 
             if result.success:
                 await self._handle_success(result)
@@ -154,12 +158,33 @@ class TelegramBot:
         finally:
             self.processing_lock.release()
 
+    async def _run_workflow_with_progress(self, title: str, article_id: Optional[int]) -> WorkflowResult:
+        """运行工作流并发送进度通知"""
+        last_progress_message = ""
+        last_progress_time = time.time()
+
+        def progress_callback(progress: WorkflowProgress):
+            nonlocal last_progress_message, last_progress_time
+            current_time = time.time()
+
+            if progress.message != last_progress_message and current_time - last_progress_time >= self.PROGRESS_INTERVAL:
+                last_progress_message = progress.message
+                last_progress_time = current_time
+                asyncio.create_task(self._send_progress_message(progress.stage, progress.message))
+
+        result = await self.workflow.run(title, article_id, skip_wechat=True, progress_callback=progress_callback)
+        return result
+
+    async def _send_progress_message(self, stage: str, message: str):
+        """发送进度消息"""
+        try:
+            self.client.send_message(self.chat_id, f"⏳ **{stage}**: {message}", "Markdown")
+            self.last_activity_time = time.time()
+        except Exception as e:
+            print(f"[Bot] Failed to send progress message: {e}")
+
     async def _handle_success(self, result: WorkflowResult):
         """处理成功"""
-        if result.telegram_sent:
-            await self._send_message("✅ **处理完成**\n\n_摘要已发送，步骤4上传中..._")
-            return
-        
         if result.md_content:
             await self._send_message("✅ 处理完成！正在发送摘要...")
 
@@ -196,7 +221,13 @@ class TelegramBot:
     async def _send_message(self, text: str, parse_mode: str = "Markdown"):
         """发送消息"""
         try:
+            current_time = time.time()
+            time_since_last = current_time - self._last_message_time
+            if time_since_last < self.MESSAGE_INTERVAL:
+                await asyncio.sleep(self.MESSAGE_INTERVAL - time_since_last)
+
             self.client.send_message(self.chat_id, text, parse_mode)
+            self._last_message_time = time.time()
             self.last_activity_time = time.time()
         except Exception as e:
             print(f"[Bot] Failed to send message: {e}")
@@ -204,8 +235,22 @@ class TelegramBot:
     async def _send_long_message(self, text: str, parse_mode: str = "Markdown"):
         """发送长消息（自动分割）"""
         try:
-            self.client.send_long_message(self.chat_id, text, parse_mode)
-            self.last_activity_time = time.time()
+            parts = self.client.split_message(text)
+            current_time = time.time()
+
+            for i, part in enumerate(parts):
+                time_since_last = current_time - self._last_message_time
+                if time_since_last < self.MESSAGE_INTERVAL:
+                    await asyncio.sleep(self.MESSAGE_INTERVAL - time_since_last)
+
+                if len(parts) > 1:
+                    part = f"[{i+1}/{len(parts)}]\n\n{part}"
+
+                self.client.send_message(self.chat_id, part, parse_mode)
+                self._last_message_time = time.time()
+                current_time = self._last_message_time
+                self.last_activity_time = time.time()
+
         except Exception as e:
             print(f"[Bot] Failed to send long message: {e}")
 

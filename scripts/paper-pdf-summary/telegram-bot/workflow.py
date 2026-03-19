@@ -9,19 +9,44 @@ import sys
 import json
 import subprocess
 import asyncio
+import re
+import time as time_module
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, Callable, List
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
 
 SCRIPT_DIR = Path(__file__).parent.parent
-PYTHON_ENV = os.getenv("PYTHON_ENV", "/home/xulei/.pyenvs/env_camoufox/bin/python")
+PYTHON_ENV = os.getenv("PYTHON_ENV", "/home/xlei/.pyenvs/env_camoufox/bin/python")
 
+PROGRESS_STAGES = [
+    (r"步骤1.*PDF下载", "PDF下载中..."),
+    (r"尝试 \d+/\d+", "尝试下载方案..."),
+    (r"下载成功|SUCCESS|✅", "PDF下载成功"),
+    (r"PDF.*已下载|下载.*成功", "PDF下载成功"),
+    (r"步骤2.*验证", "验证PDF文件名..."),
+    (r"PDF验证通过", "PDF验证通过"),
+    (r"步骤3.*总结|PDF总结", "正在生成摘要..."),
+    (r"MD文件.*生成|总结成功", "摘要生成成功"),
+]
 
 class WorkflowError(Exception):
     """工作流错误"""
     pass
+
+
+@dataclass
+class WorkflowProgress:
+    """工作流进度"""
+    stage: str
+    message: str
+    timestamp: datetime = None
+    
+    def __post_init__(self):
+        if self.timestamp is None:
+            self.timestamp = datetime.now()
 
 
 class WorkflowResult:
@@ -34,8 +59,7 @@ class WorkflowResult:
         md_path: Optional[str] = None,
         article_id: Optional[int] = None,
         error: Optional[str] = None,
-        log_path: Optional[str] = None,
-        telegram_sent: bool = False
+        log_path: Optional[str] = None
     ):
         self.success = success
         self.md_content = md_content
@@ -43,7 +67,6 @@ class WorkflowResult:
         self.article_id = article_id
         self.error = error
         self.log_path = log_path
-        self.telegram_sent = telegram_sent
 
 
 class Workflow:
@@ -54,6 +77,24 @@ class Workflow:
         self.logs_root = config.get("storage", {}).get("logs_root", "logs")
         self.download_root = config.get("storage", {}).get("download_root", "download")
         self._executor = ThreadPoolExecutor(max_workers=1)
+        self._progress_callbacks: List[Callable[[WorkflowProgress], None]] = []
+
+    def add_progress_callback(self, callback: Callable[[WorkflowProgress], None]):
+        """添加进度回调"""
+        self._progress_callbacks.append(callback)
+
+    def clear_progress_callbacks(self):
+        """清空进度回调"""
+        self._progress_callbacks.clear()
+
+    def _emit_progress(self, stage: str, message: str):
+        """触发进度通知"""
+        progress = WorkflowProgress(stage=stage, message=message)
+        for callback in self._progress_callbacks:
+            try:
+                callback(progress)
+            except Exception as e:
+                print(f"[Workflow] Progress callback error: {e}")
 
     def _get_today(self) -> str:
         """获取今日日期"""
@@ -92,11 +133,7 @@ class Workflow:
     def _find_md_file(self, title: str) -> Optional[Path]:
         """查找生成的 MD 文件"""
         today = self._get_today()
-        # 使用绝对路径
-        download_root = Path(self.download_root)
-        if not download_root.is_absolute():
-            download_root = SCRIPT_DIR / download_root
-        download_dir = download_root / today
+        download_dir = Path(self.download_root) / today
 
         if not download_dir.exists():
             return None
@@ -113,7 +150,8 @@ class Workflow:
         self,
         title: str,
         article_id: Optional[int] = None,
-        skip_wechat: bool = True
+        skip_wechat: bool = True,
+        progress_callback: Optional[Callable[[WorkflowProgress], None]] = None
     ) -> WorkflowResult:
         """
         执行工作流
@@ -122,6 +160,7 @@ class Workflow:
             title: 论文题名
             article_id: 文章 ID（可选）
             skip_wechat: 是否跳过企业微信推送
+            progress_callback: 进度回调函数
 
         Returns:
             WorkflowResult 结果对象
@@ -134,7 +173,8 @@ class Workflow:
                 self._run_sync,
                 title,
                 article_id,
-                skip_wechat
+                skip_wechat,
+                progress_callback
             )
             return result
 
@@ -144,7 +184,13 @@ class Workflow:
                 error=f"执行失败: {str(e)}"
             )
 
-    def _run_sync(self, title: str, article_id: Optional[int], skip_wechat: bool = True) -> WorkflowResult:
+    def _run_sync(
+        self, 
+        title: str, 
+        article_id: Optional[int], 
+        skip_wechat: bool = True,
+        progress_callback: Optional[Callable[[WorkflowProgress], None]] = None
+    ) -> WorkflowResult:
         """
         同步执行工作流
 
@@ -152,6 +198,7 @@ class Workflow:
             title: 论文题名
             article_id: 文章 ID
             skip_wechat: 是否跳过企业微信推送
+            progress_callback: 进度回调函数
 
         Returns:
             WorkflowResult 结果对象
@@ -175,6 +222,10 @@ class Workflow:
         env = os.environ.copy()
         env["PYTHONPATH"] = str(SCRIPT_DIR)
 
+        last_progress_time = 0
+        last_stage = ""
+        output_lines = []
+
         try:
             process = subprocess.Popen(
                 cmd,
@@ -182,12 +233,40 @@ class Workflow:
                 stderr=subprocess.STDOUT,
                 text=True,
                 env=env,
-                cwd=str(SCRIPT_DIR)
+                cwd=str(SCRIPT_DIR),
+                bufsize=1
             )
 
-            stdout, _ = process.communicate(timeout=600)
+            current_stage = "准备中"
+            self._emit_progress("准备", f"开始处理: {title[:30]}...")
 
-            print(f"[Workflow] Process output:\n{stdout}")
+            while True:
+                line = process.stdout.readline()
+                if not line and process.poll() is not None:
+                    break
+
+                if line:
+                    line = line.strip()
+                    if line:
+                        output_lines.append(line)
+                        print(f"[Workflow] {line}")
+
+                        current_time = time_module.time()
+                        if current_time - last_progress_time >= 30:
+                            for pattern, message in PROGRESS_STAGES:
+                                if re.search(pattern, line, re.IGNORECASE):
+                                    if current_stage != message:
+                                        current_stage = message
+                                        self._emit_progress("处理中", message)
+                                        if progress_callback:
+                                            progress_callback(WorkflowProgress(stage="处理中", message=message))
+                                        last_progress_time = current_time
+                                    break
+
+            stdout = "\n".join(output_lines)
+            process.wait()
+
+            print(f"[Workflow] Process return code: {process.returncode}")
 
             if process.returncode != 0:
                 return WorkflowResult(
@@ -195,77 +274,30 @@ class Workflow:
                     error=f"脚本执行失败 (返回码: {process.returncode})"
                 )
 
-            # 解析JSON输出
-            import json
-            import re
-            success_line = None
-            for line in stdout.split('\n'):
-                if 'SUMMARY_SUCCESS|' in line:
-                    success_line = line.strip()
-                    break
-            
-            if success_line:
-                parts = success_line.split('|')
-                if len(parts) >= 4:
-                    md_path = parts[1]
-                    article_id = int(parts[2]) if parts[2].isdigit() else None
-                    title = parts[3]
-                    
-                    md_file = Path(md_path)
-                    if md_file.exists():
-                        md_content = md_file.read_text(encoding="utf-8")
-                        
-                        # 立即发送Telegram
-                        from bot import TelegramBot
-                        import yaml
-                        
-                        config = load_config()
-                        bot = TelegramBot(
-                            bot_token=config['telegram']['bot_token'],
-                            user_id=config['telegram']['user_id'],
-                            chat_id=config['telegram']['chat_id']
-                        )
-                        
-                        asyncio.run(bot._send_message("✅ 处理完成！正在发送摘要..."))
-                        max_length = 4000
-                        if len(md_content) > max_length:
-                            asyncio.run(bot._send_long_message(md_content))
-                        else:
-                            asyncio.run(bot._send_message("📄 **摘要内容**\n\n" + md_content))
-                        asyncio.run(bot._send_message("✅ **处理完成**\n\n_摘要已生成并发送_"))
-                        
-                        # 后台执行步骤4
-                        from threading import Thread
-                        import sys
-                        sys.path.insert(0, str(SCRIPT_DIR))
-                        from utils.summary_uploader import upload_all
-                        
-                        def background_upload():
-                            asyncio.run(upload_all(
-                                md_path=md_path,
-                                article_id=article_id,
-                                article_title=title,
-                                source_name='手动指定',
-                                config=config,
-                                skip_lis_rss=article_id is None,
-                                skip_wechat=True
-                            ))
-                        
-                        upload_thread = Thread(target=background_upload, daemon=True)
-                        upload_thread.start()
-                        
-                        return WorkflowResult(
-                            success=True,
-                            md_content=None,
-                            md_path=md_path,
-                            article_id=article_id,
-                            telegram_sent=True
-                        )
-            
-            # 回退：尝试查找MD文件
+            json_match = re.search(r'SUMMARY_SUCCESS\|([^\|]+)\|(\d+)\|(.+)', stdout)
+            if json_match:
+                md_path = json_match.group(1)
+                article_id_result = int(json_match.group(2))
+                title_result = json_match.group(3)
+                
+                self._emit_progress("完成", "处理成功！")
+                
+                md_content = ""
+                if Path(md_path).exists():
+                    md_content = Path(md_path).read_text(encoding="utf-8")
+
+                return WorkflowResult(
+                    success=True,
+                    md_content=md_content,
+                    md_path=md_path,
+                    article_id=article_id_result,
+                    error=None
+                )
+
             md_path = self._find_md_file(title)
             if md_path:
                 md_content = md_path.read_text(encoding="utf-8")
+                self._emit_progress("完成", "处理成功！")
                 return WorkflowResult(
                     success=True,
                     md_content=md_content,

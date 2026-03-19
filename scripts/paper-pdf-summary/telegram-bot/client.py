@@ -1,7 +1,12 @@
+"""
+Telegram API Client
+
+HTTP 客户端封装 Telegram Bot API，支持代理、重试和超时。
+"""
+
 import os
 import json
 import time
-import requests
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
@@ -35,10 +40,7 @@ class TelegramClient:
     def __init__(self, bot_token: str):
         self.bot_token = bot_token
         self.base_url = f"{TELEGRAM_API_BASE}/bot{bot_token}"
-        self._proxies = self._get_proxy_dict()
-        self._session = requests.Session()
-        if self._proxies:
-            self._session.proxies.update(self._proxies)
+        self._session = None
 
     def _get_proxy(self) -> Optional[str]:
         """获取代理配置"""
@@ -72,12 +74,17 @@ class TelegramClient:
             API 响应字典
         """
         url = f"{self.base_url}/{method}"
+        proxies = self._get_proxy_dict()
 
         for attempt in range(MAX_RETRIES):
             try:
+                import requests
+
                 kwargs: Dict[str, Any] = {
                     "timeout": DEFAULT_TIMEOUT,
                 }
+                if proxies:
+                    kwargs["proxies"] = proxies
 
                 if files:
                     kwargs["files"] = files
@@ -86,7 +93,7 @@ class TelegramClient:
                 else:
                     kwargs["json"] = data
 
-                response = self._session.post(url, **kwargs)
+                response = requests.post(url, **kwargs)
                 result = response.json()
 
                 if not result.get("ok"):
@@ -234,7 +241,7 @@ class TelegramClient:
         show_alert: bool = False
     ) -> Dict[str, Any]:
         """
-        回答回ari查询
+        回答回调查询
 
         Args:
             callback_query_id: 回调查询 ID
@@ -277,9 +284,6 @@ class TelegramClient:
         }
 
         if offset is not None:
-            offset = 0
-
-        if offset > 0:
             data["offset"] = offset
 
         return self._request("getUpdates", data)
