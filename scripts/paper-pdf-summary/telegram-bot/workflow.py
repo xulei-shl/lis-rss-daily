@@ -34,7 +34,8 @@ class WorkflowResult:
         md_path: Optional[str] = None,
         article_id: Optional[int] = None,
         error: Optional[str] = None,
-        log_path: Optional[str] = None
+        log_path: Optional[str] = None,
+        telegram_sent: bool = False
     ):
         self.success = success
         self.md_content = md_content
@@ -42,6 +43,7 @@ class WorkflowResult:
         self.article_id = article_id
         self.error = error
         self.log_path = log_path
+        self.telegram_sent = telegram_sent
 
 
 class Workflow:
@@ -250,9 +252,10 @@ class Workflow:
                         
                         return WorkflowResult(
                             success=True,
-                            md_content=md_content,
+                            md_content=None,
                             md_path=md_path,
-                            article_id=article_id
+                            article_id=article_id,
+                            telegram_sent=True
                         )
             
             # 回退：尝试查找MD文件

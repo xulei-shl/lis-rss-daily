@@ -156,6 +156,10 @@ class TelegramBot:
 
     async def _handle_success(self, result: WorkflowResult):
         """处理成功"""
+        if result.telegram_sent:
+            await self._send_message("✅ **处理完成**\n\n_摘要已发送，步骤4上传中..._")
+            return
+        
         if result.md_content:
             await self._send_message("✅ 处理完成！正在发送摘要...")
 

@@ -392,8 +392,11 @@ def main():
         # 如果是 stop_after_summary 模式，步骤3成功后立即返回
         if args.stop_after_summary and summary_result:
             if summary_result.get('success'):
+                md_path = summary_result.get('md_path')
+                if md_path:
+                    md_path = str(Path(md_path).resolve())
                 print("\n" + "="*60)
-                print(f"SUMMARY_SUCCESS|{summary_result.get('md_path')}|{summary_result.get('article_id')}|{summary_result.get('title')}")
+                print(f"SUMMARY_SUCCESS|{md_path}|{summary_result.get('article_id')}|{summary_result.get('title')}")
                 print("="*60)
             return
 
