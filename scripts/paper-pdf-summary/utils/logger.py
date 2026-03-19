@@ -41,8 +41,23 @@ class DailyLogger:
         self._init_log_file()
     
     def _init_log_file(self):
-        """初始化日志文件"""
-        header = f"""# 每日处理报告 - {self.date}
+        """初始化日志文件（追加模式）"""
+        self.state_file = self.logs_root / f"{self.date}.json"
+        
+        if self.state_file.exists():
+            try:
+                state = json.loads(self.state_file.read_text(encoding='utf-8'))
+                self.successes = state.get('successes', [])
+                self.failures = state.get('failures', [])
+            except (json.JSONDecodeError, KeyError):
+                self.successes = []
+                self.failures = []
+        else:
+            self.successes = []
+            self.failures = []
+        
+        if not self.log_file.exists():
+            header = f"""# 每日处理报告 - {self.date}
 
 ## 处理概览
 
@@ -64,7 +79,7 @@ class DailyLogger:
 暂无
 
 """
-        self.log_file.write_text(header, encoding='utf-8')
+            self.log_file.write_text(header, encoding='utf-8')
     
     def _format_source(self, article: Dict) -> str:
         """格式化来源信息"""
@@ -136,12 +151,31 @@ class DailyLogger:
         
         return "\n".join(lines)
     
+    def _save_state(self):
+        """保存状态到JSON文件"""
+        state = {
+            'successes': self.successes,
+            'failures': self.failures
+        }
+        self.state_file.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding='utf-8')
+    
     def _update_log_file(self):
         """更新日志文件"""
+        self._save_state()
+        
         success_count = len(self.successes)
         failure_count = len(self.failures)
         
-        content = f"""# 每日处理报告 - {self.date}
+        success_content = self._format_article_list(self.successes)
+        failure_content = self._format_article_list(self.failures)
+        
+        if self.log_file.exists():
+            content = self.log_file.read_text(encoding='utf-8')
+            content = self._replace_section(content, '成功记录', success_content)
+            content = self._replace_section(content, '失败记录', failure_content)
+            content = self._update_count_in_table(content, success_count, failure_count)
+        else:
+            content = f"""# 每日处理报告 - {self.date}
 
 ## 处理概览
 
@@ -154,16 +188,41 @@ class DailyLogger:
 
 ## 成功记录
 
-{self._format_article_list(self.successes)}
+{success_content}
 
 ---
 
 ## 失败记录
 
-{self._format_article_list(self.failures)}
+{failure_content}
 
 """
+        
         self.log_file.write_text(content, encoding='utf-8')
+    
+    def _replace_section(self, content: str, section_name: str, new_content: str) -> str:
+        """替换markdown中的指定部分"""
+        marker = f"## {section_name}\n\n"
+        
+        start_idx = content.find(marker)
+        if start_idx == -1:
+            return content
+        
+        start_idx = content.find('\n\n', start_idx) + 2
+        
+        next_header = content.find('\n## ', start_idx)
+        
+        if next_header != -1:
+            return content[:start_idx] + new_content + content[next_header:]
+        else:
+            return content[:start_idx] + new_content + '\n'
+    
+    def _update_count_in_table(self, content: str, success_count: int, failure_count: int) -> str:
+        """更新处理概览表格中的数量"""
+        import re
+        content = re.sub(r'\| 成功处理 \| \d+ \|', f'| 成功处理 | {success_count} |', content)
+        content = re.sub(r'\| 失败处理 \| \d+ \|', f'| 失败处理 | {failure_count} |', content)
+        return content
     
     def generate_report(self) -> str:
         """
