@@ -169,12 +169,13 @@ def is_match(title: str, filename: str, threshold: float = 0) -> Tuple[bool, str
     
     匹配规则：
     - 完全匹配：标准化后的标题与文件名完全相同
+    - 前端匹配：标准化后的标题是标准化后的文件名的前缀
     - 相似度匹配：相似度大于等于阈值（仅当threshold > 0时启用）
     
     Args:
         title: 文章标题
         filename: PDF文件名
-        threshold: 相似度阈值（0表示只支持完全匹配）
+        threshold: 相似度阈值（0表示只支持完全匹配和前端匹配）
         
     Returns:
         (是否匹配, 匹配原因/不匹配原因)
@@ -189,6 +190,10 @@ def is_match(title: str, filename: str, threshold: float = 0) -> Tuple[bool, str
     # 完全匹配
     if normalized_title == normalized_filename:
         return True, "完全匹配"
+    
+    # 前端匹配：标准化后的标题是标准化后的文件名的前缀
+    if normalized_filename.startswith(normalized_title):
+        return True, f"前端匹配（检索词是PDF文件名的前缀）"
     
     # 如果设置了阈值，尝试相似度匹配
     if threshold > 0:
