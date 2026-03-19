@@ -4,8 +4,8 @@
 
 功能：
 1. 根据文章信息生成 Markdown 格式的推送消息
-2. 支持摘要截断
-3. 统一消息格式
+2. 统一消息格式
+3. 长消息由 WeChatClient.send_markdown() 自动拆分
 """
 
 from typing import Dict, Optional
@@ -19,8 +19,7 @@ class MessageFormatter:
         title: str,
         summary: str,
         article_id: Optional[int] = None,
-        source_name: Optional[str] = None,
-        max_length: int = 3500  # 预留空间给标题和其他内容
+        source_name: Optional[str] = None
     ) -> str:
         """
         格式化论文摘要推送消息
@@ -30,10 +29,9 @@ class MessageFormatter:
             summary: 摘要内容
             article_id: 文章ID（可选）
             source_name: 来源名称（可选）
-            max_length: 摘要最大长度（字节）
 
         Returns:
-            Markdown 格式消息
+            Markdown 格式消息（完整内容，超长由 WeChatClient.send_markdown() 自动拆分）
         """
         # 构建消息头部
         header_lines = ["## 论文摘要推送", ""]
@@ -57,23 +55,8 @@ class MessageFormatter:
 
         header = "\n".join(header_lines)
 
-        # 计算可用空间
-        header_bytes = len(header.encode('utf-8'))
-        available_bytes = max_length - header_bytes
-
-        # 截断摘要以适应字节限制
-        summary_bytes = len(summary.encode('utf-8'))
-
-        if summary_bytes <= available_bytes:
-            summary_display = summary
-        else:
-            # 按比例截断
-            ratio = available_bytes / summary_bytes
-            truncate_chars = int(len(summary) * ratio * 0.95)  # 保留 5% 缓冲
-            summary_display = summary[:truncate_chars] + "\n\n... (内容过长已截断)"
-
-        # 构建完整消息
-        message = f"{header}{summary_display}\n\n---\n\n由论文PDF摘要工作流自动推送"
+        # 直接使用完整摘要，由 WeChatClient.send_markdown() 处理超长拆分
+        message = f"{header}{summary}\n\n---\n\n由论文PDF摘要工作流自动推送"
 
         return message
 
