@@ -92,7 +92,11 @@ class Workflow:
     def _find_md_file(self, title: str) -> Optional[Path]:
         """查找生成的 MD 文件"""
         today = self._get_today()
-        download_dir = Path(self.download_root) / today
+        # 使用绝对路径
+        download_root = Path(self.download_root)
+        if not download_root.is_absolute():
+            download_root = SCRIPT_DIR / download_root
+        download_dir = download_root / today
 
         if not download_dir.exists():
             return None

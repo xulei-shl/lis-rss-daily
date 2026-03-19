@@ -7,6 +7,7 @@ HTTP 客户端封装 Telegram Bot API，支持代理、重试和超时。
 import os
 import json
 import time
+import requests
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
@@ -40,7 +41,11 @@ class TelegramClient:
     def __init__(self, bot_token: str):
         self.bot_token = bot_token
         self.base_url = f"{TELEGRAM_API_BASE}/bot{bot_token}"
-        self._session = None
+        self._session = requests.Session()
+        # 在初始化时设置代理
+        proxies = self._get_proxy_dict()
+        if proxies:
+            self._session.proxies.update(proxies)
 
     def _get_proxy(self) -> Optional[str]:
         """获取代理配置"""
@@ -76,15 +81,15 @@ class TelegramClient:
         url = f"{self.base_url}/{method}"
         proxies = self._get_proxy_dict()
 
+        # 设置 session 的代理
+        if proxies:
+            self._session.proxies.update(proxies)
+
         for attempt in range(MAX_RETRIES):
             try:
-                import requests
-
                 kwargs: Dict[str, Any] = {
                     "timeout": DEFAULT_TIMEOUT,
                 }
-                if proxies:
-                    kwargs["proxies"] = proxies
 
                 if files:
                     kwargs["files"] = files
@@ -93,7 +98,7 @@ class TelegramClient:
                 else:
                     kwargs["json"] = data
 
-                response = requests.post(url, **kwargs)
+                response = self._session.post(url, **kwargs)
                 result = response.json()
 
                 if not result.get("ok"):
