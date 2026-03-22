@@ -76,7 +76,7 @@ async def main(pdf_path: str, md_path: str = None, headless: bool = True, delete
             await send_button.click()
 
             copy_icon = page.locator("svg.hiagent-icon-copy-areality, svg.copy-icon").first
-            await copy_icon.wait_for(state="visible", timeout=300000)
+            await copy_icon.wait_for(state="visible", timeout=180000)
 
             result = ""
             for attempt in range(3):
