@@ -255,3 +255,64 @@ sudo journalctl -u paper-pdf-summary-api -f
 | 日志 | 文件日志 | 文件日志（同DailyLogger） |
 | 并发 | 串行 | 串行（可配置max_concurrent） |
 | LIS-RSS控制 | `--id`参数 | `id`字段（可选） |
+
+## Telegram Bot 部署
+
+通过 Telegram Bot 触发论文处理，支持 `/start`、`/help`、`/papers` 命令。
+
+### 安装依赖
+
+```bash
+cd /opt/lis-rss-daily/scripts/paper-pdf-summary
+pip install -r requirements_api.txt
+```
+
+### 环境变量配置
+
+在 `.env` 文件中配置（已加入 `.gitignore`，安全）：
+
+```bash
+# Telegram Bot 配置
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_USER_ID=your_telegram_user_id
+
+# API 地址（可选，默认 http://localhost:8081）
+TELEGRAM_API_URL=http://localhost:8081
+TELEGRAM_API_TIMEOUT=300
+```
+
+### 启动 Bot
+
+```bash
+python -m telegram_bot.main
+```
+
+或以后台模式运行：
+
+```bash
+nohup python -m telegram_bot.main > logs/telegram_bot.log 2>&1 &
+```
+
+### 命令说明
+
+| 命令 | 说明 |
+|------|------|
+| `/start` | 欢迎信息 |
+| `/help` | 使用帮助 |
+| `/papers <标题> [@ID]` | 触发论文处理 |
+
+### 使用示例
+
+```
+/papers Attention Is All You Need
+/papers Attention Is All You Need @123
+```
+
+- `<标题>`：论文标题（必填）
+- `@ID`：LIS-RSS系统ID（可选，不传则跳过LIS-RSS上传）
+
+### 注意事项
+
+- 同一时间只能处理一个任务
+- 如果上一个任务未完成，再次发送 `/papers` 会提示"正在处理上一个任务"
+- Bot 会将处理结果以 Markdown 格式返回给用户 |

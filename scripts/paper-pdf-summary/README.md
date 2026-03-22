@@ -32,6 +32,9 @@ paper-pdf-summary/
 ├── wechat/                   # 企业微信推送模块
 │   ├── client.py             # WeChat 客户端
 │   └── message_formatter.py   # 消息格式化器
+├── telegram-bot/            # Telegram Bot 模块
+│   ├── bot.py                # Bot 核心逻辑
+│   └── main.py               # 入口脚本
 ├── utils/                    # 工具模块
 │   ├── database.py          # 数据库操作
 │   ├── pdf_downloader.py     # PDF 下载器
@@ -296,6 +299,66 @@ logs/2026-03-18.md
 - 处理概览（成功/失败统计）
 - 成功记录列表
 - 失败记录列表（含失败原因）
+
+## Telegram Bot
+
+通过 Telegram Bot 远程触发论文处理，支持 `/start`、`/help`、`/papers` 命令。
+
+### 环境配置
+
+在 `.env` 文件中添加：
+
+```bash
+# Telegram Bot 配置
+# 从 @BotFather 获取 Bot Token
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+# 可选：允许的用户ID，不设置则不限制
+TELEGRAM_USER_ID=your_telegram_user_id
+
+# 可选：API 地址（默认 http://localhost:8081）
+TELEGRAM_API_URL=http://localhost:8081
+TELEGRAM_API_TIMEOUT=300
+
+# HTTP 代理（如需要）
+HTTP_PROXY=http://127.0.0.1:7890
+HTTPS_PROXY=http://127.0.0.1:7890
+```
+
+### 启动 Bot
+
+```bash
+python -m telegram_bot.main
+```
+
+或以后台模式运行：
+
+```bash
+nohup python -m telegram_bot.main > logs/telegram_bot.log 2>&1 &
+```
+
+### 命令说明
+
+| 命令 | 说明 |
+|------|------|
+| `/start` | 欢迎信息 |
+| `/help` | 使用帮助 |
+| `/papers <标题> [@ID]` | 触发论文处理 |
+
+### 使用示例
+
+```
+/papers Attention Is All You Need
+/papers Attention Is All You Need @123
+```
+
+- `<标题>`：论文标题（必填）
+- `@ID`：LIS-RSS系统ID（可选，不传则跳过LIS-RSS上传）
+
+### 注意事项
+
+- 同一时间只能处理一个任务
+- 如果上一个任务未完成，再次发送 `/papers` 会提示"正在处理上一个任务"
+- Bot 会将处理结果以 Markdown 格式返回给用户
 
 ## 故障排查
 
