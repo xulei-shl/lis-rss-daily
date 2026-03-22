@@ -18,6 +18,7 @@ queue_manager = QueueManager(max_concurrent=1)
 class ProcessRequest(BaseModel):
     title: str
     id: Optional[int] = None
+    push_wechat: bool = False
 
 
 class ProcessResponse(BaseModel):
@@ -54,7 +55,7 @@ app = FastAPI(
 
 @app.post("/process", response_model=ProcessResponse)
 async def process(req: ProcessRequest) -> ProcessResponse:
-    task_id = await queue_manager.enqueue(req.title, req.id)
+    task_id = await queue_manager.enqueue(req.title, req.id, req.push_wechat)
     result = await queue_manager.get_result(task_id)
 
     if "error" in result:

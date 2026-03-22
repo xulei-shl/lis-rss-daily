@@ -44,7 +44,7 @@ class QueueManager:
             self._config = load_workflow_config()
         return self._config
 
-    async def enqueue(self, title: str, article_id: Optional[int]) -> str:
+    async def enqueue(self, title: str, article_id: Optional[int], push_wechat: bool = False) -> str:
         task_id = str(uuid.uuid4())
         self._ensure_worker()
 
@@ -53,6 +53,7 @@ class QueueManager:
             "task_id": task_id,
             "title": title,
             "article_id": article_id,
+            "push_wechat": push_wechat,
             "status": "queued",
             "result": None
         }
@@ -60,7 +61,8 @@ class QueueManager:
         await self.queue.put({
             "task_id": task_id,
             "title": title,
-            "article_id": article_id
+            "article_id": article_id,
+            "push_wechat": push_wechat
         })
 
         return task_id
@@ -91,7 +93,7 @@ class QueueManager:
             success_count += 1
         return success_count == 0
 
-    async def _process_single_article(self, title: str, article_id: Optional[int]) -> Dict:
+    async def _process_single_article(self, title: str, article_id: Optional[int], push_wechat: bool = False) -> Dict:
         article_id = article_id if article_id else 0
         skip_lis_rss = article_id == 0
 
@@ -146,6 +148,7 @@ class QueueManager:
         result["md_path"] = str(md_path)
 
         try:
+            skip_wechat = not push_wechat
             upload_results = await parallel_upload(
                 md_path=str(md_path),
                 article_id=article_id,
@@ -153,7 +156,7 @@ class QueueManager:
                 source_name="API调用",
                 config=config,
                 skip_lis_rss=skip_lis_rss,
-                skip_wechat=False
+                skip_wechat=skip_wechat
             )
             result["stages"]["upload"] = upload_results
         except Exception as e:
@@ -181,11 +184,12 @@ class QueueManager:
                 task_id = task["task_id"]
                 title = task["title"]
                 article_id = task["article_id"]
+                push_wechat = task.get("push_wechat", False)
 
                 self.results[task_id]["status"] = "running"
 
                 try:
-                    result = await self._process_single_article(title, article_id)
+                    result = await self._process_single_article(title, article_id, push_wechat)
                     self.results[task_id]["result"] = result
                     self.results[task_id]["status"] = "completed"
                 except Exception as e:

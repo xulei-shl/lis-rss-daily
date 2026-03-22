@@ -141,6 +141,7 @@ class TelegramClient {
 interface ParsedCommand {
   title: string;
   articleId?: number;
+  pushWechat?: boolean;
 }
 
 class PaperTelegramBot {
@@ -183,6 +184,13 @@ class PaperTelegramBot {
 
     let title: string;
     let articleId: number | undefined;
+    let pushWechat = false;
+
+    const wechatMatch = text.match(/--wechat/i);
+    if (wechatMatch) {
+      pushWechat = true;
+      text = text.replace(/--wechat/gi, '').trim();
+    }
 
     if (text.includes('@')) {
       const lastAt = text.lastIndexOf('@');
@@ -203,13 +211,16 @@ class PaperTelegramBot {
       title = text;
     }
 
-    return { title: title || '', articleId };
+    return { title: title || '', articleId, pushWechat };
   }
 
-  private async callApi(title: string, articleId?: number): Promise<ProcessApiResponse> {
+  private async callApi(title: string, articleId?: number, pushWechat?: boolean): Promise<ProcessApiResponse> {
     const payload: Record<string, unknown> = { title };
     if (articleId !== undefined) {
       payload.id = articleId;
+    }
+    if (pushWechat) {
+      payload.push_wechat = true;
     }
 
     log.info('Calling API', { url: `${this.apiBaseUrl}/process`, payload });
@@ -322,13 +333,16 @@ class PaperTelegramBot {
     }
     await this.sendText(chatId,
       '📖 使用帮助\n\n' +
-      '命令：/papers <标题> [@ID]\n\n' +
+      '命令：/papers <标题> [@ID] [--wechat]\n\n' +
       '示例：\n' +
       '• /papers Attention Is All You Need\n' +
-      '• /papers Attention Is All You Need @123\n\n' +
+      '• /papers Attention Is All You Need @123\n' +
+      '• /papers Attention Is All You Need --wechat\n' +
+      '• /papers Attention Is All You Need @123 --wechat\n\n' +
       '说明：\n' +
       '• <标题> - 论文标题（必填）\n' +
       '• @ID - LIS-RSS系统ID（可选）\n' +
+      '• --wechat - 启用企业微信推送（可选，默认不推送）\n' +
       '• 同时只能处理一个任务'
     );
   }
@@ -365,13 +379,13 @@ class PaperTelegramBot {
       return;
     }
 
-    log.info('Processing request', { title: parsed.title, articleId: parsed.articleId });
+    log.info('Processing request', { title: parsed.title, articleId: parsed.articleId, pushWechat: parsed.pushWechat });
     this.isProcessing = true;
 
     try {
       await this.sendText(chatId, `📥 开始处理: ${parsed.title}\n⏳ 等待结果中...`);
 
-      const result = await this.callApi(parsed.title, parsed.articleId);
+      const result = await this.callApi(parsed.title, parsed.articleId, parsed.pushWechat);
       log.info('API returned result', { success: result.success, stages: result.stages });
 
       const responseText = this.formatResponse(parsed.title, result);

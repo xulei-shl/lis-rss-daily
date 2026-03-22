@@ -49,7 +49,8 @@ nohup uvicorn api:app --host 0.0.0.0 --port 8081 > logs/api.log 2>&1 &
 ```json
 {
   "title": "论文标题",
-  "id": 123
+  "id": 123,
+  "push_wechat": false
 }
 ```
 
@@ -57,6 +58,7 @@ nohup uvicorn api:app --host 0.0.0.0 --port 8081 > logs/api.log 2>&1 &
 |------|------|------|------|
 | `title` | string | 是 | 论文题名（用于PDF下载检索） |
 | `id` | integer | 否 | LIS-RSS系统ID；不传则跳过LIS-RSS上传 |
+| `push_wechat` | boolean | 否 | 是否启用企业微信推送；默认 false（不受 config.yaml 影响） |
 
 **响应：**
 
@@ -122,6 +124,11 @@ curl -X POST http://localhost:8081/process \
 curl -X POST http://localhost:8081/process \
   -H "Content-Type: application/json" \
   -d '{"title": "Deep Learning for Computer Vision"}'
+
+# 启用微信推送
+curl -X POST http://localhost:8081/process \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Deep Learning for Computer Vision", "id": 123, "push_wechat": true}'
 ```
 
 ### Python
@@ -129,17 +136,25 @@ curl -X POST http://localhost:8081/process \
 ```python
 import requests
 
+# 基本调用
 response = requests.post(
     "http://localhost:8081/process",
     json={"title": "Deep Learning for Computer Vision", "id": 123}
 )
 result = response.json()
 print(result["success"], result.get("md_path"))
+
+# 启用微信推送
+response = requests.post(
+    "http://localhost:8081/process",
+    json={"title": "Deep Learning for Computer Vision", "id": 123, "push_wechat": True}
+)
 ```
 
 ### Node.js
 
 ```javascript
+// 基本调用
 const resp = await fetch("http://localhost:8081/process", {
   method: "POST",
   headers: {"Content-Type": "application/json"},
@@ -147,6 +162,13 @@ const resp = await fetch("http://localhost:8081/process", {
 });
 const result = await resp.json();
 console.log(result.success, result.md_path);
+
+// 启用微信推送
+const resp2 = await fetch("http://localhost:8081/process", {
+  method: "POST",
+  headers: {"Content-Type": "application/json"},
+  body: JSON.stringify({title: "Deep Learning for Computer Vision", id: 123, push_wechat: true})
+});
 ```
 
 ## 行为说明
@@ -255,6 +277,7 @@ sudo journalctl -u paper-pdf-summary-api -f
 | 日志 | 文件日志 | 文件日志（同DailyLogger） |
 | 并发 | 串行 | 串行（可配置max_concurrent） |
 | LIS-RSS控制 | `--id`参数 | `id`字段（可选） |
+| 微信推送控制 | config.yaml 决定 | `push_wechat` 参数决定（默认 false） |
 
 ## Telegram Bot 部署
 
@@ -299,17 +322,20 @@ nohup python -m telegram_bot.main > logs/telegram_bot.log 2>&1 &
 |------|------|
 | `/start` | 欢迎信息 |
 | `/help` | 使用帮助 |
-| `/papers <标题> [@ID]` | 触发论文处理 |
+| `/papers <标题> [@ID] [--wechat]` | 触发论文处理 |
 
 ### 使用示例
 
 ```
 /papers Attention Is All You Need
 /papers Attention Is All You Need @123
+/papers Attention Is All You Need --wechat
+/papers Attention Is All You Need @123 --wechat
 ```
 
 - `<标题>`：论文标题（必填）
 - `@ID`：LIS-RSS系统ID（可选，不传则跳过LIS-RSS上传）
+- `--wechat`：启用企业微信推送（可选，默认不推送）
 
 ### 注意事项
 
