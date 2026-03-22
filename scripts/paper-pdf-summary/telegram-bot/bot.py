@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -22,9 +23,19 @@ from telegram.ext import (
     filters,
 )
 
+project_root = Path(__file__).parent.parent
+logs_dir = project_root / "logs"
+logs_dir.mkdir(exist_ok=True)
+
+log_file = logs_dir / f"telegram_bot_{datetime.now().strftime('%Y-%m-%d')}.log"
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.INFO,
+    handlers=[
+        logging.FileHandler(log_file, encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -75,11 +86,16 @@ class PaperTelegramBot:
         )
 
     async def papers_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.effective_user.id
+        logger.info(f"用户 {user_id} 发送 /papers 命令")
+
         if not self._check_user(update):
+            logger.warning(f"未授权用户 {user_id} 尝试访问")
             await update.message.reply_text("❌ 无权限访问")
             return
 
         if self._is_processing:
+            logger.info(f"用户 {user_id} 请求被忽略：正在处理上一个任务")
             await update.message.reply_text("⏳ 正在处理上一个任务，请稍后再试")
             return
 
@@ -101,18 +117,20 @@ class PaperTelegramBot:
             )
             return
 
+        logger.info(f"处理请求: title='{title}', article_id={article_id}")
         self._is_processing = True
 
         try:
             await update.message.reply_text(f"📥 开始处理: {title}\n⏳ 等待结果中...")
 
             result = await self._call_api(title, article_id)
+            logger.info(f"API 返回结果: success={result.get('success')}, stages={result.get('stages')}")
 
             response_text = self._format_response(title, result)
             await update.message.reply_text(response_text, parse_mode='Markdown')
 
         except Exception as e:
-            logger.error(f"处理异常: {e}")
+            logger.error(f"处理异常: {e}", exc_info=True)
             await update.message.reply_text(f"❌ 处理异常: {e}")
 
         finally:
@@ -139,6 +157,7 @@ class PaperTelegramBot:
         if article_id:
             payload["id"] = article_id
 
+        logger.info(f"调用 API: POST {self.api_base_url}/process, payload={payload}")
         proxies = {"http://": self.proxy, "https://": self.proxy} if self.proxy else None
         async with httpx.AsyncClient(proxies=proxies, timeout=self.api_timeout) as client:
             response = await client.post(
@@ -146,7 +165,9 @@ class PaperTelegramBot:
                 json=payload
             )
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            logger.info(f"API 响应状态码: {response.status_code}")
+            return result
 
     def _format_response(self, title: str, result: dict) -> str:
         success = result.get('success', False)
