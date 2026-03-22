@@ -110,7 +110,7 @@ def call_download_script(script_path: str, keyword: str, output_dir: str, max_re
     try:
         # 调用脚本（不传递 max_retries，由脚本内部处理重试）
         result = subprocess.run(
-            [sys.executable, str(script_path), keyword],
+            ["xvfb-run", "-a", sys.executable, str(script_path), keyword],
             capture_output=True,
             text=True,
             timeout=600,  # 10分钟超时（含重试时间）

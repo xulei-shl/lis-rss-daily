@@ -54,7 +54,7 @@ def summarize_pdf(pdf_path: str, config: dict) -> Optional[str]:
     print(f"[INFO] PDF总结: {pdf_path} -> {expected_md_path}")
     print(f"[INFO] 删除原PDF: {'是' if delete_pdf else '否'}")
 
-    cmd = [sys.executable, str(script_path), str(pdf_path)]
+    cmd = ["xvfb-run", "-a", sys.executable, str(script_path), str(pdf_path)]
     if delete_pdf:
         cmd.append("--delete")
     else:

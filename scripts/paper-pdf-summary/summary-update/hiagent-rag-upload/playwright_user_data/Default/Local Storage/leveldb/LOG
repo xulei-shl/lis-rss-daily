@@ -1,3 +1,3 @@
-2026/03/22-11:54:23.944 116ba1 Reusing MANIFEST /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/playwright_user_data/Default/Local Storage/leveldb/MANIFEST-000001
-2026/03/22-11:54:23.964 116ba1 Recovering log #3
-2026/03/22-11:54:23.964 116ba1 Reusing old log /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/playwright_user_data/Default/Local Storage/leveldb/000003.log 
+2026/03/22-12:29:43.647 11aeee Reusing MANIFEST /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/playwright_user_data/Default/Local Storage/leveldb/MANIFEST-000001
+2026/03/22-12:29:43.660 11aeee Recovering log #3
+2026/03/22-12:29:43.660 11aeee Reusing old log /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/playwright_user_data/Default/Local Storage/leveldb/000003.log 
