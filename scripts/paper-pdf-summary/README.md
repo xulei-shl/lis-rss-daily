@@ -45,7 +45,10 @@ paper-pdf-summary/
 ├── download/                  # 下载文件存储目录
 ├── logs/                     # 每日日志目录
 ├── docs/
+├── deploy/                   # 部署配置文件
+│   └── paper-pdf-summary-telegram.service  # systemd 服务配置
 ├── main.py                   # 主入口脚本
+├── start_telegram_bot.sh     # Telegram Bot 启动脚本
 ├── .env.example              # 环境变量模板
 └── README.md                 # 本文档
 ```
@@ -324,16 +327,42 @@ HTTP_PROXY=http://127.0.0.1:7890
 HTTPS_PROXY=http://127.0.0.1:7890
 ```
 
-### 启动 Bot
+### 启动方式
+
+#### 方式一：启动脚本（推荐）
 
 ```bash
-python -m telegram_bot.main
+cd /opt/lis-rss-daily/scripts/paper-pdf-summary
+./start_telegram_bot.sh
+```
+
+#### 方式二：手动运行
+
+```bash
+source .env && python -m telegram_bot.main
 ```
 
 或以后台模式运行：
 
 ```bash
 nohup python -m telegram_bot.main > logs/telegram_bot.log 2>&1 &
+```
+
+#### 方式三：systemd 服务（开机自启）
+
+```bash
+# 安装服务
+sudo cp deploy/paper-pdf-summary-telegram.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable paper-pdf-summary-telegram
+
+# 启动服务
+sudo systemctl start paper-pdf-summary-telegram
+
+# 常用命令
+sudo systemctl status paper-pdf-summary-telegram  # 查看状态
+sudo systemctl restart paper-pdf-summary-telegram  # 重启
+sudo systemctl stop paper-pdf-summary-telegram     # 停止
 ```
 
 ### 命令说明
