@@ -421,7 +421,7 @@ async def upload_all(
     md_content = md_file.read_text(encoding='utf-8')
     print(f"[信息] MD文件大小: {len(md_content)} 字符")
 
-    # 创建异步任务 - 保留 MD 文件（Telegram 会先发送）
+    # 创建异步任务
     tasks = [
         upload_to_hiagent_rag(md_path, config, delete_md=False),
     ]
@@ -438,7 +438,7 @@ async def upload_all(
 
     # 只有当 skip_wechat 为 False 时才添加 WeChat 任务
     if skip_wechat:
-        print(f"[跳过] WeChat推送已禁用（Telegram发起）")
+        print(f"[跳过] WeChat推送已禁用")
         tasks.append(asyncio.sleep(0))  # 占位符，保持结果索引一致性
     else:
         print(f"[信息] WeChat推送已启用")

@@ -354,7 +354,7 @@ def main():
     parser = argparse.ArgumentParser(description='论文PDF摘要工作流')
     parser.add_argument('--title', help='论文题名（PDF下载检索词）')
     parser.add_argument('--id', type=int, help='文章ID（可选，跳过LIS-RSS上传如果未提供）')
-    parser.add_argument('--skip-wechat', action='store_true', help='跳过企业微信推送（Telegram发起时使用）')
+    parser.add_argument('--skip-wechat', action='store_true', help='跳过企业微信推送')
     parser.add_argument('--stop-after-summary', action='store_true', help='步骤3成功后立即返回，不执行步骤4上传')
     args = parser.parse_args()
 
