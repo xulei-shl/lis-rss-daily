@@ -158,8 +158,7 @@ class PaperTelegramBot:
             payload["id"] = article_id
 
         logger.info(f"调用 API: POST {self.api_base_url}/process, payload={payload}")
-        proxies = {"http://": self.proxy, "https://": self.proxy} if self.proxy else None
-        async with httpx.AsyncClient(proxies=proxies, timeout=self.api_timeout) as client:
+        async with httpx.AsyncClient(proxy=self.proxy, timeout=self.api_timeout) as client:
             response = await client.post(
                 f"{self.api_base_url}/process",
                 json=payload
