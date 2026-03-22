@@ -40,3 +40,4 @@ temp/
 backup/
 lis-rss/
 scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/playwright_user_data/
+playwright_user_data/

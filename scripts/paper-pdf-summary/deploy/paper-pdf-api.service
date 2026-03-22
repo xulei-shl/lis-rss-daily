@@ -1,0 +1,16 @@
+[Unit]
+Description=Paper PDF Summary API Service
+After=network.target
+
+[Service]
+Type=simple
+User=xulei
+WorkingDirectory=/opt/lis-rss-daily/scripts/paper-pdf-summary
+ExecStart=/home/xulei/.pyenvs/env_camoufox/bin/uvicorn api:app --host 0.0.0.0 --port 8081
+Restart=always
+RestartSec=5
+
+Environment="PATH=/home/xulei/.pyenvs/env_camoufox/bin"
+
+[Install]
+WantedBy=multi-user.target
