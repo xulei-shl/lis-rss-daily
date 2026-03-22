@@ -32,7 +32,7 @@ paper-pdf-summary/
 ├── wechat/                   # 企业微信推送模块
 │   ├── client.py             # WeChat 客户端
 │   └── message_formatter.py   # 消息格式化器
-├── telegram-bot/            # Telegram Bot 模块
+├── telegram_bot/           # Telegram Bot 模块
 │   ├── bot.py                # Bot 核心逻辑
 │   └── main.py               # 入口脚本
 ├── utils/                    # 工具模块
