@@ -7,7 +7,7 @@ database:
   # path: "F:\\Github\\lis-rss-daily\\data\\rss-tracker.db"
 
 # 每日处理限制
-daily_process_limit: 1
+daily_process_limit: 3
 
 # 文件存储配置
 storage:
@@ -60,7 +60,7 @@ summary_upload:
 
   # 企业微信推送
   wechat:
-    enabled: false
+    enabled: true
     # webhook_url 通过环境变量 WECHAT_WEBHOOK_KEY 自动组装
     timeout: 30
     max_retries: 2
