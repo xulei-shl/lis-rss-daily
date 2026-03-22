@@ -32,9 +32,11 @@ paper-pdf-summary/
 ├── wechat/                   # 企业微信推送模块
 │   ├── client.py             # WeChat 客户端
 │   └── message_formatter.py   # 消息格式化器
-├── telegram_bot/           # Telegram Bot 模块
-│   ├── bot.py                # Bot 核心逻辑
-│   └── main.py               # 入口脚本
+├── telegram-bot/           # Telegram Bot 模块 (Node.js)
+│   ├── index.ts            # Bot 核心逻辑
+│   ├── logger.ts           # 日志模块
+│   ├── package.json        # 依赖配置
+│   └── tsconfig.json       # TypeScript 配置
 ├── utils/                    # 工具模块
 │   ├── database.py          # 数据库操作
 │   ├── pdf_downloader.py     # PDF 下载器
@@ -318,37 +320,17 @@ TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 # 可选：允许的用户ID，不设置则不限制
 TELEGRAM_USER_ID=your_telegram_user_id
 
-# 可选：API 地址（默认 http://localhost:8081）
+# API 地址（默认 http://localhost:8081）
 TELEGRAM_API_URL=http://localhost:8081
 TELEGRAM_API_TIMEOUT=300
 
-# HTTP 代理（如需要）
+# HTTP 代理（必须，用于访问 Telegram API）
 HTTP_PROXY=http://127.0.0.1:7890
-HTTPS_PROXY=http://127.0.0.1:7890
 ```
 
 ### 启动方式
 
-#### 方式一：启动脚本（推荐）
-
-```bash
-cd /opt/lis-rss-daily/scripts/paper-pdf-summary
-./start_telegram_bot.sh
-```
-
-#### 方式二：手动运行
-
-```bash
-source .env && python -m telegram_bot.main
-```
-
-或以后台模式运行：
-
-```bash
-nohup python -m telegram_bot.main > logs/telegram_bot.log 2>&1 &
-```
-
-#### 方式三：systemd 服务（开机自启）
+#### systemd 服务（推荐，开机自启）
 
 ```bash
 # 安装服务
@@ -363,6 +345,13 @@ sudo systemctl start paper-pdf-summary-telegram
 sudo systemctl status paper-pdf-summary-telegram  # 查看状态
 sudo systemctl restart paper-pdf-summary-telegram  # 重启
 sudo systemctl stop paper-pdf-summary-telegram     # 停止
+```
+
+#### 手动运行
+
+```bash
+cd /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot
+npx tsx index.ts
 ```
 
 ### 命令说明
@@ -385,13 +374,12 @@ sudo systemctl stop paper-pdf-summary-telegram     # 停止
 
 ### 日志
 
-Bot 日志保存在 `logs/telegram_bot_YYYY-MM-DD.log`
+Bot 日志保存在 `logs/telegram-node.log`
 
 ### 注意事项
 
 - 同一时间只能处理一个任务
-- 如果上一个任务未完成，再次发送 `/papers` 会提示"正在处理上一个任务"
-- Bot 会将处理结果以 Markdown 格式返回给用户
+- Bot 使用 Node.js + undici ProxyAgent 连接 Telegram
 
 ## 故障排查
 
@@ -424,7 +412,8 @@ Bot 日志保存在 `logs/telegram_bot_YYYY-MM-DD.log`
 
 ## 技术栈
 
-- **Python 3.12+**
+- **Python 3.12+**：PDF 下载、总结和上传核心逻辑
+- **Node.js**：Telegram Bot（undici ProxyAgent）
 - **Playwright**：浏览器自动化
 - **Camoufox**：反检测浏览器
 - **PyYAML**：配置文件解析
