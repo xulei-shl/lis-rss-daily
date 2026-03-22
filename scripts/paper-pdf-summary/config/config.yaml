@@ -59,7 +59,7 @@ summary_upload:
 
   # 企业微信推送
   wechat:
-    enabled: true
+    enabled: false
     # webhook_url 通过环境变量 WECHAT_WEBHOOK_KEY 自动组装
     timeout: 30
     max_retries: 2
