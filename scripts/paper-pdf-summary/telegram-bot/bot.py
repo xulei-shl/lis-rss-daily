@@ -296,7 +296,12 @@ class TelegramBot:
 
     def _poll(self):
         """轮询循环（在线程中运行）"""
-        asyncio.run(self._poll_async())
+        print(f"[Bot] Poll thread starting, is_running={self.is_running}")
+        try:
+            asyncio.run(self._poll_async())
+        except Exception as e:
+            print(f"[Bot] Poll thread exception: {e}")
+        print(f"[Bot] Poll thread ended")
 
     async def _poll_async(self):
         """异步轮询"""
@@ -325,8 +330,8 @@ class TelegramBot:
                             chat_id = message.get("chat", {}).get("id")
                             text = message.get("text", "")
 
-                        if chat_id == self.chat_id:
-                            await self.handle_command(text)
+                            if chat_id == self.chat_id:
+                                await self.handle_command(text)
 
                         offset = update_id + 1
 
@@ -354,6 +359,11 @@ class TelegramBot:
             print("[Bot] Bot verification failed")
             return False
 
+        # 重置取消标志和会话
+        self.client.reset_cancel_flag()
+        # 关闭所有现有会话以避免409冲突
+        self.client._close_session()
+
         self.is_running = True
         self.last_activity_time = time.time()
 
@@ -369,6 +379,8 @@ class TelegramBot:
             return
 
         self.is_running = False
+        # 取消正在进行的请求以避免409冲突
+        self.client.cancel_requests()
 
         if self.poll_thread:
             self.poll_thread.join(timeout=5)
@@ -388,3 +400,5 @@ class TelegramBot:
         except KeyboardInterrupt:
             print("\n[Bot] Shutting down...")
             self.stop()
+        finally:
+            print(f"[Bot] Run method ended, is_running={self.is_running}")

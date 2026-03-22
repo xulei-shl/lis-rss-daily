@@ -47,13 +47,14 @@ def load_env():
         load_dotenv(env_path)
 
 
-async def upload_to_hiagent_rag(md_path: str, config: Dict) -> bool:
+async def upload_to_hiagent_rag(md_path: str, config: Dict, delete_md: bool = True) -> bool:
     """
     上传到HiAgent RAG知识库
 
     Args:
         md_path: MD文件路径
         config: 配置字典
+        delete_md: 是否删除MD文件（默认True）
 
     Returns:
         是否成功
@@ -420,9 +421,9 @@ async def upload_all(
     md_content = md_file.read_text(encoding='utf-8')
     print(f"[信息] MD文件大小: {len(md_content)} 字符")
 
-    # 创建异步任务
+    # 创建异步任务 - 保留 MD 文件（Telegram 会先发送）
     tasks = [
-        upload_to_hiagent_rag(md_path, config),
+        upload_to_hiagent_rag(md_path, config, delete_md=False),
     ]
 
     # 只有当 skip_lis_rss 为 False 且 article_id 有效时才添加 LIS-RSS 任务

@@ -9,6 +9,7 @@ import json
 import time
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
+import threading
 
 
 TELEGRAM_API_BASE = "https://api.telegram.org"
@@ -40,7 +41,10 @@ class TelegramClient:
     def __init__(self, bot_token: str):
         self.bot_token = bot_token
         self.base_url = f"{TELEGRAM_API_BASE}/bot{bot_token}"
-        self._session = None
+        self._cancel_flag = False
+        self._session_lock = threading.Lock()
+        self._session = None  # 延迟初始化，在需要时创建
+        self._cancel_flag = False
 
     def _get_proxy(self) -> Optional[str]:
         """获取代理配置"""
@@ -56,35 +60,68 @@ class TelegramClient:
                 return {"http": proxy, "https": proxy}
         return None
 
+    def _get_session(self):
+        """获取或创建 Session"""
+        with self._session_lock:
+            if self._session is None:
+                import requests
+                self._session = requests.Session()
+                # 配置代理
+                proxies = self._get_proxy_dict()
+                if proxies:
+                    self._session.proxies.update(proxies)
+                # 配置连接池
+                self._session.mount('http://', requests.adapters.HTTPAdapter(pool_connections=1, pool_maxsize=1))
+                self._session.mount('https://', requests.adapters.HTTPAdapter(pool_connections=1, pool_maxsize=1))
+        return self._session
+
+    def _close_session(self):
+        """关闭 Session"""
+        with self._session_lock:
+            if self._session is not None:
+                self._session.close()
+                self._session = None
+
     def _request(
         self,
         method: str,
         data: Optional[Dict[str, Any]] = None,
-        files: Optional[Dict] = None
+        files: Optional[Dict] = None,
+        use_long_polling: bool = False
     ) -> Dict[str, Any]:
         """
         发送 API 请求
 
         Args:
             method: API 方法名
-            data: 请求参数
+            data:：请求参数
             files: 上传文件
+            use_long_polling: 是否为长轮询请求
 
         Returns:
             API 响应字典
         """
         url = f"{self.base_url}/{method}"
-        proxies = self._get_proxy_dict()
+        session = self._get_session()
 
         for attempt in range(MAX_RETRIES):
-            try:
-                import requests
+            # 检查取消标志
+            if self._cancel_flag:
+                raise Exception("Request cancelled")
 
-                kwargs: Dict[str, Any] = {
-                    "timeout": DEFAULT_TIMEOUT,
-                }
-                if proxies:
-                    kwargs["proxies"] = proxies
+            try:
+                # 对于长轮询，HTTP请求超时应该比Telegram API超时更长
+                # Telegram API timeout (data["timeout"]) 是告诉服务器等待多久
+                # HTTP timeout 是控制客户端等待响应的最长时间
+                if use_long_polling:
+                    # 长轮询：HTTP超时 = Telegram超时 + 10秒缓冲
+                    telegram_timeout = data.get("timeout", DEFAULT_TIMEOUT) if data else DEFAULT_TIMEOUT
+                    http_timeout = telegram_timeout + 10
+                else:
+                    # 普通请求：使用默认超时
+                    http_timeout = DEFAULT_TIMEOUT
+
+                kwargs: Dict[str, Any] = {"timeout": http_timeout}
 
                 if files:
                     kwargs["files"] = files
@@ -93,12 +130,21 @@ class TelegramClient:
                 else:
                     kwargs["json"] = data
 
-                response = requests.post(url, **kwargs)
+                response = session.post(url, **kwargs)
                 result = response.json()
 
                 if not result.get("ok"):
                     error_code = result.get("error_code")
                     description = result.get("description", "")
+
+                    # 处理409冲突错误（通常是重启时旧请求未清理）
+                    # 关闭Session以清理所有连接，然后等待更长时间
+                    if error_code == 409 and "terminated by other" in description:
+                        if attempt < MAX_RETRIES - 1:
+                            print(f"[Telegram] Conflict (409), closing session and waiting 10s...")
+                            self._close_session()
+                            time.sleep(10)
+                            continue
 
                     if error_code == 429:
                         retry_after = result.get("parameters", {}).get("retry_after", 5)
@@ -119,18 +165,26 @@ class TelegramClient:
 
                 return result
 
-            except requests.exceptions.Timeout:
-                if attempt < MAX_RETRIES - 1:
-                    delay = 0.5 * (2 ** attempt)
-                    print(f"[Telegram] Timeout, retry in {delay}s")
-                    time.sleep(delay)
-                    continue
-                raise Exception("Telegram API timeout after retries")
+            except Exception as e:
+                # 检查是否是取消操作
+                if self._cancel_flag:
+                    raise Exception("Request cancelled")
 
-            except requests.exceptions.RequestException as e:
-                if attempt < MAX_RETRIES - 1:
-                    delay = 0.5 * (2 ** attempt)
-                    print(f"[Telegram] Network error: {e}, retry in {delay}s")
+                if "Timeout" in str(e):
+                    if attempt < MAX_RETRIES - 1:
+                        delay = 0.5 * (2 ** attempt)
+                        print(f"[Telegram] Timeout, retry in {delay}s")
+                        time.sleep(delay)
+                        continue
+                    raise Exception("Telegram API timeout after retries")
+
+                if "request cancelled" in str(e).lower():
+                    raise Exception("Request cancelled")
+
+                if "Network error" in str(e) or "Connection" in str(e):
+                    if attempt < MAX_RETRIES - 1:
+                        delay = 0.5 * (2 ** attempt)
+                        print(f"[Telegram] Network error: {e}, retry in {delay}s")
                     time.sleep(delay)
                     continue
                 raise Exception(f"Telegram API request failed: {e}")
@@ -286,7 +340,7 @@ class TelegramClient:
         if offset is not None:
             data["offset"] = offset
 
-        return self._request("getUpdates", data)
+        return self._request("getUpdates", data, use_long_polling=True)
 
     def get_me(self) -> Dict[str, Any]:
         """获取机器人信息"""
@@ -359,3 +413,13 @@ class TelegramClient:
                 time.sleep(0.5)
 
         return results
+
+    def cancel_requests(self):
+        """取消所有正在进行的请求并关闭Session"""
+        self._cancel_flag = True
+        # 关闭Session会中断所有正在进行的请求
+        self._close_session()
+
+    def reset_cancel_flag(self):
+        """重置取消标志"""
+        self._cancel_flag = False

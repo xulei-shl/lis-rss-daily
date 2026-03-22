@@ -11,10 +11,14 @@
 import asyncio
 from typing import Dict, Optional, List
 
+# aiohttp 可能在某些环境中不可用（比如直接运行脚本时）
+# 在这种情况下 WeChat 功能将不可用
+WECHAT_ENABLED = True
 try:
     import aiohttp
 except ImportError:
     aiohttp = None
+    WECHAT_ENABLED = False
 
 
 class WeChatClient:

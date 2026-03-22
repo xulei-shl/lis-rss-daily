@@ -73,9 +73,12 @@ def main():
         config_path=str(config_path)
     )
 
+    # 全局变量用于信号处理器
+    _bot_instance = bot
+
     def signal_handler(signum, frame):
-        print("\n[Signal] Received shutdown signal")
-        bot.stop()
+        print(f"\n[Signal] Received signal {signum}, is_running={_bot_instance.is_running}")
+        _bot_instance.stop()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)

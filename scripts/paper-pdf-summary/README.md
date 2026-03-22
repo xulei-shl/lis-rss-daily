@@ -232,6 +232,15 @@ sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/
 sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/xulei/.pyenvs/env_camoufox/bin/python main.py --title '论文题名'"
 ```
 
+```bash
+# ssh远程使用时
+# 带文章ID：包含 LIS-RSS API 调用
+sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && xvfb-run -a /home/xulei/.pyenvs/env_camoufox/bin/python main.py --title '论文题名' --id 1984"
+
+# 不带文章ID：跳过 LIS-RSS API 调用
+sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && xvfb-run -a /home/xulei/.pyenvs/env_camoufox/bin/python main.py --title '论文题名'"
+```
+
 **参数说明**：
 - `--title`：论文题名（PDF 下载检索词，必需）
 - `--id`：文章 ID（可选）

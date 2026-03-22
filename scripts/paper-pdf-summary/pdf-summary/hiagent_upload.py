@@ -127,11 +127,12 @@ async def main(pdf_path: str, md_path: str = None, headless: bool = True, delete
 
             await browser.close()
 
-            print(json.dumps({
+            result_json = json.dumps({
                 "status": "success",
                 "md_path": md_path,
                 "chars": result_length
-            }))
+            })
+            print(result_json, flush=True)
 
     except asyncio.TimeoutError:
         print(json.dumps({
