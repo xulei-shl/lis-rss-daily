@@ -6,6 +6,7 @@ PDF验证模块 - 验证下载的PDF是否与标题匹配
 1. 验证PDF文件名是否与文章标题匹配
 2. 删除不匹配的PDF文件
 3. 提供详细的验证报告
+4. 检查PDF完整性（是否损坏）
 """
 
 import os
@@ -13,6 +14,13 @@ import re
 from pathlib import Path
 from typing import Tuple, Optional, Dict
 from utils.keyword_normalizer import normalize_text, extract_filename_key, is_match, diagnose_text
+
+try:
+    import fitz
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
+    print("[WARN] PyMuPDF未安装，PDF完整性检查功能不可用")
 
 
 def get_pdf_filename(pdf_path: str) -> str:
@@ -134,6 +142,85 @@ def validate_and_cleanup(pdf_path: str, original_title: str, threshold: int = 0,
         delete_pdf(pdf_path)
     
     return matched, reason
+
+
+def check_pdf_integrity(pdf_path: str) -> Tuple[bool, str]:
+    """
+    检查PDF文件是否完整、可正常打开
+    
+    检查方法：
+    1. 尝试用PyMuPDF打开PDF
+    2. 检查是否能读取PDF元数据
+    3. 检查是否有页数
+    
+    Args:
+        pdf_path: PDF文件路径
+        
+    Returns:
+        (是否完整, 原因描述)
+    """
+    if not pdf_path:
+        return False, "PDF路径为空"
+    
+    pdf_file = Path(pdf_path)
+    
+    if not pdf_file.exists():
+        return False, f"PDF文件不存在: {pdf_path}"
+    
+    if pdf_file.suffix.lower() != '.pdf':
+        return False, f"不是PDF文件: {pdf_file.suffix}"
+    
+    if pdf_file.stat().st_size == 0:
+        return False, "PDF文件大小为0（空文件）"
+    
+    if pdf_file.stat().st_size < 1000:
+        return False, f"PDF文件过小（{pdf_file.stat().st_size} 字节），可能是损坏或无效文件"
+    
+    if not PYMUPDF_AVAILABLE:
+        return True, "PyMuPDF未安装，跳过深度检查"
+    
+    try:
+        doc = fitz.open(pdf_path)
+        
+        if doc.is_closed:
+            doc.close()
+            return False, "PDF无法保持打开状态"
+        
+        page_count = len(doc)
+        
+        if page_count == 0:
+            doc.close()
+            return False, "PDF页数为0（可能是损坏文件）"
+        
+        try:
+            metadata = doc.metadata
+            if not metadata:
+                doc.close()
+                return False, "PDF元数据为空，可能损坏"
+        except Exception:
+            pass
+        
+        for page_num in range(min(3, page_count)):
+            try:
+                page = doc[page_num]
+                page.get_text("text")
+            except Exception as e:
+                doc.close()
+                return False, f"PDF第{page_num + 1}页读取失败: {str(e)}"
+        
+        doc.close()
+        return True, f"PDF完整，{page_count}页"
+        
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "encrypted" in error_msg:
+            return False, "PDF已加密，无法读取"
+        elif "corrupt" in error_msg or "damaged" in error_msg:
+            return False, f"PDF文件损坏: {str(e)}"
+        elif "invalid" in error_msg:
+            return False, f"PDF文件无效: {str(e)}"
+        else:
+            return False, f"PDF无法正常打开: {str(e)}"
 
 
 def get_pdf_info(pdf_path: str) -> Optional[Dict]:

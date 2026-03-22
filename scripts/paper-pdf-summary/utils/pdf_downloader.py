@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Optional, List, Dict
 import yaml
 
-from utils.pdf_validator import validate_pdf, delete_pdf
+from utils.pdf_validator import validate_pdf, delete_pdf, check_pdf_integrity
 
 
 def load_config(config_path: str = "config/config.yaml") -> Dict:
@@ -279,6 +279,16 @@ def download_pdf(
         if not pdf_path:
             print(f"[FAIL] 脚本 {script_name} 下载失败，尝试下一个脚本")
             continue
+        
+        # 检查PDF完整性
+        is_valid, valid_reason = check_pdf_integrity(pdf_path)
+        if not is_valid:
+            print(f"[损坏] PDF文件损坏: {valid_reason}")
+            print(f"[删除] 删除损坏的PDF，尝试下一个脚本")
+            delete_pdf(pdf_path)
+            continue
+        
+        print(f"[检查] PDF完整性检查通过: {valid_reason}")
         
         # 验证PDF文件名是否匹配
         threshold = config.get('pdf_download', {}).get('match_threshold', 0)
