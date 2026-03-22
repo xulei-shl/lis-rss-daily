@@ -383,6 +383,10 @@ sudo systemctl stop paper-pdf-summary-telegram     # 停止
 - `<标题>`：论文标题（必填）
 - `@ID`：LIS-RSS系统ID（可选，不传则跳过LIS-RSS上传）
 
+### 日志
+
+Bot 日志保存在 `logs/telegram_bot_YYYY-MM-DD.log`
+
 ### 注意事项
 
 - 同一时间只能处理一个任务
