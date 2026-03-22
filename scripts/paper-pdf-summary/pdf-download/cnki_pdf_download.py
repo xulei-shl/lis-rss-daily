@@ -550,12 +550,41 @@ def cnki_download(keyword: str, output_dir: str = None, reuse_session: bool = Tr
             title_text = title_link.inner_text().strip()
             print(f"   找到题名: {title_text[:60]}...")
 
-            initial_pages = len(context.pages)
+            # 获取链接的 href 属性（备用）
+            title_href = title_link.get_attribute("href")
+            print(f"   获取到链接: {title_href[:60]}..." if title_href else "   无法获取链接")
 
-            with context.expect_page(timeout=15000) as page_info:
-                title_link.click()
+            # 方法1: 优先尝试点击（使用 dispatch_event 避免元素被遮挡的问题）
+            detail_page = None
+            try:
+                print("   尝试点击链接...")
+                initial_pages = len(context.pages)
 
-            detail_page = page_info.value
+                with context.expect_page(timeout=15000) as page_info:
+                    # 使用 dispatch_event 触发 JavaScript 点击事件
+                    title_link.dispatch_event("click")
+
+                detail_page = page_info.value
+                print("   点击成功，新页面已打开")
+            except Exception as click_error:
+                print(f"   点击失败: {click_error}")
+                
+                # 方法2: 如果点击失败，使用直接导航方案
+                if title_href and "kns.cnki.net" in title_href:
+                    print("   尝试直接导航到详情页...")
+                    try:
+                        detail_page = context.new_page()
+                        detail_page.goto(title_href, timeout=60000, wait_until="domcontentloaded")
+                        time.sleep(3)
+                        print("   直接导航成功")
+                    except nav_error:
+                        print(f"   直接导航也失败: {nav_error}")
+                        raise Exception(f"点击和直接导航都失败: {click_error}, {nav_error}")
+                else:
+                    raise click_error
+
+            if detail_page is None:
+                raise Exception("无法打开详情页")
             detail_page.bring_to_front()
             time.sleep(3)
 
