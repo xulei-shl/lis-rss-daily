@@ -11,6 +11,7 @@
 6. 生成每日处理报告
 """
 
+import re
 import sys
 import os
 import asyncio
@@ -210,12 +211,35 @@ def process_article_summary_only(article: Dict, config: Dict, daily_dir: Path, s
         result['reason'] = reason
         return result
 
+    md_content = ""
+    if Path(md_path).exists():
+        md_content = Path(md_path).read_text(encoding='utf-8')
+
+    error_patterns = [
+        r'无法完成',
+        r'无法正常',
+        r'No /Root object',
+        r'Is this really a PDF',
+        r'PDF文件链接无法正常访问',
+        r'文件格式异常',
+        r'PDF.*?异常',
+        r'处理失败',
+        r'调用失败',
+    ]
+    has_error = any(re.search(p, md_content, re.IGNORECASE) for p in error_patterns)
+    if has_error:
+        reason = "PDF总结失败（生成的摘要包含错误信息，可能是PDF损坏或无法读取）"
+        print(f"[失败] {reason}")
+        print(f"[删除] 删除无效MD文件: {md_path}")
+        Path(md_path).unlink(missing_ok=True)
+        result['stages']['pdf_summary'] = 'failed'
+        result['reason'] = reason
+        return result
+
     result['stages']['pdf_summary'] = 'success'
     result['md_path'] = str(md_path)
     print(f"[成功] MD文件已生成: {md_path}")
 
-    # 读取MD内容
-    md_content = md_path.read_text(encoding='utf-8')
     result['md_content'] = md_content
     result['success'] = True
 
@@ -348,6 +372,32 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
     if not md_path:
         reason = "PDF总结失败"
         print(f"[失败] {reason}")
+        logger.log_failure(article, reason)
+        result['stages']['pdf_summary'] = 'failed'
+        result['reason'] = reason
+        return result
+    
+    md_content = ""
+    if Path(md_path).exists():
+        md_content = Path(md_path).read_text(encoding='utf-8')
+    
+    error_patterns = [
+        r'无法完成',
+        r'无法正常',
+        r'No /Root object',
+        r'Is this really a PDF',
+        r'PDF文件链接无法正常访问',
+        r'文件格式异常',
+        r'PDF.*?异常',
+        r'处理失败',
+        r'调用失败',
+    ]
+    has_error = any(re.search(p, md_content, re.IGNORECASE) for p in error_patterns)
+    if has_error:
+        reason = "PDF总结失败（生成的摘要包含错误信息，可能是PDF损坏或无法读取）"
+        print(f"[失败] {reason}")
+        print(f"[删除] 删除无效MD文件: {md_path}")
+        Path(md_path).unlink(missing_ok=True)
         logger.log_failure(article, reason)
         result['stages']['pdf_summary'] = 'failed'
         result['reason'] = reason
