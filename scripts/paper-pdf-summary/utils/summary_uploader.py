@@ -454,6 +454,17 @@ async def upload_all(
         'memos': results[2] if isinstance(results[2], bool) else False,
         'wechat': results[3] if isinstance(results[3], bool) else False
     }
+    
+    # 记录哪些子系统被跳过（用于判断是否"全部失败"）
+    upload_results['_skipped'] = []
+    if skip_lis_rss:
+        upload_results['_skipped'].append('lis_rss')
+    if skip_wechat:
+        upload_results['_skipped'].append('wechat')
+    # 同时检查 config 中禁用的子系统
+    if not summary_upload.get('wechat', {}).get('enabled', False):
+        if 'wechat' not in upload_results['_skipped']:
+            upload_results['_skipped'].append('wechat')
 
     # 处理异常
     for i, result in enumerate(results):

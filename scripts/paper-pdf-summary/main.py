@@ -225,6 +225,49 @@ def process_article_summary_only(article: Dict, config: Dict, daily_dir: Path, s
     return result
 
 
+def _is_all_upload_failed(upload_results: Optional[Dict]) -> bool:
+    """
+    判断并行上传是否全部失败
+    
+    个别并行任务失败无所谓，但如果全部任务都失败则返回True
+    注意：被跳过的任务不计入失败判断
+    
+    Args:
+        upload_results: 上传结果字典，包含 hiagent_rag, lis_rss, memos, wechat 的布尔值，
+                       以及 _skipped 列表记录被跳过的子系统
+        
+    Returns:
+        如果全部实际执行的任务都失败，返回True；否则返回False
+    """
+    if not upload_results:
+        return True
+    
+    # 获取被跳过的子系统列表
+    skipped = upload_results.get('_skipped', [])
+    
+    # 统计实际执行的任务中成功的数量
+    success_count = 0
+    
+    # HiAgent RAG - 总是执行
+    if 'hiagent_rag' not in skipped and upload_results.get('hiagent_rag', False):
+        success_count += 1
+    
+    # LIS-RSS
+    if 'lis_rss' not in skipped and upload_results.get('lis_rss', False):
+        success_count += 1
+    
+    # Memos - 总是执行
+    if 'memos' not in skipped and upload_results.get('memos', False):
+        success_count += 1
+    
+    # WeChat
+    if 'wechat' not in skipped and upload_results.get('wechat', False):
+        success_count += 1
+    
+    # 如果没有任何任务成功，才算全部失败
+    return success_count == 0
+
+
 def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyLogger, skip_lis_rss: bool = False, skip_wechat: bool = False) -> Dict:
     """
     处理单篇文章
@@ -413,56 +456,71 @@ def main():
     db_path = config['database']['path']
     limit = config['daily_process_limit']
     
-    # 首先尝试获取优先数据
-    articles = fetch_pending_articles(
-        db_path=db_path,
-        journals=journals,
-        limit=limit,
-        use_priority=True
-    )
-    
-    if not articles:
-        print("[警告] 没有找到待处理的数据")
-        logger.generate_report()
-        return
-    
-    print(f"获取到 {len(articles)} 条待处理数据")
-    
-    # 创建当日工作目录（只有在有数据时才创建）
+    # 创建当日工作目录
     download_root = config['storage']['download_root']
     daily_dir = create_download_directory(download_root, today)
     print(f"  工作目录: {daily_dir}")
     
-    # 获取来源名称
+    # 获取数据库连接（用于获取来源名称）
     conn = get_connection(db_path)
-    for article in articles:
-        article['source_name'] = get_source_name(article, conn)
-    conn.close()
     
-    # 逐条处理
+    # 逐条处理 - 失败不计数，必须全部流程走完才算一条
     print_section("开始处理数据")
     
     success_count = 0
     failure_count = 0
+    processed_article_ids = set()  # 记录已处理的文章ID，避免重复处理
     
-    for i, article in enumerate(articles, 1):
+    while success_count < limit:
+        # 每次获取一条数据
+        articles = fetch_pending_articles(
+            db_path=db_path,
+            journals=journals,
+            limit=1,  # 每次只获取一条
+            use_priority=True
+        )
+        
+        if not articles:
+            print("[信息] 没有更多待处理的数据")
+            break
+        
+        # 跳过已处理的文章
+        article = articles[0]
+        article_id = article.get('id')
+        if article_id in processed_article_ids:
+            print(f"[跳过] 文章ID {article_id} 已处理过，跳过")
+            continue
+        
+        # 获取来源名称
+        article['source_name'] = get_source_name(article, conn)
+        processed_article_ids.add(article_id)
+        
         print(f"\n{'#'*60}")
-        print(f"# 处理第 {i}/{len(articles)} 条")
+        print(f"# 处理第 {success_count + failure_count + 1} 条 (成功: {success_count}, 失败: {failure_count})")
         print('#'*60)
         
         result = process_article(article, config, daily_dir, logger)
         
-        if result['success']:
+        # 判断是否为成功：必须 PDF下载成功 + 总结成功 + 并行上传不是全部失败
+        is_fully_successful = (
+            result.get('stages', {}).get('pdf_download') == 'success' and
+            result.get('stages', {}).get('pdf_summary') == 'success' and
+            not _is_all_upload_failed(result.get('stages', {}).get('upload'))
+        )
+        
+        if is_fully_successful:
             success_count += 1
+            print(f"\n[进度] 成功: {success_count}, 失败: {failure_count} (此条成功计入)")
         else:
             failure_count += 1
-        
-        print(f"\n[进度] 成功: {success_count}, 失败: {failure_count}")
+            print(f"\n[进度] 成功: {success_count}, 失败: {failure_count} (此条失败不计入，继续处理)")
         
         # 检查是否达到每日处理上限
         if success_count >= limit:
             print(f"\n[信息] 已达到每日处理上限 ({limit})，停止处理")
             break
+    
+    conn.close()
     
     # 生成最终报告
     print_section("生成每日报告")
