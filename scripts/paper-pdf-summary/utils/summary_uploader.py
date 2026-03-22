@@ -462,7 +462,7 @@ async def upload_all(
     if skip_wechat:
         upload_results['_skipped'].append('wechat')
     # 同时检查 config 中禁用的子系统
-    if not summary_upload.get('wechat', {}).get('enabled', False):
+    if not config.get('summary_upload', {}).get('wechat', {}).get('enabled', False):
         if 'wechat' not in upload_results['_skipped']:
             upload_results['_skipped'].append('wechat')
 
