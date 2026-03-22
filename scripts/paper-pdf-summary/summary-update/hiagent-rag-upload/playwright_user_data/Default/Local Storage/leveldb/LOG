@@ -1,3 +1,2 @@
-2026/03/19-11:33:56.611 5b1ae Reusing MANIFEST /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/playwright_user_data/Default/Local Storage/leveldb/MANIFEST-000001
-2026/03/19-11:33:56.616 5b1ae Recovering log #3
-2026/03/19-11:33:56.616 5b1ae Reusing old log /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/playwright_user_data/Default/Local Storage/leveldb/000003.log 
+2026/03/22-10:09:04.050 69e4 Creating DB F:\Github\lis-rss-daily\scripts\paper-pdf-summary\summary-update\hiagent-rag-upload\playwright_user_data\Default\Local Storage\leveldb since it was missing.
+2026/03/22-10:09:04.088 69e4 Reusing MANIFEST F:\Github\lis-rss-daily\scripts\paper-pdf-summary\summary-update\hiagent-rag-upload\playwright_user_data\Default\Local Storage\leveldb/MANIFEST-000001
