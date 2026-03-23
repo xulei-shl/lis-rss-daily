@@ -690,7 +690,7 @@ async function summarizePdf() {
   if (!confirmed) return;
 
   try {
-    const res = await fetch('http://localhost:8081/process', {
+    const res = await fetch('/api/pdf-summary', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
