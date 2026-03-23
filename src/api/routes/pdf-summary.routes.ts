@@ -57,6 +57,38 @@ router.post('/pdf-summary', requireAuth, requireAdmin, async (req: AuthRequest, 
       }
     }
 
+    // PDF 总结成功时发送 Telegram 通知
+    if (result.success && req.userId) {
+      const telegramNotifier = getTelegramNotifier();
+      try {
+        const notifyData = {
+          id: id || 0,
+          title: title,
+          url: '',
+          source_name: 'PDF全文总结成功',
+          source_origin: 'keyword' as const,
+          summary: `✅ PDF 全文总结已生成`,
+          filter_status: 'passed' as const,
+          process_status: 'completed' as const,
+          is_read: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          rss_source_id: null,
+          journal_id: null,
+          keyword_id: null,
+          ai_summary: null,
+          content: null,
+          markdown_content: null,
+          error_message: null,
+          rating: null,
+          published_at: null
+        } as ArticleWithSource;
+        await telegramNotifier.sendNewArticle(req.userId, notifyData);
+      } catch (telegramError) {
+        console.error('Failed to send Telegram notification:', telegramError);
+      }
+    }
+
     res.json(result);
   } catch (error) {
     console.error('PDF summary proxy error:', error);
