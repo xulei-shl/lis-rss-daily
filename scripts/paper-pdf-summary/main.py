@@ -228,7 +228,10 @@ def process_article_summary_only(article: Dict, config: Dict, daily_dir: Path, s
         r'处理失败',
         r'调用失败',
         r'抱歉.*?无法.*?',
-        r'对不起.*?无法.*?'
+        r'对不起.*?无法.*?',
+        r'请求异常',
+        r'稍后重试',
+        r'请稍后重试'
     ]
     has_error = any(re.search(p, md_content, re.IGNORECASE) for p in error_patterns)
     if has_error:
@@ -398,7 +401,10 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
         r'处理失败',
         r'调用失败',
         r'抱歉.*?无法.*?',
-        r'对不起.*?无法.*?'
+        r'对不起.*?无法.*?',
+        r'请求异常',
+        r'稍后重试',
+        r'请稍后重试'
     ]
     has_error = any(re.search(p, md_content, re.IGNORECASE) for p in error_patterns)
     if has_error:
