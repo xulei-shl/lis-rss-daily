@@ -1811,6 +1811,11 @@ function renderTelegramChats() {
     } else {
       tags.push('<span class="telegram-chat-tag disabled">新增文章</span>');
     }
+    if (chat.insights) {
+      tags.push('<span class="telegram-chat-tag insights">洞察报告</span>');
+    } else if (chat.insights !== undefined) {
+      tags.push('<span class="telegram-chat-tag insights disabled">洞察报告</span>');
+    }
 
     return '<div class="telegram-chat-item ' + inactiveClass + '">' +
       '<div class="telegram-chat-info">' +
@@ -1955,6 +1960,7 @@ function openTelegramChatModal(chat = null) {
     document.getElementById('telegramChatDailySummary').checked = chat.dailySummary;
     document.getElementById('telegramChatJournalAll').checked = chat.journalAll;
     document.getElementById('telegramChatNewArticles').checked = chat.newArticles;
+    document.getElementById('telegramChatInsights').checked = chat.insights;
     document.getElementById('telegramChatIsActive').checked = chat.isActive;
     // Disable chat ID input in edit mode
     document.getElementById('telegramChatChatId').disabled = true;
@@ -2021,6 +2027,7 @@ async function saveTelegramChat(e) {
   const dailySummary = document.getElementById('telegramChatDailySummary').checked;
   const journalAll = document.getElementById('telegramChatJournalAll').checked;
   const newArticles = document.getElementById('telegramChatNewArticles').checked;
+  const insights = document.getElementById('telegramChatInsights').checked;
   const isActive = document.getElementById('telegramChatIsActive').checked;
 
   if (!chatId) {
@@ -2035,6 +2042,7 @@ async function saveTelegramChat(e) {
     dailySummary,
     journalAll,
     newArticles,
+    insights,
     isActive,
   };
 

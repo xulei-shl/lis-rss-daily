@@ -87,6 +87,10 @@
             <input type="checkbox" id="wechatWebhookNewArticles" name="new_articles" checked>
             接收新增文章
           </label>
+          <label>
+            <input type="checkbox" id="wechatWebhookInsights" name="insights" checked>
+            接收洞察报告（15天周期）
+          </label>
         </div>
       </div>
 
@@ -228,6 +232,12 @@
   background: rgba(245, 158, 11, 0.1);
   color: var(--orange);
   border-color: rgba(245, 158, 11, 0.2);
+}
+
+.wechat-webhook-tag.insights {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
+  border-color: rgba(139, 92, 246, 0.2);
 }
 
 .wechat-webhook-tag.disabled {

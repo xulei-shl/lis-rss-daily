@@ -54,6 +54,11 @@ function renderWeChatWebhooks() {
     } else if (webhook.push_types?.new_articles !== undefined) {
       pushTypeTags.push('<span class="wechat-webhook-tag new-articles disabled">新增文章</span>');
     }
+    if (webhook.push_types?.insights) {
+      pushTypeTags.push('<span class="wechat-webhook-tag insights">洞察报告</span>');
+    } else if (webhook.push_types?.insights !== undefined) {
+      pushTypeTags.push('<span class="wechat-webhook-tag insights disabled">洞察报告</span>');
+    }
 
     const statusClass = webhook.enabled ? '' : 'inactive';
 
@@ -104,6 +109,7 @@ function openWeChatWebhookModal(webhookId) {
     document.getElementById('wechatWebhookDailySummary').checked = webhook.push_types?.daily_summary !== false;
     document.getElementById('wechatWebhookJournalAll').checked = webhook.push_types?.journal_all !== false;
     document.getElementById('wechatWebhookNewArticles').checked = webhook.push_types?.new_articles !== false;
+    document.getElementById('wechatWebhookInsights').checked = webhook.push_types?.insights !== false;
     document.getElementById('wechatWebhookEnabled').checked = webhook.enabled;
   } else {
     title.textContent = '添加 Webhook';
@@ -111,6 +117,7 @@ function openWeChatWebhookModal(webhookId) {
     document.getElementById('wechatWebhookDailySummary').checked = true;
     document.getElementById('wechatWebhookJournalAll').checked = true;
     document.getElementById('wechatWebhookNewArticles').checked = true;
+    document.getElementById('wechatWebhookInsights').checked = true;
     document.getElementById('wechatWebhookEnabled').checked = true;
   }
 
@@ -214,6 +221,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const daily_summary = document.getElementById('wechatWebhookDailySummary').checked;
       const journal_all = document.getElementById('wechatWebhookJournalAll').checked;
       const new_articles = document.getElementById('wechatWebhookNewArticles').checked;
+      const insights = document.getElementById('wechatWebhookInsights').checked;
 
       try {
         const body = {
@@ -223,7 +231,8 @@ document.addEventListener('DOMContentLoaded', function() {
           push_types: {
             daily_summary,
             journal_all,
-            new_articles
+            new_articles,
+            insights
           }
         };
 

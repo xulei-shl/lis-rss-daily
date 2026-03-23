@@ -37,7 +37,7 @@ router.get('/telegram-chats', requireAuth, async (req: AuthRequest, res) => {
  */
 router.post('/telegram-chats', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const { chatId, chatName, role, dailySummary, journalAll, newArticles, isActive } = req.body || {};
+    const { chatId, chatName, role, dailySummary, journalAll, newArticles, insights, isActive } = req.body || {};
 
     // Validate chatId
     if (!chatId || typeof chatId !== 'string') {
