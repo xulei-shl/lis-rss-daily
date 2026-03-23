@@ -27,7 +27,8 @@
     journal: '期刊精选',
     blog_news: '博客资讯',
     all: '综合',
-    search: '搜索总结'
+    search: '搜索总结',
+    insights: '洞察报告'
   };
 
   // Initialize
@@ -137,7 +138,7 @@
   function populateYearFilter() {
     const years = new Set();
     allHistory.forEach(item => {
-      const year = new Date(item.summary_date).getFullYear();
+      const year = new Date(item.created_at).getFullYear();
       years.add(year);
     });
 
@@ -175,7 +176,7 @@
       if (selectedType && item.summary_type !== selectedType) return false;
 
       // Date filter
-      const date = new Date(item.summary_date);
+      const date = new Date(item.created_at);
       const year = date.getFullYear();
       const month = date.getMonth() + 1;
 
@@ -236,7 +237,7 @@
   function groupByMonth(items) {
     const grouped = {};
     items.forEach(item => {
-      const date = new Date(item.summary_date);
+      const date = new Date(item.created_at);
       const key = `${date.getFullYear()}年${date.getMonth() + 1}月`;
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(item);

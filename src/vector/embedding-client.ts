@@ -38,7 +38,7 @@ async function loadEmbeddingConfig(userId: number): Promise<EmbeddingConfig> {
     baseUrl: dbConfig.base_url,
     apiKey: decryptAPIKey(dbConfig.api_key_encrypted, appConfig.llmEncryptionKey),
     model: dbConfig.model,
-    timeout: dbConfig.timeout ?? 30000,
+    timeout: dbConfig.timeout ?? 180000,
     maxRetries: dbConfig.max_retries ?? 3,
   };
 }

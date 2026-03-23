@@ -38,7 +38,7 @@ export async function rerank(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(dbConfig.timeout ?? 30000),
+      signal: AbortSignal.timeout(dbConfig.timeout ?? 180000),
     });
 
     if (!res.ok) {

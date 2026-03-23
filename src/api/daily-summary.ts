@@ -1002,9 +1002,11 @@ ${articlesText}
 
   log.info({ userId, dateStr, articleCount: articles.length }, 'Insights summary generated');
 
+  const executionDate = now.toISOString().split('T')[0];
+
   await saveDailySummary({
     userId,
-    date: dateStr,
+    date: executionDate,
     type: 'insights',
     articleCount: articles.length,
     summaryContent: summary,
@@ -1012,7 +1014,7 @@ ${articlesText}
   });
 
   const result = {
-    date: dateStr,
+    date: executionDate,
     type: 'insights' as SummaryType,
     totalArticles: articles.length,
     articlesByType,

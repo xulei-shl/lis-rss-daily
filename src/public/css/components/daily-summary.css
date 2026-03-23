@@ -519,6 +519,17 @@
   letter-spacing: 0.05em;
 }
 
+.badge-insights {
+  background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
+  color: white;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 /* History item header with type badge */
 .history-item-header {
   display: flex;

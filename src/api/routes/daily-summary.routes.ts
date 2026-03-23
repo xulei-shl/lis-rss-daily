@@ -14,7 +14,7 @@ const log = logger.child({ module: 'api-routes/daily-summary' });
 const router = express.Router();
 
 // 有效的总结类型
-const VALID_SUMMARY_TYPES: SummaryType[] = ['journal', 'blog_news', 'all', 'journal_all', 'search'];
+const VALID_SUMMARY_TYPES: SummaryType[] = ['journal', 'blog_news', 'all', 'journal_all', 'search', 'insights'];
 
 /**
  * 验证并获取总结类型参数
@@ -127,13 +127,25 @@ router.get('/daily-summary/:date', requireAuth, async (req: AuthRequest, res) =>
     // Handle array case from express
     const dateParam = Array.isArray(date) ? date[0] : date;
 
+    const type = parseSummaryType(req.query.type);
+    
+    // For insights type, use the full date string directly
+    if (type === 'insights' || dateParam.includes('~')) {
+      const summary = await dailySummaryService.getDailySummaryByDate(req.effectiveUserId!, dateParam, 'insights');
+      if (!summary) {
+        res.status(404).json({ error: '总结不存在' });
+        return;
+      }
+      res.json(summary);
+      return;
+    }
+
     // 验证日期格式 (YYYY-MM-DD)
     if (!dateParam || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
       res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
       return;
     }
 
-    const type = parseSummaryType(req.query.type);
     // Use effectiveUserId so guest users can see admin's data
     const summary = await dailySummaryService.getDailySummaryByDate(req.effectiveUserId!, dateParam, type);
 
@@ -163,13 +175,31 @@ router.get('/daily-summary/:date/articles', requireAuth, async (req: AuthRequest
     // Handle array case from express
     const dateParam = Array.isArray(date) ? date[0] : date;
 
+    const type = parseSummaryType(req.query.type);
+
+    // For insights type, use the full date string directly
+    if (type === 'insights' || dateParam.includes('~')) {
+      const summary = await dailySummaryService.getDailySummaryByDate(req.effectiveUserId!, dateParam, 'insights');
+      if (!summary) {
+        res.status(404).json({ error: '总结不存在' });
+        return;
+      }
+      const articlesData = JSON.parse(summary.articles_data);
+      res.json({
+        date: dateParam,
+        type: summary.summary_type,
+        total: summary.article_count,
+        ...articlesData,
+      });
+      return;
+    }
+
     // 验证日期格式
     if (!dateParam || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
       res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
       return;
     }
 
-    const type = parseSummaryType(req.query.type);
     // Use effectiveUserId so guest users can see admin's data
     const summary = await dailySummaryService.getDailySummaryByDate(req.effectiveUserId!, dateParam, type);
 
