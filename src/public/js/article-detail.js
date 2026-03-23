@@ -380,15 +380,15 @@ function formatMarkdown(text) {
       continue;
     }
 
-    // 检测标题行
+    // 检测标准 Markdown 标题行（以 # 开头）
     if (trimmedLine.startsWith('#### ')) {
-      // 收集标题后的内容（直到下一个标题或空行）
       const title = trimmedLine.slice(5);
+      // 检测后续内容
       const contentLines = [];
       i++;
       while (i < allLines.length) {
         const nextLine = allLines[i].trim();
-        // 遇到下一个标题或分隔行（---）则停止
+        // 遇到下一个标题、空行或分隔行则停止
         if (nextLine.startsWith('#### ') || nextLine.startsWith('### ') || 
             nextLine.startsWith('## ') || nextLine.startsWith('# ') ||
             nextLine.startsWith('---') || nextLine === '') {
@@ -399,12 +399,15 @@ function formatMarkdown(text) {
         }
         i++;
       }
-      const content = contentLines.join('\n').trim();
-      if (content) {
-        // 将换行符转换为 <br> 标签
-        const contentWithBreaks = content.replace(/\n/g, '<br>');
+      // 将内容按行分割为多个段落
+      if (contentLines.length > 0) {
         result.push('<h4>' + formatInline(escapeHtml(title)) + '</h4>');
-        result.push('<p>' + formatInline(escapeHtml(contentWithBreaks)) + '</p>');
+        for (const contentLine of contentLines) {
+          const trimmedContent = contentLine.trim();
+          if (trimmedContent) {
+            result.push('<p>' + formatInline(escapeHtml(trimmedContent)) + '</p>');
+          }
+        }
       } else {
         result.push('<h4>' + formatInline(escapeHtml(title)) + '</h4>');
       }
@@ -425,11 +428,14 @@ function formatMarkdown(text) {
         }
         i++;
       }
-      const content = contentLines.join('\n').trim();
-      if (content) {
-        const contentWithBreaks = content.replace(/\n/g, '<br>');
+      if (contentLines.length > 0) {
         result.push('<h3>' + formatInline(escapeHtml(title)) + '</h3>');
-        result.push('<p>' + formatInline(escapeHtml(contentWithBreaks)) + '</p>');
+        for (const contentLine of contentLines) {
+          const trimmedContent = contentLine.trim();
+          if (trimmedContent) {
+            result.push('<p>' + formatInline(escapeHtml(trimmedContent)) + '</p>');
+          }
+        }
       } else {
         result.push('<h3>' + formatInline(escapeHtml(title)) + '</h3>');
       }
@@ -450,11 +456,14 @@ function formatMarkdown(text) {
         }
         i++;
       }
-      const content = contentLines.join('\n').trim();
-      if (content) {
-        const contentWithBreaks = content.replace(/\n/g, '<br>');
+      if (contentLines.length > 0) {
         result.push('<h2>' + formatInline(escapeHtml(title)) + '</h2>');
-        result.push('<p>' + formatInline(escapeHtml(contentWithBreaks)) + '</p>');
+        for (const contentLine of contentLines) {
+          const trimmedContent = contentLine.trim();
+          if (trimmedContent) {
+            result.push('<p>' + formatInline(escapeHtml(trimmedContent)) + '</p>');
+          }
+        }
       } else {
         result.push('<h2>' + formatInline(escapeHtml(title)) + '</h2>');
       }
@@ -475,11 +484,14 @@ function formatMarkdown(text) {
         }
         i++;
       }
-      const content = contentLines.join('\n').trim();
-      if (content) {
-        const contentWithBreaks = content.replace(/\n/g, '<br>');
+      if (contentLines.length > 0) {
         result.push('<h1>' + formatInline(escapeHtml(title)) + '</h1>');
-        result.push('<p>' + formatInline(escapeHtml(contentWithBreaks)) + '</p>');
+        for (const contentLine of contentLines) {
+          const trimmedContent = contentLine.trim();
+          if (trimmedContent) {
+            result.push('<p>' + formatInline(escapeHtml(trimmedContent)) + '</p>');
+          }
+        }
       } else {
         result.push('<h1>' + formatInline(escapeHtml(title)) + '</h1>');
       }
@@ -535,7 +547,8 @@ function formatMarkdown(text) {
       continue;
     }
 
-    // 普通段落：收集连续的非空行
+    // 普通段落：每一行都作为一个独立的段落
+    // 遇到空行或标题分隔符才停止收集
     const paragraphLines = [line];
     i++;
     while (i < allLines.length) {
@@ -551,11 +564,13 @@ function formatMarkdown(text) {
       }
       i++;
     }
-    const paragraph = paragraphLines.join('\n').trim();
-    if (paragraph) {
-      // 将换行符转换为 <br> 标签，保留段落内的换行
-      const paragraphWithBreaks = paragraph.replace(/\n/g, '<br>');
-      result.push('<p>' + formatInline(escapeHtml(paragraphWithBreaks)) + '</p>');
+    
+    // 将每一行都作为独立段落输出
+    for (const paraLine of paragraphLines) {
+      const trimmedPara = paraLine.trim();
+      if (trimmedPara) {
+        result.push('<p>' + formatInline(escapeHtml(trimmedPara)) + '</p>');
+      }
     }
   }
 
