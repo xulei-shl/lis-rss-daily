@@ -295,12 +295,13 @@
 /* Action Buttons */
 .action-buttons {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
     gap: var(--space-2);
 }
 
 .action-buttons .btn {
-    width: 100%;
+    flex: 1 1 45%;
+    min-width: 120px;
     justify-content: center;
 }
 

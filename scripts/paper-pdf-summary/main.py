@@ -220,11 +220,15 @@ def process_article_summary_only(article: Dict, config: Dict, daily_dir: Path, s
         r'无法正常',
         r'No /Root object',
         r'Is this really a PDF',
-        r'PDF文件链接无法正常访问',
+        r'文件链接无法正常访问',
         r'文件格式异常',
+        r'链接无效',
+        r'格式异常',
         r'PDF.*?异常',
         r'处理失败',
         r'调用失败',
+        r'抱歉.*?无法.*?',
+        r'对不起.*?无法.*?'
     ]
     has_error = any(re.search(p, md_content, re.IGNORECASE) for p in error_patterns)
     if has_error:

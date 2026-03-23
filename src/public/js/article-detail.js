@@ -60,6 +60,12 @@ document.addEventListener('DOMContentLoaded', () => {
       aiSummaryActions.style.display = 'flex';
     }
 
+    // 显示 PDF 全文总结按钮
+    const pdfSummaryBtn = document.getElementById('pdfSummaryBtn');
+    if (pdfSummaryBtn) {
+      pdfSummaryBtn.style.display = 'inline-block';
+    }
+
     // 绑定编辑和删除按钮事件
     document.getElementById('editAiSummaryBtn').addEventListener('click', editAiSummary);
     document.getElementById('deleteAiSummaryBtn').addEventListener('click', deleteAiSummary);
@@ -667,5 +673,42 @@ async function deleteAiSummary() {
   } catch (err) {
     console.error('Failed to delete AI summary:', err);
     window.toast.error(err.message || '删除失败，请稍后重试');
+  }
+}
+
+// PDF 全文总结
+async function summarizePdf() {
+  if (!articleData) return;
+
+  const confirmed = await showConfirm('是否生成 PDF 全文总结？', {
+    title: '全文总结',
+    okText: '是',
+    cancelText: '否',
+    okButtonType: 'btn-primary'
+  });
+
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('http://localhost:8081/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: articleData.title,
+        id: articleData.id,
+        push_wechat: false
+      })
+    });
+
+    const result = await res.json();
+
+    if (result.success) {
+      window.toast.success('PDF 全文总结已生成');
+    } else {
+      window.toast.error(result.reason || '生成失败');
+    }
+  } catch (err) {
+    console.error('Failed to generate PDF summary:', err);
+    window.toast.error('生成失败，请稍后重试');
   }
 }
