@@ -1055,6 +1055,62 @@ export async function updateArticleReadStatus(
 }
 
 /**
+ * 更新文章过滤状态
+ * @param articleId - Article ID
+ * @param userId - User ID (for permission check)
+ * @param filterStatus - Filter status (pending/passed/rejected)
+ */
+export async function updateArticleFilterStatus(
+  articleId: number,
+  userId: number,
+  filterStatus: 'pending' | 'passed' | 'rejected'
+): Promise<void> {
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  // 验证状态值
+  if (!['pending', 'passed', 'rejected'].includes(filterStatus)) {
+    throw new Error('Invalid filter status');
+  }
+
+  const result = await db
+    .updateTable('articles')
+    .set({
+      filter_status: filterStatus,
+      filtered_at: now,
+      updated_at: now,
+    })
+    .where('id', '=', articleId)
+    .where((eb) => eb.or([
+      eb.and([
+        eb('articles.rss_source_id', 'is not', null),
+        eb('articles.rss_source_id', 'in', (eb) =>
+          eb.selectFrom('rss_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.journal_id', 'is not', null),
+        eb('articles.journal_id', 'in', (eb) =>
+          eb.selectFrom('journals').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.keyword_id', 'is not', null),
+        eb('articles.keyword_id', 'in', (eb) =>
+          eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+    ]))
+    .executeTakeFirst();
+
+  if (result.numUpdatedRows === 0n) {
+    throw new Error('Article not found');
+  }
+
+  log.info({ articleId, userId, filterStatus }, 'Article filter status updated');
+}
+
+/**
  * 批量更新文章已读状态
  * @param userId - User ID
  * @param articleIds - Article IDs to update

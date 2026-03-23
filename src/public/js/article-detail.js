@@ -48,9 +48,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const readBtn = document.getElementById('readBtn');
     const processBtn = document.getElementById('processBtn');
     const deleteBtn = document.getElementById('deleteBtn');
+    const filterStatusBtn = document.getElementById('filterStatusBtn');
     if (readBtn) readBtn.style.display = 'none';
     if (processBtn) processBtn.style.display = 'none';
     if (deleteBtn) deleteBtn.style.display = 'none';
+    if (filterStatusBtn) filterStatusBtn.style.display = 'none';
   }
 
   // Admin 模式：显示 AI 总结操作按钮
@@ -64,6 +66,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const pdfSummaryBtn = document.getElementById('pdfSummaryBtn');
     if (pdfSummaryBtn) {
       pdfSummaryBtn.style.display = 'inline-block';
+    }
+
+    // 显示过滤状态按钮
+    const filterStatusBtn = document.getElementById('filterStatusBtn');
+    if (filterStatusBtn) {
+      filterStatusBtn.style.display = 'inline-block';
     }
 
     // 绑定编辑和删除按钮事件
@@ -173,6 +181,9 @@ function renderArticle(article) {
   // 已读状态
   const isRead = article.is_read === 1;
   updateReadButton(isRead);
+
+  // 过滤状态按钮
+  updateFilterStatusButton(article.filter_status);
 
   // 处理按钮可见性
   const processBtn = document.getElementById('processBtn');
@@ -744,6 +755,76 @@ async function toggleReadStatus(isRead) {
     }
   } catch (err) {
     console.error('Failed to toggle read status:', err);
+    window.toast.error('操作失败，请稍后重试');
+  }
+}
+
+// 更新过滤状态按钮文本
+function updateFilterStatusButton(filterStatus) {
+  const filterStatusBtn = document.getElementById('filterStatusBtn');
+  if (!filterStatusBtn) return;
+
+  // 根据当前状态确定按钮文字和操作
+  let buttonText = '';
+  let nextStatus = '';
+
+  switch (filterStatus) {
+    case 'pending':
+      buttonText = '标记通过';
+      nextStatus = 'passed';
+      break;
+    case 'passed':
+      buttonText = '标记拒绝';
+      nextStatus = 'rejected';
+      break;
+    case 'rejected':
+      buttonText = '标记通过';
+      nextStatus = 'passed';
+      break;
+    default:
+      buttonText = '标记通过';
+      nextStatus = 'passed';
+  }
+
+  filterStatusBtn.textContent = buttonText;
+  filterStatusBtn.onclick = function() { toggleFilterStatus(nextStatus); };
+}
+
+// 切换过滤状态
+async function toggleFilterStatus(nextStatus) {
+  if (!articleData) return;
+
+  try {
+    const res = await fetch('/api/articles/' + articleData.id + '/filter-status', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filter_status: nextStatus })
+    });
+
+    if (!res.ok) throw new Error('Failed to update');
+
+    // 更新本地数据
+    articleData.filter_status = nextStatus;
+
+    // 更新按钮状态
+    updateFilterStatusButton(nextStatus);
+
+    // 更新页面显示
+    const statusLabels = {
+      'passed': '通过',
+      'rejected': '拒绝',
+      'pending': '待处理'
+    };
+    const filterStatusEl = document.getElementById('filterStatus');
+    if (filterStatusEl) {
+      filterStatusEl.textContent = statusLabels[nextStatus] || nextStatus;
+    }
+
+    // 提示信息
+    const statusText = nextStatus === 'passed' ? '已通过审核' : '已拒绝';
+    window.toast.success(statusText);
+  } catch (err) {
+    console.error('Failed to toggle filter status:', err);
     window.toast.error('操作失败，请稍后重试');
   }
 }

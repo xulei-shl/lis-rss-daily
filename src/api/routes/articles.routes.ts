@@ -470,6 +470,43 @@ router.patch('/articles/:id/read', requireAuth, requireWriteAccess, async (req: 
 });
 
 /**
+ * PATCH /api/articles/:id/filter-status
+ * Update article filter status
+ * Requires admin role (not guest)
+ */
+router.patch('/articles/:id/filter-status', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
+  try {
+    const idParam = req.params.id;
+    if (typeof idParam !== 'string') {
+      return res.status(400).json({ error: 'Invalid article ID' });
+    }
+    const id = parseInt(idParam);
+
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid article ID' });
+    }
+
+    const { filter_status } = req.body;
+    if (!['pending', 'passed', 'rejected'].includes(filter_status)) {
+      return res.status(400).json({ error: 'filter_status must be one of: pending, passed, rejected' });
+    }
+
+    await articleService.updateArticleFilterStatus(id, req.effectiveUserId!, filter_status);
+
+    res.json({ success: true, filter_status });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Article not found') {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    if (error instanceof Error && error.message === 'Invalid filter status') {
+      return res.status(400).json({ error: 'Invalid filter status' });
+    }
+    log.error({ error, userId: req.userId }, 'Failed to update article filter status');
+    res.status(500).json({ error: 'Failed to update article filter status' });
+  }
+});
+
+/**
  * POST /api/articles/batch-read
  * Batch update article read status
  * Requires admin role (not guest)
