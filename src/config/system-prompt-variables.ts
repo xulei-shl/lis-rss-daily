@@ -178,11 +178,6 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
       source: 'YYYY-MM-DD 格式',
       required: true,
     },
-    SUMMARY_GUIDE: {
-      description: '总结指南',
-      source: '自定义指南',
-      required: false,
-    },
   },
 };
 

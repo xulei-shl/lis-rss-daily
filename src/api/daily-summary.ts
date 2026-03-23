@@ -985,7 +985,6 @@ ${articlesText}
     {
       ARTICLES_LIST: articlesText,
       DATE_RANGE: dateStr,
-      SUMMARY_GUIDE: '将同一类主题的文章分组，每组提供总结、选题建议和文章列表',
     }
   );
 

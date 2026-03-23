@@ -10,6 +10,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:backfill-title-normalized": "tsx scripts/backfill-title-normalized.ts",
     "gen-password": "tsx scripts/gen-password.ts",
+    "trigger-insights": "tsx scripts/trigger-insights.ts",
     "test:search": "tsx scripts/search-smoke.ts"
   },
   "dependencies": {
