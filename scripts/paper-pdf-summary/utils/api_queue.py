@@ -1,4 +1,5 @@
 import asyncio
+import re
 import sys
 import uuid
 from datetime import datetime
@@ -142,6 +143,36 @@ class QueueManager:
         if not md_path:
             result["stages"]["pdf_summary"] = "failed"
             result["reason"] = "PDF总结失败"
+            return result
+
+        # 读取MD内容检查是否包含错误信息
+        md_content = ""
+        if Path(md_path).exists():
+            md_content = Path(md_path).read_text(encoding='utf-8')
+
+        error_patterns = [
+            r'无法完成',
+            r'无法正常',
+            r'No /Root object',
+            r'Is this really a PDF',
+            r'文件链接无法正常访问',
+            r'文件格式异常',
+            r'链接无效',
+            r'格式异常',
+            r'PDF.*?异常',
+            r'处理失败',
+            r'调用失败',
+            r'抱歉.*?无法.*?',
+            r'对不起.*?无法.*?'
+        ]
+        has_error = any(re.search(p, md_content, re.IGNORECASE) for p in error_patterns)
+        if has_error:
+            reason = "PDF总结失败（生成的摘要包含错误信息，可能是PDF损坏或无法读取）"
+            print(f"[失败] {reason}")
+            print(f"[删除] 删除无效MD文件: {md_path}")
+            Path(md_path).unlink(missing_ok=True)
+            result["stages"]["pdf_summary"] = "failed"
+            result["reason"] = reason
             return result
 
         result["stages"]["pdf_summary"] = "success"
