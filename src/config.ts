@@ -50,6 +50,12 @@ export interface Config {
   dailySummarySchedule: string;
   dailySummaryTypes: string[];
 
+  // Insights
+  insightsEnabled: boolean;
+  insightsSchedule: string;
+  insightsDays: number;
+  insightsUserId: number;
+
   // Search AI Summary
   searchAiSummaryGuestEnabled: boolean;
 
@@ -178,6 +184,12 @@ function getConfig(): Config {
     dailySummaryEnabled: process.env.DAILY_SUMMARY_ENABLED !== 'false',
     dailySummarySchedule: process.env.DAILY_SUMMARY_SCHEDULE || '0 7 * * *',
     dailySummaryTypes: (process.env.DAILY_SUMMARY_TYPES || 'journal,blog_news,journal_all').split(','),
+
+    // Insights
+    insightsEnabled: process.env.INSIGHTS_ENABLED !== 'false',
+    insightsSchedule: process.env.INSIGHTS_SCHEDULE || '0 1 */15 * *',
+    insightsDays: parseInt(process.env.INSIGHTS_DAYS || '15', 10),
+    insightsUserId: parseInt(process.env.INSIGHTS_USER_ID || '1', 10),
 
     // Search AI Summary
     searchAiSummaryGuestEnabled: process.env.SEARCH_AI_SUMMARY_GUEST_ENABLED === 'true',

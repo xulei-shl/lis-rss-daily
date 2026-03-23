@@ -237,7 +237,7 @@ CREATE INDEX IF NOT EXISTS idx_article_translations_article_id ON article_transl
 -- ===========================================
 -- 11. LLM Configs Table
 -- ===========================================
--- task_type 取值来自 config/types.yaml: task_types (filter, summary, keywords, translation, daily_summary, analysis)
+-- task_type 取值来自 config/types.yaml: task_types (filter, summary, keywords, translation, daily_summary, analysis, insights)
 -- 新增类型需更新 YAML 配置并创建新的迁移脚本
 CREATE TABLE IF NOT EXISTS llm_configs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -283,7 +283,7 @@ CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key);
 -- ===========================================
 -- 11. System Prompts Table
 -- ===========================================
--- type 取值来自 config/types.yaml: task_types (filter, summary, keywords, translation, daily_summary, analysis)
+-- type 取值来自 config/types.yaml: task_types (filter, summary, keywords, translation, daily_summary, analysis, insights)
 CREATE TABLE IF NOT EXISTS system_prompts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
@@ -304,12 +304,12 @@ CREATE INDEX IF NOT EXISTS idx_system_prompts_is_active ON system_prompts(is_act
 -- ===========================================
 -- 12. Daily Summaries Table
 -- ===========================================
--- summary_type 取值：'journal'（期刊）、'blog_news'（博客资讯）、'all'（历史兼容）
+-- summary_type 取值：'journal'（期刊）、'blog_news'（博客资讯）、'all'（历史兼容）、'search'（搜索总结）、'journal_all'（全部期刊）、'insights'（洞察报告）
 CREATE TABLE IF NOT EXISTS daily_summaries (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
   summary_date TEXT NOT NULL,
-  summary_type TEXT DEFAULT 'all',
+  summary_type TEXT DEFAULT 'all' CHECK(summary_type IN ('journal', 'blog_news', 'all', 'search', 'journal_all', 'insights')),
   article_count INTEGER NOT NULL,
   summary_content TEXT NOT NULL,
   articles_data TEXT NOT NULL,
@@ -439,6 +439,7 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
   role TEXT DEFAULT 'viewer' CHECK(role IN ('admin', 'viewer')),
   daily_summary INTEGER DEFAULT 1,     -- 接收每日总结（通过的期刊 + 资讯）
   journal_all INTEGER DEFAULT 0,        -- 接收全部期刊总结（包含未通过）
+  insights INTEGER DEFAULT 1,        -- 接收洞察总结（15天周期）
   new_articles INTEGER DEFAULT 1,        -- 接收新增文章
   is_active INTEGER DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

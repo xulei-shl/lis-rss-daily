@@ -205,7 +205,7 @@ export interface DailySummariesTable {
   id: Generated<number>;
   user_id: number;
   summary_date: string;
-  summary_type: 'journal' | 'blog_news' | 'all' | 'search' | 'journal_all';
+  summary_type: 'journal' | 'blog_news' | 'all' | 'search' | 'journal_all' | 'insights';
   article_count: number;
   summary_content: string;
   articles_data: string;
@@ -297,6 +297,7 @@ export interface TelegramChatsTable {
   daily_summary: number;
   journal_all: number;  // 接收全部期刊总结（包含未通过）
   new_articles: number;
+  insights: number;
   is_active: number;
   created_at: Generated<string>;
   updated_at: string;

@@ -20,6 +20,7 @@ export interface TelegramChatConfig {
   role: TelegramChatRole;
   dailySummary: boolean;
   journalAll: boolean;
+  insights: boolean;
   newArticles: boolean;
   isActive: boolean;
   createdAt: string;
@@ -32,6 +33,7 @@ export interface CreateTelegramChatInput {
   role?: TelegramChatRole;
   dailySummary?: boolean;
   journalAll?: boolean;
+  insights?: boolean;
   newArticles?: boolean;
   isActive?: boolean;
 }
@@ -41,6 +43,7 @@ export interface UpdateTelegramChatInput {
   role?: TelegramChatRole;
   dailySummary?: boolean;
   journalAll?: boolean;
+  insights?: boolean;
   newArticles?: boolean;
   isActive?: boolean;
 }
@@ -57,6 +60,7 @@ function rowToConfig(row: TelegramChatsSelection): TelegramChatConfig {
     role: row.role,
     dailySummary: row.daily_summary === 1,
     journalAll: row.journal_all === 1,
+    insights: (row as any).insights === 1,
     newArticles: row.new_articles === 1,
     isActive: row.is_active === 1,
     createdAt: row.created_at,
@@ -145,6 +149,7 @@ export async function addTelegramChat(userId: number, input: CreateTelegramChatI
       role: input.role || 'viewer',
       daily_summary: input.dailySummary !== false ? 1 : 0,
       journal_all: input.journalAll !== false ? 1 : 0,
+      insights: input.insights !== false ? 1 : 0,
       new_articles: input.newArticles !== false ? 1 : 0,
       is_active: input.isActive !== false ? 1 : 0,
       updated_at: now,
@@ -179,6 +184,9 @@ export async function updateTelegramChat(
   }
   if (input.dailySummary !== undefined) {
     updates.daily_summary = input.dailySummary ? 1 : 0;
+  }
+  if (input.insights !== undefined) {
+    updates.insights = input.insights ? 1 : 0;
   }
   if (input.journalAll !== undefined) {
     updates.journal_all = input.journalAll ? 1 : 0;
@@ -344,6 +352,24 @@ export async function getJournalAllChats(userId: number): Promise<TelegramChatCo
     .where('user_id', '=', userId)
     .where('is_active', '=', 1)
     .where('journal_all', '=', 1)
+    .orderBy('created_at', 'asc')
+    .selectAll()
+    .execute();
+
+  return rows.map(rowToConfig);
+}
+
+/**
+ * Get chats that should receive insights summary
+ */
+export async function getInsightsChats(userId: number): Promise<TelegramChatConfig[]> {
+  const db = getDb();
+
+  const rows = await db
+    .selectFrom('telegram_chats')
+    .where('user_id', '=', userId)
+    .where('is_active', '=', 1)
+    .where('insights', '=', 1)
     .orderBy('created_at', 'asc')
     .selectAll()
     .execute();

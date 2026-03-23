@@ -18,6 +18,7 @@ export interface WeChatPushTypes {
   daily_summary: boolean;
   journal_all: boolean;
   new_articles: boolean;
+  insights: boolean;
 }
 
 /**
@@ -119,8 +120,13 @@ function loadConfig(): WeChatConfig {
             daily_summary: true,
             journal_all: true,
             new_articles: true,
+            insights: true,
           },
         };
+      }
+      // 确保新增的推送类型有默认值
+      if (webhook.push_types.insights === undefined) {
+        webhook.push_types.insights = true;
       }
       return webhook;
     });

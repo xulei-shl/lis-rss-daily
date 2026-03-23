@@ -23,7 +23,7 @@ const log = logger.child({ module: 'daily-summary-service' });
  * - search: 搜索总结（用户手动选择文章生成）
  * - journal_all: 全部期刊总结（包含未通过的）
  */
-export type SummaryType = 'journal' | 'blog_news' | 'all' | 'search' | 'journal_all';
+export type SummaryType = 'journal' | 'blog_news' | 'all' | 'search' | 'journal_all' | 'insights';
 
 export interface DailySummaryArticle {
   id: number;
@@ -797,7 +797,7 @@ ${articlesText}
   // 推送到 Telegram（异步，不阻塞主流程）
   getTelegramNotifier().sendJournalAllSummary(userId, {
     date: result.date,
-    type: result.type,
+    type: 'journal_all',
     totalArticles: result.totalArticles,
     summary: result.summary,
     articlesByType: {
@@ -807,6 +807,246 @@ ${articlesText}
     },
   }).catch(err => {
     log.warn({ error: err }, 'Failed to send journal all summary to Telegram');
+  });
+
+  return result;
+}
+
+// ============================================================================
+// Insights - 洞察报告功能
+// ============================================================================
+
+/**
+ * 获取过去N天内通过的文章（用于洞察）
+ * - created_at 过去N天（不含今天）
+ * - filter_status = 'passed'
+ * - rss_source_id 或 journal_id 对应的名称在白名单中
+ * - markdown_content 或 content 有值（且不是特定值）
+ */
+export async function getInsightsArticles(
+  userId: number,
+  days: number = 15,
+  limit: number = 60
+): Promise<DailySummaryArticle[]> {
+  const db = getDb();
+  const { getJournalsWhitelist } = await import('../utils/journals-whitelist.js');
+  const whitelist = getJournalsWhitelist();
+
+  const now = new Date();
+  const startDate = new Date(now);
+  startDate.setDate(startDate.getDate() - days);
+  startDate.setHours(0, 0, 0, 0);
+  const endDate = new Date(now);
+  endDate.setHours(0, 0, 0, 0);
+
+  log.info(
+    { userId, days, startDate: startDate.toISOString(), endDate: endDate.toISOString(), whitelist: whitelist.length },
+    'Fetching insights articles'
+  );
+
+  const articles = await db
+    .selectFrom('articles')
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .where('articles.filter_status', '=', 'passed')
+    .where((eb) => eb.or([
+      eb('rss_sources.user_id', '=', userId),
+      eb('journals.user_id', '=', userId),
+      eb('keyword_subscriptions.user_id', '=', userId),
+    ]))
+    .where('articles.created_at', '>=', startDate.toISOString())
+    .where('articles.created_at', '<', endDate.toISOString())
+    .where((eb) => eb.or([
+      eb('rss_sources.name', 'in', whitelist),
+      eb('journals.name', 'in', whitelist),
+    ]))
+    .where((eb) => eb.or([
+      eb('articles.markdown_content', 'is not', null),
+      eb('articles.content', 'is not', null),
+    ]))
+    .where((eb) => eb.and([
+      eb.or([
+        eb('articles.markdown_content', 'not like', '%<正>%'),
+        eb('articles.markdown_content', 'is', null),
+      ]),
+      eb.or([
+        eb('articles.content', 'not like', '%<正>%'),
+        eb('articles.content', 'is', null),
+      ]),
+    ]))
+    .select((eb: any) => [
+      'articles.id',
+      'articles.title',
+      'articles.url',
+      'articles.summary',
+      'articles.markdown_content',
+      'articles.published_at',
+      'articles.source_origin',
+      eb.fn.coalesce('rss_sources.name', 'journals.name', 'keyword_subscriptions.keyword').as('source_name'),
+      eb.fn.coalesce('rss_sources.source_type', eb.val('journal')).as('source_type'),
+    ])
+    .orderBy('articles.created_at', 'desc')
+    .limit(limit)
+    .execute();
+
+  const result = articles.map((row: any) => {
+    let sourceName = row.source_name || '未知来源';
+    if (row.source_origin === 'keyword') {
+      sourceName = `关键词: ${row.source_name}`;
+    }
+
+    return {
+      id: row.id,
+      title: row.title,
+      url: row.url,
+      summary: row.summary,
+      markdown_content: row.markdown_content,
+      source_name: sourceName,
+      source_type: row.source_type || 'journal',
+      published_at: row.published_at,
+    };
+  });
+
+  log.info({ userId, count: result.length }, 'Fetched insights articles');
+
+  return result;
+}
+
+/**
+ * 生成洞察报告
+ */
+export async function generateInsightsSummary(
+  input: { userId: number; days?: number }
+): Promise<DailySummaryResult> {
+  const { userId, days = 15 } = input;
+
+  const now = new Date();
+  const startDate = new Date(now);
+  startDate.setDate(startDate.getDate() - days);
+  const endDate = new Date(now);
+  endDate.setDate(endDate.getDate() - 1);
+  const dateStr = `${startDate.toISOString().split('T')[0]} ~ ${endDate.toISOString().split('T')[0]}`;
+
+  const articles = await getInsightsArticles(userId, days);
+
+  if (articles.length === 0) {
+    return {
+      date: dateStr,
+      type: 'insights',
+      totalArticles: 0,
+      articlesByType: { journal: [], blog: [], news: [] },
+      summary: '过去15天暂无通过的文章。',
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  const articlesByType = {
+    journal: articles.filter(a => a.source_type === 'journal'),
+    blog: articles.filter(a => a.source_type === 'blog'),
+    news: articles.filter(a => a.source_type === 'news'),
+  };
+
+  let articlesText = '';
+  const addSection = (title: string, list: DailySummaryArticle[]) => {
+    if (list.length === 0) return;
+    articlesText += `\n## ${title}\n`;
+    list.forEach((article) => {
+      const content = article.markdown_content || article.summary || '';
+      const preview = content.length > 500 ? content.substring(0, 500) + '...' : content;
+      articlesText += `### ID: ${article.id} - ${article.title}\n`;
+      articlesText += `来源：${article.source_name}\n`;
+      articlesText += `预览：${preview}\n\n`;
+    });
+  };
+
+  addSection('期刊精选', articlesByType.journal);
+  addSection('博客推荐', articlesByType.blog);
+  addSection('资讯动态', articlesByType.news);
+
+  const promptTemplate = await resolveSystemPrompt(
+    userId,
+    'insights',
+    `你是专业的研究趋势洞察助手。请根据以下文章列表生成研究趋势洞察报告。
+
+## 文章列表
+${articlesText}
+
+## 日期范围：${dateStr}
+
+## 总结指南：
+1. 将同一类主题的文章放在一起分组总结
+2. 每组给出：一段总结 + 选题建议 + 文章列表（ID+标题）
+3. 突出研究趋势和潜在的研究选题方向
+
+## 输出要求：
+1. 生成 1500-3000 字的中文洞察报告
+2. 使用清晰的层次结构（Markdown 格式）`,
+    {
+      ARTICLES_LIST: articlesText,
+      DATE_RANGE: dateStr,
+      SUMMARY_GUIDE: '将同一类主题的文章分组，每组提供总结、选题建议和文章列表',
+    }
+  );
+
+  const llm = await getUserLLMProvider(userId, 'insights');
+  const summary = await llm.chat(
+    [
+      { role: 'system', content: promptTemplate },
+      { role: 'user', content: `请生成 ${dateStr} 的研究趋势洞察报告。` },
+    ],
+    {
+      temperature: 0.3,
+      label: 'insights_summary',
+    }
+  );
+
+  log.info({ userId, dateStr, articleCount: articles.length }, 'Insights summary generated');
+
+  await saveDailySummary({
+    userId,
+    date: dateStr,
+    type: 'insights',
+    articleCount: articles.length,
+    summaryContent: summary,
+    articlesData: articlesByType,
+  });
+
+  const result = {
+    date: dateStr,
+    type: 'insights' as SummaryType,
+    totalArticles: articles.length,
+    articlesByType,
+    summary,
+    generatedAt: new Date().toISOString(),
+  };
+
+  getTelegramNotifier().sendInsightsSummary(userId, {
+    date: result.date,
+    type: 'insights',
+    totalArticles: result.totalArticles,
+    summary: result.summary,
+    articlesByType: {
+      journal: result.articlesByType.journal.length,
+      blog: result.articlesByType.blog.length,
+      news: result.articlesByType.news.length,
+    },
+  }).catch(err => {
+    log.warn({ error: err }, 'Failed to send insights summary to Telegram');
+  });
+
+  getWeChatNotifier().sendInsightsSummary(userId, {
+    date: result.date,
+    type: 'insights',
+    totalArticles: result.totalArticles,
+    summary: result.summary,
+    articlesByType: {
+      journal: result.articlesByType.journal.length,
+      blog: result.articlesByType.blog.length,
+      news: result.articlesByType.news.length,
+    },
+  }).catch(err => {
+    log.warn({ error: err }, 'Failed to send insights summary to WeChat');
   });
 
   return result;

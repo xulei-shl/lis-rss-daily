@@ -163,6 +163,27 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
       required: false,
     },
   },
+
+  /**
+   * insights 类型变量 - 洞察总结
+   */
+  insights: {
+    ARTICLES_LIST: {
+      description: '文章列表（标题、摘要、来源）',
+      source: '从 articles 表动态构建',
+      required: true,
+    },
+    DATE_RANGE: {
+      description: '日期范围',
+      source: 'YYYY-MM-DD 格式',
+      required: true,
+    },
+    SUMMARY_GUIDE: {
+      description: '总结指南',
+      source: '自定义指南',
+      required: false,
+    },
+  },
 };
 
 /**

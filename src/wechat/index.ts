@@ -189,6 +189,78 @@ class WeChatNotifier {
   }
 
   /**
+   * 发送洞察总结通知到所有配置了该类型的 webhook
+   */
+  async sendInsightsSummary(
+    userId: number,
+    data: {
+      date: string;
+      type: 'insights';
+      totalArticles: number;
+      summary: string;
+      articlesByType: { journal: number; blog: number; news: number };
+    }
+  ): Promise<boolean> {
+    const cacheKey = this.getCacheKey(userId, 'insights', data.date);
+    if (this.checkAndSetCache(cacheKey)) {
+      log.info({ userId, date: data.date }, '[DEBUG] Skipping duplicate sendInsightsSummary');
+      return false;
+    }
+
+    const webhooks = getWebhooksForPushType('insights');
+
+    if (webhooks.length === 0) {
+      log.debug({ userId }, 'No WeChat webhooks configured for insights summary');
+      return false;
+    }
+
+    const message = formatDailySummary(data);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const webhook of webhooks) {
+      try {
+        const client = new WeChatClient(webhook.url);
+        const success = await client.sendMarkdown(message);
+
+        if (success) {
+          successCount++;
+          log.info(
+            {
+              userId,
+              webhookId: webhook.id,
+              webhookName: webhook.name,
+              date: data.date,
+              type: data.type,
+              articleCount: data.totalArticles,
+            },
+            'Insights summary sent to WeChat'
+          );
+        } else {
+          failCount++;
+          log.warn(
+            { userId, webhookId: webhook.id, webhookName: webhook.name },
+            'Failed to send insights summary to WeChat'
+          );
+        }
+      } catch (error) {
+        failCount++;
+        log.error(
+          {
+            userId,
+            webhookId: webhook.id,
+            webhookName: webhook.name,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'Failed to send insights summary to WeChat'
+        );
+      }
+    }
+
+    return successCount > 0;
+  }
+
+  /**
    * 发送新增文章通知到所有配置了该类型的 webhook
    */
   async sendNewArticle(

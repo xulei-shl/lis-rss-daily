@@ -14,7 +14,7 @@ import type { SummaryType, DailySummaryArticle } from '../api/daily-summary.js';
  */
 export interface WeChatDailySummaryData {
   date: string;
-  type: SummaryType;
+  type: SummaryType | 'insights';
   totalArticles: number;
   summary: string;
   articlesByType: {

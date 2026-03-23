@@ -16,6 +16,7 @@ import {
   getDailySummaryChats,
   getJournalAllChats,
   getNewArticlesChats,
+  getInsightsChats,
   getActiveTelegramChats,
   hasTelegramChats,
   type TelegramChatConfig
@@ -220,6 +221,77 @@ class TelegramNotifier {
           chatId: chat.chatId,
           error: error instanceof Error ? error.message : String(error),
         }, 'Failed to send journal all summary to Telegram');
+      }
+    }
+
+    return successCount > 0;
+  }
+
+  /**
+   * Send insights summary notification to all configured chats
+   */
+  async sendInsightsSummary(userId: number, data: DailySummaryData): Promise<boolean> {
+    const cacheKey = this.getCacheKey(userId, 'insights', data.date);
+    if (this.checkAndSetCache(cacheKey)) {
+      log.info({ userId, date: data.date }, 'Skipping duplicate sendInsightsSummary');
+      return false;
+    }
+
+    const config = await loadTelegramConfig(userId);
+
+    if (!config) {
+      log.debug({ userId }, 'Telegram not configured, skipping insights summary');
+      return false;
+    }
+
+    const chats = await getInsightsChats(userId);
+
+    if (chats.length === 0) {
+      log.debug({ userId }, 'No chats configured for insights summary');
+      return false;
+    }
+
+    const client = new TelegramClient(config.botToken);
+    const message = formatDailySummary({
+      date: data.date,
+      type: 'insights',
+      totalArticles: data.totalArticles,
+      summary: data.summary,
+      articlesByType: data.articlesByType,
+    });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const chat of chats) {
+      try {
+        const result = await client.sendMessage(chat.chatId, message, 'HTML');
+
+        if (result.ok) {
+          successCount++;
+          log.info({
+            userId,
+            chatId: chat.chatId,
+            chatName: chat.chatName,
+            date: data.date,
+            articleCount: data.totalArticles,
+            messageId: result.result?.message_id,
+          }, 'Insights summary sent to Telegram');
+        } else {
+          failCount++;
+          log.warn({
+            userId,
+            chatId: chat.chatId,
+            error: result.description,
+          }, 'Failed to send insights summary to Telegram');
+        }
+      } catch (error) {
+        failCount++;
+        log.error({
+          userId,
+          chatId: chat.chatId,
+          error: error instanceof Error ? error.message : String(error),
+        }, 'Failed to send insights summary to Telegram');
       }
     }
 

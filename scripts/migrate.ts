@@ -603,6 +603,20 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
           console.log('      → Added journal_all column to telegram_chats table');
         } else {
           console.log('      → Skipped (journal_all column already exists)');
+        continue;
+      }
+
+      // ============================================================
+      // 027: 添加 insights 字段到 telegram_chats 表
+      // ============================================================
+      if (file === '027_telegram_insights.sql') {
+        const hasInsights = hasColumn(db, 'telegram_chats', 'insights');
+        if (!hasInsights) {
+          db.exec('ALTER TABLE telegram_chats ADD COLUMN insights INTEGER DEFAULT 1;');
+          console.log('      → Added insights column to telegram_chats table');
+        } else {
+          console.log('      → Skipped (insights column already exists)');
+        }
         }
         continue;
       }

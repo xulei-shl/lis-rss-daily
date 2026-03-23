@@ -53,7 +53,13 @@ task_types:
     priority: 6
     enabled: false
 
-# RSS 源类型定义（用于订阅源分类）
+  insights:
+    code: "insights"
+    label: "洞察总结"
+    label_en: "Insights"
+    description: "每15天汇总通过的文章，生成研究趋势洞察报告"
+    priority: 7
+    enabled: true
 source_types:
   journal:
     code: "journal"
