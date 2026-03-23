@@ -355,17 +355,144 @@ async function deleteArticle() {
 function formatMarkdown(text) {
   if (!text) return '';
 
-  // 分割成块进行处理
-  const blocks = text.split(/\n\n+/);
+  // 首先按行分割
+  const allLines = text.split('\n');
   const result = [];
+  let i = 0;
 
-  for (let block of blocks) {
-    block = block.trim();
-    if (!block) continue;
+  while (i < allLines.length) {
+    const line = allLines[i];
+    const trimmedLine = line.trim();
 
-    // 检测表格
-    if (block.includes('|') && block.includes('\n')) {
-      const tableHtml = formatTable(block);
+    // 跳过空行
+    if (!trimmedLine) {
+      i++;
+      continue;
+    }
+
+    // 检测标题行
+    if (trimmedLine.startsWith('#### ')) {
+      // 收集标题后的内容（直到下一个标题或空行）
+      const title = trimmedLine.slice(5);
+      const contentLines = [];
+      i++;
+      while (i < allLines.length) {
+        const nextLine = allLines[i].trim();
+        // 遇到下一个标题或分隔行（---）则停止
+        if (nextLine.startsWith('#### ') || nextLine.startsWith('### ') || 
+            nextLine.startsWith('## ') || nextLine.startsWith('# ') ||
+            nextLine.startsWith('---') || nextLine === '') {
+          break;
+        }
+        if (nextLine) {
+          contentLines.push(allLines[i]);
+        }
+        i++;
+      }
+      const content = contentLines.join('\n').trim();
+      if (content) {
+        result.push('<h4>' + formatInline(escapeHtml(title)) + '</h4>');
+        result.push('<p>' + formatInline(escapeHtml(content)) + '</p>');
+      } else {
+        result.push('<h4>' + formatInline(escapeHtml(title)) + '</h4>');
+      }
+      continue;
+    } else if (trimmedLine.startsWith('### ')) {
+      const title = trimmedLine.slice(4);
+      const contentLines = [];
+      i++;
+      while (i < allLines.length) {
+        const nextLine = allLines[i].trim();
+        if (nextLine.startsWith('#### ') || nextLine.startsWith('### ') || 
+            nextLine.startsWith('## ') || nextLine.startsWith('# ') ||
+            nextLine.startsWith('---') || nextLine === '') {
+          break;
+        }
+        if (nextLine) {
+          contentLines.push(allLines[i]);
+        }
+        i++;
+      }
+      const content = contentLines.join('\n').trim();
+      if (content) {
+        result.push('<h3>' + formatInline(escapeHtml(title)) + '</h3>');
+        result.push('<p>' + formatInline(escapeHtml(content)) + '</p>');
+      } else {
+        result.push('<h3>' + formatInline(escapeHtml(title)) + '</h3>');
+      }
+      continue;
+    } else if (trimmedLine.startsWith('## ')) {
+      const title = trimmedLine.slice(3);
+      const contentLines = [];
+      i++;
+      while (i < allLines.length) {
+        const nextLine = allLines[i].trim();
+        if (nextLine.startsWith('#### ') || nextLine.startsWith('### ') || 
+            nextLine.startsWith('## ') || nextLine.startsWith('# ') ||
+            nextLine.startsWith('---') || nextLine === '') {
+          break;
+        }
+        if (nextLine) {
+          contentLines.push(allLines[i]);
+        }
+        i++;
+      }
+      const content = contentLines.join('\n').trim();
+      if (content) {
+        result.push('<h2>' + formatInline(escapeHtml(title)) + '</h2>');
+        result.push('<p>' + formatInline(escapeHtml(content)) + '</p>');
+      } else {
+        result.push('<h2>' + formatInline(escapeHtml(title)) + '</h2>');
+      }
+      continue;
+    } else if (trimmedLine.startsWith('# ')) {
+      const title = trimmedLine.slice(2);
+      const contentLines = [];
+      i++;
+      while (i < allLines.length) {
+        const nextLine = allLines[i].trim();
+        if (nextLine.startsWith('#### ') || nextLine.startsWith('### ') || 
+            nextLine.startsWith('## ') || nextLine.startsWith('# ') ||
+            nextLine.startsWith('---') || nextLine === '') {
+          break;
+        }
+        if (nextLine) {
+          contentLines.push(allLines[i]);
+        }
+        i++;
+      }
+      const content = contentLines.join('\n').trim();
+      if (content) {
+        result.push('<h1>' + formatInline(escapeHtml(title)) + '</h1>');
+        result.push('<p>' + formatInline(escapeHtml(content)) + '</p>');
+      } else {
+        result.push('<h1>' + formatInline(escapeHtml(title)) + '</h1>');
+      }
+      continue;
+    }
+
+    // 检测分隔线
+    if (trimmedLine === '---') {
+      result.push('<hr>');
+      i++;
+      continue;
+    }
+
+    // 检测表格（多行）
+    if (trimmedLine.includes('|')) {
+      const tableLines = [line];
+      i++;
+      while (i < allLines.length) {
+        const nextLine = allLines[i].trim();
+        if (nextLine.includes('|')) {
+          tableLines.push(allLines[i]);
+          i++;
+        } else {
+          break;
+        }
+      }
+      const tableBlock = tableLines.join('\n');
+      const tableHtml = formatTable(tableBlock);
       if (tableHtml) {
         result.push(tableHtml);
         continue;
@@ -373,27 +500,45 @@ function formatMarkdown(text) {
     }
 
     // 检测无序列表
-    const lines = block.split('\n');
-    if (lines.every(line => line.trim().startsWith('- ') || line.trim().match(/^\*\*.*\*\*$/))) {
-      result.push('<ul>' + lines.map(line => {
-        const content = line.replace(/^-\s+/, '').trim();
-        // 处理列表项中的粗体
+    if (trimmedLine.startsWith('- ') || trimmedLine.match(/^\*\s/)) {
+      const listLines = [line];
+      i++;
+      while (i < allLines.length) {
+        const nextLine = allLines[i].trim();
+        if (nextLine.startsWith('- ') || nextLine.match(/^\*\s/) || nextLine.match(/^\*\*.*\*\*$/)) {
+          listLines.push(allLines[i]);
+          i++;
+        } else {
+          break;
+        }
+      }
+      const listHtml = '<ul>' + listLines.map(l => {
+        const content = l.replace(/^[*-]\s+/, '').trim();
         return '<li>' + formatInline(escapeHtml(content)) + '</li>';
-      }).join('') + '</ul>');
+      }).join('') + '</ul>';
+      result.push(listHtml);
       continue;
     }
 
-    // 处理标题和段落
-    if (block.startsWith('#### ')) {
-      result.push('<h4>' + formatInline(escapeHtml(block.slice(5))) + '</h4>');
-    } else if (block.startsWith('### ')) {
-      result.push('<h3>' + formatInline(escapeHtml(block.slice(4))) + '</h3>');
-    } else if (block.startsWith('## ')) {
-      result.push('<h2>' + formatInline(escapeHtml(block.slice(3))) + '</h2>');
-    } else if (block.startsWith('# ')) {
-      result.push('<h1>' + formatInline(escapeHtml(block.slice(2))) + '</h1>');
-    } else {
-      result.push('<p>' + formatInline(escapeHtml(block)) + '</p>');
+    // 普通段落：收集连续的非空行
+    const paragraphLines = [line];
+    i++;
+    while (i < allLines.length) {
+      const nextLine = allLines[i].trim();
+      // 遇到标题、空行或分隔线则停止
+      if (nextLine.startsWith('# ') || nextLine.startsWith('## ') || 
+          nextLine.startsWith('### ') || nextLine.startsWith('#### ') ||
+          nextLine.startsWith('---') || nextLine === '') {
+        break;
+      }
+      if (nextLine) {
+        paragraphLines.push(allLines[i]);
+      }
+      i++;
+    }
+    const paragraph = paragraphLines.join('\n').trim();
+    if (paragraph) {
+      result.push('<p>' + formatInline(escapeHtml(paragraph)) + '</p>');
     }
   }
 
