@@ -92,7 +92,7 @@ router.put('/telegram-chats/:id', requireAuth, requireAdmin, async (req: AuthReq
       return res.status(400).json({ error: '无效的 ID' });
     }
 
-    const { chatName, role, dailySummary, journalAll, newArticles, isActive } = req.body || {};
+    const { chatName, role, dailySummary, journalAll, newArticles, insights, isActive } = req.body || {};
 
     // Validate role
     if (role !== undefined && !['admin', 'viewer'].includes(role)) {
@@ -105,6 +105,7 @@ router.put('/telegram-chats/:id', requireAuth, requireAdmin, async (req: AuthReq
       dailySummary,
       journalAll,
       newArticles,
+      insights,
       isActive,
     };
 
