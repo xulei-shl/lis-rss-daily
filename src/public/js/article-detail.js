@@ -401,8 +401,10 @@ function formatMarkdown(text) {
       }
       const content = contentLines.join('\n').trim();
       if (content) {
+        // 将换行符转换为 <br> 标签
+        const contentWithBreaks = content.replace(/\n/g, '<br>');
         result.push('<h4>' + formatInline(escapeHtml(title)) + '</h4>');
-        result.push('<p>' + formatInline(escapeHtml(content)) + '</p>');
+        result.push('<p>' + formatInline(escapeHtml(contentWithBreaks)) + '</p>');
       } else {
         result.push('<h4>' + formatInline(escapeHtml(title)) + '</h4>');
       }
@@ -425,8 +427,9 @@ function formatMarkdown(text) {
       }
       const content = contentLines.join('\n').trim();
       if (content) {
+        const contentWithBreaks = content.replace(/\n/g, '<br>');
         result.push('<h3>' + formatInline(escapeHtml(title)) + '</h3>');
-        result.push('<p>' + formatInline(escapeHtml(content)) + '</p>');
+        result.push('<p>' + formatInline(escapeHtml(contentWithBreaks)) + '</p>');
       } else {
         result.push('<h3>' + formatInline(escapeHtml(title)) + '</h3>');
       }
@@ -449,8 +452,9 @@ function formatMarkdown(text) {
       }
       const content = contentLines.join('\n').trim();
       if (content) {
+        const contentWithBreaks = content.replace(/\n/g, '<br>');
         result.push('<h2>' + formatInline(escapeHtml(title)) + '</h2>');
-        result.push('<p>' + formatInline(escapeHtml(content)) + '</p>');
+        result.push('<p>' + formatInline(escapeHtml(contentWithBreaks)) + '</p>');
       } else {
         result.push('<h2>' + formatInline(escapeHtml(title)) + '</h2>');
       }
@@ -473,8 +477,9 @@ function formatMarkdown(text) {
       }
       const content = contentLines.join('\n').trim();
       if (content) {
+        const contentWithBreaks = content.replace(/\n/g, '<br>');
         result.push('<h1>' + formatInline(escapeHtml(title)) + '</h1>');
-        result.push('<p>' + formatInline(escapeHtml(content)) + '</p>');
+        result.push('<p>' + formatInline(escapeHtml(contentWithBreaks)) + '</p>');
       } else {
         result.push('<h1>' + formatInline(escapeHtml(title)) + '</h1>');
       }
@@ -548,7 +553,9 @@ function formatMarkdown(text) {
     }
     const paragraph = paragraphLines.join('\n').trim();
     if (paragraph) {
-      result.push('<p>' + formatInline(escapeHtml(paragraph)) + '</p>');
+      // 将换行符转换为 <br> 标签，保留段落内的换行
+      const paragraphWithBreaks = paragraph.replace(/\n/g, '<br>');
+      result.push('<p>' + formatInline(escapeHtml(paragraphWithBreaks)) + '</p>');
     }
   }
 
