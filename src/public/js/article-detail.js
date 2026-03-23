@@ -270,14 +270,24 @@ function exportMarkdown() {
   if (!articleData) return;
 
   // 构建简单的 Markdown 导出
-  const md = '# ' + articleData.title + '\n\n' +
+  let md = '# ' + articleData.title + '\n\n' +
     '**来源:** ' + (articleData.source_name || articleData.rss_source_name || 'Unknown') + '\n' +
     '**URL:** ' + articleData.url + '\n' +
     '**发布时间:** ' + getPublishTimeText(articleData) + '\n\n' +
-    '---\n\n' +
-    (articleData.summary || '') + '\n\n' +
-    '---\n\n' +
-    (articleData.markdown_content || articleData.content || '');
+    '---\n\n';
+
+  // RSS 摘要
+  if (articleData.summary) {
+    md += '## 摘要\n\n' + articleData.summary + '\n\n---\n\n';
+  }
+
+  // AI 总结
+  if (articleData.ai_summary) {
+    md += '## AI 总结\n\n' + articleData.ai_summary + '\n\n---\n\n';
+  }
+
+  // 正文
+  md += (articleData.markdown_content || articleData.content || '');
 
   // 下载为文件
   const blob = new Blob([md], { type: 'text/markdown' });
