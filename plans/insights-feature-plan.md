@@ -7,12 +7,12 @@
 ## 需求分析
 
 ### 核心需求
-1. **定时运行**：默认15天周期，凌晨1点运行（不包含当天数据）
+1. **定时运行**：默认15天周期，凌晨1点运行（不包含当天数据，即从昨天开始往前推15天）
 2. **数据提取条件**：
-   - `created_at` 过去15天（注意时区）
+   - `created_at` 过去15天（注意时区，从昨天开始往前推15天，不含今天）
    - `filter_status = 'passed'`
    - `rss_source_id` 或 `journal_id` 对应的名称在白名单中（journals_list.yaml）
-   - `markdown_content` 或 `content` 有值，且不是 `<正>~` 或 `. <br/>`
+   - `markdown_content` 或 `content` 有值，且不是 `<正>~` 或 `. <br/>` 或仅包含空白
 3. **数据提取**：id, title, markdown_content/content（优先级），上限60条
 4. **生成报告**：调用大模型，**summary_type = 'insights'**（新增独立类型），存入 daily_summaries 表
 5. **推送支持**：推送到 WeChat 和 Telegram（页面按需启用）
@@ -104,7 +104,7 @@ export async function getInsightsArticles(
  * 生成洞察报告
  * - 调用 getInsightsArticles 获取数据
  * - 调用大模型生成报告
- * - 保存到数据库（summary_type = 'search'）
+ * - 保存到数据库（summary_type = 'insights'）
  * - 推送到 WeChat/Telegram
  */
 export async function generateInsightsSummary(
@@ -192,18 +192,20 @@ INSIGHTS_USER_ID=1
 
 | 序号 | 文件路径 | 修改类型 |
 |-----|---------|---------|
+| 0 | src/utils/journals-whitelist.ts | 新增（加载白名单） |
 | 1 | config/types.yaml | 新增任务类型 |
 | 2 | src/constants/push-types.ts | 新增推送类型 |
 | 3 | src/config/system-prompt-variables.ts | 新增变量定义 |
 | 4 | src/config/default-prompts/insights.md | 新增文件 |
-| 5 | src/api/daily-summary.ts | 新增函数 |
-| 6 | src/daily-summary-scheduler.ts | 扩展调度器 |
-| 7 | src/config.ts | 新增配置项 |
-| 8 | src/config/wechat-config.ts | 支持新推送类型 |
-| 9 | src/api/telegram-chats.ts | 支持新推送类型 |
-| 10 | src/telegram/index.ts | 新增推送方法 |
-| 11 | src/wechat/index.ts | 新增推送方法 |
-| 12 | .env.example | 新增环境变量 |
+| 5 | src/api/daily-summary.ts | 新增函数 + 更新 SummaryType |
+| 6 | src/db.ts | 更新 SummaryType 类型 |
+| 7 | src/insights-scheduler.ts | 新增（独立调度器） |
+| 8 | src/config.ts | 新增配置项 |
+| 9 | src/config/wechat-config.ts | 支持新推送类型 |
+| 10 | src/api/telegram-chats.ts | 支持新推送类型 |
+| 11 | src/telegram/index.ts | 新增推送方法 |
+| 12 | src/wechat/index.ts | 新增推送方法 |
+| 13 | .env.example | 新增环境变量 |
 
 ---
 
@@ -228,10 +230,85 @@ graph TD
 
 ## 注意事项
 
-1. **summary_type 取值**：需求文档说 summary_type = 'search'，但这会与用户手动搜索生成的总结冲突。需要确认是否应该用新的类型值（如 'insights'）
+### 已识别问题及解决方案
 
-2. **时区处理**：不包含当前天的数据，需要正确处理时区边界
+#### 1. journals_list.yaml 白名单加载（重要）
+- **问题**：当前后端代码（Node.js）没有读取 journals_list.yaml 的逻辑，该文件仅被 Python 脚本使用
+- **解决方案**：新增 `src/utils/journals-whitelist.ts`
+  ```typescript
+  import fs from 'fs';
+  import path from 'path';
+  
+  let cachedWhitelist: string[] | null = null;
+  
+  export function getJournalsWhitelist(): string[] {
+    if (cachedWhitelist) return cachedWhitelist;
+    const configPath = path.join(process.cwd(), 'config', 'journals_list.yaml');
+    const content = fs.readFileSync(configPath, 'utf-8');
+    // 解析 YAML 列表（简单处理：按行分割，去除空行和注释）
+    cachedWhitelist = content
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#'));
+    return cachedWhitelist;
+  }
+  ```
 
-3. **内容过滤**：需要过滤掉 `<正>~` 和 `. <br/>` 这类无意义内容
+#### 2. summary_type 类型冲突（重要）
+- **问题**：使用 'search' 会与用户手动搜索生成的总结冲突
+- **解决方案**：使用新类型 `'insights'`，需要更新：
+  - `src/api/daily-summary.ts` 的 `SummaryType` 添加 `'insights'`
+  - `src/db.ts` 的 `DailySummariesTable.summary_type` 类型添加 `'insights'`
 
-4. **白名单匹配**：需要读取 journals_list.yaml 并匹配 rss_sources.name 或 journals.name
+#### 3. 日期范围查询差异（重要）
+- **问题**：现有 `getDailyPassedArticles` 按单日查询，洞察需要 15 天范围
+- **解决方案**：新增专门的查询函数 `getInsightsArticles`，使用自定义日期范围计算：
+  ```typescript
+  // 计算过去N天的日期范围（不含今天）
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+  startDate.setHours(0, 0, 0, 0);
+  const endDate = new Date();  // 今天
+  endDate.setHours(0, 0, 0, 0);  // 不包含今天的数据
+  ```
+
+#### 4. 内容过滤逻辑（重要）
+- **问题**：需要在 SQL 查询中过滤无意义内容
+- **解决方案**：在查询条件中添加：
+  ```typescript
+  .where((eb) => eb.and([
+    eb.or([
+      eb('articles.markdown_content', 'is not', null),
+      eb('articles.content', 'is not', null),
+    ]),
+    eb('articles.markdown_content', 'not like', '%<正>%'),
+    eb('articles.content', 'not like', '%<正>%'),
+  ]))
+  ```
+
+#### 5. 白名单匹配逻辑
+- **问题**：需要在查询时 JOIN rss_sources 或 journals 表，并匹配 name 字段
+- **解决方案**：在 getInsightsArticles 中添加：
+  ```typescript
+  .where((eb) => eb.or([
+    eb('rss_sources.name', 'in', whitelist),
+    eb('journals.name', 'in', whitelist),
+  ]))
+  ```
+
+#### 6. 时区处理边界
+- **问题**：需要确保"不包含当天数据"，且时区转换正确
+- **解决方案**：使用用户时区，计算日期范围时 endDate 设为当天 00:00:00（不包含当天）
+
+#### 7. types.yaml 配置说明
+- **说明**：config/types.yaml 中的 task_types 仅用于文档和前端展示，代码中已实现的功能实际不依赖此配置
+- **建议**：可以添加 insights 类型以保持配置一致性，但不影响实际功能
+
+#### 8. 调度器扩展方式
+- **方案 A**：扩展现有 `DailySummaryScheduler`，在 types 数组中添加 'insights'
+- **方案 B**：创建新的 `InsightsScheduler` 实例（推荐，职责分离）
+- **推荐**：方案 B，创建独立调度器
+
+#### 9. 系统提示词变量
+- **说明**：insights 类型的变量可复用 `daily_summary` 的 ARTICLES_LIST 和 DATE_RANGE
+- **建议**：在 `system-prompt-variables.ts` 中添加 SUMMARY_GUIDE 变量即可
