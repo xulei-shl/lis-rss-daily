@@ -421,9 +421,12 @@ async def upload_all(
     md_content = md_file.read_text(encoding='utf-8')
     print(f"[信息] MD文件大小: {len(md_content)} 字符")
 
+    summary_config = config.get('summary_upload', {}).get('hiagent_rag', {})
+    delete_md = summary_config.get('delete_md', True)
+
     # 创建异步任务
     tasks = [
-        upload_to_hiagent_rag(md_path, config, delete_md=False),
+        upload_to_hiagent_rag(md_path, config, delete_md=delete_md),
     ]
 
     # 只有当 skip_lis_rss 为 False 且 article_id 有效时才添加 LIS-RSS 任务

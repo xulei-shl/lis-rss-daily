@@ -22,7 +22,7 @@ export async function callPdfApi(
     };
 
     if (articleId !== null) {
-      requestBody.article_id = articleId;
+      requestBody.id = articleId;
     }
 
     const response = await fetch(`${apiUrl}/summary`, {
