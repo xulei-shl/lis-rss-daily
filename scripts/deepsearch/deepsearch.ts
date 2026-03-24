@@ -41,11 +41,10 @@ async function generateSearchTerms(
 
   for (const article of articles) {
     const content = article.aiSummary ?? article.markdownContent ?? article.content ?? '';
-    if (!content) continue;
 
     const userPrompt = renderPrompt(promptTemplate, {
       title: article.title,
-      content: content.slice(0, 2000),
+      content: content ? content.slice(0, 2000) : '',
     });
 
     const messages: ChatMessage[] = [
