@@ -133,6 +133,7 @@ router.put('/wechat/webhooks/:id', requireAuth, requireAdmin, async (req: AuthRe
         daily_summary: push_types.daily_summary !== false,
         journal_all: push_types.journal_all !== false,
         new_articles: push_types.new_articles !== false,
+        insights: push_types.insights !== false,
       };
     }
 
