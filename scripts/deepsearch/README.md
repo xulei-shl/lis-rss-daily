@@ -54,8 +54,9 @@ llm:
 # 检索配置
 search:
   iteration_rounds: 1
-  score_threshold: 0.65
+  score_threshold: 0.78
   semantic_limit: 5
+  max_final_articles: 10
 
 # PDF 总结配置
 pdf_summary:
@@ -99,6 +100,7 @@ output:
 
 - `semantic_limit`：每轮检索返回的文章数量
 - `score_threshold`：相关性分数阈值，低于此分数的文章被过滤
+- `max_final_articles`：最终结果保留的文章数量（按相关性得分从高到低排序，0 表示不限制）
 
 ## 使用方式
 
@@ -121,6 +123,7 @@ node cli.ts -i input.md -c ./custom-config.yaml
 - `-r, --rounds` - 迭代检索轮次（可选）
 - `-t, --threshold` - 相关性分数阈值（可选）
 - `-l, --limit` - 语义检索返回数量（可选）
+- `-m, --maxFinal` - 最终结果保留数量（可选）
 - `-o, --output` - 输出目录（可选）
 
 ### API
