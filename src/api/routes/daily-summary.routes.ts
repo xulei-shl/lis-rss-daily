@@ -469,4 +469,49 @@ router.post('/daily-summary/journal-all/cli', requireCliAuth, async (req: AuthRe
   }
 });
 
+/**
+ * POST /api/daily-summary/insights/generate
+ * 手动触发生成洞察报告
+ * 
+ * Body 参数:
+ * - days: 可选，天数 (默认 15)
+ */
+router.post('/daily-summary/insights/generate', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
+  try {
+    const { days } = req.body || {};
+
+    const result = await dailySummaryService.generateInsightsSummary({
+      userId: req.userId!,
+      days: days || 15,
+    });
+
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to generate insights summary';
+    log.error({ error, userId: req.userId }, 'Failed to generate insights summary');
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
+ * GET /api/daily-summary/insights/latest
+ * 获取今天的洞察报告（只返回今天生成的）
+ */
+router.get('/daily-summary/insights/latest', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    // Use getTodaySummary to only get today's insights report
+    const summary = await dailySummaryService.getTodaySummary(req.effectiveUserId!, 'insights');
+
+    if (!summary) {
+      res.status(404).json({ error: '今日洞察报告尚未生成' });
+      return;
+    }
+
+    res.json(summary);
+  } catch (error) {
+    log.error({ error, userId: req.userId }, 'Failed to get latest insights summary');
+    res.status(500).json({ error: 'Failed to get latest insights summary' });
+  }
+});
+
 export default router;

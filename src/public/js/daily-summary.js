@@ -18,15 +18,18 @@
   // Tab elements
   const tabJournal = document.getElementById('tabJournal');
   const tabBlogNews = document.getElementById('tabBlogNews');
+  const tabInsights = document.getElementById('tabInsights');
   const journalBadge = document.getElementById('journalBadge');
   const blogNewsBadge = document.getElementById('blogNewsBadge');
+  const insightsBadge = document.getElementById('insightsBadge');
   const emptyMessage = document.getElementById('emptyMessage');
 
   // Current state
   let currentSummaryType = 'journal';
   let summaryCache = {
     journal: null,
-    blog_news: null
+    blog_news: null,
+    insights: null
   };
 
   // Toggle panel expansion
@@ -52,20 +55,20 @@
 
       currentSummaryType = type;
 
-      // Update empty message based on user role
-      const adminMessage = type === 'journal'
-        ? '点击下方按钮生成今日期刊总结'
-        : '点击下方按钮生成今日博客资讯总结';
-      const guestMessage = type === 'journal'
-        ? '暂无今日期刊总结'
-        : '暂无今日博客资讯总结';
+      // Update empty message based on user role and type
+      const typeMessages = {
+        journal: { admin: '点击下方按钮生成今日期刊总结', guest: '暂无今日期刊总结' },
+        blog_news: { admin: '点击下方按钮生成今日博客资讯总结', guest: '暂无今日博客资讯总结' },
+        insights: { admin: '点击下方按钮生成洞察报告', guest: '暂无洞察报告' }
+      };
+      const messages = typeMessages[type] || typeMessages.journal;
 
       if (emptyMessage) {
-        emptyMessage.textContent = window.userRole === 'guest' ? guestMessage : adminMessage;
+        emptyMessage.textContent = window.userRole === 'guest' ? messages.guest : messages.admin;
       }
       const guestMessageEl = document.getElementById('emptyMessageGuest');
       if (guestMessageEl) {
-        guestMessageEl.textContent = guestMessage;
+        guestMessageEl.textContent = messages.guest;
       }
 
       // Load summary for this type
@@ -123,18 +126,33 @@
     showSummaryLoading();
 
     try {
-      const res = await fetch(`/api/daily-summary/today?type=${type}`);
+      let data;
+      
+      if (type === 'insights') {
+        // Insights uses a different API endpoint
+        const res = await fetch('/api/daily-summary/insights/latest');
+        if (res.status === 404) {
+          showSummaryEmpty();
+          return;
+        }
+        if (!res.ok) {
+          throw new Error('Failed to load insights');
+        }
+        data = await res.json();
+      } else {
+        const res = await fetch(`/api/daily-summary/today?type=${type}`);
 
-      if (res.status === 404) {
-        showSummaryEmpty();
-        return;
+        if (res.status === 404) {
+          showSummaryEmpty();
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error('Failed to load summary');
+        }
+
+        data = await res.json();
       }
-
-      if (!res.ok) {
-        throw new Error('Failed to load summary');
-      }
-
-      const data = await res.json();
       
       // Cache the result
       summaryCache[type] = data;
@@ -154,17 +172,31 @@
     showSummaryLoading();
 
     try {
-      const res = await fetch('/api/daily-summary/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 30, type: type })
-      });
+      let data;
+      
+      if (type === 'insights') {
+        const res = await fetch('/api/daily-summary/insights/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ days: 15 })
+        });
+        if (!res.ok) {
+          throw new Error('Failed to generate insights');
+        }
+        data = await res.json();
+      } else {
+        const res = await fetch('/api/daily-summary/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit: 30, type: type })
+        });
 
-      if (!res.ok) {
-        throw new Error('Failed to generate summary');
+        if (!res.ok) {
+          throw new Error('Failed to generate summary');
+        }
+
+        data = await res.json();
       }
-
-      const data = await res.json();
       
       // Cache the result
       summaryCache[type] = data;
@@ -181,7 +213,15 @@
 
   // Update type badge
   function updateTypeBadge(type, count) {
-    const badge = type === 'journal' ? journalBadge : blogNewsBadge;
+    let badge;
+    if (type === 'journal') {
+      badge = journalBadge;
+    } else if (type === 'blog_news') {
+      badge = blogNewsBadge;
+    } else if (type === 'insights') {
+      badge = insightsBadge;
+    }
+    
     if (badge) {
       if (count > 0) {
         badge.textContent = count;
@@ -221,7 +261,8 @@
       blog_news: '博客资讯',
       all: '综合',
       search: '搜索总结',
-      journal_all: '全部期刊'
+      journal_all: '全部期刊',
+      insights: '洞察报告'
     };
     const typeLabel = typeLabels[summaryType] || '综合';
 
@@ -406,7 +447,8 @@
         blog_news: '博客资讯',
         all: '综合',
         search: '搜索',
-        journal_all: '全部期刊'
+        journal_all: '全部期刊',
+        insights: '洞察报告'
       };
 
       historyList.innerHTML = history.map(item => `
@@ -459,7 +501,14 @@
     const targetType = type || 'journal';
     if (targetType !== currentSummaryType) {
       document.querySelectorAll('.summary-tab').forEach(t => t.classList.remove('active'));
-      const targetTab = targetType === 'journal' ? tabJournal : tabBlogNews;
+      let targetTab;
+      if (targetType === 'journal') {
+        targetTab = tabJournal;
+      } else if (targetType === 'blog_news') {
+        targetTab = tabBlogNews;
+      } else if (targetType === 'insights') {
+        targetTab = tabInsights;
+      }
       if (targetTab) targetTab.classList.add('active');
       currentSummaryType = targetType;
     }

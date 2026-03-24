@@ -1002,7 +1002,8 @@ ${articlesText}
 
   log.info({ userId, dateStr, articleCount: articles.length }, 'Insights summary generated');
 
-  const executionDate = now.toISOString().split('T')[0];
+  // Use user's local date instead of UTC date
+  const executionDate = await getUserLocalDate(userId);
 
   await saveDailySummary({
     userId,
