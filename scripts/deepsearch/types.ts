@@ -18,6 +18,7 @@ export interface DeepSearchConfig {
     semantic_limit: number;
     semantic_weight: number;
     keyword_weight: number;
+    max_final_articles: number;
   };
   pdf_summary: {
     api_url: string;
@@ -101,6 +102,7 @@ export interface ProcessOptions {
   rounds?: number;
   scoreThreshold?: number;
   semanticLimit?: number;
+  maxFinalArticles?: number;
   outputDir?: string;
 }
 

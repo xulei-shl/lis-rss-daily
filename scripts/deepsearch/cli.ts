@@ -1,3 +1,12 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, '../..');
+
+process.env.DATABASE_PATH = path.join(rootDir, 'data', 'rss-tracker.db');
+
 import { parseArgs } from 'util';
 import { readInputFile } from './md-parser.js';
 import { runDeepSearch } from './deepsearch.js';
@@ -8,6 +17,7 @@ interface CliOptions {
   rounds?: number;
   threshold?: number;
   limit?: number;
+  maxFinal?: number;
   output?: string;
 }
 
@@ -33,6 +43,10 @@ function parseCliArgs(): CliOptions {
       type: 'string' as const,
       short: 'l',
     },
+    maxFinal: {
+      type: 'string' as const,
+      short: 'm',
+    },
     output: {
       type: 'string' as const,
       short: 'o',
@@ -57,6 +71,7 @@ function parseCliArgs(): CliOptions {
     rounds: values.rounds ? parseInt(values.rounds as string, 10) : undefined,
     threshold: values.threshold ? parseFloat(values.threshold as string) : undefined,
     limit: values.limit ? parseInt(values.limit as string, 10) : undefined,
+    maxFinal: values.maxFinal ? parseInt(values.maxFinal as string, 10) : undefined,
     output: values.output as string | undefined,
   };
 }
@@ -73,6 +88,7 @@ DeepSearch - 深度检索工具
   -r, --rounds <n>        迭代检索轮次 (可选，覆盖配置)
   -t, --threshold <n>    相关性分数阈值 (可选，覆盖配置)
   -l, --limit <n>        语义检索返回数量 (可选，覆盖配置)
+  -m, --maxFinal <n>    最终结果保留数量 (可选，覆盖配置)
   -o, --output <dir>     输出目录 (可选，覆盖配置)
   -h, --help             显示帮助信息
 
@@ -94,6 +110,7 @@ async function main(): Promise<void> {
       rounds: options.rounds,
       scoreThreshold: options.threshold,
       semanticLimit: options.limit,
+      maxFinalArticles: options.maxFinal,
       outputDir: options.output,
       configPath: options.config,
     });

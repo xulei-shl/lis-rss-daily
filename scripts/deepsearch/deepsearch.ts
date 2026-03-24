@@ -60,7 +60,15 @@ async function generateSearchTerms(
         label: 'generate-search-terms',
       });
 
-      const parsed = JSON.parse(response);
+      let jsonStr = response.trim();
+      if (jsonStr.startsWith('```')) {
+        const match = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (match) {
+          jsonStr = match[1].trim();
+        }
+      }
+
+      const parsed = JSON.parse(jsonStr);
       if (parsed.search_queries && Array.isArray(parsed.search_queries)) {
         searchTerms.push(...parsed.search_queries);
       }
@@ -260,6 +268,7 @@ export interface DeepSearchOptions {
   rounds?: number;
   scoreThreshold?: number;
   semanticLimit?: number;
+  maxFinalArticles?: number;
   outputDir?: string;
   configPath?: string;
 }
@@ -287,11 +296,17 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
   const rounds = options.rounds ?? config.search.iteration_rounds;
   const threshold = options.scoreThreshold ?? config.search.score_threshold;
   const limit = options.semanticLimit ?? config.search.semantic_limit;
+  const maxFinal = options.maxFinalArticles ?? config.search.max_final_articles;
 
   console.log(`\n开始迭代检索 (轮次: ${rounds}, 阈值: ${threshold}, 限制: ${limit})`);
   await writeStepReport('步骤一：检索相关文章', `迭代检索参数: 轮次=${rounds}, 阈值=${threshold}, 限制=${limit}`);
 
-  const candidates = await iterativeSearch(seedArticles, rounds, threshold, limit);
+  let candidates = await iterativeSearch(seedArticles, rounds, threshold, limit);
+
+  if (maxFinal > 0) {
+    candidates.sort((a, b) => b.score - a.score);
+    candidates = candidates.slice(0, maxFinal);
+  }
 
   console.log(`\n检索完成，找到 ${candidates.length} 篇候选文章`);
   const candidateList = candidates.map((c) => `- ${c.title} (得分: ${c.score.toFixed(2)}, 来源: ${c.source})`).join('\n');

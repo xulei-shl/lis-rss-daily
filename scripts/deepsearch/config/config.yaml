@@ -34,9 +34,11 @@ search:
   # 迭代检索轮次（1-3轮）
   iteration_rounds: 1
   # 相关性分数阈值（0-1）
-  score_threshold: 0.66
+  score_threshold: 0.78
   # 语义检索返回的文章数量
   semantic_limit: 5
+  # 最终结果保留的文章数量（按相关性得分从高到低排序，0表示不限制）
+  max_final_articles: 10
   # 语义权重
   semantic_weight: 0.7
   # 关键词权重

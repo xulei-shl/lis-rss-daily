@@ -28,6 +28,7 @@ class ProcessRequest(BaseModel):
     rounds: Optional[int] = None
     score_threshold: Optional[float] = None
     semantic_limit: Optional[int] = None
+    max_final_articles: Optional[int] = None
     output_dir: Optional[str] = None
 
 
@@ -46,6 +47,7 @@ async def run_deepsearch_task(
     rounds: Optional[int],
     score_threshold: Optional[float],
     semantic_limit: Optional[int],
+    max_final_articles: Optional[int],
     output_dir: Optional[str],
 ):
     """Run deepsearch in background"""
@@ -66,6 +68,7 @@ async def run_deepsearch_task(
             "rounds": rounds,
             "scoreThreshold": score_threshold,
             "semanticLimit": semantic_limit,
+            "maxFinalArticles": max_final_articles,
             "outputDir": output_dir,
         })
 
@@ -96,6 +99,7 @@ async def process(request: ProcessRequest, background_tasks: BackgroundTasks):
         request.rounds,
         request.score_threshold,
         request.semantic_limit,
+        request.max_final_articles,
         request.output_dir,
     )
 
