@@ -12,12 +12,14 @@ import type {
   GetUpdatesResponse,
 } from './types.js';
 import { ProxyAgent } from 'undici';
+import { splitMessage, getByteLength, DEFAULT_MAX_LENGTH } from '../utils/message-splitter.js';
 
 const log = logger.child({ module: 'telegram-client' });
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 const DEFAULT_TIMEOUT = 30000;
 const MAX_RETRIES = 3;
+const TELEGRAM_MAX_LENGTH = 4096;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -128,12 +130,54 @@ export class TelegramClient {
   }
 
   /**
-   * Send a text message
+   * Send a text message (auto-split if too long)
    * @param chatId - Target chat ID
    * @param text - Message text
    * @param parseMode - Optional parse mode ('Markdown', 'MarkdownV2', or 'HTML')
    */
   async sendMessage(
+    chatId: string,
+    text: string,
+    parseMode?: 'Markdown' | 'MarkdownV2' | 'HTML'
+  ): Promise<TelegramMessageResponse> {
+    const byteLength = getByteLength(text);
+
+    if (byteLength <= TELEGRAM_MAX_LENGTH) {
+      return this.sendSingleMessage(chatId, text, parseMode);
+    }
+
+    log.info({ byteLength, maxLength: TELEGRAM_MAX_LENGTH }, 'Message too long, splitting into chunks');
+
+    const reservedSpace = 20;
+    const chunks = splitMessage(text, TELEGRAM_MAX_LENGTH - reservedSpace);
+    log.info({ chunkCount: chunks.length }, 'Split message into chunks');
+
+    let lastResult: TelegramMessageResponse | null = null;
+    for (let i = 0; i < chunks.length; i++) {
+      const marker = chunks.length > 1 ? `[${i + 1}/${chunks.length}]\n\n` : '';
+      const markedChunk = marker + chunks[i];
+
+      const markedBytes = getByteLength(markedChunk);
+      if (markedBytes > TELEGRAM_MAX_LENGTH) {
+        const truncated = chunks[i].substring(0, TELEGRAM_MAX_LENGTH - getByteLength(marker));
+        const finalChunk = marker + truncated;
+        lastResult = await this.sendSingleMessage(chatId, finalChunk, parseMode);
+      } else {
+        lastResult = await this.sendSingleMessage(chatId, markedChunk, parseMode);
+      }
+
+      if (i < chunks.length - 1) {
+        await sleep(300);
+      }
+    }
+
+    return lastResult!;
+  }
+
+  /**
+   * Send a single message without chunking
+   */
+  private async sendSingleMessage(
     chatId: string,
     text: string,
     parseMode?: 'Markdown' | 'MarkdownV2' | 'HTML'
@@ -151,13 +195,48 @@ export class TelegramClient {
   }
 
   /**
-   * Send a message with inline keyboard
+   * Send a message with inline keyboard (auto-split if too long)
    * @param chatId - Target chat ID
    * @param text - Message text
    * @param keyboard - Inline keyboard markup
    * @param parseMode - Optional parse mode
    */
   async sendMessageWithKeyboard(
+    chatId: string,
+    text: string,
+    keyboard: InlineKeyboardMarkup,
+    parseMode?: 'HTML'
+  ): Promise<TelegramMessageResponse> {
+    const byteLength = getByteLength(text);
+
+    if (byteLength <= TELEGRAM_MAX_LENGTH) {
+      return this.sendSingleMessageWithKeyboard(chatId, text, keyboard, parseMode);
+    }
+
+    log.info({ byteLength, maxLength: TELEGRAM_MAX_LENGTH }, 'Message too long, splitting into chunks');
+
+    const reservedSpace = 20;
+    const chunks = splitMessage(text, TELEGRAM_MAX_LENGTH - reservedSpace);
+
+    let lastResult: TelegramMessageResponse | null = null;
+    for (let i = 0; i < chunks.length; i++) {
+      const marker = chunks.length > 1 ? `[${i + 1}/${chunks.length}]\n\n` : '';
+      const markedChunk = marker + chunks[i];
+
+      lastResult = await this.sendSingleMessageWithKeyboard(chatId, markedChunk, keyboard, parseMode);
+
+      if (i < chunks.length - 1) {
+        await sleep(300);
+      }
+    }
+
+    return lastResult!;
+  }
+
+  /**
+   * Send a single message with keyboard without chunking
+   */
+  private async sendSingleMessageWithKeyboard(
     chatId: string,
     text: string,
     keyboard: InlineKeyboardMarkup,
