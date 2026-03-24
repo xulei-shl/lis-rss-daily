@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { Kysely, SqliteDialect } from 'kysely';
+import path from 'path';
 import { getConfig } from './config.js';
 
 interface ArticlesTable {
@@ -108,7 +109,13 @@ export function getDb(): Kysely<DatabaseSchema> {
   }
 
   const config = getConfig();
-  const dbPath = config.database.path;
+  let dbPath = config.database.path;
+
+  if (!path.isAbsolute(dbPath)) {
+    const scriptDir = path.resolve(process.cwd(), 'scripts/deepsearch');
+    dbPath = path.join(scriptDir, '..', dbPath);
+    dbPath = path.resolve(dbPath);
+  }
 
   const dialect = new SqliteDialect({
     database: new Database(dbPath),
@@ -127,7 +134,13 @@ export function getSimpleDb(): Database.Database {
   }
 
   const config = getConfig();
-  const dbPath = config.database.path;
+  let dbPath = config.database.path;
+
+  if (!path.isAbsolute(dbPath)) {
+    const scriptDir = path.resolve(process.cwd(), 'scripts/deepsearch');
+    dbPath = path.join(scriptDir, '..', dbPath);
+    dbPath = path.resolve(dbPath);
+  }
 
   simpleDb = new Database(dbPath);
   return simpleDb;

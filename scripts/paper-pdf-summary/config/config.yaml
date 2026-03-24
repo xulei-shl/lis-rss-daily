@@ -46,7 +46,7 @@ summary_upload:
   hiagent_rag:
     enabled: true
     script: "summary-update/hiagent-rag-upload/upload_knowledge.py"
-    delete_md: true
+    delete_md: false
   
   # LIS-RSS系统更新
   lis_rss:

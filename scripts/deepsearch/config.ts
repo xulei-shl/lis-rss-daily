@@ -1,8 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 import type { DeepSearchConfig } from './types.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const DEFAULT_CONFIG_PATH = path.join(__dirname, 'config', 'config.yaml');
 
 let configInstance: DeepSearchConfig | null = null;
@@ -14,11 +17,15 @@ export function loadConfig(configPath?: string): DeepSearchConfig {
 
   const effectivePath = configPath || DEFAULT_CONFIG_PATH;
 
-  if (!fs.existsSync(effectivePath)) {
-    throw new Error(`配置文件不存在: ${effectivePath}`);
+  const resolvedPath = path.isAbsolute(effectivePath)
+    ? effectivePath
+    : path.join(process.cwd(), effectivePath);
+
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(`配置文件不存在: ${resolvedPath}`);
   }
 
-  const fileContents = fs.readFileSync(effectivePath, 'utf8');
+  const fileContents = fs.readFileSync(resolvedPath, 'utf8');
   const config = yaml.load(fileContents) as DeepSearchConfig;
 
   if (!config.user?.userId) {

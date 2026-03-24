@@ -2,8 +2,8 @@ import fs from 'fs';
 import type { ParsedSeedLine, SeedArticle } from './types.js';
 import { getArticleById } from './database.js';
 
-const SEED_LINE_REGEX = /^- 题名：(\d+)\s+(.+)$/;
-const SEED_LINE_NO_ID_REGEX = /^- 题名：(.+)$/;
+const SEED_LINE_REGEX = /^- (.+)：(\d+)$/;
+const SEED_LINE_NO_ID_REGEX = /^- (.+)$/;
 
 export function parseSeedFile(content: string): ParsedSeedLine[] {
   const lines = content.split('\n');
@@ -11,14 +11,14 @@ export function parseSeedFile(content: string): ParsedSeedLine[] {
 
   for (const line of lines) {
     const trimmedLine = line.trim();
-    if (!trimmedLine.startsWith('- 题名：')) {
+    if (!trimmedLine.startsWith('- ')) {
       continue;
     }
 
     const withIdMatch = trimmedLine.match(SEED_LINE_REGEX);
     if (withIdMatch) {
-      const articleId = parseInt(withIdMatch[1], 10);
-      const title = withIdMatch[2].trim();
+      const title = withIdMatch[1].trim();
+      const articleId = parseInt(withIdMatch[2], 10);
       results.push({ articleId, title });
       continue;
     }

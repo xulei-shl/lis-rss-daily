@@ -2,23 +2,9 @@ import OpenAI from 'openai';
 import type { ChatCompletionCreateParamsNonStreaming } from 'openai/resources/chat/completions.js';
 import { getLLMConfigs } from './database.js';
 import { getConfig } from './config.js';
-
-const DEFAULT_ENCRYPTION_KEY = '0000000000000000000000000000000000000000000000000000000000000000';
+import { decryptAPIKey } from '../../src/utils/crypto.js';
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-
-function decryptAPIKey(encryptedText: string, encryptionKey: string): string {
-  if (!encryptedText) return '';
-  if (encryptionKey === DEFAULT_ENCRYPTION_KEY) {
-    return encryptedText;
-  }
-  const CryptoJS = require('crypto-js');
-  const key = CryptoJS.enc.Hex.parse(encryptionKey.padEnd(64, '0').slice(0, 64));
-  const iv = CryptoJS.enc.Hex.parse(encryptedText.slice(0, 32));
-  const encrypted = encryptedText.slice(32);
-  const decrypted = CryptoJS.AES.decrypt(encrypted, key, { iv: iv });
-  return decrypted.toString(CryptoJS.enc.Utf8);
-}
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -38,7 +24,7 @@ export interface LLMProvider {
 }
 
 function getEncryptionKey(): string {
-  return process.env.LLM_ENCRYPTION_KEY || DEFAULT_ENCRYPTION_KEY;
+  return process.env.LLM_ENCRYPTION_KEY || '0000000000000000000000000000000000000000000000000000000000000000';
 }
 
 function createOpenAIProvider(

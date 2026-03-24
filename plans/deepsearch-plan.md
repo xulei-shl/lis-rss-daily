@@ -54,6 +54,33 @@ graph TB
 ```yaml
 # DeepSearch 配置文件
 
+# 用户配置（用于数据库查询和检索服务权限验证）
+user:
+  # 用户 ID（用于检索服务的数据权限验证）
+  userId: 1
+
+# 数据库配置
+database:
+  # SQLite 数据库文件路径
+  path: "/opt/lis-rss-daily/data/rss-tracker.db"
+
+# LLM 配置
+llm:
+  # 任务类型（可选，用于选择对应任务的 LLM 配置）
+  # - 如果不配置或为 null：使用该用户所有启用的 LLM 配置，按 is_default、priority、created_at 排序
+  # - 如果指定具体值（如 "deepsearch"）：优先使用匹配该任务类型的配置，失败后自动切换到默认配置
+  task_type: null
+  # 温度参数
+  temperature: 0.3
+  # 最大 token 数
+  max_tokens: 2000
+  # 重试间隔（毫秒，用于 PDF API 指数退避）
+  retry_delay_ms: 1000
+
+# 注意：LLM 的 API Key、Base URL、模型名称从数据库 llm_configs 表获取
+# - 多个配置支持故障转移（failover）
+# - 配置排序：is_default > priority > created_at
+
 # 检索相关配置
 search:
   # 迭代检索轮次（1-3轮）
@@ -67,21 +94,14 @@ search:
   # 关键词权重
   keyword_weight: 0.3
 
-# LLM 配置
-llm:
-  # 使用的模型
-  model: "qwen-plus"
-  # 温度参数
-  temperature: 0.3
-  # 最大 token 数
-  max_tokens: 2000
-
 # PDF 总结配置
 pdf_summary:
   # API 地址
   api_url: "http://localhost:8081"
   # 超时时间（秒）
   timeout: 300
+  # 调用失败时的重试次数
+  max_retries: 2
 
 # 输出配置
 output:
@@ -116,7 +136,7 @@ prompts/
 
 - [ ] 创建 `scripts/deepsearch/types.ts` - 定义 TypeScript 类型
 - [ ] 创建 `scripts/deepsearch/config.ts` - 配置加载模块
-- [ ] 创建 `scripts/deepsearch/llm.ts` - LLM 调用封装（复用主项目逻辑）
+- [ ] 创建 `scripts/deepsearch/llm.ts` - LLM 调用封装（复用主项目 `src/llm.ts` 中的 `getLLM()` 函数）
 - [ ] 创建 `scripts/deepsearch/search.ts` - 检索服务封装
 - [ ] 创建 `scripts/deepsearch/pdf-api.ts` - PDF Summary API 客户端
 - [ ] 创建 `scripts/deepsearch/report.ts` - 报告生成模块
@@ -286,12 +306,24 @@ async function iterativeSearch(
 
 ### 8.2 LLM 检索词生成
 
+**自动轮询（Failover）机制**：
+- DeepSearch 通过 `getUserLLMProvider(userId, taskType)` 从数据库获取 LLM Provider
+- 主项目的 failover 逻辑：当一个 LLM 配置调用失败时，自动尝试下一个配置
+- 详情见 `src/llm.ts:449-484` 的 `createFailoverProvider` 函数
+
 ```typescript
+// DeepSearch 的 LLM 调用方式
+import { getUserLLMProvider } from '../../src/llm.js';
+
 async function generateSearchTerms(
   article: Article,
   promptTemplate: string,
-  llm: LLMProvider
+  config: DeepSearchConfig
 ): Promise<string[]> {
+  // 获取 LLM Provider（已包含 failover 机制）
+  // 从数据库 llm_configs 表按 task_type 优先级获取
+  const llm = await getUserLLMProvider(config.user.userId, config.llm.task_type);
+  
   // 优先级：ai_summary > markdown_content > content
   const content = article.ai_summary 
     || article.markdown_content 
@@ -302,29 +334,56 @@ async function generateSearchTerms(
   const response = await llm.chat([
     { role: 'system', content: '你是一个专业的学术检索助手。' },
     { role: 'user', content: userPrompt }
-  ], { jsonMode: true });
+  ], { 
+    jsonMode: true,
+    temperature: config.llm.temperature,
+    maxTokens: config.llm.max_tokens,
+    label: 'generate-search-terms'  // 用于日志记录
+  });
   
   return parseSearchTerms(response);
 }
 ```
 
-### 8.3 PDF 总结调用与文章摘要 MD 生成
+### 8.3 PDF 总结调用（带重试）
 
-**重要说明**：
-- PDF API 返回的 `md_path` 指向生成的 MD 文件（存储在 `download/{date}/` 目录）
-- **注意**：配置文件 `config.yaml` 中默认设置 `delete_md: true`，上传后会自动删除 MD 文件！
-- DeepSearch 必须在上传前复制 MD 文件内容，或修改配置禁用删除
+**重试机制**：
+- DeepSearch 在调用 PDF API 时实现自动重试
+- 支持指数退避策略：间隔时间 = `retry_delay_ms * 2^retryCount`
+- 重试次数在 `config.yaml` 的 `pdf_summary.max_retries` 中配置
 
-**解决方案**：
-1. **方案一**：DeepSearch 调用 PDF API 前，先复制原始 MD 文件内容到 DeepSearch 的输出目录
-2. **方案二**：修改 `config.yaml` 中 `summary_upload.hiagent_rag.delete_md` 为 `false`（推荐）
-
-```yaml
-# 建议修改配置文件
-summary_upload:
-  hiagent_rag:
-    delete_md: false  # 禁用 MD 文件删除
+```typescript
+async function callPdfApiWithRetry(
+  title: string,
+  articleId: number | null,
+  apiUrl: string,
+  config: DeepSearchConfig
+): Promise<PdfApiResult> {
+  const maxRetries = config.pdf_summary.max_retries ?? 3;
+  const baseDelay = config.llm.retry_delay_ms ?? 1000;
+  
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const result = await callPdfApi(title, articleId, apiUrl);
+      if (result.success) return result;
+      
+      // 如果返回失败（非异常），也进行重试
+      console.warn(`[重试] PDF API 返回失败: ${result.reason}，剩余重试次数: ${maxRetries - i - 1}`);
+    } catch (error) {
+      console.warn(`[重试] PDF API 调用异常: ${error.message}，剩余重试次数: ${maxRetries - i - 1}`);
+    }
+    
+    // 指数退避等待
+    if (i < maxRetries - 1) {
+      await sleep(baseDelay * Math.pow(2, i));
+    }
+  }
+  
+  return { success: false, reason: 'max retries exceeded' };
+}
 ```
+
+### 8.4 文章摘要 MD 生成
 
 ```typescript
 /**
@@ -400,11 +459,11 @@ async function processPdfSummaryAndGenerateMD(
           continue;
         }
         
-        // 调用 PDF 总结 API
-        pdfResult = await callPdfApi(article.title, article.id, apiUrl);
+        // 调用 PDF 总结 API（带重试）
+        pdfResult = await callPdfApiWithRetry(article.title, article.id, apiUrl, config);
       } else {
         // 无 ID：直接调用 PDF 总结 API（结果写入临时文件，不写入数据库）
-        pdfResult = await callPdfApi(candidate.title, null, apiUrl);
+        pdfResult = await callPdfApiWithRetry(candidate.title, null, apiUrl, config);
       }
       
       if (pdfResult.success) {
@@ -459,10 +518,23 @@ async function processPdfSummaryAndGenerateMD(
 | 模块 | 依赖 | 说明 |
 |------|------|------|
 | config.ts | js-yaml | 配置文件解析 |
-| llm.ts | src/llm.ts | 复用主项目 LLM 逻辑 |
-| search.ts | src/vector/search-service.ts | 复用统一检索接口 |
-| pdf-api.ts | 无 | HTTP 请求 |
+| llm.ts | src/llm.ts | 复用主项目 `getUserLLMProvider()` 函数，从数据库获取配置，支持多配置 failover |
+| search.ts | src/vector/search-service.ts | 复用统一检索接口（需配置 userId） |
+| pdf-api.ts | 无 | HTTP 请求，支持重试 |
 | report.ts | 无 | 文件系统操作 |
+| database.ts | better-sqlite3 | 数据库访问（路径从 config.yaml 读取） |
+
+### 9.1 LLM 调用说明
+
+**复用主项目 LLM 逻辑**：
+- 使用 `src/llm.ts` 中的 `getUserLLMProvider(userId, taskType)` 从数据库获取 LLM Provider
+- 主项目已有完整的 failover 机制：当一个配置失败时自动尝试下一个
+- DeepSearch 无需额外实现重试逻辑
+
+**配置**：
+- LLM 的 API Key、Base URL、模型等从数据库 `llm_configs` 表获取（与主项目共享）
+- 配置获取方式：`getActiveConfigListByTypeAndTask(userId, 'llm', taskType)`
+- DeepSearch 的 `config.yaml` 中可配置温度、max_tokens 等调用参数
 
 ---
 
@@ -491,8 +563,57 @@ async function processPdfSummaryAndGenerateMD(
 
 ## 12. 风险和注意事项
 
-1. **LLM 调用成本** - 需要合理设置 token 限制和缓存策略
-2. **PDF API 依赖** - 需要确保 paper-pdf-summary 服务正常运行
-3. **数据库连接** - 需要确保能访问主项目数据库
-4. **Chroma 服务** - 需要确保向量检索服务正常运行
-5. **文件清理** - 需要定期清理临时文件和输出目录
+1. **配置文件初始化** - 首次使用需确保 `config.yaml` 正确配置 `user.userId`、`database.path` 等参数
+2. **PDF API MD 文件删除** - paper-pdf-summary 的 `config.yaml` 中需设置 `delete_md: false`（需手动修改）
+3. **LLM 调用** - 复用主项目逻辑，已有 failover 支持多配置自动轮询
+4. **PDF API 依赖** - 需要确保 paper-pdf-summary 服务（端口 8081）正常运行
+5. **数据库连接** - 数据库路径在 `config.yaml` 中配置，需确保文件存在且可访问
+6. **Chroma 服务** - 检索功能依赖向量检索服务，需确保服务正常运行
+7. **文件清理** - 需要定期清理输出目录和临时文件
+
+---
+
+## 13. 常见问题 FAQ
+
+### Q1: DeepSearch 与主项目的 LLM 配置是否共享？
+
+**是的**。DeepSearch 从数据库 `llm_configs` 表获取 LLM 配置：
+- API Key、Base URL、模型等与主项目共享同一数据库配置
+- 配置获取方式：`getActiveConfigListByTypeAndTask(userId, 'llm', taskType)`
+- 主项目的多配置 failover 机制对 DeepSearch 同样生效
+- DeepSearch 的 `config.yaml` 中只需配置 `temperature`、`max_tokens` 等调用参数
+
+### Q2: 如何指定使用的 LLM 配置？
+
+在 `config.yaml` 中配置 `llm.task_type`：
+- **不配置或为 null**：使用该用户所有启用的 LLM 配置，按 is_default、priority、created_at 排序，多配置自动 failover
+- **指定具体值（如 "deepsearch"）**：优先使用匹配该任务类型的配置，失败后自动切换到默认配置
+
+### Q3: 如何启用 LLM 多配置 failover？
+
+在主项目的 LLM 配置页面中添加多个配置并启用，DeepSearch 会自动按顺序尝试：
+- 当前一个配置失败（如 API 限流、服务不可用）时，自动尝试下一个
+- 详情见 `src/llm.ts:449-484` 的 `createFailoverProvider` 实现
+
+### Q4: PDF API 调用失败时会重试多少次？
+
+由 `config.yaml` 中的 `pdf_summary.max_retries` 控制：
+- 默认值为 2
+- 使用指数退避策略：间隔时间为 `llm.retry_delay_ms * 2^retryCount` 毫秒
+- 全部重试失败后，记录错误并继续处理下一篇文章
+
+### Q5: 如何修改 MD 文件删除配置？
+
+手动修改 `scripts/paper-pdf-summary/config/config.yaml`：
+```yaml
+summary_upload:
+  hiagent_rag:
+    delete_md: false  # 改为 false 禁用删除
+```
+
+### Q6: 检索时使用的用户 ID 是什么？
+
+由 `config.yaml` 中的 `user.userId` 配置：
+- 用于数据库查询和检索服务的数据权限验证
+- 用于获取该用户的 LLM 配置
+- 建议使用管理员账户（userId=1）或具有完整数据访问权限的账户

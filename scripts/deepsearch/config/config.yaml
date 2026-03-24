@@ -7,7 +7,7 @@ user:
 
 # 数据库配置
 database:
-  # SQLite 数据库文件路径
+  # SQLite 数据库文件路径（绝对路径）
   path: "/opt/lis-rss-daily/data/rss-tracker.db"
 
 # LLM 配置

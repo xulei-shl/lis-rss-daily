@@ -96,78 +96,99 @@ async function iterativeSearch(
 ): Promise<CandidateArticle[]> {
   const config = getConfig();
   const allCandidateIds = new Set<number>();
-  let candidates: CandidateArticle[] = [];
-  let currentSeeds = seedArticles;
+  
+  console.log(`[迭代 0/${rounds}] 种子文章直接检索...`);
+  const round0Results = await performSearchRound(seedArticles, semanticLimit, scoreThreshold, config);
+  console.log(`  - 第0轮检索到 ${round0Results.length} 篇文章`);
+  
+  round0Results.forEach((c) => {
+    if (c.articleId !== null) {
+      allCandidateIds.add(c.articleId);
+    }
+  });
 
-  for (let round = 0; round < rounds; round++) {
-    console.log(`[迭代 ${round + 1}/${rounds}] 开始检索...`);
+  let candidates = round0Results;
+  let currentRoundResults = round0Results;
 
-    const relatedFromIds = await searchRelatedByIds(currentSeeds, semanticLimit);
-    console.log(`  - 从 ID 检索到 ${relatedFromIds.length} 篇文章`);
+  for (let round = 1; round <= rounds; round++) {
+    console.log(`[迭代 ${round}/${rounds}] 对第${round - 1}轮结果进行检索...`);
 
     try {
-      const llm = await getUserLLMProvider(config.llm.task_type ?? undefined);
-      const searchTerms = await generateSearchTerms(currentSeeds, llm, config);
-      console.log(`  - 生成检索词: ${searchTerms.join(', ')}`);
-
-      const searchResults: CandidateArticle[] = [];
-      for (const term of searchTerms.slice(0, 3)) {
-        const semanticResults = await semanticSearch(term, semanticLimit);
-        searchResults.push(...semanticResults);
+      const nextRoundCandidates: CandidateArticle[] = [];
+      
+      for (const prevCandidate of currentRoundResults) {
+        let seedArticle: SeedArticle[] = [];
+        
+        if (prevCandidate.articleId !== null) {
+          const article = await getArticleById(prevCandidate.articleId);
+          if (article) {
+            seedArticle = [{
+              articleId: article.id,
+              title: article.title,
+              aiSummary: article.ai_summary,
+              markdownContent: article.markdown_content,
+              content: article.content,
+            }];
+          }
+        }
+        
+        if (seedArticle.length > 0) {
+          const searchResults = await performSearchRound(seedArticle, semanticLimit, scoreThreshold, config);
+          nextRoundCandidates.push(...searchResults);
+        }
       }
 
-      const merged = mergeResults(relatedFromIds, searchResults);
+      const merged = mergeResults([], nextRoundCandidates);
       const filtered = filterByScore(merged, scoreThreshold);
-
-      console.log(`  - 合并后候选文章: ${filtered.length} 篇`);
+      
+      console.log(`  - 第${round}轮检索到 ${filtered.length} 篇新文章`);
 
       filtered.forEach((c) => {
-        if (c.articleId !== null) {
+        if (c.articleId !== null && !allCandidateIds.has(c.articleId)) {
           allCandidateIds.add(c.articleId);
+          candidates.push(c);
         }
       });
 
-      candidates = filtered;
+      currentRoundResults = filtered;
 
-      if (candidates.length > 0) {
-        const newSeeds: SeedArticle[] = [];
-        for (const c of candidates.slice(0, 5)) {
-          if (c.articleId !== null) {
-            const article = await getArticleById(c.articleId);
-            if (article) {
-              newSeeds.push({
-                articleId: article.id,
-                title: article.title,
-                aiSummary: article.ai_summary,
-                markdownContent: article.markdown_content,
-                content: article.content,
-              });
-            }
-          }
-        }
-        if (newSeeds.length > 0) {
-          currentSeeds = newSeeds;
-        }
+      if (currentRoundResults.length === 0) {
+        console.log(`  - 没有新的相关文章，停止迭代`);
+        break;
       }
     } catch (error) {
-      console.error(`迭代 ${round + 1} 失败:`, error);
+      console.error(`迭代 ${round} 失败:`, error);
     }
   }
 
-  const finalCandidates: CandidateArticle[] = [];
-  const idToCandidate = new Map<number, CandidateArticle>();
+  return candidates;
+}
 
-  for (const c of candidates) {
-    if (c.articleId !== null && !idToCandidate.has(c.articleId)) {
-      idToCandidate.set(c.articleId, c);
+async function performSearchRound(
+  seedArticles: SeedArticle[],
+  semanticLimit: number,
+  scoreThreshold: number,
+  config: ReturnType<typeof getConfig>
+): Promise<CandidateArticle[]> {
+  const relatedFromIds = await searchRelatedByIds(seedArticles, semanticLimit);
+
+  let searchResults: CandidateArticle[] = [];
+  try {
+    const llm = await getUserLLMProvider(config.llm.task_type ?? undefined);
+    const searchTerms = await generateSearchTerms(seedArticles, llm, config);
+
+    for (const term of searchTerms.slice(0, 3)) {
+      const semanticResults = await semanticSearch(term, semanticLimit);
+      searchResults.push(...semanticResults);
     }
+  } catch (error) {
+    console.error(`  - 检索词生成或语义检索失败:`, error);
   }
 
-  for (const [, candidate] of idToCandidate) {
-    finalCandidates.push(candidate);
-  }
+  const merged = mergeResults(relatedFromIds, searchResults);
+  const filtered = filterByScore(merged, scoreThreshold);
 
-  return finalCandidates;
+  return filtered;
 }
 
 async function processPdfSummary(
