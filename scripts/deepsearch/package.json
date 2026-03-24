@@ -1,0 +1,24 @@
+{
+  "name": "deepsearch",
+  "version": "1.0.0",
+  "description": "DeepSearch - 深度检索工具",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node cli.ts",
+    "build": "tsc",
+    "api": "python api.py"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.0.0",
+    "crypto-js": "^4.2.0",
+    "js-yaml": "^4.1.0",
+    "kysely": "^0.27.0",
+    "openai": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/crypto-js": "^4.2.1",
+    "@types/node": "^20.0.0"
+  }
+}

@@ -1,0 +1,59 @@
+# DeepSearch 配置文件
+
+# 用户配置（用于数据库查询和检索服务权限验证）
+user:
+  # 用户 ID（用于检索服务的数据权限验证）
+  userId: 1
+
+# 数据库配置
+database:
+  # SQLite 数据库文件路径
+  path: "/opt/lis-rss-daily/data/rss-tracker.db"
+
+# LLM 配置
+llm:
+  # 任务类型（可选，用于选择对应任务的 LLM 配置）
+  # - 如果不配置或为 null：使用该用户所有启用的 LLM 配置，按 is_default、priority、created_at 排序
+  # - 如果指定具体值（如 "deepsearch"）：优先使用匹配该任务类型的配置，失败后自动切换到默认配置
+  task_type: null
+  # 温度参数
+  temperature: 0.3
+  # 最大 token 数
+  max_tokens: 2000
+  # 重试间隔（毫秒，用于 PDF API 指数退避）
+  retry_delay_ms: 1000
+
+# 注意：LLM 的 API Key、Base URL、模型名称从数据库 llm_configs 表获取
+# - 多个配置支持故障转移（failover）
+# - 配置排序：is_default > priority > created_at
+
+# 检索相关配置
+search:
+  # 提示词文件（相对于 prompts 目录，不含 .md 后缀）
+  prompt: "default"
+  # 迭代检索轮次（1-3轮）
+  iteration_rounds: 1
+  # 相关性分数阈值（0-1）
+  score_threshold: 0.66
+  # 语义检索返回的文章数量
+  semantic_limit: 5
+  # 语义权重
+  semantic_weight: 0.7
+  # 关键词权重
+  keyword_weight: 0.3
+
+# PDF 总结配置
+pdf_summary:
+  # API 地址
+  api_url: "http://localhost:8081"
+  # 超时时间（秒）
+  timeout: 300
+  # 调用失败时的重试次数
+  max_retries: 2
+
+# 输出配置
+output:
+  # 报告输出目录
+  report_dir: "./output"
+  # 文章摘要输出目录
+  articles_dir: "./output/articles"
