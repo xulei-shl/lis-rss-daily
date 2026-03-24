@@ -30,6 +30,7 @@ class ProcessRequest(BaseModel):
     semantic_limit: Optional[int] = None
     max_final_articles: Optional[int] = None
     output_dir: Optional[str] = None
+    config_path: Optional[str] = None
 
 
 class TaskStatus(BaseModel):
@@ -49,6 +50,7 @@ async def run_deepsearch_task(
     semantic_limit: Optional[int],
     max_final_articles: Optional[int],
     output_dir: Optional[str],
+    config_path: Optional[str],
 ):
     """Run deepsearch in background"""
     tasks[task_id]["status"] = "running"
@@ -70,6 +72,7 @@ async def run_deepsearch_task(
             "semanticLimit": semantic_limit,
             "maxFinalArticles": max_final_articles,
             "outputDir": output_dir,
+            "configPath": config_path,
         })
 
         tasks[task_id]["progress"] = {"step": "completed", "current": 100, "total": 100}
@@ -101,6 +104,7 @@ async def process(request: ProcessRequest, background_tasks: BackgroundTasks):
         request.semantic_limit,
         request.max_final_articles,
         request.output_dir,
+        request.config_path,
     )
 
     return TaskStatus(
