@@ -352,13 +352,6 @@ export async function getUserLLMProvider(userId: number, taskType?: string): Pro
     ? await getActiveConfigListByTypeAndTask(userId, 'llm', taskType)
     : await getActiveConfigListByType(userId, 'llm');
 
-  if (!dbConfigs || dbConfigs.length === 0) {
-    throw new Error(
-      `未找到用户 ${userId}${taskType ? ` 的 ${taskType} 任务类型` : ''} 的 LLM 配置。` +
-      `请在设置中添加并启用至少一个 LLM 配置。`
-    );
-  }
-
   const entries: FailoverEntry[] = [];
   for (const dbConfig of dbConfigs) {
     const provider = buildProviderFromDbConfig(dbConfig);
@@ -367,23 +360,48 @@ export async function getUserLLMProvider(userId: number, taskType?: string): Pro
     }
   }
 
-  if (entries.length === 0) {
+  if (entries.length === 0 && !taskType) {
     throw new Error(
-      `用户 ${userId}${taskType ? ` 的 ${taskType} 任务类型` : ''} 的所有 LLM 配置均无效。` +
-      `请检查配置是否正确。`
+      `未找到用户 ${userId} 的 LLM 配置。` +
+      `请在设置中添加并启用至少一个 LLM 配置。`
+    );
+  }
+
+  if (entries.length === 0 && taskType) {
+    const defaultConfigs = await getActiveConfigListByType(userId, 'llm');
+    for (const dbConfig of defaultConfigs) {
+      const provider = buildProviderFromDbConfig(dbConfig);
+      if (provider) {
+        entries.push({ configId: dbConfig.id, provider });
+      }
+    }
+
+    if (entries.length === 0) {
+      log.warn(
+        { userId, taskType },
+        '未找到任务类型 LLM 配置，fallback 到环境变量默认配置'
+      );
+      return getLLM();
+    }
+
+    log.info(
+      { userId, taskType, provider: entries[0].provider.name, count: entries.length },
+      '任务类型 LLM 配置为空，fallback 到默认配置'
+    );
+  } else if (entries.length === 1) {
+    log.info({ userId, taskType, provider: entries[0].provider.name }, 'LLM provider initialized from database');
+  } else {
+    log.info(
+      { userId, taskType, provider: entries[0].provider.name, count: entries.length },
+      'LLM provider initialized with failover'
     );
   }
 
   if (entries.length === 1) {
-    log.info({ userId, taskType, provider: entries[0].provider.name }, 'LLM provider initialized from database');
     return entries[0].provider;
   }
 
   const failoverProvider = createFailoverProvider(entries);
-  log.info(
-    { userId, taskType, provider: failoverProvider.name, count: entries.length },
-    'LLM provider initialized with failover'
-  );
   return failoverProvider;
 }
 
@@ -455,7 +473,11 @@ function createFailoverProvider(entries: FailoverEntry[]): LLMProvider {
         }
       }
 
-      throw lastError ?? new Error('全部 LLM 配置均失败');
+      log.warn(
+        { userId: entries[0].configId, label: options.label },
+        '全部 LLM 配置均失败，fallback 到环境变量默认配置'
+      );
+      return getLLM().chat(messages, options);
     },
   };
 
