@@ -178,7 +178,7 @@
         const res = await fetch('/api/daily-summary/insights/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ days: 15 })
+          body: JSON.stringify({})
         });
         if (!res.ok) {
           throw new Error('Failed to generate insights');

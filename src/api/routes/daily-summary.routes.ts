@@ -8,6 +8,7 @@ import { requireAuth, requireCliAuth, requireWriteAccess } from '../../middlewar
 import { logger } from '../../logger.js';
 import * as dailySummaryService from '../daily-summary.js';
 import { getUserLocalDate } from '../timezone.js';
+import { config } from '../../config.js';
 import type { SummaryType } from '../daily-summary.js';
 
 const log = logger.child({ module: 'api-routes/daily-summary' });
@@ -474,15 +475,16 @@ router.post('/daily-summary/journal-all/cli', requireCliAuth, async (req: AuthRe
  * 手动触发生成洞察报告
  * 
  * Body 参数:
- * - days: 可选，天数 (默认 15)
+ * - days: 可选，天数 (默认使用环境变量 INSIGHTS_DAYS)
  */
 router.post('/daily-summary/insights/generate', requireAuth, requireWriteAccess, async (req: AuthRequest, res) => {
   try {
     const { days } = req.body || {};
+    const defaultDays = config.insightsDays || 15;
 
     const result = await dailySummaryService.generateInsightsSummary({
       userId: req.userId!,
-      days: days || 15,
+      days: days || defaultDays,
     });
 
     res.json(result);
