@@ -3,40 +3,59 @@ import path from 'path';
 import { getConfig } from './config.js';
 import type { CandidateArticle, ArticleMDResult } from './types.js';
 
-export function ensureOutputDir(): void {
-  const config = getConfig();
-  const outputDir = config.output.report_dir;
-  const articlesDir = config.output.articles_dir;
+let cachedReportPath: string | null = null;
+let cachedOutputDir: string | null = null;
 
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
+export function initOutputDir(): string {
+  if (cachedOutputDir) {
+    return cachedOutputDir;
   }
-
+  
+  const config = getConfig();
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  cachedOutputDir = path.join(config.output.base_dir, `run_${timestamp}`);
+  
+  if (!fs.existsSync(cachedOutputDir)) {
+    fs.mkdirSync(cachedOutputDir, { recursive: true });
+  }
+  
+  const articlesDir = path.join(cachedOutputDir, 'articles');
   if (!fs.existsSync(articlesDir)) {
     fs.mkdirSync(articlesDir, { recursive: true });
   }
+  
+  return cachedOutputDir;
+}
+
+export function ensureOutputDir(): void {
+  initOutputDir();
 }
 
 export function getReportPath(): string {
-  const config = getConfig();
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  return path.join(config.output.report_dir, `report_${timestamp}.md`);
+  if (cachedReportPath) {
+    return cachedReportPath;
+  }
+  
+  const outputDir = initOutputDir();
+  cachedReportPath = path.join(outputDir, 'report.md');
+  
+  const header = `# DeepSearch 运行报告\n\n生成时间: ${new Date().toISOString()}\n\n---\n\n`;
+  fs.writeFileSync(cachedReportPath, header, 'utf8');
+  
+  return cachedReportPath;
 }
 
 export function getArticlesDir(): string {
-  const config = getConfig();
-  return config.output.articles_dir;
+  const outputDir = initOutputDir();
+  return path.join(outputDir, 'articles');
+}
+
+export function getOutputDir(): string {
+  return initOutputDir();
 }
 
 export async function appendToReport(content: string): Promise<void> {
   const reportPath = getReportPath();
-  const exists = fs.existsSync(reportPath);
-  
-  if (!exists) {
-    const header = `# DeepSearch 运行报告\n\n生成时间: ${new Date().toISOString()}\n\n---\n\n`;
-    fs.writeFileSync(reportPath, header, 'utf8');
-  }
-
   fs.appendFileSync(reportPath, content + '\n\n', 'utf8');
 }
 
@@ -71,15 +90,26 @@ export async function generateArticleSummaryMD(
   title: string,
   content: string,
   pdfSuccess: boolean,
-  pdfReason?: string
+  pdfReason?: string,
+  skipped?: boolean
 ): Promise<string> {
-  let statusEmoji = pdfSuccess ? '✅' : '❌';
-  let statusText = pdfSuccess ? 'PDF 总结成功' : `PDF 总结失败: ${pdfReason}`;
+  let statusEmoji = '✅';
+  let statusText = '';
+
+  if (skipped) {
+    statusEmoji = '⏭️';
+    statusText = '已有摘要，跳过 PDF 总结';
+  } else if (pdfSuccess) {
+    statusText = 'PDF 总结成功';
+  } else {
+    statusText = `PDF 总结失败: ${pdfReason || '未知错误'}`;
+  }
 
   const mdContent = `---
 title: ${title}
 article_id: ${articleId ?? 'N/A'}
 pdf_success: ${pdfSuccess}
+pdf_skipped: ${skipped || false}
 generated_at: ${new Date().toISOString()}
 ---
 

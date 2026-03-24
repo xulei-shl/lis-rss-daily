@@ -3,7 +3,7 @@ import { getArticleById, getArticlesByIds } from './database.js';
 import { getUserLLMProvider, type LLMProvider, type ChatMessage } from './llm.js';
 import { semanticSearch, relatedSearch, filterByScore, mergeResults } from './search.js';
 import { callPdfApiWithRetry } from './pdf-api.js';
-import { ensureOutputDir, writeStepReport, saveArticleMD, generateArticleSummaryMD, getReportPath, getArticlesDir } from './report.js';
+import { ensureOutputDir, writeStepReport, saveArticleMD, generateArticleSummaryMD, getReportPath, getArticlesDir, getOutputDir } from './report.js';
 import { parseSeedFileToArticles } from './md-parser.js';
 import type { SeedArticle, CandidateArticle, DeepSearchResult } from './types.js';
 import fs from 'fs';
@@ -211,38 +211,48 @@ async function processPdfSummary(
 
     try {
       let pdfResult = null;
+      let isSkipped = false;
+      let content = '';
 
       if (candidate.articleId !== null) {
-        const article = await getArticleById(candidate.articleId);
+        let article = await getArticleById(candidate.articleId);
 
         if (article?.ai_summary) {
           console.log(`  - 已有摘要，跳过 PDF 总结`);
           skipped++;
+          isSkipped = true;
+          content = article.ai_summary || article.markdown_content || article.content || '';
         } else {
           pdfResult = await callPdfApiWithRetry(candidate.title, candidate.articleId);
           if (pdfResult.success) {
             success++;
+            console.log(`  - PDF 总结成功`);
+            article = await getArticleById(candidate.articleId);
+            content = article?.ai_summary || article?.markdown_content || article?.content || '';
           } else {
             failed++;
             console.log(`  - PDF 总结失败: ${pdfResult.reason}`);
+            content = article?.markdown_content || article?.content || '';
           }
         }
 
-        const content = article?.ai_summary || article?.markdown_content || article?.content || '';
         const mdContent = await generateArticleSummaryMD(
           candidate.articleId,
           candidate.title,
           content,
           pdfResult?.success ?? false,
-          pdfResult?.reason
+          pdfResult?.reason,
+          isSkipped
         );
         await saveArticleMD(candidate.articleId, candidate.title, mdContent);
       } else {
         pdfResult = await callPdfApiWithRetry(candidate.title, null);
         if (pdfResult.success) {
           success++;
+          console.log(`  - PDF 总结成功`);
         } else {
           failed++;
+          console.log(`  - PDF 总结失败: ${pdfResult.reason}`);
         }
 
         const mdContent = await generateArticleSummaryMD(
@@ -250,7 +260,8 @@ async function processPdfSummary(
           candidate.title,
           pdfResult.md_path ? `PDF 原文路径: ${pdfResult.pdf_path}` : '',
           pdfResult.success,
-          pdfResult.reason
+          pdfResult.reason,
+          false
         );
         await saveArticleMD(null, candidate.title, mdContent);
       }
@@ -329,6 +340,7 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
   return {
     reportPath: getReportPath(),
     articlesDir: getArticlesDir(),
+    outputDir: getOutputDir(),
     articleCount: candidates.length,
     pdfSummarySuccess: pdfResult.success,
     pdfSummaryFailed: pdfResult.failed,

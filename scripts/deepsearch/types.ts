@@ -26,6 +26,7 @@ export interface DeepSearchConfig {
     max_retries: number;
   };
   output: {
+    base_dir: string;
     report_dir: string;
     articles_dir: string;
   };
@@ -90,6 +91,7 @@ export interface ArticleMDResult {
 export interface DeepSearchResult {
   reportPath: string;
   articlesDir: string;
+  outputDir: string;
   articleCount: number;
   pdfSummarySuccess: number;
   pdfSummaryFailed: number;
