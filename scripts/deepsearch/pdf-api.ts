@@ -25,7 +25,7 @@ export async function callPdfApi(
       requestBody.id = articleId;
     }
 
-    const response = await fetch(`${apiUrl}/summary`, {
+    const response = await fetch(`${apiUrl}/process`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -50,12 +50,11 @@ export async function callPdfApi(
       return {
         success: true,
         md_path: data.md_path,
-        pdf_path: data.pdf_path,
       };
     } else {
       return {
         success: false,
-        reason: data.error || 'Unknown error',
+        reason: data.reason || 'Unknown error',
       };
     }
   } catch (error) {
