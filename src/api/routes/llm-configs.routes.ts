@@ -298,7 +298,7 @@ router.put('/llm-configs/:id', requireAuth, requireAdmin, async (req: AuthReques
           return res.status(400).json({ error: '有任务类型的配置不能设置为默认配置。只有通用配置（task_type 为空）才能设置为默认。' });
         }
       }
-      updateData.taskType = taskType || undefined;
+      updateData.taskType = taskType;
     }
 
     if (enabled !== undefined) {
