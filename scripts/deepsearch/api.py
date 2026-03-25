@@ -57,23 +57,67 @@ async def run_deepsearch_task(
     tasks[task_id]["progress"] = {"step": "initializing", "current": 0, "total": 100}
 
     try:
-        from deepsearch import runDeepSearch
+        import subprocess
+        import tempfile
+        import shutil
+        import json
 
         if input_type == "file":
             from md_parser import readInputFile
             input_md = readInputFile(input_md)
 
         tasks[task_id]["progress"] = {"step": "searching", "current": 10, "total": 100}
-        
-        result = await runDeepSearch({
+
+        deepsearch_dir = Path(__file__).parent
+        output_base = output_dir or str(deepsearch_dir / "output")
+        task_output_dir = Path(output_base) / task_id
+
+        input_data = {
             "inputMd": input_md,
             "rounds": rounds,
             "scoreThreshold": score_threshold,
             "semanticLimit": semantic_limit,
             "maxFinalArticles": max_final_articles,
-            "outputDir": output_dir,
+            "outputDir": str(task_output_dir),
             "configPath": config_path,
-        })
+        }
+
+        input_file = f"/tmp/deepsearch_input_{task_id}.json"
+        with open(input_file, "w", encoding="utf-8") as f:
+            json.dump(input_data, f, ensure_ascii=False)
+
+        result_file = f"/tmp/deepsearch_result_{task_id}.json"
+        env = os.environ.copy()
+        env["DATABASE_PATH"] = os.environ.get("DATABASE_PATH", "/opt/lis-rss-daily/data/rss-tracker.db")
+
+        proc = await asyncio.create_subprocess_exec(
+            "npx", "tsx", str(deepsearch_dir / "cli.ts"),
+            "--json", input_file,
+            "--output", result_file,
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        stdout, stderr = await proc.communicate()
+
+        if proc.returncode != 0:
+            error_msg = stderr.decode() if stderr else "Unknown error"
+            raise Exception(f"DeepSearch CLI failed: {error_msg}")
+
+        if os.path.exists(result_file):
+            with open(result_file, "r", encoding="utf-8") as f:
+                result = json.load(f)
+        else:
+            result = {
+                "reportPath": str(task_output_dir / "report.md"),
+                "articlesDir": str(task_output_dir / "articles"),
+                "outputDir": str(task_output_dir),
+                "articleCount": 0,
+                "pdfSummarySuccess": 0,
+                "pdfSummaryFailed": 0,
+                "pdfSummarySkipped": 0,
+            }
 
         tasks[task_id]["progress"] = {"step": "completed", "current": 100, "total": 100}
         tasks[task_id]["status"] = "completed"
