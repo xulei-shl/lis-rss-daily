@@ -472,6 +472,8 @@ CREATE TABLE IF NOT EXISTS deepsearch_tasks (
   pdf_summary_success INTEGER DEFAULT 0,
   pdf_summary_failed INTEGER DEFAULT 0,
   pdf_summary_skipped INTEGER DEFAULT 0,
+  search_stats_json TEXT,
+  execution_logs_json TEXT,
   error_message TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,

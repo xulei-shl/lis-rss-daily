@@ -321,6 +321,8 @@ export interface DeepSearchTasksTable {
   pdf_summary_success: number;
   pdf_summary_failed: number;
   pdf_summary_skipped: number;
+  search_stats_json: string | null;
+  execution_logs_json: string | null;
   error_message: string | null;
   created_at: Generated<string>;
   updated_at: string;

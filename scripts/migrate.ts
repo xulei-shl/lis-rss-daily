@@ -603,6 +603,7 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
           console.log('      → Added journal_all column to telegram_chats table');
         } else {
           console.log('      → Skipped (journal_all column already exists)');
+        }
         continue;
       }
 
@@ -617,7 +618,56 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
         } else {
           console.log('      → Skipped (insights column already exists)');
         }
+        continue;
+      }
+
+      // ============================================================
+      // 028: 添加 deepsearch_tasks 表
+      // ============================================================
+      if (file === '028_add_deepsearch_tasks.sql') {
+        const hasDeepSearchTasks = hasTable(db, 'deepsearch_tasks');
+        if (!hasDeepSearchTasks) {
+          const migrationSql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(migrationSql);
+          console.log('      → Created deepsearch_tasks table');
+        } else {
+          console.log('      → Skipped (deepsearch_tasks table already exists)');
         }
+        continue;
+      }
+
+      // ============================================================
+      // 029: deepsearch_tasks 增加运行态持久化字段
+      // ============================================================
+      if (file === '029_add_deepsearch_task_persisted_runtime.sql') {
+        if (!hasTable(db, 'deepsearch_tasks')) {
+          const bootstrapPath = path.join(sqlDir, '028_add_deepsearch_tasks.sql');
+          if (fs.existsSync(bootstrapPath)) {
+            const bootstrapSql = fs.readFileSync(bootstrapPath, 'utf-8');
+            db.exec(bootstrapSql);
+            console.log('      → deepsearch_tasks table missing, created from 028');
+          } else {
+            throw new Error('deepsearch_tasks table missing and 028_add_deepsearch_tasks.sql not found');
+          }
+        }
+
+        const hasSearchStatsJson = hasColumn(db, 'deepsearch_tasks', 'search_stats_json');
+        const hasExecutionLogsJson = hasColumn(db, 'deepsearch_tasks', 'execution_logs_json');
+
+        if (!hasSearchStatsJson) {
+          db.exec('ALTER TABLE deepsearch_tasks ADD COLUMN search_stats_json TEXT;');
+          console.log('      → Added search_stats_json column to deepsearch_tasks');
+        } else {
+          console.log('      → search_stats_json column already exists');
+        }
+
+        if (!hasExecutionLogsJson) {
+          db.exec('ALTER TABLE deepsearch_tasks ADD COLUMN execution_logs_json TEXT;');
+          console.log('      → Added execution_logs_json column to deepsearch_tasks');
+        } else {
+          console.log('      → execution_logs_json column already exists');
+        }
+
         continue;
       }
 

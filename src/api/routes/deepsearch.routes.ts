@@ -50,6 +50,30 @@ interface DeepSearchTaskResponse {
   completedAt: string | null;
 }
 
+function parseJsonObject<T>(value: string | null): T | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (parsed && typeof parsed === 'object') {
+      return parsed as T;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function parseStringArray(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item) => typeof item === 'string');
+  } catch {
+    return [];
+  }
+}
+
 function toNumber(value: unknown, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -227,6 +251,8 @@ router.post('/tasks', requireAuth, async (req: AuthRequest, res) => {
       maxFinalArticles: maxFinalArticlesNum,
       onCompleted: async (result: DeepSearchRuntimeResult) => {
         const finishTime = new Date().toISOString();
+        const runtime = getRuntimeTask(internalTaskId);
+        const persistedLogs = runtime && runtime.logs.length > 0 ? JSON.stringify(runtime.logs) : null;
         await db
           .updateTable('deepsearch_tasks')
           .set({
@@ -237,6 +263,8 @@ router.post('/tasks', requireAuth, async (req: AuthRequest, res) => {
             pdf_summary_success: result.pdfSummarySuccess,
             pdf_summary_failed: result.pdfSummaryFailed,
             pdf_summary_skipped: result.pdfSummarySkipped,
+            search_stats_json: JSON.stringify(result.searchStats),
+            execution_logs_json: persistedLogs,
             error_message: null,
             completed_at: finishTime,
             updated_at: finishTime,
@@ -247,10 +275,13 @@ router.post('/tasks', requireAuth, async (req: AuthRequest, res) => {
       },
       onFailed: async (errorMessage: string) => {
         const failTime = new Date().toISOString();
+        const runtime = getRuntimeTask(internalTaskId);
+        const persistedLogs = runtime && runtime.logs.length > 0 ? JSON.stringify(runtime.logs) : null;
         await db
           .updateTable('deepsearch_tasks')
           .set({
             status: 'failed',
+            execution_logs_json: persistedLogs,
             error_message: errorMessage,
             completed_at: null,
             updated_at: failTime,
@@ -304,9 +335,12 @@ router.get('/tasks/:id', requireAuth, async (req: AuthRequest, res) => {
     let responsePdfSummarySuccess = task.pdf_summary_success;
     let responsePdfSummaryFailed = task.pdf_summary_failed;
     let responsePdfSummarySkipped = task.pdf_summary_skipped;
-    let responseSearchStats: DeepSearchStatsResponse | null = null;
+    let responseSearchStats: DeepSearchStatsResponse | null = parseJsonObject<DeepSearchStatsResponse>(task.search_stats_json);
     let responseOutputDir: string | null = responseReportPath ? path.dirname(responseReportPath) : null;
-    let responseLogs = buildFallbackLogs(task);
+    let responseLogs = parseStringArray(task.execution_logs_json);
+    if (responseLogs.length === 0) {
+      responseLogs = buildFallbackLogs(task);
+    }
 
     let progress = getDefaultProgress(responseStatus);
 
