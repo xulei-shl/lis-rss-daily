@@ -2,6 +2,7 @@ import fs from 'fs';
 import type { ParsedSeedLine, SeedArticle } from './types.js';
 import { getArticleById } from './database.js';
 
+const SEED_LINE_AT_ID_REGEX = /^-\s+(.+)\s*@\s*(\d+)\s*$/;
 const SEED_LINE_REGEX = /^-\s+(.+?)\s*[：:]\s*(\d+)\s*$/;
 const SEED_LINE_NO_ID_REGEX = /^-\s+(.+)$/;
 
@@ -15,10 +16,18 @@ export function parseSeedFile(content: string): ParsedSeedLine[] {
       continue;
     }
 
-    const withIdMatch = trimmedLine.match(SEED_LINE_REGEX);
-    if (withIdMatch) {
-      const title = withIdMatch[1].trim();
-      const articleId = parseInt(withIdMatch[2], 10);
+    const withAtIdMatch = trimmedLine.match(SEED_LINE_AT_ID_REGEX);
+    if (withAtIdMatch) {
+      const title = withAtIdMatch[1].trim();
+      const articleId = parseInt(withAtIdMatch[2], 10);
+      results.push({ articleId, title });
+      continue;
+    }
+
+    const withColonIdMatch = trimmedLine.match(SEED_LINE_REGEX);
+    if (withColonIdMatch) {
+      const title = withColonIdMatch[1].trim();
+      const articleId = parseInt(withColonIdMatch[2], 10);
       results.push({ articleId, title });
       continue;
     }
