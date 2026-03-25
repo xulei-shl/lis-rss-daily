@@ -113,8 +113,8 @@
   </div>
 
   <!-- Task Detail Modal -->
-  <div class="modal" id="taskDetailModal">
-    <div class="modal-content">
+  <div class="modal-overlay" id="taskDetailModal">
+    <div class="modal">
       <div class="modal-header">
         <h3>任务详情</h3>
         <button class="modal-close" onclick="closeTaskDetail()">&times;</button>
@@ -205,7 +205,20 @@
       
       try {
         const response = await fetch('/api/deepsearch/tasks');
-        if (!response.ok) throw new Error('Failed to load tasks');
+        
+        if (response.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          document.getElementById('emptyTasks').innerHTML = '<div class="empty-state-title">暂无任务</div><div class="empty-state-desc">创建第一个深度检索任务吧</div>';
+          document.getElementById('emptyTasks').style.display = 'block';
+          document.getElementById('taskTable').style.display = 'none';
+          document.getElementById('loadingTasks').style.display = 'none';
+          return;
+        }
         
         const data = await response.json();
         tasks = data.tasks || [];
@@ -213,8 +226,9 @@
         renderTasks();
       } catch (error) {
         console.error('Error loading tasks:', error);
-        document.getElementById('emptyTasks').innerHTML = '<div class="empty-state-title">加载失败</div><div class="empty-state-desc">请刷新页面重试</div>';
+        document.getElementById('emptyTasks').innerHTML = '<div class="empty-state-title">暂无任务</div><div class="empty-state-desc">创建第一个深度检索任务吧</div>';
         document.getElementById('emptyTasks').style.display = 'block';
+        document.getElementById('taskTable').style.display = 'none';
       } finally {
         document.getElementById('loadingTasks').style.display = 'none';
       }
@@ -363,7 +377,7 @@
           </div>
         \`;
         
-        document.getElementById('taskDetailModal').style.display = 'block';
+        document.getElementById('taskDetailModal').classList.add('active');
       } catch (error) {
         console.error('Error loading task detail:', error);
         alert('加载失败');
@@ -372,53 +386,7 @@
 
     // Close task detail
     function closeTaskDetail() {
-      document.getElementById('taskDetailModal').style.display = 'none';
-    }
-
-    // Download task
-    async function downloadTask(taskId) {
-      try {
-        const response = await fetch(\`/api/deepsearch/tasks/\${taskId}/download\`);
-        if (!response.ok) throw new Error('Download failed');
-        
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = \`deepsearch_\${taskId}.zip\`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      } catch (error) {
-        console.error('Download error:', error);
-        alert('下载失败');
-      }
-    }
-
-    // Delete task
-    async function deleteTask(taskId) {
-      if (!confirm('确定要删除这个任务吗？')) return;
-      
-      try {
-        const response = await fetch(\`/api/deepsearch/tasks/\${taskId}\`, {
-          method: 'DELETE'
-        });
-        
-        if (!response.ok) throw new Error('Delete failed');
-        
-        loadTasks();
-      } catch (error) {
-        console.error('Delete error:', error);
-        alert('删除失败');
-      }
-    }
-
-    // Escape HTML
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
+      document.getElementById('taskDetailModal').classList.remove('active');
     }
 
     // Close modal on outside click

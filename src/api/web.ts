@@ -51,8 +51,10 @@ export function createApp(): express.Express {
     next();
   });
 
-  // Static files (CSS, JS, images, etc.)
+  // Static files (CSS, JS, images from src/public)
   app.use(express.static(path.join(__dirname, '../public')));
+  // Static files (templates, etc. from root public)
+  app.use('/templates', express.static(path.join(__dirname, '../../public/templates')));
 
   // API routes
   app.use('/api', apiRoutes);

@@ -122,7 +122,7 @@ router.post('/tasks', requireAuth, async (req: AuthRequest, res) => {
     const taskId = insertResult?.insertId;
 
     res.json({
-      id: taskId,
+      id: Number(taskId),
       taskName: task_name,
       status: 'running',
       externalTaskId: apiResult.task_id,
