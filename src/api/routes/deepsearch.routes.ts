@@ -1,11 +1,17 @@
 import express from 'express';
+import fs from 'fs/promises';
+import path from 'path';
+import { randomUUID } from 'crypto';
 import { sql } from 'kysely';
 import type { AuthRequest } from '../../middleware/auth.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { getDb, type DeepSearchTasksSelection } from '../../db.js';
-import { config } from '../../config.js';
+import { startDeepSearchTask, getRuntimeTask, type DeepSearchRuntimeResult } from '../deepsearch.executor.js';
+import { createZipBuffer } from '../../utils/simple-zip.js';
 
 const router = express.Router();
+
+type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 interface DeepSearchTaskResponse {
   id: number;
@@ -33,6 +39,41 @@ interface DeepSearchTaskResponse {
   completedAt: string | null;
 }
 
+function toNumber(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getDefaultProgress(status: string): { step: string; current: number; total: number } | null {
+  if (status === 'pending') return { step: 'pending', current: 0, total: 100 };
+  if (status === 'running') return { step: 'searching', current: 10, total: 100 };
+  if (status === 'completed') return { step: 'completed', current: 100, total: 100 };
+  if (status === 'failed') return { step: 'failed', current: 100, total: 100 };
+  return null;
+}
+
+function sanitizeDownloadName(taskName: string): string {
+  return taskName.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+async function collectFilesRecursively(rootDir: string, currentDir = rootDir): Promise<string[]> {
+  const result: string[] = [];
+  const entries = await fs.readdir(currentDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(currentDir, entry.name);
+    if (entry.isDirectory()) {
+      result.push(...await collectFilesRecursively(rootDir, fullPath));
+      continue;
+    }
+    if (entry.isFile()) {
+      result.push(fullPath);
+    }
+  }
+
+  return result;
+}
+
 router.get('/tasks', requireAuth, async (req: AuthRequest, res) => {
   try {
     const db = getDb();
@@ -52,7 +93,7 @@ router.get('/tasks', requireAuth, async (req: AuthRequest, res) => {
     }
 
     if (status && ['pending', 'running', 'completed', 'failed'].includes(status)) {
-      query = query.where('status', '=', status as 'pending' | 'running' | 'completed' | 'failed');
+      query = query.where('status', '=', status as TaskStatus);
     }
 
     if (createdFrom && /^\d{4}-\d{2}-\d{2}$/.test(createdFrom)) {
@@ -92,45 +133,27 @@ router.post('/tasks', requireAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'task_name and input_md are required' });
     }
 
+    const roundsNum = toNumber(rounds, 1);
+    const semanticLimitNum = toNumber(semantic_limit, 5);
+    const scoreThresholdNum = toNumber(score_threshold, 0.65);
+    const maxFinalArticlesNum = toNumber(max_final_articles, 10);
+
     const db = getDb();
     const userId = req.userId!;
-
-    const result = await fetch(`${config.deepSearchApiUrl}/process`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        input_md,
-        input_type: 'content',
-        rounds: rounds || 1,
-        score_threshold: score_threshold || 0.65,
-        semantic_limit: semantic_limit || 5,
-        max_final_articles: max_final_articles || 10,
-      }),
-    });
-
-    if (!result.ok) {
-      const errorText = await result.text();
-      throw new Error(`DeepSearch API error: ${errorText}`);
-    }
-
-    const apiResult = await result.json() as {
-      task_id: string;
-      status: string;
-      progress: { step: string; current: number; total: number };
-    };
-
+    const internalTaskId = randomUUID();
     const now = new Date().toISOString();
+
     const insertResult = await db
       .insertInto('deepsearch_tasks')
       .values({
         user_id: userId,
         task_name,
         input_md,
-        rounds: rounds || 1,
-        semantic_limit: semantic_limit || 5,
-        score_threshold: score_threshold || 0.65,
-        max_final_articles: max_final_articles || 10,
-        external_task_id: apiResult.task_id,
+        rounds: roundsNum,
+        semantic_limit: semanticLimitNum,
+        score_threshold: scoreThresholdNum,
+        max_final_articles: maxFinalArticlesNum,
+        external_task_id: internalTaskId,
         status: 'running',
         article_count: 0,
         pdf_summary_success: 0,
@@ -147,7 +170,7 @@ router.post('/tasks', requireAuth, async (req: AuthRequest, res) => {
         .selectFrom('deepsearch_tasks')
         .select(['id'])
         .where('user_id', '=', userId)
-        .where('external_task_id', '=', apiResult.task_id)
+        .where('external_task_id', '=', internalTaskId)
         .orderBy('id', 'desc')
         .executeTakeFirst();
       taskId = insertedTask?.id || null;
@@ -156,12 +179,55 @@ router.post('/tasks', requireAuth, async (req: AuthRequest, res) => {
       throw new Error('Failed to resolve inserted task ID');
     }
 
+    startDeepSearchTask({
+      taskId: internalTaskId,
+      inputMd: String(input_md),
+      rounds: roundsNum,
+      scoreThreshold: scoreThresholdNum,
+      semanticLimit: semanticLimitNum,
+      maxFinalArticles: maxFinalArticlesNum,
+      onCompleted: async (result: DeepSearchRuntimeResult) => {
+        const finishTime = new Date().toISOString();
+        await db
+          .updateTable('deepsearch_tasks')
+          .set({
+            status: 'completed',
+            result_report_path: result.reportPath,
+            result_articles_dir: result.articlesDir,
+            article_count: result.articleCount,
+            pdf_summary_success: result.pdfSummarySuccess,
+            pdf_summary_failed: result.pdfSummaryFailed,
+            pdf_summary_skipped: result.pdfSummarySkipped,
+            error_message: null,
+            completed_at: finishTime,
+            updated_at: finishTime,
+          })
+          .where('id', '=', taskId!)
+          .where('user_id', '=', userId)
+          .execute();
+      },
+      onFailed: async (errorMessage: string) => {
+        const failTime = new Date().toISOString();
+        await db
+          .updateTable('deepsearch_tasks')
+          .set({
+            status: 'failed',
+            error_message: errorMessage,
+            completed_at: null,
+            updated_at: failTime,
+          })
+          .where('id', '=', taskId!)
+          .where('user_id', '=', userId)
+          .execute();
+      },
+    });
+
     res.json({
       id: taskId,
       taskName: task_name,
       status: 'running',
-      externalTaskId: apiResult.task_id,
-      createdAt: new Date().toISOString(),
+      externalTaskId: internalTaskId,
+      createdAt: now,
     });
   } catch (error) {
     console.error('Failed to create deepsearch task:', error);
@@ -187,16 +253,8 @@ router.get('/tasks/:id', requireAuth, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    let progress: { step: string; current: number; total: number } | null = null;
-    let result: {
-      reportPath: string | null;
-      articlesDir: string | null;
-      outputDir: string | null;
-      articleCount: number;
-      pdfSummarySuccess: number;
-      pdfSummaryFailed: number;
-      pdfSummarySkipped: number;
-    } | null = null;
+    const runtime = task.external_task_id ? getRuntimeTask(task.external_task_id) : null;
+
     let responseStatus = task.status;
     let responseErrorMessage = task.error_message;
     let responseCompletedAt = task.completed_at;
@@ -207,87 +265,33 @@ router.get('/tasks/:id', requireAuth, async (req: AuthRequest, res) => {
     let responsePdfSummarySuccess = task.pdf_summary_success;
     let responsePdfSummaryFailed = task.pdf_summary_failed;
     let responsePdfSummarySkipped = task.pdf_summary_skipped;
-    let responseOutputDir: string | null = null;
+    let responseOutputDir: string | null = responseReportPath ? path.dirname(responseReportPath) : null;
 
-    if (task.external_task_id && task.status !== 'pending') {
-      try {
-        const statusRes = await fetch(`${config.deepSearchApiUrl}/task/${task.external_task_id}`);
-        if (statusRes.ok) {
-          const apiStatus = await statusRes.json() as {
-            status: 'pending' | 'running' | 'completed' | 'failed';
-            progress: { step: string; current: number; total: number };
-            result?: {
-              reportPath: string;
-              articlesDir: string;
-              outputDir: string;
-              articleCount: number;
-              pdfSummarySuccess: number;
-              pdfSummaryFailed: number;
-              pdfSummarySkipped: number;
-            };
-            error?: string;
-          };
+    let progress = getDefaultProgress(responseStatus);
 
-          progress = apiStatus.progress || null;
-          responseStatus = apiStatus.status || task.status;
-          if (typeof apiStatus.error === 'string') {
-            responseErrorMessage = apiStatus.error;
-          } else if (apiStatus.status === 'completed') {
-            responseErrorMessage = null;
-          }
-          if (apiStatus.status === 'completed' && !task.completed_at) {
-            responseCompletedAt = new Date().toISOString();
-          }
+    if (runtime) {
+      responseStatus = runtime.status;
+      responseErrorMessage = runtime.error ?? responseErrorMessage;
+      responseUpdatedAt = runtime.updatedAt;
+      progress = runtime.progress;
 
-          if (apiStatus.result) {
-            responseReportPath = apiStatus.result.reportPath || null;
-            responseArticlesDir = apiStatus.result.articlesDir || null;
-            responseOutputDir = apiStatus.result.outputDir || null;
-            responseArticleCount = apiStatus.result.articleCount || 0;
-            responsePdfSummarySuccess = apiStatus.result.pdfSummarySuccess || 0;
-            responsePdfSummaryFailed = apiStatus.result.pdfSummaryFailed || 0;
-            responsePdfSummarySkipped = apiStatus.result.pdfSummarySkipped || 0;
-          }
+      if (runtime.status === 'completed' && !responseCompletedAt) {
+        responseCompletedAt = runtime.updatedAt;
+      }
 
-          const now = new Date().toISOString();
-          const shouldUpdate =
-            responseStatus !== task.status ||
-            responseErrorMessage !== task.error_message ||
-            responseCompletedAt !== task.completed_at ||
-            responseReportPath !== task.result_report_path ||
-            responseArticlesDir !== task.result_articles_dir ||
-            responseArticleCount !== task.article_count ||
-            responsePdfSummarySuccess !== task.pdf_summary_success ||
-            responsePdfSummaryFailed !== task.pdf_summary_failed ||
-            responsePdfSummarySkipped !== task.pdf_summary_skipped;
-
-          if (shouldUpdate) {
-            await db
-              .updateTable('deepsearch_tasks')
-              .set({
-                status: responseStatus as 'pending' | 'running' | 'completed' | 'failed',
-                result_report_path: responseReportPath,
-                result_articles_dir: responseArticlesDir,
-                article_count: responseArticleCount,
-                pdf_summary_success: responsePdfSummarySuccess,
-                pdf_summary_failed: responsePdfSummaryFailed,
-                pdf_summary_skipped: responsePdfSummarySkipped,
-                error_message: responseErrorMessage,
-                completed_at: responseCompletedAt,
-                updated_at: now,
-              })
-              .where('id', '=', taskId)
-              .execute();
-            responseUpdatedAt = now;
-          }
-        }
-      } catch (apiError) {
-        console.error('Failed to fetch task status from DeepSearch API:', apiError);
+      if (runtime.result) {
+        responseReportPath = runtime.result.reportPath;
+        responseArticlesDir = runtime.result.articlesDir;
+        responseOutputDir = runtime.result.outputDir;
+        responseArticleCount = runtime.result.articleCount;
+        responsePdfSummarySuccess = runtime.result.pdfSummarySuccess;
+        responsePdfSummaryFailed = runtime.result.pdfSummaryFailed;
+        responsePdfSummarySkipped = runtime.result.pdfSummarySkipped;
       }
     }
 
-    if (responseReportPath || responseArticlesDir || responseArticleCount > 0) {
-      result = {
+    const result = (responseReportPath || responseArticlesDir || responseArticleCount > 0)
+      ? {
         reportPath: responseReportPath,
         articlesDir: responseArticlesDir,
         outputDir: responseOutputDir,
@@ -295,8 +299,8 @@ router.get('/tasks/:id', requireAuth, async (req: AuthRequest, res) => {
         pdfSummarySuccess: responsePdfSummarySuccess,
         pdfSummaryFailed: responsePdfSummaryFailed,
         pdfSummarySkipped: responsePdfSummarySkipped,
-      };
-    }
+      }
+      : null;
 
     const response: DeepSearchTaskResponse = {
       id: task.id,
@@ -332,55 +336,33 @@ router.get('/tasks/:id/download', requireAuth, async (req: AuthRequest, res) => 
 
     const task = await db
       .selectFrom('deepsearch_tasks')
-      .select(['id', 'task_name', 'external_task_id', 'status'])
+      .select(['id', 'task_name', 'external_task_id', 'status', 'result_report_path', 'result_articles_dir'])
       .where('id', '=', taskId)
       .where('user_id', '=', userId)
-      .executeTakeFirst() as { id: number; task_name: string; external_task_id: string | null; status: string } | undefined;
+      .executeTakeFirst() as {
+        id: number;
+        task_name: string;
+        external_task_id: string | null;
+        status: string;
+        result_report_path: string | null;
+        result_articles_dir: string | null;
+      } | undefined;
 
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    if (!task.external_task_id) {
-      return res.status(400).json({ error: 'No external task ID' });
-    }
-
     let taskStatus = task.status;
-    if (taskStatus !== 'completed') {
-      const statusResponse = await fetch(`${config.deepSearchApiUrl}/task/${task.external_task_id}`);
-      if (statusResponse.ok) {
-        const statusData = await statusResponse.json() as {
-          status: 'pending' | 'running' | 'completed' | 'failed';
-          result?: {
-            reportPath: string;
-            articlesDir: string;
-            articleCount: number;
-            pdfSummarySuccess: number;
-            pdfSummaryFailed: number;
-            pdfSummarySkipped: number;
-          };
-          error?: string;
-        };
+    let reportPath = task.result_report_path;
+    let articlesDir = task.result_articles_dir;
 
-        taskStatus = statusData.status;
-        if (taskStatus === 'completed' || taskStatus === 'failed') {
-          const now = new Date().toISOString();
-          await db
-            .updateTable('deepsearch_tasks')
-            .set({
-              status: taskStatus as 'pending' | 'running' | 'completed' | 'failed',
-              result_report_path: statusData.result?.reportPath || null,
-              result_articles_dir: statusData.result?.articlesDir || null,
-              article_count: statusData.result?.articleCount || 0,
-              pdf_summary_success: statusData.result?.pdfSummarySuccess || 0,
-              pdf_summary_failed: statusData.result?.pdfSummaryFailed || 0,
-              pdf_summary_skipped: statusData.result?.pdfSummarySkipped || 0,
-              error_message: statusData.error || null,
-              completed_at: taskStatus === 'completed' ? now : null,
-              updated_at: now,
-            })
-            .where('id', '=', taskId)
-            .execute();
+    if (task.external_task_id) {
+      const runtime = getRuntimeTask(task.external_task_id);
+      if (runtime) {
+        taskStatus = runtime.status;
+        if (runtime.result) {
+          reportPath = reportPath || runtime.result.reportPath;
+          articlesDir = articlesDir || runtime.result.articlesDir;
         }
       }
     }
@@ -389,19 +371,49 @@ router.get('/tasks/:id/download', requireAuth, async (req: AuthRequest, res) => 
       return res.status(400).json({ error: 'Task not completed' });
     }
 
-    const apiResponse = await fetch(`${config.deepSearchApiUrl}/task/${task.external_task_id}/download`);
+    const zipEntries: Array<{ name: string; data: Buffer; mtime?: Date }> = [];
 
-    if (!apiResponse.ok) {
-      const errorText = await apiResponse.text();
-      throw new Error(`DeepSearch API download error: ${errorText}`);
+    if (reportPath) {
+      try {
+        const reportData = await fs.readFile(reportPath);
+        const reportStat = await fs.stat(reportPath);
+        zipEntries.push({
+          name: path.basename(reportPath),
+          data: reportData,
+          mtime: reportStat.mtime,
+        });
+      } catch {
+        // 报告文件缺失时继续尝试打包 articles
+      }
     }
 
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="deepsearch-${task.task_name.replace(/[^a-zA-Z0-9]/g, '_')}.zip"`);
+    if (articlesDir) {
+      try {
+        const files = await collectFilesRecursively(articlesDir);
+        for (const filePath of files) {
+          const relative = path.relative(articlesDir, filePath).replace(/\\/g, '/');
+          const data = await fs.readFile(filePath);
+          const stat = await fs.stat(filePath);
+          zipEntries.push({
+            name: `articles/${relative}`,
+            data,
+            mtime: stat.mtime,
+          });
+        }
+      } catch {
+        // 文章目录缺失时由下方统一兜底
+      }
+    }
 
-    const arrayBuffer = await apiResponse.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    res.send(buffer);
+    if (zipEntries.length === 0) {
+      return res.status(500).json({ error: 'Result files not found' });
+    }
+
+    const zipBuffer = createZipBuffer(zipEntries);
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="deepsearch-${sanitizeDownloadName(task.task_name)}.zip"`);
+    res.send(zipBuffer);
   } catch (error) {
     console.error('Failed to download deepsearch task:', error);
     res.status(500).json({ error: 'Failed to download task' });
