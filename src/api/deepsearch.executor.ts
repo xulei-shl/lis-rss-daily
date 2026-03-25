@@ -19,6 +19,7 @@ export interface DeepSearchRuntimeState {
   progress: { step: string; current: number; total: number } | null;
   result: DeepSearchRuntimeResult | null;
   error: string | null;
+  logs: string[];
   updatedAt: string;
 }
 
@@ -36,12 +37,31 @@ interface StartTaskOptions {
 
 const runtimeTasks = new Map<string, DeepSearchRuntimeState>();
 
+function formatLogTimestamp(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+  const second = String(date.getSeconds()).padStart(2, '0');
+  return `${year}/${month}/${day} ${hour}:${minute}:${second}`;
+}
+
+function appendRuntimeLog(taskId: string, message: string): void {
+  const current = runtimeTasks.get(taskId);
+  if (!current) return;
+  const line = `[${formatLogTimestamp()}] ${message}`;
+  const logs = [...current.logs, line].slice(-500);
+  setRuntimeState(taskId, { logs });
+}
+
 function setRuntimeState(taskId: string, patch: Partial<DeepSearchRuntimeState>): DeepSearchRuntimeState {
   const current = runtimeTasks.get(taskId) ?? {
     status: 'pending' as TaskStatus,
     progress: { step: 'pending', current: 0, total: 100 },
     result: null,
     error: null,
+    logs: [],
     updatedAt: new Date().toISOString(),
   };
   const next: DeepSearchRuntimeState = {
@@ -63,6 +83,7 @@ export function startDeepSearchTask(options: StartTaskOptions): void {
     progress: { step: 'pending', current: 0, total: 100 },
     result: null,
     error: null,
+    logs: [`[${formatLogTimestamp()}] 任务已创建`],
   });
 
   void (async () => {
@@ -71,6 +92,7 @@ export function startDeepSearchTask(options: StartTaskOptions): void {
         status: 'running',
         progress: { step: 'searching', current: 10, total: 100 },
       });
+      appendRuntimeLog(options.taskId, '任务开始执行');
 
       const outputDir = path.join(process.cwd(), 'output', 'deepsearch', options.taskId);
       await fs.mkdir(outputDir, { recursive: true });
@@ -83,6 +105,15 @@ export function startDeepSearchTask(options: StartTaskOptions): void {
         maxFinalArticles: options.maxFinalArticles,
         configPath: options.configPath,
         outputDir,
+        onProgress: (step, current, total) => {
+          setRuntimeState(options.taskId, {
+            status: 'running',
+            progress: { step, current, total },
+          });
+        },
+        onLog: (message) => {
+          appendRuntimeLog(options.taskId, message);
+        },
       };
 
       const result = await runDeepSearch(runOptions);
@@ -103,6 +134,7 @@ export function startDeepSearchTask(options: StartTaskOptions): void {
         result: runtimeResult,
         error: null,
       });
+      appendRuntimeLog(options.taskId, '任务执行完成');
 
       await options.onCompleted?.(runtimeResult);
     } catch (error) {
@@ -112,8 +144,8 @@ export function startDeepSearchTask(options: StartTaskOptions): void {
         progress: { step: 'failed', current: 100, total: 100 },
         error: message,
       });
+      appendRuntimeLog(options.taskId, `任务失败: ${message}`);
       await options.onFailed?.(message);
     }
   })();
 }
-

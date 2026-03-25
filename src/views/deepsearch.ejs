@@ -77,7 +77,7 @@
           </div>
 
           <div class="form-group">
-            <label for="inputMd">输入内容 <a class="link-text" href="/templates/deepsearch-input.md" target="_blank" rel="noopener">下载模板</a></label>
+            <label for="inputMd">输入内容 <a class="link-text" href="/templates/deepsearch-input.md" target="_blank" rel="noopener">参数说明</a></label>
             <textarea id="inputMd" name="input_md" rows="8" placeholder="每行一篇文献，格式：- 标题 或 - 标题：ID" required></textarea>
           </div>
 
@@ -124,6 +124,8 @@
     let detailRefreshTimer = null;
     let currentDetailTaskId = null;
     let searchDebounceTimer = null;
+    let detailLogScrollTop = 0;
+    let detailLogPinnedBottom = true;
 
     document.addEventListener('DOMContentLoaded', () => {
       bindEvents();
@@ -404,17 +406,14 @@
       const content = document.getElementById('taskDetailContent');
       const progress = task.progress || {};
       const result = task.result || {};
-      const logs = [];
-
-      logs.push('[' + formatDateTime(task.createdAt) + '] 任务已创建');
-      if (task.status === 'running' || task.status === 'pending') {
-        logs.push('[' + formatDateTime(new Date().toISOString()) + '] 当前步骤: ' + (progress.step || '执行中'));
-      }
-      if (task.status === 'completed') {
-        logs.push('[' + formatDateTime(task.completedAt) + '] 任务执行完成');
-      }
-      if (task.status === 'failed' && task.errorMessage) {
-        logs.push('[' + formatDateTime(new Date().toISOString()) + '] 任务失败: ' + task.errorMessage);
+      const logs = Array.isArray(task.logs) && task.logs.length > 0
+        ? task.logs
+        : buildFallbackLogs(task, progress);
+      const previousLogEl = document.getElementById('taskLogLines');
+      if (previousLogEl) {
+        detailLogScrollTop = previousLogEl.scrollTop;
+        const distanceToBottom = previousLogEl.scrollHeight - previousLogEl.scrollTop - previousLogEl.clientHeight;
+        detailLogPinnedBottom = distanceToBottom <= 24;
       }
 
       const progressText = task.status === 'completed'
@@ -424,20 +423,74 @@
       content.innerHTML = \`
         <div class="detail-grid">
           <div class="detail-row"><span>任务名称</span><strong>\${escapeHtml(task.taskName || '-')}</strong></div>
-          <div class="detail-row"><span>状态</span><strong>\${renderStatusBadge(task.status)}</strong></div>
-          <div class="detail-row"><span>进度</span><strong>\${escapeHtml(progress.step || '未知')} (\${progressText})</strong></div>
-          <div class="detail-row"><span>创建时间</span><strong>\${formatDateTime(task.createdAt)}</strong></div>
-          <div class="detail-row"><span>完成时间</span><strong>\${formatDateTime(task.completedAt)}</strong></div>
+          <div class="detail-row"><span>状态/进度</span><strong>\${renderStatusBadge(task.status)} / \${escapeHtml(progress.step || '未知')} (\${progressText})</strong></div>
+          <div class="detail-row"><span>创建时间/完成时间</span><strong>\${formatDateTime(task.createdAt)} / \${formatDateTime(task.completedAt)}</strong></div>
           <div class="detail-row"><span>文章数量</span><strong>\${Number(result.articleCount || 0)}</strong></div>
-          <div class="detail-row"><span>PDF 总结成功</span><strong>\${Number(result.pdfSummarySuccess || 0)}</strong></div>
-          <div class="detail-row"><span>PDF 总结失败</span><strong>\${Number(result.pdfSummaryFailed || 0)}</strong></div>
-          <div class="detail-row"><span>错误信息</span><strong>\${escapeHtml(task.errorMessage || '-')}</strong></div>
+          <div class="detail-row"><span>PDF 总结成功/失败</span><strong>\${Number(result.pdfSummarySuccess || 0)} / \${Number(result.pdfSummaryFailed || 0)}</strong></div>
         </div>
         <div class="log-block">
-          <h4>执行日志</h4>
-          <pre>\${escapeHtml(logs.join('\\n'))}</pre>
+          <h4>执行日志 <span class="log-count">共 \${logs.length} 条</span></h4>
+          <div class="log-lines" id="taskLogLines">\${renderLogsHtml(logs)}</div>
         </div>
       \`;
+
+      const currentLogEl = document.getElementById('taskLogLines');
+      if (currentLogEl) {
+        if (detailLogPinnedBottom) {
+          currentLogEl.scrollTop = currentLogEl.scrollHeight;
+        } else {
+          currentLogEl.scrollTop = detailLogScrollTop;
+        }
+        currentLogEl.addEventListener('scroll', () => {
+          detailLogScrollTop = currentLogEl.scrollTop;
+          const distanceToBottom = currentLogEl.scrollHeight - currentLogEl.scrollTop - currentLogEl.clientHeight;
+          detailLogPinnedBottom = distanceToBottom <= 24;
+        });
+      }
+    }
+
+    function renderLogsHtml(logs) {
+      if (!Array.isArray(logs) || logs.length === 0) {
+        return '<div class="log-line log-line-info">暂无日志</div>';
+      }
+
+      return logs.map((line) => {
+        const cls = getLogLineClass(line);
+        return '<div class="log-line ' + cls + '">' + escapeHtml(line) + '</div>';
+      }).join('');
+    }
+
+    function getLogLineClass(line) {
+      const text = String(line || '');
+      if (text.includes('失败') || text.includes('异常') || text.includes('Error')) {
+        return 'log-line-error';
+      }
+      if (text.includes('成功') || text.includes('完成')) {
+        return 'log-line-success';
+      }
+      if (text.includes('步骤') || text.includes('迭代') || text.includes('当前步骤')) {
+        return 'log-line-step';
+      }
+      return 'log-line-info';
+    }
+
+    function buildFallbackLogs(task, progress) {
+      const logs = [];
+      logs.push('[' + formatDateTime(task.createdAt) + '] 任务已创建');
+
+      if (task.status === 'running' || task.status === 'pending') {
+        logs.push('[' + formatDateTime(new Date().toISOString()) + '] 当前步骤: ' + (progress.step || '执行中'));
+      }
+
+      if (task.status === 'completed') {
+        logs.push('[' + formatDateTime(task.completedAt) + '] 任务执行完成');
+      }
+
+      if (task.status === 'failed' && task.errorMessage) {
+        logs.push('[' + formatDateTime(task.updatedAt || new Date().toISOString()) + '] 任务失败: ' + task.errorMessage);
+      }
+
+      return logs;
     }
 
     async function downloadTask(taskId) {

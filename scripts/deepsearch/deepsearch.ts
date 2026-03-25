@@ -1,5 +1,5 @@
 import { getConfig, loadConfig } from './config.js';
-import { getArticleById, getArticlesByIds } from './database.js';
+import { getArticleById } from './database.js';
 import { getUserLLMProvider, type LLMProvider, type ChatMessage } from './llm.js';
 import { semanticSearch, relatedSearch, filterByScore, mergeResults } from './search.js';
 import { callPdfApiWithRetry } from './pdf-api.js';
@@ -99,14 +99,19 @@ async function iterativeSearch(
   seedArticles: SeedArticle[],
   rounds: number,
   scoreThreshold: number,
-  semanticLimit: number
+  semanticLimit: number,
+  onLog?: (message: string) => void
 ): Promise<CandidateArticle[]> {
   const config = getConfig();
   const allCandidateIds = new Set<number>();
+  const log = (message: string): void => {
+    console.log(message);
+    onLog?.(message);
+  };
   
-  console.log(`[迭代 0/${rounds}] 种子文章直接检索...`);
+  log(`[迭代 0/${rounds}] 种子文章直接检索...`);
   const round0Results = await performSearchRound(seedArticles, semanticLimit, scoreThreshold, config);
-  console.log(`  - 第0轮检索到 ${round0Results.length} 篇文章`);
+  log(`  - 第0轮检索到 ${round0Results.length} 篇文章`);
   
   round0Results.forEach((c) => {
     if (c.articleId !== null) {
@@ -118,7 +123,7 @@ async function iterativeSearch(
   let currentRoundResults = round0Results;
 
   for (let round = 1; round <= rounds; round++) {
-    console.log(`[迭代 ${round}/${rounds}] 对第${round - 1}轮结果进行检索...`);
+    log(`[迭代 ${round}/${rounds}] 对第${round - 1}轮结果进行检索...`);
 
     try {
       const nextRoundCandidates: CandidateArticle[] = [];
@@ -148,7 +153,7 @@ async function iterativeSearch(
       const merged = mergeResults([], nextRoundCandidates);
       const filtered = filterByScore(merged, scoreThreshold);
       
-      console.log(`  - 第${round}轮检索到 ${filtered.length} 篇新文章`);
+      log(`  - 第${round}轮检索到 ${filtered.length} 篇新文章`);
 
       filtered.forEach((c) => {
         if (c.articleId !== null && !allCandidateIds.has(c.articleId)) {
@@ -160,11 +165,12 @@ async function iterativeSearch(
       currentRoundResults = filtered;
 
       if (currentRoundResults.length === 0) {
-        console.log(`  - 没有新的相关文章，停止迭代`);
+        log('  - 没有新的相关文章，停止迭代');
         break;
       }
     } catch (error) {
       console.error(`迭代 ${round} 失败:`, error);
+      onLog?.(`迭代 ${round} 失败: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -199,14 +205,19 @@ async function performSearchRound(
 }
 
 async function processPdfSummary(
-  candidates: CandidateArticle[]
+  candidates: CandidateArticle[],
+  onLog?: (message: string) => void
 ): Promise<{ success: number; failed: number; skipped: number }> {
   let success = 0;
   let failed = 0;
   let skipped = 0;
+  const log = (message: string): void => {
+    console.log(message);
+    onLog?.(message);
+  };
 
   for (const candidate of candidates) {
-    console.log(`[PDF 总结] ${candidate.title}...`);
+    log(`[PDF 总结] ${candidate.title}...`);
 
     try {
       let pdfResult = null;
@@ -217,7 +228,7 @@ async function processPdfSummary(
         let article = await getArticleById(candidate.articleId);
 
         if (article?.ai_summary) {
-          console.log(`  - 已有摘要，跳过 PDF 总结`);
+          log('  - 已有摘要，跳过 PDF 总结');
           skipped++;
           isSkipped = true;
           content = article.ai_summary || article.markdown_content || article.content || '';
@@ -225,12 +236,12 @@ async function processPdfSummary(
           pdfResult = await callPdfApiWithRetry(candidate.title, candidate.articleId);
           if (pdfResult.success) {
             success++;
-            console.log(`  - PDF 总结成功`);
+            log('  - PDF 总结成功');
             article = await getArticleById(candidate.articleId);
             content = article?.ai_summary || article?.markdown_content || article?.content || '';
           } else {
             failed++;
-            console.log(`  - PDF 总结失败: ${pdfResult.reason}`);
+            log(`  - PDF 总结失败: ${pdfResult.reason}`);
             content = article?.markdown_content || article?.content || '';
           }
         }
@@ -248,10 +259,10 @@ async function processPdfSummary(
         pdfResult = await callPdfApiWithRetry(candidate.title, null);
         if (pdfResult.success) {
           success++;
-          console.log(`  - PDF 总结成功`);
+          log('  - PDF 总结成功');
         } else {
           failed++;
-          console.log(`  - PDF 总结失败: ${pdfResult.reason}`);
+          log(`  - PDF 总结失败: ${pdfResult.reason}`);
         }
 
         const mdContent = await generateArticleSummaryMD(
@@ -267,6 +278,7 @@ async function processPdfSummary(
     } catch (error) {
       failed++;
       console.error(`  - PDF 总结异常:`, error);
+      onLog?.(`  - PDF 总结异常: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -281,9 +293,19 @@ export interface DeepSearchOptions {
   maxFinalArticles?: number;
   outputDir?: string;
   configPath?: string;
+  onProgress?: (step: string, current: number, total: number) => void;
+  onLog?: (message: string) => void;
 }
 
 export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSearchResult> {
+  const totalProgress = 100;
+  const emitProgress = (step: string, current: number): void => {
+    options.onProgress?.(step, current, totalProgress);
+  };
+  const emitLog = (message: string): void => {
+    options.onLog?.(message);
+  };
+
   if (options.configPath) {
     loadConfig(options.configPath);
   }
@@ -295,11 +317,16 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
   console.log('='.repeat(50));
   console.log('DeepSearch 开始执行');
   console.log('='.repeat(50));
+  emitLog('DeepSearch 开始执行');
+  emitProgress('searching', 5);
 
   await writeStepReport('步骤一：检索相关文章', '开始解析输入文件...');
+  emitLog('步骤一：开始解析输入文件');
+  emitProgress('searching', 10);
 
   const seedArticles = await parseSeedFileToArticles(options.inputMd);
   console.log(`解析到 ${seedArticles.length} 个种子文章`);
+  emitLog(`步骤一：解析到 ${seedArticles.length} 个种子文章`);
 
   const report = `解析到 ${seedArticles.length} 个种子文章:\n${seedArticles.map((a) => `- ${a.title}${a.articleId ? ` (ID: ${a.articleId})` : ''}`).join('\n')}`;
   await writeStepReport('步骤一：检索相关文章', report);
@@ -311,8 +338,11 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
 
   console.log(`\n开始迭代检索 (轮次: ${rounds}, 阈值: ${threshold}, 限制: ${limit})`);
   await writeStepReport('步骤一：检索相关文章', `迭代检索参数: 轮次=${rounds}, 阈值=${threshold}, 限制=${limit}`);
+  emitLog(`步骤一：开始迭代检索，轮次=${rounds}，阈值=${threshold}，限制=${limit}`);
+  emitProgress('searching', 20);
 
-  let candidates = await iterativeSearch(seedArticles, rounds, threshold, limit);
+  let candidates = await iterativeSearch(seedArticles, rounds, threshold, limit, emitLog);
+  emitProgress('searching', 60);
 
   if (maxFinal > 0) {
     candidates.sort((a, b) => b.score - a.score);
@@ -320,14 +350,19 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
   }
 
   console.log(`\n检索完成，找到 ${candidates.length} 篇候选文章`);
+  emitLog(`步骤一：检索完成，找到 ${candidates.length} 篇候选文章`);
   const candidateList = candidates.map((c) => `- ${c.title} (得分: ${c.score.toFixed(2)}, 来源: ${c.source})`).join('\n');
   await writeStepReport('步骤一：检索相关文章', `找到 ${candidates.length} 篇候选文章:\n${candidateList}`);
 
   await writeStepReport('步骤二：PDF 总结', `开始处理 ${candidates.length} 篇文章的 PDF 总结...`);
+  emitLog(`步骤二：开始处理 ${candidates.length} 篇文章的 PDF 总结`);
+  emitProgress('pdf_summary', 70);
 
-  const pdfResult = await processPdfSummary(candidates);
+  const pdfResult = await processPdfSummary(candidates, emitLog);
+  emitProgress('pdf_summary', 95);
 
   console.log(`\nPDF 总结完成: 成功 ${pdfResult.success}, 失败 ${pdfResult.failed}, 跳过 ${pdfResult.skipped}`);
+  emitLog(`步骤二：PDF 总结完成，成功 ${pdfResult.success}，失败 ${pdfResult.failed}，跳过 ${pdfResult.skipped}`);
   await writeStepReport(
     '步骤二：PDF 总结',
     `PDF 总结完成:\n- 成功: ${pdfResult.success}\n- 失败: ${pdfResult.failed}\n- 跳过: ${pdfResult.skipped}`
@@ -336,6 +371,8 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
   console.log('='.repeat(50));
   console.log('DeepSearch 执行完成');
   console.log('='.repeat(50));
+  emitLog('DeepSearch 执行完成');
+  emitProgress('completed', 100);
 
   return {
     reportPath: getReportPath(),

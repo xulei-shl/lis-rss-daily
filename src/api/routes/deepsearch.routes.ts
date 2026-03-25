@@ -34,6 +34,7 @@ interface DeepSearchTaskResponse {
     pdfSummarySkipped: number;
   } | null;
   errorMessage: string | null;
+  logs: string[];
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -54,6 +55,34 @@ function getDefaultProgress(status: string): { step: string; current: number; to
 
 function sanitizeDownloadName(taskName: string): string {
   return taskName.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function formatLogTimestampFromIso(value: string | null): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+  const second = String(date.getSeconds()).padStart(2, '0');
+  return `${year}/${month}/${day} ${hour}:${minute}:${second}`;
+}
+
+function buildFallbackLogs(task: DeepSearchTasksSelection): string[] {
+  const logs: string[] = [];
+  logs.push(`[${formatLogTimestampFromIso(task.created_at)}] 任务已创建`);
+
+  if (task.status === 'completed' && task.completed_at) {
+    logs.push(`[${formatLogTimestampFromIso(task.completed_at)}] 任务执行完成`);
+  }
+
+  if (task.status === 'failed' && task.error_message) {
+    logs.push(`[${formatLogTimestampFromIso(task.updated_at)}] 任务失败: ${task.error_message}`);
+  }
+
+  return logs;
 }
 
 async function collectFilesRecursively(rootDir: string, currentDir = rootDir): Promise<string[]> {
@@ -266,6 +295,7 @@ router.get('/tasks/:id', requireAuth, async (req: AuthRequest, res) => {
     let responsePdfSummaryFailed = task.pdf_summary_failed;
     let responsePdfSummarySkipped = task.pdf_summary_skipped;
     let responseOutputDir: string | null = responseReportPath ? path.dirname(responseReportPath) : null;
+    let responseLogs = buildFallbackLogs(task);
 
     let progress = getDefaultProgress(responseStatus);
 
@@ -274,6 +304,7 @@ router.get('/tasks/:id', requireAuth, async (req: AuthRequest, res) => {
       responseErrorMessage = runtime.error ?? responseErrorMessage;
       responseUpdatedAt = runtime.updatedAt;
       progress = runtime.progress;
+      responseLogs = runtime.logs.length > 0 ? runtime.logs : responseLogs;
 
       if (runtime.status === 'completed' && !responseCompletedAt) {
         responseCompletedAt = runtime.updatedAt;
@@ -315,6 +346,7 @@ router.get('/tasks/:id', requireAuth, async (req: AuthRequest, res) => {
       progress,
       result,
       errorMessage: responseErrorMessage,
+      logs: responseLogs,
       createdAt: task.created_at,
       updatedAt: responseUpdatedAt,
       completedAt: responseCompletedAt,
