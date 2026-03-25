@@ -93,6 +93,9 @@ export interface Config {
   keywordCrawlSchedule: string;
   keywordInterval: number;
   keywordIntervalRandom: number;
+
+  // DeepSearch
+  deepSearchApiUrl: string;
 }
 
 function getConfig(): Config {
@@ -193,6 +196,9 @@ function getConfig(): Config {
 
     // Search AI Summary
     searchAiSummaryGuestEnabled: process.env.SEARCH_AI_SUMMARY_GUEST_ENABLED === 'true',
+
+    // DeepSearch
+    deepSearchApiUrl: process.env.DEEPSEARCH_API_URL || 'http://localhost:8082',
   };
 }
 

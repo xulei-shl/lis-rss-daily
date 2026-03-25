@@ -3,7 +3,7 @@
 ## 1. 需求概述
 
 在主项目中新增「深度检索」页面，功能包括：
-- 任务创建：填写任务名、上传 MD 文件、设置参数（迭代轮次、相关文献数量）
+- 任务创建：填写任务名、上传 MD 文件、设置参数（迭代轮次、相关文献数量、最大保留文章数）
 - 任务管理：显示任务列表及状态（pending/running/completed/failed）
 - 结果下载：打包下载 API 生成的报告 MD 和日志 MD
 - MD 模板下载：提供输入文件模板
@@ -57,9 +57,10 @@ CREATE TABLE IF NOT EXISTS deepsearch_tasks (
     user_id INTEGER NOT NULL,                    -- 创建任务的用户
     task_name TEXT NOT NULL,                     -- 任务名称（用于显示和检索）
     input_md TEXT NOT NULL,                      -- 输入的 MD 内容
-    rounds INTEGER DEFAULT 1,                    -- 迭代轮次
+    rounds INTEGER DEFAULT 1,                     -- 迭代轮次 (0-3)
     semantic_limit INTEGER DEFAULT 5,             -- 相关文献数量
-    score_threshold REAL DEFAULT 0.65,           -- 相关性分数阈值
+    score_threshold REAL DEFAULT 0.65,            -- 相关性分数阈值
+    max_final_articles INTEGER DEFAULT 10,        -- 最大保留文章数 (5-50)
     external_task_id TEXT,                        -- DeepSearch API 返回的任务 ID
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed')),
     result_report_path TEXT,                     -- 报告文件路径（可选，存储相对于 output 目录）
@@ -87,9 +88,10 @@ CREATE INDEX IF NOT EXISTS idx_deepsearch_tasks_created_at ON deepsearch_tasks(c
 | user_id | 创建任务的用户（用于权限控制） |
 | task_name | 任务名称，支持显示和搜索 |
 | input_md | 用户上传的 MD 文件内容（存储原始内容） |
-| rounds | 迭代轮次，对应 API 的 rounds 参数 |
+| rounds | 迭代轮次 (0-3)，对应 API 的 rounds 参数 |
 | semantic_limit | 相关文献数量，对应 API 的 semantic_limit 参数 |
 | score_threshold | 相关性分数阈值，对应 API 的 score_threshold 参数 |
+| max_final_articles | 最大保留文章数 (5-50)，对应 API 的 max_final_articles 参数 |
 | external_task_id | DeepSearch API 返回的任务 ID，用于查询状态和下载 |
 | status | 任务状态：pending/running/completed/failed |
 | result_report_path | 报告文件路径（从 API result 获取） |
@@ -137,9 +139,12 @@ CREATE INDEX IF NOT EXISTS idx_deepsearch_tasks_created_at ON deepsearch_tasks(c
   "input_md": "- 题名：1234\n- 深度学习研究进展",
   "rounds": 1,
   "semantic_limit": 5,
-  "score_threshold": 0.65
+  "score_threshold": 0.65,
+  "max_final_articles": 10
 }
 ```
+
+> **注意**：内部调用 DeepSearch API 时，`input_type` 固定为 `"content"`
 
 **响应：**
 ```json
@@ -159,25 +164,32 @@ CREATE INDEX IF NOT EXISTS idx_deepsearch_tasks_created_at ON deepsearch_tasks(c
 ```json
 {
   "id": 1,
-  "task_name": "测试任务",
-  "input_md": "- 题名：1234\n- 深度学习研究进展",
+  "taskName": "测试任务",
+  "inputMd": "- 题名：1234\n- 深度学习研究进展",
   "rounds": 1,
-  "semantic_limit": 5,
+  "semanticLimit": 5,
+  "scoreThreshold": 0.65,
+  "maxFinalArticles": 10,
   "status": "running",
-  "external_task_id": "uuid-from-deepsearch-api",
+  "externalTaskId": "uuid-from-deepsearch-api",
   "progress": {
     "step": "searching",
     "current": 50,
     "total": 100
   },
   "result": {
-    "article_count": 10,
-    "pdf_summary_success": 8,
-    "pdf_summary_failed": 2
+    "reportPath": "/opt/lis-rss-daily/output/deepsearch/report_20260324.md",
+    "articlesDir": "/opt/lis-rss-daily/output/deepsearch/articles",
+    "outputDir": "/opt/lis-rss-daily/output/deepsearch",
+    "articleCount": 10,
+    "pdfSummarySuccess": 8,
+    "pdfSummaryFailed": 2,
+    "pdfSummarySkipped": 0
   },
-  "error_message": null,
-  "created_at": "2026-03-24T10:00:00Z",
-  "updated_at": "2026-03-24T10:05:00Z"
+  "errorMessage": null,
+  "createdAt": "2026-03-24T10:00:00Z",
+  "updatedAt": "2026-03-24T10:05:00Z",
+  "completedAt": null
 }
 ```
 
@@ -270,7 +282,7 @@ CREATE INDEX IF NOT EXISTS idx_deepsearch_tasks_created_at ON deepsearch_tasks(c
 │ │ │ 输入文件: [选择文件] [下载模板]     │ │ │
 │ │ │ (支持 .md 格式)                     │ │ │
 │ │ └─────────────────────────────────────┘ │ │
-│ │ 迭代轮次: [1▼] 相关文献数量: [5▼]      │ │
+│ │ 迭代轮次: [1▼] 相关文献数量: [5▼] 最大保留: [10▼] │ │
 │ │ [生成]                                  │ │
 │ └─────────────────────────────────────────┘ │
 │                                             │
@@ -306,8 +318,9 @@ formData.append('file', mdFile);
 formData.append('task_name', taskName);
 formData.append('rounds', rounds);
 formData.append('semantic_limit', semanticLimit);
+formData.append('max_final_articles', maxFinalArticles);
 
-// 或直接传递 MD 内容
+// 或直接传递 MD 内容（推荐）
 const response = await fetch('/api/deepsearch/tasks', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -315,26 +328,43 @@ const response = await fetch('/api/deepsearch/tasks', {
     task_name: 'xxx',
     input_md: '内容',
     rounds: 1,
-    semantic_limit: 5
+    semantic_limit: 5,
+    score_threshold: 0.65,
+    max_final_articles: 10
   })
 });
 ```
 
 ### 8.2 状态轮询
 ```typescript
-// 前端轮询逻辑
-async function pollStatus(taskId) {
+// 前端轮询逻辑（智能间隔）
+async function pollStatus(taskId, onProgress) {
+  let interval = 3000;
+  let maxInterval = 10000;
+  
   while (true) {
     const res = await fetch(`/api/deepsearch/tasks/${taskId}`);
     const data = await res.json();
     
-    if (data.status === 'completed' || data.status === 'failed') {
-      break;
+    // 回调进度信息供 UI 展示
+    if (onProgress && data.progress) {
+      onProgress(data.progress);
     }
     
-    await sleep(3000); // 3秒轮询
+    if (data.status === 'completed' || data.status === 'failed') {
+      return data;
+    }
+    
+    // 逐步增加轮询间隔，减少服务器压力
+    await sleep(interval);
+    interval = Math.min(interval + 1000, maxInterval);
   }
 }
+
+// 使用示例
+pollStatus(taskId, (progress) => {
+  console.log(`进度: ${progress.step} - ${progress.current}/${progress.total}`);
+});
 ```
 
 ### 8.3 文件下载
@@ -366,6 +396,7 @@ DEEPSEARCH_API_URL=http://localhost:8082
 - 迭代轮次：1（范围 0-3）
 - 相关文献数量：5
 - 相关性阈值：0.65
+- 最大保留文章数：10（范围 5-50）
 
 ## 10. 风险和注意事项
 

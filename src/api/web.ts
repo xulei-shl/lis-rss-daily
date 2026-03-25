@@ -198,6 +198,17 @@ export function createApp(): express.Express {
     });
   });
 
+  // DeepSearch page
+  app.get('/deepsearch', optionalAuth, (req: any, res: Response) => {
+    if (!req.userId) {
+      return res.redirect('/login');
+    }
+    res.render('deepsearch', {
+      pageTitle: '深度检索 - LIS-RSS Literature Tracker',
+      user: req.user,
+    });
+  });
+
   // Daily summary history page
   app.get('/history', optionalAuth, (req: any, res: Response) => {
     if (!req.userId) {

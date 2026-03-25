@@ -46,6 +46,7 @@ export interface DatabaseTable {
   keyword_subscriptions: KeywordSubscriptionsTable;
   keyword_crawl_logs: KeywordCrawlLogsTable;
   telegram_chats: TelegramChatsTable;
+  deepsearch_tasks: DeepSearchTasksTable;
 }
 
 export interface UsersTable {
@@ -303,6 +304,29 @@ export interface TelegramChatsTable {
   updated_at: string;
 }
 
+export interface DeepSearchTasksTable {
+  id: Generated<number>;
+  user_id: number;
+  task_name: string;
+  input_md: string;
+  rounds: number;
+  semantic_limit: number;
+  score_threshold: number;
+  max_final_articles: number;
+  external_task_id: string | null;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  result_report_path: string | null;
+  result_articles_dir: string | null;
+  article_count: number;
+  pdf_summary_success: number;
+  pdf_summary_failed: number;
+  pdf_summary_skipped: number;
+  error_message: string | null;
+  created_at: Generated<string>;
+  updated_at: string;
+  completed_at: string | null;
+}
+
 export type DB = Kysely<DatabaseTable>;
 
 // Selection result types (unwraps Generated<T> to T)
@@ -320,6 +344,7 @@ export type RssFetchLogsSelection = SelectionType<RssFetchLogsTable>;
 export type KeywordSubscriptionsSelection = SelectionType<KeywordSubscriptionsTable>;
 export type KeywordCrawlLogsSelection = SelectionType<KeywordCrawlLogsTable>;
 export type TelegramChatsSelection = SelectionType<TelegramChatsTable>;
+export type DeepSearchTasksSelection = SelectionType<DeepSearchTasksTable>;
 
 let _db: DB | null = null;
 
