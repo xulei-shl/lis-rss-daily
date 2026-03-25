@@ -2,8 +2,8 @@ import fs from 'fs';
 import type { ParsedSeedLine, SeedArticle } from './types.js';
 import { getArticleById } from './database.js';
 
-const SEED_LINE_REGEX = /^- (.+)：(\d+)$/;
-const SEED_LINE_NO_ID_REGEX = /^- (.+)$/;
+const SEED_LINE_REGEX = /^-\s+(.+?)\s*[：:]\s*(\d+)\s*$/;
+const SEED_LINE_NO_ID_REGEX = /^-\s+(.+)$/;
 
 export function parseSeedFile(content: string): ParsedSeedLine[] {
   const lines = content.split('\n');

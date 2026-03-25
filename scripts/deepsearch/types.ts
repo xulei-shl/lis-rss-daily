@@ -49,7 +49,7 @@ export interface CandidateArticle {
   articleId: number | null;
   title: string;
   score: number;
-  source: 'related' | 'semantic';
+  source: 'related' | 'semantic' | 'seed';
 }
 
 export interface SearchResult {
