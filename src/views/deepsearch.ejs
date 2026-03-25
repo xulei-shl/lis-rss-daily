@@ -578,6 +578,7 @@
       const logs = Array.isArray(task.logs) && task.logs.length > 0
         ? task.logs
         : buildFallbackLogs(task, progress);
+      const failedItems = extractFailedItemsFromLogs(logs);
       const previousLogEl = document.getElementById('taskLogLines');
       if (previousLogEl) {
         detailLogScrollTop = previousLogEl.scrollTop;
@@ -597,6 +598,7 @@
           <div class="detail-row detail-row-full detail-row-progress"><span>进度/状态</span><strong class="detail-inline-badges">\${renderProgressBadge(progressLabel)} <span class="detail-inline-sep">|</span> \${renderStatusBadge(task.status)}</strong></div>
           <div class="detail-row detail-row-full detail-row-step1"><span>检索统计（步骤一）</span><strong>\${formatSearchStats(searchStats)}</strong></div>
           <div class="detail-row detail-row-full detail-row-step2"><span>产出统计（步骤二）</span><strong>文章 \${Number(result.articleCount || 0)} / PDF 成功 \${Number(result.pdfSummarySuccess || 0)} / PDF 失败 \${Number(result.pdfSummaryFailed || 0)}</strong></div>
+          <div class="detail-row detail-row-full detail-row-failed"><span>失败文章（题名+ID）</span><strong>\${formatFailedItems(failedItems)}</strong></div>
         </div>
         <div class="log-block">
           <h4>执行日志 <span class="log-count">共 \${logs.length} 条</span></h4>
@@ -632,6 +634,18 @@
 
     function getLogLineClass(line) {
       const text = String(line || '');
+      if (text.includes('题名：') && text.includes('；ID：')) {
+        return 'log-line-failed-item';
+      }
+      if (
+        text.includes('ID检索第') ||
+        text.includes('语义检索词数量') ||
+        text.includes('过滤后') ||
+        text.includes('新增') ||
+        text.includes('步骤一统计')
+      ) {
+        return 'log-line-metric';
+      }
       if (text.includes('失败') || text.includes('异常') || text.includes('Error')) {
         return 'log-line-error';
       }
@@ -655,18 +669,64 @@
 
       const seed = Number(stats.seedArticleCount || 0);
       const related = Number(stats.relatedArticlesCount || 0);
+      const relatedFiltered = Number(stats.relatedArticlesFilteredCount || 0);
+      const relatedAdded = Number(stats.relatedArticlesUniqueAddedCount || 0);
       const semanticTerms = Number(stats.semanticSearchTermsCount || 0);
       const semanticHits = Number(stats.semanticSearchHitsCount || 0);
+      const semanticFiltered = Number(stats.semanticSearchFilteredCount || 0);
+      const semanticAdded = Number(stats.semanticSearchUniqueAddedCount || 0);
       const configuredRounds = Number(stats.iterationRoundsConfigured || 0);
       const executedRounds = Number(stats.iterationRoundsExecuted || 0);
 
       return [
         '种子 ' + seed,
-        '相关文章 ' + related,
-        '语义检索词 ' + semanticTerms,
-        '语义命中 ' + semanticHits,
+        '相关文章(原始/过滤/新增) ' + related + '/' + relatedFiltered + '/' + relatedAdded,
+        '语义(检索词/原始/过滤/新增) ' + semanticTerms + '/' + semanticHits + '/' + semanticFiltered + '/' + semanticAdded,
         '轮次(配置→实际) ' + configuredRounds + '→' + executedRounds,
       ].join(' / ');
+    }
+
+    function extractFailedItemsFromLogs(logs) {
+      if (!Array.isArray(logs) || logs.length === 0) {
+        return [];
+      }
+
+      const seen = new Set();
+      const items = [];
+
+      for (const line of logs) {
+        const text = String(line || '');
+        const titleStart = text.indexOf('题名：');
+        const idStart = text.indexOf('；ID：');
+        if (titleStart < 0 || idStart < 0 || idStart <= titleStart) {
+          continue;
+        }
+
+        const title = text.slice(titleStart + 3, idStart).trim();
+        const articleId = text.slice(idStart + 4).trim();
+        if (!title) {
+          continue;
+        }
+
+        const key = title + '||' + articleId;
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        items.push({ title, articleId: articleId || 'N/A' });
+      }
+
+      return items;
+    }
+
+    function formatFailedItems(items) {
+      if (!Array.isArray(items) || items.length === 0) {
+        return '-';
+      }
+
+      return items.map((item, index) => {
+        return (index + 1) + '. ' + escapeHtml(item.title) + '（ID: ' + escapeHtml(item.articleId) + '）';
+      }).join('<br>');
     }
 
     function buildFallbackLogs(task, progress) {

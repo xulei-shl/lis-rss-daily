@@ -99,8 +99,12 @@ export interface DeepSearchResult {
   searchStats: {
     seedArticleCount: number;
     relatedArticlesCount: number;
+    relatedArticlesFilteredCount: number;
+    relatedArticlesUniqueAddedCount: number;
     semanticSearchTermsCount: number;
     semanticSearchHitsCount: number;
+    semanticSearchFilteredCount: number;
+    semanticSearchUniqueAddedCount: number;
     iterationRoundsConfigured: number;
     iterationRoundsExecuted: number;
   };

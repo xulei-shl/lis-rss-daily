@@ -16,8 +16,12 @@ const PROMPTS_DIR = path.join(__dirname, 'prompts');
 
 interface SearchRoundMetrics {
   relatedArticlesCount: number;
+  relatedArticlesFilteredCount: number;
+  relatedArticlesUniqueAddedCount: number;
   semanticSearchTermsCount: number;
   semanticSearchHitsCount: number;
+  semanticSearchFilteredCount: number;
+  semanticSearchUniqueAddedCount: number;
 }
 
 interface IterativeSearchStats extends SearchRoundMetrics {
@@ -33,15 +37,23 @@ interface RelatedSearchResult {
 function createEmptySearchMetrics(): SearchRoundMetrics {
   return {
     relatedArticlesCount: 0,
+    relatedArticlesFilteredCount: 0,
+    relatedArticlesUniqueAddedCount: 0,
     semanticSearchTermsCount: 0,
     semanticSearchHitsCount: 0,
+    semanticSearchFilteredCount: 0,
+    semanticSearchUniqueAddedCount: 0,
   };
 }
 
 function accumulateSearchMetrics(target: SearchRoundMetrics, source: SearchRoundMetrics): void {
   target.relatedArticlesCount += source.relatedArticlesCount;
+  target.relatedArticlesFilteredCount += source.relatedArticlesFilteredCount;
+  target.relatedArticlesUniqueAddedCount += source.relatedArticlesUniqueAddedCount;
   target.semanticSearchTermsCount += source.semanticSearchTermsCount;
   target.semanticSearchHitsCount += source.semanticSearchHitsCount;
+  target.semanticSearchFilteredCount += source.semanticSearchFilteredCount;
+  target.semanticSearchUniqueAddedCount += source.semanticSearchUniqueAddedCount;
 }
 
 function loadPromptTemplate(promptName: string): string {
@@ -191,6 +203,7 @@ async function searchRelatedBySeed(
     const nextFrontier = new Set<number>();
     let queriedInThisRound = false;
     let roundHits = 0;
+    let roundFiltered = 0;
     let roundAdded = 0;
 
     for (const articleId of frontierIds) {
@@ -205,6 +218,8 @@ async function searchRelatedBySeed(
       roundHits += related.length;
 
       const filtered = filterByScore(related, scoreThreshold);
+      metrics.relatedArticlesFilteredCount += filtered.length;
+      roundFiltered += filtered.length;
       for (const candidate of filtered) {
         if (candidate.articleId !== null && !queriedIds.has(candidate.articleId)) {
           nextFrontier.add(candidate.articleId);
@@ -217,12 +232,13 @@ async function searchRelatedBySeed(
         }
       }
     }
+    metrics.relatedArticlesUniqueAddedCount += roundAdded;
 
     if (queriedInThisRound) {
       iterationRoundsExecuted += 1;
     }
 
-    log(`  - ID检索第${round}轮：命中 ${roundHits}，新增 ${roundAdded}`);
+    log(`  - ID检索第${round}轮：命中 ${roundHits}，过滤后 ${roundFiltered}，新增 ${roundAdded}`);
     frontierIds = Array.from(nextFrontier);
   }
 
@@ -253,8 +269,13 @@ async function searchSemanticBySeed(
     metrics.semanticSearchHitsCount += semanticResults.length;
 
     const filtered = filterByScore(semanticResults, scoreThreshold);
+    metrics.semanticSearchFilteredCount += filtered.length;
     for (const candidate of filtered) {
+      const beforeSize = allCandidatesMap.size;
       upsertCandidate(allCandidatesMap, candidate);
+      if (allCandidatesMap.size !== beforeSize) {
+        metrics.semanticSearchUniqueAddedCount += 1;
+      }
     }
   }
 
@@ -341,10 +362,16 @@ function loadPdfSummaryContent(pdfResult: PdfApiResult | null): string {
 async function processPdfSummary(
   candidates: CandidateArticle[],
   onLog?: (message: string) => void
-): Promise<{ success: number; failed: number; skipped: number }> {
+): Promise<{
+  success: number;
+  failed: number;
+  skipped: number;
+  failedItems: Array<{ title: string; articleId: number | null; reason?: string }>;
+}> {
   let success = 0;
   let failed = 0;
   let skipped = 0;
+  const failedItems: Array<{ title: string; articleId: number | null; reason?: string }> = [];
   const log = (message: string): void => {
     console.log(message);
     onLog?.(message);
@@ -379,6 +406,11 @@ async function processPdfSummary(
           } else {
             failed += 1;
             log(`  - PDF 总结失败: ${pdfResult.reason}`);
+            failedItems.push({
+              title: candidate.title,
+              articleId: candidate.articleId,
+              reason: pdfResult.reason,
+            });
             content = article?.markdown_content || article?.content || '';
           }
         }
@@ -401,6 +433,11 @@ async function processPdfSummary(
         } else {
           failed += 1;
           log(`  - PDF 总结失败: ${pdfResult.reason}`);
+          failedItems.push({
+            title: candidate.title,
+            articleId: candidate.articleId,
+            reason: pdfResult.reason,
+          });
           content = '';
         }
 
@@ -417,11 +454,17 @@ async function processPdfSummary(
     } catch (error) {
       failed += 1;
       console.error('  - PDF 总结异常:', error);
-      onLog?.(`  - PDF 总结异常: ${error instanceof Error ? error.message : String(error)}`);
+      const reason = error instanceof Error ? error.message : String(error);
+      failedItems.push({
+        title: candidate.title,
+        articleId: candidate.articleId,
+        reason,
+      });
+      onLog?.(`  - PDF 总结异常: ${reason}`);
     }
   }
 
-  return { success, failed, skipped };
+  return { success, failed, skipped, failedItems };
 }
 
 export interface DeepSearchOptions {
@@ -485,8 +528,12 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
   const searchStats = {
     seedArticleCount: seedArticles.length,
     relatedArticlesCount: iterativeResult.stats.relatedArticlesCount,
+    relatedArticlesFilteredCount: iterativeResult.stats.relatedArticlesFilteredCount,
+    relatedArticlesUniqueAddedCount: iterativeResult.stats.relatedArticlesUniqueAddedCount,
     semanticSearchTermsCount: iterativeResult.stats.semanticSearchTermsCount,
     semanticSearchHitsCount: iterativeResult.stats.semanticSearchHitsCount,
+    semanticSearchFilteredCount: iterativeResult.stats.semanticSearchFilteredCount,
+    semanticSearchUniqueAddedCount: iterativeResult.stats.semanticSearchUniqueAddedCount,
     iterationRoundsConfigured: rounds,
     iterationRoundsExecuted: iterativeResult.stats.iterationRoundsExecuted,
   };
@@ -506,6 +553,10 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
   emitLog(
     `步骤一统计：相关文章 ${searchStats.relatedArticlesCount}，语义检索词 ${searchStats.semanticSearchTermsCount}，语义命中 ${searchStats.semanticSearchHitsCount}`
   );
+  await writeStepReport(
+    '步骤一：检索相关文章',
+    `ID 迭代检索统计:\n- 配置轮次: ${searchStats.iterationRoundsConfigured}\n- 实际执行轮次: ${searchStats.iterationRoundsExecuted}\n- 原始命中数: ${searchStats.relatedArticlesCount}\n- 阈值过滤后: ${searchStats.relatedArticlesFilteredCount}\n- 去重后新增: ${searchStats.relatedArticlesUniqueAddedCount}\n\n语义检索统计:\n- 检索词数量: ${searchStats.semanticSearchTermsCount}\n- 原始命中数: ${searchStats.semanticSearchHitsCount}\n- 阈值过滤后: ${searchStats.semanticSearchFilteredCount}\n- 去重后新增: ${searchStats.semanticSearchUniqueAddedCount}\n\n全局合并去重后候选: ${iterativeResult.candidates.length}`
+  );
   const candidateList = candidates.map((c) => `- ${c.title} (得分: ${c.score.toFixed(2)}, 来源: ${c.source})`).join('\n');
   await writeStepReport(
     '步骤一：检索相关文章',
@@ -521,9 +572,18 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
 
   console.log(`\nPDF 总结完成: 成功 ${pdfResult.success}, 失败 ${pdfResult.failed}, 跳过 ${pdfResult.skipped}`);
   emitLog(`步骤二：PDF 总结完成，成功 ${pdfResult.success}，失败 ${pdfResult.failed}，跳过 ${pdfResult.skipped}`);
+  if (pdfResult.failedItems.length > 0) {
+    emitLog('步骤二：失败文章列表');
+    for (const item of pdfResult.failedItems) {
+      emitLog(`  - 题名：${item.title}；ID：${item.articleId ?? 'N/A'}`);
+    }
+  }
+  const failedItemsList = pdfResult.failedItems
+    .map((item) => `- 题名：${item.title}；ID：${item.articleId ?? 'N/A'}`)
+    .join('\n');
   await writeStepReport(
     '步骤二：PDF 总结',
-    `PDF 总结完成:\n- 处理总数: ${candidatesForPdf.length}\n- 成功: ${pdfResult.success}\n- 失败: ${pdfResult.failed}\n- 跳过: ${pdfResult.skipped}`
+    `PDF 总结完成:\n- 处理总数: ${candidatesForPdf.length}\n- 成功: ${pdfResult.success}\n- 失败: ${pdfResult.failed}\n- 跳过: ${pdfResult.skipped}\n\n失败文章列表:\n${failedItemsList || '(无)'}`
   );
 
   console.log('='.repeat(50));

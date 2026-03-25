@@ -146,6 +146,11 @@
   background: color-mix(in srgb, var(--color-success) 12%, var(--bg-subtle));
 }
 
+.detail-row-failed {
+  border-left-color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 10%, var(--bg-subtle));
+}
+
 .detail-row span {
   display: block;
   color: var(--text-tertiary);
@@ -247,6 +252,18 @@
 
 .log-line-info {
   border-left-color: var(--border);
+}
+
+.log-line-metric {
+  border-left-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 12%, var(--bg-subtle));
+  color: var(--text-primary);
+}
+
+.log-line-failed-item {
+  border-left-color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 14%, var(--bg-subtle));
+  color: var(--color-danger);
 }
 
 @media (max-width: 1024px) {
