@@ -131,6 +131,21 @@
   grid-column: 1 / -1;
 }
 
+.detail-row-progress {
+  border-left-color: var(--color-info);
+  background: color-mix(in srgb, var(--color-info) 8%, var(--bg-subtle));
+}
+
+.detail-row-step1 {
+  border-left-color: var(--color-info);
+  background: color-mix(in srgb, var(--color-info) 12%, var(--bg-subtle));
+}
+
+.detail-row-step2 {
+  border-left-color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 12%, var(--bg-subtle));
+}
+
 .detail-row span {
   display: block;
   color: var(--text-tertiary);
