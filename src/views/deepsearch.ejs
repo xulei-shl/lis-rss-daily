@@ -94,18 +94,22 @@
             <div class="form-group">
               <label for="rounds">迭代轮次</label>
               <input type="number" id="rounds" name="rounds" value="1" min="1" max="3" step="1" placeholder="输入数值">
+              <div id="roundsError" style="display:none; color:#d93025; font-size:12px; margin-top:6px;"></div>
             </div>
             <div class="form-group">
               <label for="semanticLimit">相关文献数量</label>
               <input type="number" id="semanticLimit" name="semantic_limit" value="5" min="1" max="10" step="1" placeholder="输入数值">
+              <div id="semanticLimitError" style="display:none; color:#d93025; font-size:12px; margin-top:6px;"></div>
             </div>
             <div class="form-group">
               <label for="maxFinalArticles">最大保留文章数</label>
               <input type="number" id="maxFinalArticles" name="max_final_articles" value="15" min="1" max="30" step="1" placeholder="输入数值">
+              <div id="maxFinalArticlesError" style="display:none; color:#d93025; font-size:12px; margin-top:6px;"></div>
             </div>
             <div class="form-group">
               <label for="scoreThreshold">相关性阈值</label>
               <input type="number" id="scoreThreshold" name="score_threshold" value="0.75" min="0.60" max="1.00" step="0.01" placeholder="输入数值">
+              <div id="scoreThresholdError" style="display:none; color:#d93025; font-size:12px; margin-top:6px;"></div>
             </div>
           </div>
         </form>
@@ -155,6 +159,7 @@
         }, 0);
       });
       seedTitleInput.addEventListener('blur', tryParseSeedTitleIntoFields);
+      bindNumericFieldValidation();
 
       document.getElementById('keywordInput').addEventListener('input', () => {
         scheduleAutoSearch();
@@ -317,28 +322,112 @@
       document.getElementById('createTaskModal').classList.remove('active');
     }
 
-    function parseAndValidateNumber(value, min, max, fieldLabel, isInteger = true) {
-      const parsed = isInteger ? parseInt(value, 10) : parseFloat(value);
-      if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
-        showToast(fieldLabel + '必须在 ' + min + ' - ' + max + ' 之间', 'error');
+    function setFieldError(inputId, message) {
+      const inputEl = document.getElementById(inputId);
+      const errorEl = document.getElementById(inputId + 'Error');
+      if (!inputEl || !errorEl) return;
+
+      if (message) {
+        inputEl.style.borderColor = '#d93025';
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+      } else {
+        inputEl.style.borderColor = '';
+        errorEl.textContent = '';
+        errorEl.style.display = 'none';
+      }
+    }
+
+    function formatNumberValue(value, isInteger) {
+      if (isInteger) {
+        return String(Math.trunc(value));
+      }
+      return value.toFixed(2);
+    }
+
+    function validateNumberField(field) {
+      const inputEl = document.getElementById(field.id);
+      if (!inputEl) return null;
+
+      const raw = String(inputEl.value || '').trim();
+      if (!raw) {
+        setFieldError(field.id, field.label + '不能为空');
         return null;
       }
+
+      let parsed = Number(raw);
+      if (!Number.isFinite(parsed)) {
+        setFieldError(field.id, field.label + '请输入有效数字');
+        return null;
+      }
+
+      if (!field.integer) {
+        const parts = raw.split('.');
+        const decimalLength = parts.length > 1 ? parts[1].length : 0;
+        if (decimalLength > 2) {
+          setFieldError(field.id, field.label + '最多保留2位小数');
+          return null;
+        }
+      } else if (!Number.isInteger(parsed)) {
+        setFieldError(field.id, field.label + '必须是整数');
+        return null;
+      }
+
+      if (field.clampOnBlur) {
+        parsed = Math.min(field.max, Math.max(field.min, parsed));
+        if (field.integer) {
+          parsed = Math.round(parsed);
+        } else {
+          parsed = Math.round(parsed * 100) / 100;
+        }
+        inputEl.value = formatNumberValue(parsed, field.integer);
+      }
+
+      if (parsed < field.min || parsed > field.max) {
+        setFieldError(field.id, field.label + '必须在 ' + field.min + ' - ' + field.max + ' 之间');
+        return null;
+      }
+
+      setFieldError(field.id, '');
       return parsed;
     }
 
+    function getNumericFieldConfigs(clampOnBlur) {
+      return [
+        { id: 'rounds', label: '迭代轮次', min: 1, max: 3, integer: true, clampOnBlur },
+        { id: 'semanticLimit', label: '相关文献数量', min: 1, max: 10, integer: true, clampOnBlur },
+        { id: 'maxFinalArticles', label: '最大保留文章数', min: 1, max: 30, integer: true, clampOnBlur },
+        { id: 'scoreThreshold', label: '相关性阈值', min: 0.60, max: 1.00, integer: false, clampOnBlur },
+      ];
+    }
+
+    function bindNumericFieldValidation() {
+      const fields = getNumericFieldConfigs(false);
+      fields.forEach((field) => {
+        const inputEl = document.getElementById(field.id);
+        if (!inputEl) return;
+        inputEl.addEventListener('input', () => {
+          validateNumberField(field);
+        });
+        inputEl.addEventListener('blur', () => {
+          validateNumberField({ ...field, clampOnBlur: true });
+        });
+      });
+    }
+
     function parseSeedTextToTitleAndId(seedText) {
-      const singleLine = String(seedText || '').replace(/\r?\n+/g, ' ').trim();
+      const singleLine = String(seedText || '').replace(/\\r?\\n+/g, ' ').trim();
       if (!singleLine) {
         return { title: '', articleId: '' };
       }
 
-      const withoutBullet = singleLine.replace(/^\-\s*/, '').trim();
-      const withAtIdMatch = withoutBullet.match(/^(.+?)\s*@\s*(\d+)\s*$/);
+      const withoutBullet = singleLine.replace(/^\\-\\s*/, '').trim();
+      const withAtIdMatch = withoutBullet.match(/^(.+?)\\s*@\\s*(\\d+)\\s*$/);
       if (withAtIdMatch) {
         return { title: withAtIdMatch[1].trim(), articleId: withAtIdMatch[2] };
       }
 
-      const withColonIdMatch = withoutBullet.match(/^(.+?)\s*[：:]\s*(\d+)\s*$/);
+      const withColonIdMatch = withoutBullet.match(/^(.+?)\\s*[：:]\\s*(\\d+)\\s*$/);
       if (withColonIdMatch) {
         return { title: withColonIdMatch[1].trim(), articleId: withColonIdMatch[2] };
       }
@@ -350,7 +439,7 @@
       const seedTitleInput = document.getElementById('seedTitle');
       const seedArticleIdInput = document.getElementById('seedArticleId');
       const raw = seedTitleInput.value.trim();
-      const looksLikeSeedLine = /^\-\s+/.test(raw) || /[@：:]\s*\d+\s*$/.test(raw);
+      const looksLikeSeedLine = /^\\-\\s+/.test(raw) || /[@：:]\\s*\\d+\\s*$/.test(raw);
       if (!looksLikeSeedLine) {
         return;
       }
@@ -373,20 +462,22 @@
       const parsedSeed = parseSeedTextToTitleAndId(seedTitleRaw);
       const seedTitle = parsedSeed.title;
       const seedArticleId = seedArticleIdRaw || parsedSeed.articleId;
-      const rounds = parseAndValidateNumber(document.getElementById('rounds').value, 1, 3, '迭代轮次');
-      const semanticLimit = parseAndValidateNumber(document.getElementById('semanticLimit').value, 1, 10, '相关文献数量');
-      const maxFinalArticles = parseAndValidateNumber(document.getElementById('maxFinalArticles').value, 1, 30, '最大保留文章数');
-      const scoreThreshold = parseAndValidateNumber(document.getElementById('scoreThreshold').value, 0.60, 1.00, '相关性阈值', false);
+      const submitValidateFields = getNumericFieldConfigs(true);
+      const rounds = validateNumberField(submitValidateFields[0]);
+      const semanticLimit = validateNumberField(submitValidateFields[1]);
+      const maxFinalArticles = validateNumberField(submitValidateFields[2]);
+      const scoreThreshold = validateNumberField(submitValidateFields[3]);
 
       if (!taskName || !seedTitle) {
         showToast('请填写任务名称和种子文献题名', 'error');
         return;
       }
-      if (seedArticleId && !/^\d+$/.test(seedArticleId)) {
+      if (seedArticleId && !/^\\d+$/.test(seedArticleId)) {
         showToast('种子文献ID必须是正整数', 'error');
         return;
       }
       if (rounds === null || semanticLimit === null || maxFinalArticles === null || scoreThreshold === null) {
+        showToast('请修正参数范围后再提交', 'error');
         return;
       }
       const inputMd = seedArticleId ? '- ' + seedTitle + '@' + seedArticleId : '- ' + seedTitle;
