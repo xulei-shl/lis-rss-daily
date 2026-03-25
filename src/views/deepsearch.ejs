@@ -419,12 +419,13 @@
       const progressText = task.status === 'completed'
         ? '100%'
         : (task.status === 'failed' ? '-' : ((progress.current || 0) + '/' + (progress.total || 100)));
+      const progressLabel = (progress.step || '未知') + ' (' + progressText + ')';
 
       content.innerHTML = \`
         <div class="detail-grid">
           <div class="detail-row"><span>任务名称</span><strong>\${escapeHtml(task.taskName || '-')}</strong></div>
-          <div class="detail-row"><span>状态/进度</span><strong>\${renderStatusBadge(task.status)} / \${escapeHtml(progress.step || '未知')} (\${progressText})</strong></div>
-          <div class="detail-row"><span>创建时间/完成时间</span><strong>\${formatDateTime(task.createdAt)} / \${formatDateTime(task.completedAt)}</strong></div>
+          <div class="detail-row"><span>进度/状态</span><strong class="detail-inline-badges">\${renderProgressBadge(progressLabel)} <span class="detail-inline-sep">|</span> \${renderStatusBadge(task.status)}</strong></div>
+          <div class="detail-row"><span>创建时间→完成时间</span><strong>\${formatDateTime(task.createdAt)} → \${formatDateTime(task.completedAt)}</strong></div>
           <div class="detail-row"><span>文章数量</span><strong>\${Number(result.articleCount || 0)}</strong></div>
           <div class="detail-row"><span>PDF 总结成功/失败</span><strong>\${Number(result.pdfSummarySuccess || 0)} / \${Number(result.pdfSummaryFailed || 0)}</strong></div>
         </div>
@@ -472,6 +473,10 @@
         return 'log-line-step';
       }
       return 'log-line-info';
+    }
+
+    function renderProgressBadge(text) {
+      return '<span class="status-badge progress-badge">' + escapeHtml(text || '-') + '</span>';
     }
 
     function buildFallbackLogs(task, progress) {
