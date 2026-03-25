@@ -96,43 +96,19 @@
           <div class="create-form-grid">
             <div class="form-group">
               <label for="rounds">迭代轮次</label>
-              <select id="rounds" name="rounds">
-                <option value="0">0 轮</option>
-                <option value="1" selected>1 轮</option>
-                <option value="2">2 轮</option>
-                <option value="3">3 轮</option>
-              </select>
+              <input type="number" id="rounds" name="rounds" value="1" min="0" step="1" placeholder="输入数值">
             </div>
             <div class="form-group">
               <label for="semanticLimit">相关文献数量</label>
-              <select id="semanticLimit" name="semantic_limit">
-                <option value="3">3 篇</option>
-                <option value="5" selected>5 篇</option>
-                <option value="10">10 篇</option>
-                <option value="15">15 篇</option>
-                <option value="20">20 篇</option>
-              </select>
+              <input type="number" id="semanticLimit" name="semantic_limit" value="5" min="1" step="1" placeholder="输入数值">
             </div>
             <div class="form-group">
               <label for="maxFinalArticles">最大保留文章数</label>
-              <select id="maxFinalArticles" name="max_final_articles">
-                <option value="5">5 篇</option>
-                <option value="10" selected>10 篇</option>
-                <option value="15">15 篇</option>
-                <option value="20">20 篇</option>
-                <option value="30">30 篇</option>
-                <option value="50">50 篇</option>
-              </select>
+              <input type="number" id="maxFinalArticles" name="max_final_articles" value="30" min="1" step="1" placeholder="输入数值">
             </div>
             <div class="form-group">
               <label for="scoreThreshold">相关性阈值</label>
-              <select id="scoreThreshold" name="score_threshold">
-                <option value="0.5">0.5</option>
-                <option value="0.6">0.6</option>
-                <option value="0.65" selected>0.65</option>
-                <option value="0.7">0.7</option>
-                <option value="0.8">0.8</option>
-              </select>
+              <input type="number" id="scoreThreshold" name="score_threshold" value="0.75" min="0" max="1" step="0.01" placeholder="输入数值">
             </div>
           </div>
         </form>
