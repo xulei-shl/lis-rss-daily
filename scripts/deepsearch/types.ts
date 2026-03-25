@@ -96,6 +96,14 @@ export interface DeepSearchResult {
   pdfSummarySuccess: number;
   pdfSummaryFailed: number;
   pdfSummarySkipped: number;
+  searchStats: {
+    seedArticleCount: number;
+    relatedArticlesCount: number;
+    semanticSearchTermsCount: number;
+    semanticSearchHitsCount: number;
+    iterationRoundsConfigured: number;
+    iterationRoundsExecuted: number;
+  };
 }
 
 export interface ProcessOptions {

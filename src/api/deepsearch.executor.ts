@@ -12,6 +12,14 @@ export interface DeepSearchRuntimeResult {
   pdfSummarySuccess: number;
   pdfSummaryFailed: number;
   pdfSummarySkipped: number;
+  searchStats: {
+    seedArticleCount: number;
+    relatedArticlesCount: number;
+    semanticSearchTermsCount: number;
+    semanticSearchHitsCount: number;
+    iterationRoundsConfigured: number;
+    iterationRoundsExecuted: number;
+  };
 }
 
 export interface DeepSearchRuntimeState {
@@ -126,6 +134,7 @@ export function startDeepSearchTask(options: StartTaskOptions): void {
         pdfSummarySuccess: result.pdfSummarySuccess,
         pdfSummaryFailed: result.pdfSummaryFailed,
         pdfSummarySkipped: result.pdfSummarySkipped,
+        searchStats: result.searchStats,
       };
 
       setRuntimeState(options.taskId, {

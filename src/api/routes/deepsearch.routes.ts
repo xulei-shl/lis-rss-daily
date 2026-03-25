@@ -13,6 +13,15 @@ const router = express.Router();
 
 type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
 
+interface DeepSearchStatsResponse {
+  seedArticleCount: number;
+  relatedArticlesCount: number;
+  semanticSearchTermsCount: number;
+  semanticSearchHitsCount: number;
+  iterationRoundsConfigured: number;
+  iterationRoundsExecuted: number;
+}
+
 interface DeepSearchTaskResponse {
   id: number;
   taskName: string;
@@ -32,6 +41,7 @@ interface DeepSearchTaskResponse {
     pdfSummarySuccess: number;
     pdfSummaryFailed: number;
     pdfSummarySkipped: number;
+    searchStats: DeepSearchStatsResponse | null;
   } | null;
   errorMessage: string | null;
   logs: string[];
@@ -294,6 +304,7 @@ router.get('/tasks/:id', requireAuth, async (req: AuthRequest, res) => {
     let responsePdfSummarySuccess = task.pdf_summary_success;
     let responsePdfSummaryFailed = task.pdf_summary_failed;
     let responsePdfSummarySkipped = task.pdf_summary_skipped;
+    let responseSearchStats: DeepSearchStatsResponse | null = null;
     let responseOutputDir: string | null = responseReportPath ? path.dirname(responseReportPath) : null;
     let responseLogs = buildFallbackLogs(task);
 
@@ -318,10 +329,11 @@ router.get('/tasks/:id', requireAuth, async (req: AuthRequest, res) => {
         responsePdfSummarySuccess = runtime.result.pdfSummarySuccess;
         responsePdfSummaryFailed = runtime.result.pdfSummaryFailed;
         responsePdfSummarySkipped = runtime.result.pdfSummarySkipped;
+        responseSearchStats = runtime.result.searchStats;
       }
     }
 
-    const result = (responseReportPath || responseArticlesDir || responseArticleCount > 0)
+    const result = (responseReportPath || responseArticlesDir || responseArticleCount > 0 || responseSearchStats)
       ? {
         reportPath: responseReportPath,
         articlesDir: responseArticlesDir,
@@ -330,6 +342,7 @@ router.get('/tasks/:id', requireAuth, async (req: AuthRequest, res) => {
         pdfSummarySuccess: responsePdfSummarySuccess,
         pdfSummaryFailed: responsePdfSummaryFailed,
         pdfSummarySkipped: responsePdfSummarySkipped,
+        searchStats: responseSearchStats,
       }
       : null;
 

@@ -14,6 +14,35 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROMPTS_DIR = path.join(__dirname, 'prompts');
 
+interface SearchRoundMetrics {
+  relatedArticlesCount: number;
+  semanticSearchTermsCount: number;
+  semanticSearchHitsCount: number;
+}
+
+interface SearchRoundResult {
+  candidates: CandidateArticle[];
+  metrics: SearchRoundMetrics;
+}
+
+interface IterativeSearchStats extends SearchRoundMetrics {
+  iterationRoundsExecuted: number;
+}
+
+function createEmptySearchMetrics(): SearchRoundMetrics {
+  return {
+    relatedArticlesCount: 0,
+    semanticSearchTermsCount: 0,
+    semanticSearchHitsCount: 0,
+  };
+}
+
+function accumulateSearchMetrics(target: SearchRoundMetrics, source: SearchRoundMetrics): void {
+  target.relatedArticlesCount += source.relatedArticlesCount;
+  target.semanticSearchTermsCount += source.semanticSearchTermsCount;
+  target.semanticSearchHitsCount += source.semanticSearchHitsCount;
+}
+
 function loadPromptTemplate(promptName: string): string {
   const filePath = path.join(PROMPTS_DIR, `${promptName}.md`);
   if (!fs.existsSync(filePath)) {
@@ -101,16 +130,21 @@ async function iterativeSearch(
   scoreThreshold: number,
   semanticLimit: number,
   onLog?: (message: string) => void
-): Promise<CandidateArticle[]> {
+): Promise<{ candidates: CandidateArticle[]; stats: IterativeSearchStats }> {
   const config = getConfig();
   const allCandidateIds = new Set<number>();
+  const totalMetrics = createEmptySearchMetrics();
+  let iterationRoundsExecuted = 0;
   const log = (message: string): void => {
     console.log(message);
     onLog?.(message);
   };
   
   log(`[迭代 0/${rounds}] 种子文章直接检索...`);
-  const round0Results = await performSearchRound(seedArticles, semanticLimit, scoreThreshold, config);
+  const round0Result = await performSearchRound(seedArticles, semanticLimit, scoreThreshold, config);
+  const round0Results = round0Result.candidates;
+  accumulateSearchMetrics(totalMetrics, round0Result.metrics);
+  iterationRoundsExecuted += 1;
   log(`  - 第0轮检索到 ${round0Results.length} 篇文章`);
   
   round0Results.forEach((c) => {
@@ -127,6 +161,7 @@ async function iterativeSearch(
 
     try {
       const nextRoundCandidates: CandidateArticle[] = [];
+      const roundMetrics = createEmptySearchMetrics();
       
       for (const prevCandidate of currentRoundResults) {
         let seedArticle: SeedArticle[] = [];
@@ -145,13 +180,16 @@ async function iterativeSearch(
         }
         
         if (seedArticle.length > 0) {
-          const searchResults = await performSearchRound(seedArticle, semanticLimit, scoreThreshold, config);
-          nextRoundCandidates.push(...searchResults);
+          const searchResult = await performSearchRound(seedArticle, semanticLimit, scoreThreshold, config);
+          nextRoundCandidates.push(...searchResult.candidates);
+          accumulateSearchMetrics(roundMetrics, searchResult.metrics);
         }
       }
 
       const merged = mergeResults([], nextRoundCandidates);
       const filtered = filterByScore(merged, scoreThreshold);
+      accumulateSearchMetrics(totalMetrics, roundMetrics);
+      iterationRoundsExecuted += 1;
       
       log(`  - 第${round}轮检索到 ${filtered.length} 篇新文章`);
 
@@ -174,7 +212,13 @@ async function iterativeSearch(
     }
   }
 
-  return candidates;
+  return {
+    candidates,
+    stats: {
+      ...totalMetrics,
+      iterationRoundsExecuted,
+    },
+  };
 }
 
 async function performSearchRound(
@@ -182,16 +226,24 @@ async function performSearchRound(
   semanticLimit: number,
   scoreThreshold: number,
   config: ReturnType<typeof getConfig>
-): Promise<CandidateArticle[]> {
+): Promise<SearchRoundResult> {
   const relatedFromIds = await searchRelatedByIds(seedArticles, semanticLimit);
+  const metrics: SearchRoundMetrics = {
+    relatedArticlesCount: relatedFromIds.length,
+    semanticSearchTermsCount: 0,
+    semanticSearchHitsCount: 0,
+  };
 
   let searchResults: CandidateArticle[] = [];
   try {
     const llm = await getUserLLMProvider(config.llm.task_type ?? undefined);
     const searchTerms = await generateSearchTerms(seedArticles, llm, config);
+    const termsToSearch = searchTerms.slice(0, 3);
+    metrics.semanticSearchTermsCount = termsToSearch.length;
 
-    for (const term of searchTerms.slice(0, 3)) {
+    for (const term of termsToSearch) {
       const semanticResults = await semanticSearch(term, semanticLimit);
+      metrics.semanticSearchHitsCount += semanticResults.length;
       searchResults.push(...semanticResults);
     }
   } catch (error) {
@@ -201,7 +253,10 @@ async function performSearchRound(
   const merged = mergeResults(relatedFromIds, searchResults);
   const filtered = filterByScore(merged, scoreThreshold);
 
-  return filtered;
+  return {
+    candidates: filtered,
+    metrics,
+  };
 }
 
 async function processPdfSummary(
@@ -341,7 +396,16 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
   emitLog(`步骤一：开始迭代检索，轮次=${rounds}，阈值=${threshold}，限制=${limit}`);
   emitProgress('searching', 20);
 
-  let candidates = await iterativeSearch(seedArticles, rounds, threshold, limit, emitLog);
+  const iterativeResult = await iterativeSearch(seedArticles, rounds, threshold, limit, emitLog);
+  let candidates = iterativeResult.candidates;
+  const searchStats = {
+    seedArticleCount: seedArticles.length,
+    relatedArticlesCount: iterativeResult.stats.relatedArticlesCount,
+    semanticSearchTermsCount: iterativeResult.stats.semanticSearchTermsCount,
+    semanticSearchHitsCount: iterativeResult.stats.semanticSearchHitsCount,
+    iterationRoundsConfigured: rounds,
+    iterationRoundsExecuted: iterativeResult.stats.iterationRoundsExecuted,
+  };
   emitProgress('searching', 60);
 
   if (maxFinal > 0) {
@@ -351,6 +415,9 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
 
   console.log(`\n检索完成，找到 ${candidates.length} 篇候选文章`);
   emitLog(`步骤一：检索完成，找到 ${candidates.length} 篇候选文章`);
+  emitLog(
+    `步骤一统计：相关文章 ${searchStats.relatedArticlesCount}，语义检索词 ${searchStats.semanticSearchTermsCount}，语义命中 ${searchStats.semanticSearchHitsCount}`
+  );
   const candidateList = candidates.map((c) => `- ${c.title} (得分: ${c.score.toFixed(2)}, 来源: ${c.source})`).join('\n');
   await writeStepReport('步骤一：检索相关文章', `找到 ${candidates.length} 篇候选文章:\n${candidateList}`);
 
@@ -382,5 +449,6 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
     pdfSummarySuccess: pdfResult.success,
     pdfSummaryFailed: pdfResult.failed,
     pdfSummarySkipped: pdfResult.skipped,
+    searchStats,
   };
 }

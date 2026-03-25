@@ -127,6 +127,10 @@
   border-left: 3px solid var(--brand-primary);
 }
 
+.detail-row-full {
+  grid-column: 1 / -1;
+}
+
 .detail-row span {
   display: block;
   color: var(--text-tertiary);

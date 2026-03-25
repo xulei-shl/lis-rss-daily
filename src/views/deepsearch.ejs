@@ -406,6 +406,7 @@
       const content = document.getElementById('taskDetailContent');
       const progress = task.progress || {};
       const result = task.result || {};
+      const searchStats = result.searchStats || null;
       const logs = Array.isArray(task.logs) && task.logs.length > 0
         ? task.logs
         : buildFallbackLogs(task, progress);
@@ -428,6 +429,7 @@
           <div class="detail-row"><span>创建时间→完成时间</span><strong>\${formatDateTime(task.createdAt)} → \${formatDateTime(task.completedAt)}</strong></div>
           <div class="detail-row"><span>文章数量</span><strong>\${Number(result.articleCount || 0)}</strong></div>
           <div class="detail-row"><span>PDF 总结成功/失败</span><strong>\${Number(result.pdfSummarySuccess || 0)} / \${Number(result.pdfSummaryFailed || 0)}</strong></div>
+          <div class="detail-row detail-row-full"><span>检索统计</span><strong>\${formatSearchStats(searchStats)}</strong></div>
         </div>
         <div class="log-block">
           <h4>执行日志 <span class="log-count">共 \${logs.length} 条</span></h4>
@@ -477,6 +479,27 @@
 
     function renderProgressBadge(text) {
       return '<span class="status-badge progress-badge">' + escapeHtml(text || '-') + '</span>';
+    }
+
+    function formatSearchStats(stats) {
+      if (!stats) {
+        return '-';
+      }
+
+      const seed = Number(stats.seedArticleCount || 0);
+      const related = Number(stats.relatedArticlesCount || 0);
+      const semanticTerms = Number(stats.semanticSearchTermsCount || 0);
+      const semanticHits = Number(stats.semanticSearchHitsCount || 0);
+      const configuredRounds = Number(stats.iterationRoundsConfigured || 0);
+      const executedRounds = Number(stats.iterationRoundsExecuted || 0);
+
+      return [
+        '种子 ' + seed,
+        '相关文章 ' + related,
+        '语义检索词 ' + semanticTerms,
+        '语义命中 ' + semanticHits,
+        '轮次(配置→实际) ' + configuredRounds + '→' + executedRounds,
+      ].join(' / ');
     }
 
     function buildFallbackLogs(task, progress) {
