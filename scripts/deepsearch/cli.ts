@@ -20,6 +20,7 @@ interface CliOptions {
   limit?: number;
   maxFinal?: number;
   output?: string;
+  result?: string;
 }
 
 function parseCliArgs(): CliOptions {
@@ -56,6 +57,9 @@ function parseCliArgs(): CliOptions {
       type: 'string' as const,
       short: 'o',
     },
+    result: {
+      type: 'string' as const,
+    },
     help: {
       type: 'boolean' as const,
       short: 'h',
@@ -79,6 +83,7 @@ function parseCliArgs(): CliOptions {
     limit: values.limit ? parseInt(values.limit as string, 10) : undefined,
     maxFinal: values.maxFinal ? parseInt(values.maxFinal as string, 10) : undefined,
     output: values.output as string | undefined,
+    result: values.result as string | undefined,
   };
 }
 
@@ -97,6 +102,7 @@ DeepSearch - 深度检索工具
   -l, --limit <n>        语义检索返回数量 (可选，覆盖配置)
   -m, --maxFinal <n>    最终结果保留数量 (可选，覆盖配置)
   -o, --output <dir>     输出目录 (可选，覆盖配置)
+      --result <path>    结果 JSON 文件输出路径 (可选)
   -h, --help             显示帮助信息
 
 示例:
@@ -162,6 +168,12 @@ async function main(): Promise<void> {
     if (options.json) {
       console.log('\n输出 JSON 结果:');
       console.log(JSON.stringify(result, null, 2));
+    }
+
+    if (options.result) {
+      const fs = await import('fs');
+      fs.writeFileSync(options.result, JSON.stringify(result, null, 2), 'utf-8');
+      console.log('结果已写入:', options.result);
     }
   } catch (error) {
     console.error('执行失败:', error);

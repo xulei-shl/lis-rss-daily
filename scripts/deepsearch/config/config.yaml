@@ -47,7 +47,7 @@ search:
 # PDF 总结配置
 pdf_summary:
   # API 地址
-  api_url: "http://localhost:8081"
+  api_url: "http://10.40.92.18:8081"
   # 超时时间（秒）
   timeout: 300
   # 调用失败时的重试次数

@@ -57,9 +57,6 @@ async def run_deepsearch_task(
     tasks[task_id]["progress"] = {"step": "initializing", "current": 0, "total": 100}
 
     try:
-        import subprocess
-        import tempfile
-        import shutil
         import json
 
         if input_type == "file":
@@ -93,7 +90,7 @@ async def run_deepsearch_task(
         proc = await asyncio.create_subprocess_exec(
             "npx", "tsx", str(deepsearch_dir / "cli.ts"),
             "--json", input_file,
-            "--output", result_file,
+            "--result", result_file,
             env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

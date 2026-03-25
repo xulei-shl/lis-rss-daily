@@ -6,24 +6,42 @@ import type { CandidateArticle, ArticleMDResult } from './types.js';
 let cachedReportPath: string | null = null;
 let cachedOutputDir: string | null = null;
 
+function ensureDirStructure(outputDir: string): void {
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+
+  const articlesDir = path.join(outputDir, 'articles');
+  if (!fs.existsSync(articlesDir)) {
+    fs.mkdirSync(articlesDir, { recursive: true });
+  }
+}
+
+export function configureOutputDir(outputDir?: string): string {
+  cachedReportPath = null;
+
+  if (outputDir) {
+    cachedOutputDir = outputDir;
+    ensureDirStructure(cachedOutputDir);
+    return cachedOutputDir;
+  }
+
+  const config = getConfig();
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  cachedOutputDir = path.join(config.output.base_dir, `run_${timestamp}`);
+  ensureDirStructure(cachedOutputDir);
+  return cachedOutputDir;
+}
+
 export function initOutputDir(): string {
   if (cachedOutputDir) {
     return cachedOutputDir;
   }
-  
+
   const config = getConfig();
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   cachedOutputDir = path.join(config.output.base_dir, `run_${timestamp}`);
-  
-  if (!fs.existsSync(cachedOutputDir)) {
-    fs.mkdirSync(cachedOutputDir, { recursive: true });
-  }
-  
-  const articlesDir = path.join(cachedOutputDir, 'articles');
-  if (!fs.existsSync(articlesDir)) {
-    fs.mkdirSync(articlesDir, { recursive: true });
-  }
-  
+  ensureDirStructure(cachedOutputDir);
   return cachedOutputDir;
 }
 
@@ -35,13 +53,13 @@ export function getReportPath(): string {
   if (cachedReportPath) {
     return cachedReportPath;
   }
-  
+
   const outputDir = initOutputDir();
   cachedReportPath = path.join(outputDir, 'report.md');
-  
+
   const header = `# DeepSearch 运行报告\n\n生成时间: ${new Date().toISOString()}\n\n---\n\n`;
   fs.writeFileSync(cachedReportPath, header, 'utf8');
-  
+
   return cachedReportPath;
 }
 

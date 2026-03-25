@@ -3,7 +3,7 @@ import { getArticleById, getArticlesByIds } from './database.js';
 import { getUserLLMProvider, type LLMProvider, type ChatMessage } from './llm.js';
 import { semanticSearch, relatedSearch, filterByScore, mergeResults } from './search.js';
 import { callPdfApiWithRetry } from './pdf-api.js';
-import { ensureOutputDir, writeStepReport, saveArticleMD, generateArticleSummaryMD, getReportPath, getArticlesDir, getOutputDir } from './report.js';
+import { configureOutputDir, ensureOutputDir, writeStepReport, saveArticleMD, generateArticleSummaryMD, getReportPath, getArticlesDir, getOutputDir } from './report.js';
 import { parseSeedFileToArticles } from './md-parser.js';
 import type { SeedArticle, CandidateArticle, DeepSearchResult } from './types.js';
 import fs from 'fs';
@@ -289,6 +289,7 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
   }
 
   const config = getConfig();
+  configureOutputDir(options.outputDir);
   ensureOutputDir();
 
   console.log('='.repeat(50));
