@@ -1,428 +1,570 @@
-<%- include('layout', { pageTitle: '深度检索', pageStyles: '', user: user, guestSummaryEnabled: false, body: `
-  <!-- Page Header -->
+<%- include('layout', { pageTitle: pageTitle, pageStyles: '<link rel="stylesheet" href="/css/pages/deepsearch.css">', user: user, guestSummaryEnabled: false, body: `
   <div class="page-header">
     <h1 class="page-title">深度检索</h1>
   </div>
 
-  <!-- Create Task Form -->
   <div class="card">
     <div class="card-header">
-      <h2>创建新任务</h2>
+      <h2 class="card-title">检索</h2>
     </div>
     <div class="card-body">
-      <form id="createTaskForm">
-        <div class="form-group">
-          <label for="taskName">任务名称</label>
-          <input type="text" id="taskName" name="task_name" class="form-control" placeholder="请输入任务名称" required>
+      <div class="filters-bar deepsearch-filters">
+        <div class="filter-row deepsearch-filter-row">
+        <div class="filter-group deepsearch-keyword-group">
+          <label class="filter-label" for="keywordInput">任务名关键词</label>
+          <input type="search" id="keywordInput" class="filter-select" placeholder="输入任务名称关键词">
         </div>
-        
-        <div class="form-group">
-          <label for="inputMd">输入内容</label>
-          <div class="input-options">
-            <button type="button" class="btn btn-sm btn-outline" id="uploadFileBtn">上传 MD 文件</button>
-            <a href="/templates/deepsearch-input.md" target="_blank" class="btn btn-sm btn-link">下载模板</a>
-          </div>
-          <input type="file" id="mdFile" accept=".md,.txt" style="display: none;">
-          <textarea id="inputMd" name="input_md" class="form-control" rows="6" placeholder="请输入种子文献，每行一篇，格式：- 标题或 - 标题：ID" required></textarea>
-          <small class="form-text text-muted">每行一篇文献，格式：- 标题 或 - 标题：ID</small>
+        <div class="filter-group deepsearch-status-group">
+          <label class="filter-label" for="statusFilter">状态</label>
+          <select id="statusFilter" class="filter-select">
+            <option value="">全部状态</option>
+            <option value="pending">等待中</option>
+            <option value="running">运行中</option>
+            <option value="completed">已完成</option>
+            <option value="failed">失败</option>
+          </select>
         </div>
-        
-        <div class="form-row">
-          <div class="form-group">
-            <label for="rounds">迭代轮次</label>
-            <select id="rounds" name="rounds" class="form-control">
-              <option value="0">0 轮</option>
-              <option value="1" selected>1 轮</option>
-              <option value="2">2 轮</option>
-              <option value="3">3 轮</option>
-            </select>
-            <small class="form-text text-muted">0-3 轮，轮次越多搜索越深入</small>
-          </div>
-          
-          <div class="form-group">
-            <label for="semanticLimit">相关文献数量</label>
-            <select id="semanticLimit" name="semantic_limit" class="form-control">
-              <option value="3">3 篇</option>
-              <option value="5" selected>5 篇</option>
-              <option value="10">10 篇</option>
-              <option value="15">15 篇</option>
-              <option value="20">20 篇</option>
-            </select>
-            <small class="form-text text-muted">每轮检索的文献数量</small>
-          </div>
-          
-          <div class="form-group">
-            <label for="maxFinalArticles">最大保留文章数</label>
-            <select id="maxFinalArticles" name="max_final_articles" class="form-control">
-              <option value="5">5 篇</option>
-              <option value="10" selected>10 篇</option>
-              <option value="15">15 篇</option>
-              <option value="20">20 篇</option>
-              <option value="30">30 篇</option>
-              <option value="50">50 篇</option>
-            </select>
-            <small class="form-text text-muted">最终保留的最大文章数</small>
-          </div>
-          
-          <div class="form-group">
-            <label for="scoreThreshold">相关性阈值</label>
-            <select id="scoreThreshold" name="score_threshold" class="form-control">
-              <option value="0.5">0.5</option>
-              <option value="0.6">0.6</option>
-              <option value="0.65" selected>0.65</option>
-              <option value="0.7">0.7</option>
-              <option value="0.8">0.8</option>
-            </select>
-            <small class="form-text text-muted">相关性分数阈值</small>
+        <div class="filter-group deepsearch-date-group">
+          <label class="filter-label" for="createdFrom">任务时间</label>
+          <div class="date-range-group">
+            <input type="date" id="createdFrom" class="filter-date">
+            <span class="date-separator">至</span>
+            <input type="date" id="createdTo" class="filter-date">
           </div>
         </div>
-        
-        <button type="submit" class="btn btn-primary">开始检索</button>
-      </form>
+        <div class="filter-actions">
+          <button type="button" class="btn btn-secondary" id="resetFiltersBtn">重置</button>
+          <button type="button" class="btn btn-primary create-task-btn" id="openCreateModalBtn">创建任务</button>
+        </div>
+      </div>
+      </div>
     </div>
   </div>
 
-  <!-- Task List -->
   <div class="card">
     <div class="card-header">
-      <h2>任务列表</h2>
+      <h2 class="card-title">任务列表</h2>
     </div>
     <div class="card-body">
-      <div id="taskListContainer">
-        <div class="loading" id="loadingTasks" style="display: none;">加载中...</div>
-        <div class="empty-state" id="emptyTasks">
-          <div class="empty-state-title">暂无任务</div>
-          <div class="empty-state-desc">创建第一个深度检索任务吧</div>
-        </div>
-        <table class="table" id="taskTable" style="display: none;">
+      <div class="loading" id="tasksLoading" style="display:none;">加载中</div>
+      <div class="empty-state" id="tasksEmpty" style="display:none;">
+        <div class="empty-state-title">暂无任务</div>
+        <div class="empty-state-desc">请先创建任务或调整检索条件</div>
+      </div>
+      <div class="table-container" id="tasksTableContainer" style="display:none;">
+        <table>
           <thead>
             <tr>
               <th>任务名称</th>
-              <th>参数</th>
               <th>状态</th>
-              <th>文章数</th>
+              <th>进度</th>
               <th>创建时间</th>
               <th>完成时间</th>
+              <th>文章数</th>
               <th>操作</th>
             </tr>
           </thead>
-          <tbody id="taskTableBody"></tbody>
+          <tbody id="tasksTableBody"></tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- Task Detail Modal -->
+  <div class="modal-overlay" id="createTaskModal">
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h3>创建深度检索任务</h3>
+        <button class="modal-close" type="button" id="closeCreateModalBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="createTaskForm">
+          <div class="form-group">
+            <label for="taskName">任务名称</label>
+            <input type="text" id="taskName" name="task_name" placeholder="请输入任务名称" required>
+          </div>
+
+          <div class="form-group">
+            <label for="inputMd">输入内容</label>
+            <div class="create-input-actions">
+              <button type="button" class="btn btn-secondary create-input-btn" id="uploadFileBtn">上传 MD 文件</button>
+              <a class="btn btn-secondary create-input-btn" href="/templates/deepsearch-input.md" target="_blank" rel="noopener">下载模板</a>
+            </div>
+            <input type="file" id="mdFile" accept=".md,.txt" style="display:none;">
+            <textarea id="inputMd" name="input_md" rows="8" placeholder="每行一篇文献，格式：- 标题 或 - 标题：ID" required></textarea>
+          </div>
+
+          <div class="create-form-grid">
+            <div class="form-group">
+              <label for="rounds">迭代轮次</label>
+              <select id="rounds" name="rounds">
+                <option value="0">0 轮</option>
+                <option value="1" selected>1 轮</option>
+                <option value="2">2 轮</option>
+                <option value="3">3 轮</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="semanticLimit">相关文献数量</label>
+              <select id="semanticLimit" name="semantic_limit">
+                <option value="3">3 篇</option>
+                <option value="5" selected>5 篇</option>
+                <option value="10">10 篇</option>
+                <option value="15">15 篇</option>
+                <option value="20">20 篇</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="maxFinalArticles">最大保留文章数</label>
+              <select id="maxFinalArticles" name="max_final_articles">
+                <option value="5">5 篇</option>
+                <option value="10" selected>10 篇</option>
+                <option value="15">15 篇</option>
+                <option value="20">20 篇</option>
+                <option value="30">30 篇</option>
+                <option value="50">50 篇</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="scoreThreshold">相关性阈值</label>
+              <select id="scoreThreshold" name="score_threshold">
+                <option value="0.5">0.5</option>
+                <option value="0.6">0.6</option>
+                <option value="0.65" selected>0.65</option>
+                <option value="0.7">0.7</option>
+                <option value="0.8">0.8</option>
+              </select>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancelCreateBtn">取消</button>
+        <button type="button" class="btn btn-primary" id="submitCreateBtn">创建并开始检索</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="taskDetailModal">
-    <div class="modal">
+    <div class="modal modal-large">
       <div class="modal-header">
         <h3>任务详情</h3>
-        <button class="modal-close" onclick="closeTaskDetail()">&times;</button>
+        <button class="modal-close" type="button" id="closeDetailModalBtn">&times;</button>
       </div>
       <div class="modal-body" id="taskDetailContent"></div>
     </div>
   </div>
 
   <script>
-    // State
     let tasks = [];
-    let pollingIntervals = {};
+    let listRefreshTimer = null;
+    let detailRefreshTimer = null;
+    let currentDetailTaskId = null;
+    let searchDebounceTimer = null;
 
-    // Initialize
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', () => {
+      bindEvents();
       loadTasks();
-      
-      // File upload handler
-      document.getElementById('uploadFileBtn').addEventListener('click', function() {
-        document.getElementById('mdFile').click();
-      });
-      
-      document.getElementById('mdFile').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = function(e) {
-            document.getElementById('inputMd').value = e.target.result;
-          };
-          reader.readAsText(file);
-        }
-      });
-      
-      // Form submit handler
-      document.getElementById('createTaskForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const taskName = document.getElementById('taskName').value;
-        const inputMd = document.getElementById('inputMd').value;
-        const rounds = parseInt(document.getElementById('rounds').value);
-        const semanticLimit = parseInt(document.getElementById('semanticLimit').value);
-        const maxFinalArticles = parseInt(document.getElementById('maxFinalArticles').value);
-        const scoreThreshold = parseFloat(document.getElementById('scoreThreshold').value);
-        
-        try {
-          const response = await fetch('/api/deepsearch/tasks', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              task_name: taskName,
-              input_md: inputMd,
-              rounds: rounds,
-              semantic_limit: semanticLimit,
-              max_final_articles: maxFinalArticles,
-              score_threshold: scoreThreshold
-            })
-          });
-          
-          if (!response.ok) {
-            const error = await response.json();
-            alert('创建失败: ' + (error.error || '未知错误'));
-            return;
-          }
-          
-          const result = await response.json();
-          
-          // Clear form
-          document.getElementById('taskName').value = '';
-          document.getElementById('inputMd').value = '';
-          
-          // Reload and start polling
-          loadTasks();
-          startPolling(result.id);
-          
-          alert('任务创建成功！');
-        } catch (error) {
-          console.error('Error creating task:', error);
-          alert('创建失败，请稍后重试');
-        }
-      });
+      startListAutoRefresh();
     });
 
-    // Load tasks
-    async function loadTasks() {
-      document.getElementById('loadingTasks').style.display = 'block';
-      document.getElementById('emptyTasks').style.display = 'none';
-      document.getElementById('taskTable').style.display = 'none';
-      
+    function bindEvents() {
+      document.getElementById('resetFiltersBtn').addEventListener('click', resetFilters);
+      document.getElementById('openCreateModalBtn').addEventListener('click', openCreateModal);
+      document.getElementById('closeCreateModalBtn').addEventListener('click', closeCreateModal);
+      document.getElementById('cancelCreateBtn').addEventListener('click', closeCreateModal);
+      document.getElementById('submitCreateBtn').addEventListener('click', submitCreateTask);
+      document.getElementById('uploadFileBtn').addEventListener('click', () => document.getElementById('mdFile').click());
+      document.getElementById('mdFile').addEventListener('change', onMdFileSelected);
+      document.getElementById('closeDetailModalBtn').addEventListener('click', closeTaskDetail);
+
+      document.getElementById('keywordInput').addEventListener('input', () => {
+        scheduleAutoSearch();
+      });
+      document.getElementById('statusFilter').addEventListener('change', () => {
+        loadTasks();
+      });
+      document.getElementById('createdFrom').addEventListener('change', () => {
+        loadTasks();
+      });
+      document.getElementById('createdTo').addEventListener('change', () => {
+        loadTasks();
+      });
+
+      document.getElementById('keywordInput').addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          loadTasks();
+        }
+      });
+
+      window.addEventListener('click', (event) => {
+        const createModal = document.getElementById('createTaskModal');
+        const detailModal = document.getElementById('taskDetailModal');
+        if (event.target === createModal) closeCreateModal();
+        if (event.target === detailModal) closeTaskDetail();
+      });
+    }
+
+    function scheduleAutoSearch() {
+      if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+      }
+      searchDebounceTimer = setTimeout(() => {
+        loadTasks();
+      }, 300);
+    }
+
+    function startListAutoRefresh() {
+      stopListAutoRefresh();
+      listRefreshTimer = setInterval(() => {
+        if (tasks.some(task => task.status === 'running' || task.status === 'pending')) {
+          loadTasks(false);
+        }
+      }, 5000);
+    }
+
+    function stopListAutoRefresh() {
+      if (listRefreshTimer) {
+        clearInterval(listRefreshTimer);
+        listRefreshTimer = null;
+      }
+    }
+
+    function buildQueryString() {
+      const params = new URLSearchParams();
+      const keyword = document.getElementById('keywordInput').value.trim();
+      const status = document.getElementById('statusFilter').value;
+      const createdFrom = document.getElementById('createdFrom').value;
+      const createdTo = document.getElementById('createdTo').value;
+
+      if (keyword) params.set('keyword', keyword);
+      if (status) params.set('status', status);
+      if (createdFrom) params.set('created_from', createdFrom);
+      if (createdTo) params.set('created_to', createdTo);
+
+      const query = params.toString();
+      return query ? '?' + query : '';
+    }
+
+    async function loadTasks(showLoading = true) {
+      const loadingEl = document.getElementById('tasksLoading');
+      const emptyEl = document.getElementById('tasksEmpty');
+      const tableEl = document.getElementById('tasksTableContainer');
+
+      if (showLoading) {
+        loadingEl.style.display = 'block';
+      }
+      emptyEl.style.display = 'none';
+      tableEl.style.display = 'none';
+
       try {
-        const response = await fetch('/api/deepsearch/tasks');
-        
+        const response = await fetch('/api/deepsearch/tasks' + buildQueryString(), { credentials: 'same-origin' });
         if (response.status === 401) {
           window.location.href = '/login';
           return;
         }
-        
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          document.getElementById('emptyTasks').innerHTML = '<div class="empty-state-title">暂无任务</div><div class="empty-state-desc">创建第一个深度检索任务吧</div>';
-          document.getElementById('emptyTasks').style.display = 'block';
-          document.getElementById('taskTable').style.display = 'none';
-          document.getElementById('loadingTasks').style.display = 'none';
-          return;
+          throw new Error('加载任务失败');
         }
-        
+
         const data = await response.json();
-        tasks = data.tasks || [];
-        
+        tasks = Array.isArray(data.tasks) ? data.tasks : [];
         renderTasks();
       } catch (error) {
-        console.error('Error loading tasks:', error);
-        document.getElementById('emptyTasks').innerHTML = '<div class="empty-state-title">暂无任务</div><div class="empty-state-desc">创建第一个深度检索任务吧</div>';
-        document.getElementById('emptyTasks').style.display = 'block';
-        document.getElementById('taskTable').style.display = 'none';
+        console.error('load tasks error', error);
+        tasks = [];
+        renderTasks();
+        showToast('任务列表加载失败', 'error');
       } finally {
-        document.getElementById('loadingTasks').style.display = 'none';
+        loadingEl.style.display = 'none';
       }
     }
 
-    // Render tasks
     function renderTasks() {
+      const emptyEl = document.getElementById('tasksEmpty');
+      const tableEl = document.getElementById('tasksTableContainer');
+      const tbody = document.getElementById('tasksTableBody');
+
       if (tasks.length === 0) {
-        document.getElementById('emptyTasks').style.display = 'block';
-        document.getElementById('taskTable').style.display = 'none';
+        emptyEl.style.display = 'block';
+        tableEl.style.display = 'none';
+        tbody.innerHTML = '';
         return;
       }
-      
-      document.getElementById('emptyTasks').style.display = 'none';
-      document.getElementById('taskTable').style.display = 'table';
-      
-      const tbody = document.getElementById('taskTableBody');
-      tbody.innerHTML = tasks.map(task => {
-        const statusBadge = getStatusBadge(task.status);
-        const createdTime = new Date(task.createdAt).toLocaleString('zh-CN');
-        const completedTime = task.completedAt ? new Date(task.completedAt).toLocaleString('zh-CN') : '-';
-        
-        let actions = '';
-        if (task.status === 'completed') {
-          actions = \`<button class="btn btn-sm btn-primary" onclick="downloadTask(\${task.id})">下载</button>\`;
-        } else if (task.status === 'running') {
-          actions = \`<button class="btn btn-sm btn-outline" onclick="viewTaskDetail(\${task.id})">查看</button>\`;
-        } else {
-          actions = \`<button class="btn btn-sm btn-outline" onclick="deleteTask(\${task.id})">删除</button>\`;
-        }
-        
+
+      emptyEl.style.display = 'none';
+      tableEl.style.display = 'block';
+
+      tbody.innerHTML = tasks.map((task) => {
+        const canDownload = task.status === 'completed';
+        const progressText = task.status === 'completed'
+          ? '100%'
+          : (task.status === 'failed' ? '-' : '执行中');
+
         return \`
           <tr>
-            <td>\${escapeHtml(task.taskName)}</td>
-            <td>\${task.rounds}轮/\${task.semanticLimit}篇</td>
-            <td>\${statusBadge}</td>
-            <td>\${task.articleCount || 0}</td>
-            <td>\${createdTime}</td>
-            <td>\${completedTime}</td>
-            <td>\${actions}</td>
+            <td>\${escapeHtml(task.taskName || '')}</td>
+            <td>\${renderStatusBadge(task.status)}</td>
+            <td>\${progressText}</td>
+            <td>\${formatDateTime(task.createdAt)}</td>
+            <td>\${formatDateTime(task.completedAt)}</td>
+            <td>\${Number(task.articleCount || 0)}</td>
+            <td class="table-actions-cell">
+              <button type="button" class="btn btn-secondary task-action-btn" onclick="viewTaskDetail(\${task.id})">查看</button>
+              <button type="button" class="btn btn-secondary task-action-btn" onclick="downloadTask(\${task.id})" \${canDownload ? '' : 'disabled'}>下载</button>
+              <button type="button" class="btn btn-danger task-action-btn" onclick="deleteTask(\${task.id})">删除</button>
+            </td>
           </tr>
         \`;
       }).join('');
-      
-      // Start polling for running tasks
-      tasks.forEach(task => {
-        if (task.status === 'running' && !pollingIntervals[task.id]) {
-          startPolling(task.id);
-        }
-      });
     }
 
-    // Get status badge
-    function getStatusBadge(status) {
-      const badges = {
-        pending: '<span class="badge badge-secondary">等待中</span>',
-        running: '<span class="badge badge-info">运行中</span>',
-        completed: '<span class="badge badge-success">已完成</span>',
-        failed: '<span class="badge badge-danger">失败</span>'
+    function renderStatusBadge(status) {
+      const textMap = {
+        pending: '等待中',
+        running: '运行中',
+        completed: '已完成',
+        failed: '失败',
       };
-      return badges[status] || status;
+      const cls = status === 'running' ? 'processing' : (status || '');
+      return \`<span class="status-badge \${cls}">\${textMap[status] || escapeHtml(status || '-')}</span>\`;
     }
 
-    // Start polling
-    function startPolling(taskId) {
-      if (pollingIntervals[taskId]) return;
-      
-      let interval = 3000;
-      const maxInterval = 10000;
-      
-      const poll = async () => {
-        try {
-          const response = await fetch(\`/api/deepsearch/tasks/\${taskId}\`);
-          if (!response.ok) return;
-          
-          const data = await response.json();
-          
-          // Update task in list
-          const index = tasks.findIndex(t => t.id === taskId);
-          if (index !== -1) {
-            tasks[index] = { ...tasks[index], ...data };
-            renderTasks();
-          }
-          
-          if (data.status === 'completed' || data.status === 'failed') {
-            clearInterval(pollingIntervals[taskId]);
-            delete pollingIntervals[taskId];
-          } else {
-            // Increase interval
-            interval = Math.min(interval + 1000, maxInterval);
-            pollingIntervals[taskId] = setTimeout(poll, interval);
-          }
-        } catch (error) {
-          console.error('Polling error:', error);
-        }
+    function resetFilters() {
+      if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = null;
+      }
+      document.getElementById('keywordInput').value = '';
+      document.getElementById('statusFilter').value = '';
+      document.getElementById('createdFrom').value = '';
+      document.getElementById('createdTo').value = '';
+      loadTasks();
+    }
+
+    function openCreateModal() {
+      document.getElementById('createTaskModal').classList.add('active');
+    }
+
+    function closeCreateModal() {
+      document.getElementById('createTaskModal').classList.remove('active');
+    }
+
+    function onMdFileSelected(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(loadEvent) {
+        document.getElementById('inputMd').value = String(loadEvent.target?.result || '');
       };
-      
-      pollingIntervals[taskId] = setTimeout(poll, interval);
+      reader.readAsText(file);
     }
 
-    // View task detail
-    async function viewTaskDetail(taskId) {
+    async function submitCreateTask() {
+      const taskName = document.getElementById('taskName').value.trim();
+      const inputMd = document.getElementById('inputMd').value.trim();
+      const rounds = parseInt(document.getElementById('rounds').value, 10);
+      const semanticLimit = parseInt(document.getElementById('semanticLimit').value, 10);
+      const maxFinalArticles = parseInt(document.getElementById('maxFinalArticles').value, 10);
+      const scoreThreshold = parseFloat(document.getElementById('scoreThreshold').value);
+
+      if (!taskName || !inputMd) {
+        showToast('请填写任务名称和输入内容', 'error');
+        return;
+      }
+
+      const submitBtn = document.getElementById('submitCreateBtn');
+      submitBtn.disabled = true;
+
       try {
-        const response = await fetch(\`/api/deepsearch/tasks/\${taskId}\`);
-        if (!response.ok) throw new Error('Failed to load task');
-        
-        const task = await response.json();
-        
-        const content = document.getElementById('taskDetailContent');
-        content.innerHTML = \`
-          <div class="task-detail">
-            <div class="detail-row">
-              <label>任务名称:</label>
-              <span>\${escapeHtml(task.taskName)}</span>
-            </div>
-            <div class="detail-row">
-              <label>状态:</label>
-              <span>\${getStatusBadge(task.status)}</span>
-            </div>
-            \${task.progress ? \`
-            <div class="detail-row">
-              <label>进度:</label>
-              <span>\${task.progress.step} (\${task.progress.current}/\${task.progress.total})</span>
-            </div>
-            \` : ''}
-            \${task.result ? \`
-            <div class="detail-row">
-              <label>文章数量:</label>
-              <span>\${task.result.articleCount}</span>
-            </div>
-            <div class="detail-row">
-              <label>PDF 总结成功:</label>
-              <span>\${task.result.pdfSummarySuccess}</span>
-            </div>
-            <div class="detail-row">
-              <label>PDF 总结失败:</label>
-              <span>\${task.result.pdfSummaryFailed}</span>
-            </div>
-            \` : ''}
-            \${task.errorMessage ? \`
-            <div class="detail-row">
-              <label>错误信息:</label>
-              <span class="text-danger">\${escapeHtml(task.errorMessage)}</span>
-            </div>
-            \` : ''}
-          </div>
-        \`;
-        
-        document.getElementById('taskDetailModal').classList.add('active');
+        const response = await fetch('/api/deepsearch/tasks', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            task_name: taskName,
+            input_md: inputMd,
+            rounds,
+            semantic_limit: semanticLimit,
+            max_final_articles: maxFinalArticles,
+            score_threshold: scoreThreshold,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || '创建任务失败');
+        }
+
+        document.getElementById('createTaskForm').reset();
+        closeCreateModal();
+        await loadTasks();
+        showToast('任务创建成功', 'success');
       } catch (error) {
-        console.error('Error loading task detail:', error);
-        alert('加载失败');
+        console.error('create task error', error);
+        showToast(error instanceof Error ? error.message : '创建任务失败', 'error');
+      } finally {
+        submitBtn.disabled = false;
       }
     }
 
-    // Close task detail
+    async function viewTaskDetail(taskId) {
+      currentDetailTaskId = taskId;
+      document.getElementById('taskDetailModal').classList.add('active');
+      await refreshTaskDetail();
+      startDetailAutoRefresh();
+    }
+
     function closeTaskDetail() {
+      currentDetailTaskId = null;
+      stopDetailAutoRefresh();
       document.getElementById('taskDetailModal').classList.remove('active');
     }
 
-    // Close modal on outside click
-    window.onclick = function(event) {
-      const modal = document.getElementById('taskDetailModal');
-      if (event.target === modal) {
-        closeTaskDetail();
+    function startDetailAutoRefresh() {
+      stopDetailAutoRefresh();
+      detailRefreshTimer = setInterval(() => {
+        if (currentDetailTaskId) {
+          refreshTaskDetail();
+        }
+      }, 4000);
+    }
+
+    function stopDetailAutoRefresh() {
+      if (detailRefreshTimer) {
+        clearInterval(detailRefreshTimer);
+        detailRefreshTimer = null;
       }
-    };
+    }
+
+    async function refreshTaskDetail() {
+      if (!currentDetailTaskId) return;
+
+      const content = document.getElementById('taskDetailContent');
+      content.innerHTML = '<div class="loading">加载任务详情</div>';
+
+      try {
+        const response = await fetch('/api/deepsearch/tasks/' + currentDetailTaskId, { credentials: 'same-origin' });
+        if (!response.ok) {
+          throw new Error('获取任务详情失败');
+        }
+        const task = await response.json();
+        renderTaskDetail(task);
+        await loadTasks(false);
+
+        if (task.status === 'completed' || task.status === 'failed') {
+          stopDetailAutoRefresh();
+        }
+      } catch (error) {
+        console.error('detail error', error);
+        content.innerHTML = '<div class="empty-state"><div class="empty-state-title">加载失败</div><div class="empty-state-desc">请稍后重试</div></div>';
+      }
+    }
+
+    function renderTaskDetail(task) {
+      const content = document.getElementById('taskDetailContent');
+      const progress = task.progress || {};
+      const result = task.result || {};
+      const logs = [];
+
+      logs.push('[' + formatDateTime(task.createdAt) + '] 任务已创建');
+      if (task.status === 'running' || task.status === 'pending') {
+        logs.push('[' + formatDateTime(new Date().toISOString()) + '] 当前步骤: ' + (progress.step || '执行中'));
+      }
+      if (task.status === 'completed') {
+        logs.push('[' + formatDateTime(task.completedAt) + '] 任务执行完成');
+      }
+      if (task.status === 'failed' && task.errorMessage) {
+        logs.push('[' + formatDateTime(new Date().toISOString()) + '] 任务失败: ' + task.errorMessage);
+      }
+
+      const progressText = task.status === 'completed'
+        ? '100%'
+        : (task.status === 'failed' ? '-' : ((progress.current || 0) + '/' + (progress.total || 100)));
+
+      content.innerHTML = \`
+        <div class="detail-grid">
+          <div class="detail-row"><span>任务名称</span><strong>\${escapeHtml(task.taskName || '-')}</strong></div>
+          <div class="detail-row"><span>状态</span><strong>\${renderStatusBadge(task.status)}</strong></div>
+          <div class="detail-row"><span>进度</span><strong>\${escapeHtml(progress.step || '未知')} (\${progressText})</strong></div>
+          <div class="detail-row"><span>创建时间</span><strong>\${formatDateTime(task.createdAt)}</strong></div>
+          <div class="detail-row"><span>完成时间</span><strong>\${formatDateTime(task.completedAt)}</strong></div>
+          <div class="detail-row"><span>文章数量</span><strong>\${Number(result.articleCount || 0)}</strong></div>
+          <div class="detail-row"><span>PDF 总结成功</span><strong>\${Number(result.pdfSummarySuccess || 0)}</strong></div>
+          <div class="detail-row"><span>PDF 总结失败</span><strong>\${Number(result.pdfSummaryFailed || 0)}</strong></div>
+          <div class="detail-row"><span>错误信息</span><strong>\${escapeHtml(task.errorMessage || '-')}</strong></div>
+        </div>
+        <div class="log-block">
+          <h4>执行日志</h4>
+          <pre>\${escapeHtml(logs.join('\\n'))}</pre>
+        </div>
+      \`;
+    }
+
+    async function downloadTask(taskId) {
+      const task = tasks.find(item => item.id === taskId);
+      if (!task || task.status !== 'completed') {
+        showToast('任务未完成，暂不可下载', 'info');
+        return;
+      }
+      window.location.href = '/api/deepsearch/tasks/' + taskId + '/download';
+    }
+
+    async function deleteTask(taskId) {
+      const confirmed = typeof showConfirm === 'function'
+        ? await showConfirm('删除后任务记录将不可恢复，确认删除吗？', {
+          title: '删除任务',
+          okText: '删除',
+          cancelText: '取消',
+          okButtonType: 'btn-danger',
+        })
+        : window.confirm('删除后任务记录将不可恢复，确认删除吗？');
+      if (!confirmed) return;
+
+      try {
+        const response = await fetch('/api/deepsearch/tasks/' + taskId, {
+          method: 'DELETE',
+          credentials: 'same-origin',
+        });
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || '删除失败');
+        }
+        if (currentDetailTaskId === taskId) {
+          closeTaskDetail();
+        }
+        await loadTasks();
+        showToast('任务已删除', 'success');
+      } catch (error) {
+        console.error('delete task error', error);
+        showToast(error instanceof Error ? error.message : '删除失败', 'error');
+      }
+    }
+
+    function formatDateTime(value) {
+      if (!value) return '-';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '-';
+      return date.toLocaleString('zh-CN');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = String(str);
+      return div.innerHTML;
+    }
+
+    function showToast(message, type) {
+      if (window.toast && typeof window.toast[type] === 'function') {
+        window.toast[type](message);
+        return;
+      }
+      alert(message);
+    }
+
+    window.viewTaskDetail = viewTaskDetail;
+    window.downloadTask = downloadTask;
+    window.deleteTask = deleteTask;
   </script>
-  
-  <style>
-    .form-row {
-      display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
-    }
-    .form-group {
-      flex: 1;
-      min-width: 150px;
-    }
-    .input-options {
-      margin-bottom: 10px;
-    }
-    .task-detail .detail-row {
-      display: flex;
-      padding: 8px 0;
-      border-bottom: 1px solid #eee;
-    }
-    .task-detail .detail-row label {
-      width: 120px;
-      font-weight: bold;
-      color: #666;
-    }
-    .task-detail .detail-row span {
-      flex: 1;
-    }
-  </style>
-`}) %>
+` }) %>

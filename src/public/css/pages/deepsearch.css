@@ -1,0 +1,210 @@
+/* ============================================
+   DEEPSEARCH PAGE
+   ============================================ */
+
+.page-header {
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.page-title {
+  font-family: var(--font-heading);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  margin: 0;
+}
+
+.card + .card {
+  margin-top: var(--space-6);
+}
+
+.card:hover {
+  transform: none;
+}
+
+.deepsearch-filters {
+  padding: 0;
+  gap: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.deepsearch-filter-row {
+  grid-template-columns: minmax(240px, 1.4fr) minmax(120px, 0.75fr) minmax(320px, 1.6fr);
+  grid-template-areas:
+    "keyword status date"
+    ". actions .";
+  gap: var(--space-4);
+}
+
+.deepsearch-keyword-group {
+  grid-area: keyword;
+}
+
+.deepsearch-status-group {
+  grid-area: status;
+}
+
+.deepsearch-date-group {
+  grid-area: date;
+}
+
+.deepsearch-filter-row .date-range-group {
+  min-width: 0;
+}
+
+.filter-actions {
+  grid-area: actions;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+  height: 42px;
+}
+
+.deepsearch-filter-row .filter-actions .btn {
+  min-width: 104px;
+  height: 42px;
+  padding: 0 16px;
+}
+
+.create-task-btn {
+  margin-left: 0;
+}
+
+.table-actions-cell {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.task-action-btn {
+  height: 32px;
+  padding: 0 12px;
+  font-size: var(--text-xs);
+  margin-left: var(--space-1);
+}
+
+.task-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.create-input-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.create-input-btn {
+  height: 36px;
+  padding: 0 14px;
+  font-size: var(--text-xs);
+  text-decoration: none;
+}
+
+.create-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.detail-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: var(--bg-subtle);
+}
+
+.detail-row span {
+  display: block;
+  color: var(--text-tertiary);
+  font-family: var(--font-meta);
+  font-size: var(--text-xs);
+  margin-bottom: 4px;
+}
+
+.detail-row strong {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.log-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.log-block h4 {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--divider);
+  font-family: var(--font-heading);
+  font-size: var(--text-base);
+}
+
+.log-block pre {
+  margin: 0;
+  padding: var(--space-4);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  max-height: 320px;
+  overflow: auto;
+}
+
+@media (max-width: 1024px) {
+  .deepsearch-filter-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "keyword status"
+      "date date"
+      "actions actions";
+  }
+
+  .filter-actions {
+    height: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-title {
+    font-size: var(--text-2xl);
+  }
+
+  .deepsearch-filter-row,
+  .create-form-grid,
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .deepsearch-filter-row {
+    grid-template-areas:
+      "keyword"
+      "status"
+      "date"
+      "actions";
+  }
+
+  .filter-actions {
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .table-actions-cell {
+    text-align: left;
+  }
+}
