@@ -213,6 +213,10 @@ output/
 - openai
 - fastapi (Python)
 
+## 数据隔离
+
+任务按用户隔离，不同用户的任务互相不可见。admin 用户只能看到 admin 创建的任务，guest 用户只能看到 guest 创建的任务。
+
 ## 注意事项
 
 1. 首次使用需确保 `config.yaml` 正确配置 `user.userId`、`database.path` 等参数
