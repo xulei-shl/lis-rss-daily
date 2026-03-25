@@ -310,6 +310,54 @@ function exportMarkdown() {
   URL.revokeObjectURL(url);
 }
 
+// 复制深度检索种子
+async function copyDeepSearchSeed() {
+  if (!articleData) return;
+
+  const title = (articleData.title || '').replace(/\s+/g, ' ').trim();
+  const id = articleData.id;
+
+  if (!title || !id) {
+    showToastMessage('无法生成种子文献，请刷新后重试', 'error');
+    return;
+  }
+
+  const seed = '- ' + title + '@' + id;
+
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      await navigator.clipboard.writeText(seed);
+    } else {
+      fallbackCopyText(seed);
+    }
+    showToastMessage('已复制种子文献，可直接粘贴到深度检索输入框', 'success');
+  } catch (err) {
+    console.error('Failed to copy deep search seed:', err);
+    showToastMessage('复制失败，请手动复制：' + seed, 'error');
+  }
+}
+
+function fallbackCopyText(text) {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', 'readonly');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
+}
+
+function showToastMessage(message, type) {
+  if (window.toast && typeof window.toast[type] === 'function') {
+    window.toast[type](message);
+    return;
+  }
+
+  window.alert(message);
+}
+
 // 重新处理文章
 async function processArticle() {
   if (!articleData) return;
