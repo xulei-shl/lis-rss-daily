@@ -42,9 +42,14 @@ def load_env():
     """加载.env环境变量"""
     from dotenv import load_dotenv
     
-    env_path = Path(__file__).parent.parent / ".env"
-    if env_path.exists():
-        load_dotenv(env_path)
+    script_env_path = Path(__file__).parent.parent / ".env"
+    project_env_path = Path(__file__).parent.parent.parent / ".env"
+
+    if project_env_path.exists():
+        load_dotenv(project_env_path, override=False)
+
+    if script_env_path.exists():
+        load_dotenv(script_env_path, override=True)
 
 
 async def upload_to_hiagent_rag(md_path: str, config: Dict, delete_md: bool = True) -> bool:

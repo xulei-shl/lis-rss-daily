@@ -16,6 +16,9 @@ import sys
 import os
 import asyncio
 import argparse
+import json
+import urllib.request
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -34,7 +37,7 @@ from utils.database import (
 from utils.pdf_downloader import load_config, create_download_directory, download_pdf
 from utils.pdf_validator import validate_and_cleanup, get_pdf_info
 from utils.pdf_summarizer import summarize_pdf
-from utils.summary_uploader import upload_all as parallel_upload
+from utils.summary_uploader import upload_all as parallel_upload, load_env
 from utils.logger import DailyLogger
 import yaml
 
@@ -299,6 +302,82 @@ def _is_all_upload_failed(upload_results: Optional[Dict]) -> bool:
     return success_count == 0
 
 
+def notify_main_app_pdf_summary(
+    article_id: int,
+    title: str,
+    source_name: Optional[str],
+    summary: str
+) -> bool:
+    """
+    调用主项目统一推送接口发送 PDF 总结通知
+
+    说明：
+    - 历史上脚本侧只负责企业微信推送，因此沿用 skip_wechat 参数控制“是否跳过通知”
+    - 现在实际发送由主项目统一负责，包括 Telegram 和企业微信
+    """
+    load_env()
+
+    cli_api_key = os.getenv('CLI_API_KEY')
+    if not cli_api_key:
+        print("[跳过] 未配置 CLI_API_KEY，无法调用主项目统一推送接口")
+        return False
+
+    user_id = (
+        os.getenv('PDF_SUMMARY_NOTIFY_USER_ID')
+        or os.getenv('DAILY_SUMMARY_USER_ID')
+        or os.getenv('USER_ID')
+        or '1'
+    )
+    base_url = (
+        os.getenv('BASE_URL')
+        or os.getenv('LIS_RSS_API_URL')
+        or 'http://localhost:8007'
+    ).rstrip('/')
+
+    url = (
+        f"{base_url}/api/pdf-summary/notify/cli?"
+        f"{urllib.parse.urlencode({'user_id': user_id})}"
+    )
+    payload = {
+        'articleId': article_id if article_id > 0 else None,
+        'title': title,
+        'sourceName': source_name or '未知',
+        'summary': summary,
+        'success': True
+    }
+
+    try:
+        data = json.dumps(payload).encode('utf-8')
+        request = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                'Content-Type': 'application/json',
+                'x-api-key': cli_api_key
+            },
+            method='POST'
+        )
+
+        print_section("步骤5: 调用主项目统一推送")
+        print(f"[信息] 接口地址: {base_url}/api/pdf-summary/notify/cli")
+        print(f"[信息] 用户ID: {user_id}")
+        print(f"[信息] 文章ID: {article_id}")
+
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = response.read().decode('utf-8')
+            result = json.loads(body)
+
+        notified = bool(result.get('notified'))
+        telegram = bool(result.get('telegram'))
+        wechat = bool(result.get('wechat'))
+
+        print(f"[结果] 主项目推送结果: telegram={telegram}, wechat={wechat}, notified={notified}")
+        return notified
+    except Exception as e:
+        print(f"[错误] 调用主项目统一推送失败: {e}")
+        return False
+
+
 def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyLogger, skip_lis_rss: bool = False, skip_wechat: bool = False) -> Dict:
     """
     处理单篇文章
@@ -307,7 +386,8 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
     1. 下载PDF（按优先级尝试多个脚本）
     2. 验证PDF文件名匹配
     3. 生成PDF总结（MD）
-    4. 并行上传到四个子系统（包含LIS-RSS数据库更新，可跳过）
+    4. 并行上传到三个子系统（包含LIS-RSS数据库更新，可跳过）
+    5. 调用主项目统一推送渠道发送 PDF 总结通知
     
     Args:
         article: 文章数据
@@ -422,7 +502,7 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
     print(f"[成功] MD文件已生成: {md_path}")
     
     # ===== 步骤4: 并行上传 =====
-    print_section("步骤4: 并行上传到四个子系统")
+    print_section("步骤4: 并行上传到三个子系统")
 
     try:
         source_name = article.get('source_name')
@@ -433,7 +513,7 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
             source_name=source_name,
             config=config,
             skip_lis_rss=skip_lis_rss,
-            skip_wechat=skip_wechat
+            skip_wechat=True
         ))
         
         result['stages']['upload'] = upload_results
@@ -446,6 +526,21 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
         result['stages']['upload'] = {'error': str(e)}
         result['reason'] = reason
         return result
+
+    if skip_wechat:
+        result['stages']['notify'] = 'skipped'
+        print("[跳过] 已按参数跳过统一推送通知")
+    elif _is_all_upload_failed(upload_results):
+        result['stages']['notify'] = 'skipped'
+        print("[跳过] 所有上传任务均失败，跳过统一推送通知")
+    else:
+        notify_success = notify_main_app_pdf_summary(
+            article_id=article_id,
+            title=title,
+            source_name=source_name,
+            summary=md_content
+        )
+        result['stages']['notify'] = 'success' if notify_success else 'failed'
 
     # ===== 完成 =====
     result['success'] = True

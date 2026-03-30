@@ -8,7 +8,7 @@
 - **智能 PDF 验证**：自动验证下载的 PDF 文件名与文章标题匹配
 - **AI 摘要生成**：通过 HiAgent 自动生成论文摘要（Markdown 格式）
 - **多系统并行上传**：同时上传到摘要到 HiAgent RAG、LIS-RSS、Memos
-- **企业微信推送**：自动推送论文摘要到企业微信群
+- **统一推送渠道**：处理完成后调用主项目统一推送渠道，按主项目配置发送 Telegram / 企业微信
 - **每日处理报告**：生成详细的每日处理结果报告
 - **断点恢复机制**：支持中断后恢复处理
 
@@ -86,6 +86,18 @@ LIS_RSS_USERNAME=your_username
 LIS_RSS_PASSWORD=your_password
 ```
 
+#### 主项目统一推送配置
+```env
+# 主项目地址；不配置时默认回退使用 LIS_RSS_API_URL
+BASE_URL=https://your-lis-rss.com
+
+# 主项目 CLI API 密钥，用于调用统一推送接口
+CLI_API_KEY=your_cli_api_key_here
+
+# 接收 PDF 总结推送的主项目用户 ID，默认 1
+PDF_SUMMARY_NOTIFY_USER_ID=1
+```
+
 #### HiAgent RAG 知识库配置
 ```env
 WorkspaceType=personal
@@ -98,10 +110,13 @@ DatasetID=your_knowledge_id
 HIAGENT_PDF_URL=https://your-hiagent-pdf-url.com
 ```
 
-#### 企业微信推送配置
+#### 脚本侧企业微信配置（可选）
 ```env
 WECHAT_WEBHOOK_KEY=your_wechat_webhook_key_here
 ```
+
+> 当前定时任务默认通过主项目统一推送渠道发送通知，不再依赖脚本侧企业微信 Webhook。
+> 仅在你需要保留脚本内部独立推送能力时，才需要配置 `WECHAT_WEBHOOK_KEY`。
 
 ### 3. 配置虚拟环境
 
@@ -176,23 +191,28 @@ summary_upload:
 
   wechat:
     enabled: true
-    # webhook_url 通过环境变量 WECHAT_WEBHOOK_KEY 自动组装
+    # 仅脚本内部企业微信推送使用
+    # 当前 main.py 默认改为调用主项目统一推送渠道
     timeout: 30
     max_retries: 2
 ```
 
-##### 企业微信推送配置说明
-- `enabled`: 是否启用企业微信推送
-- `webhook_url`: 通过 `.env` 文件中的 `WECHAT_WEBHOOK_KEY` 环境变量自动组装
+##### 推送配置说明
+- `summary_upload.wechat.enabled`: 是否保留脚本内部企业微信推送能力
 - `timeout`: 请求超时时间（秒）
 - `max_retries`: 失败重试次数
 
-**环境变量配置**：在 `.env` 文件中添加：
+**主项目统一推送环境变量**：在 `.env` 文件中添加：
 ```env
-WECHAT_WEBHOOK_KEY=your_wechat_webhook_key_here
+BASE_URL=https://your-lis-rss.com
+CLI_API_KEY=your_cli_api_key_here
+PDF_SUMMARY_NOTIFY_USER_ID=1
 ```
 
-**消息格式**：自动生成 Markdown 格式的推送消息，包含论文 ID、来源、标题和摘要内容。超长消息会自动拆分为多条发送。
+**当前行为**：
+- `main.py` 在摘要生成并完成上传后，会调用主项目 `/api/pdf-summary/notify/cli`
+- 实际发送渠道由主项目统一控制，包括 Telegram 和企业微信
+- `WECHAT_WEBHOOK_KEY` 仅对脚本内部企业微信模块有效，不影响主项目统一推送
 
 ## 使用方法
 
@@ -228,8 +248,8 @@ sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && xvfb-r
 - `--title`：论文题名（PDF 下载检索词，必需）
 - `--id`：文章 ID（可选）
   - 提供 ID：执行完整流程，包含 LIS-RSS API 调用
-  - 不提供 ID：跳过 LIS-RSS API 调用，只执行 HiAgent RAG、Memos、微信推送
-- `--skip-wechat`：跳过企业微信推送（默认 false）
+  - 不提供 ID：跳过 LIS-RSS API 调用，只执行 HiAgent RAG、Memos，并调用主项目统一推送
+- `--skip-wechat`：跳过最终通知发送（历史参数名保留，当前实际含义是跳过主项目统一推送）
 
 ### 定时任务配置
 
@@ -241,6 +261,7 @@ sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && xvfb-r
 - 虚拟环境：`/home/xulei/.pyenvs/env_camoufox/bin/python`
 - 脚本：`main.py`
 - 日志：`/opt/lis-rss-daily/scripts/paper-pdf-summary/logs/cron.log`
+- 推送方式：调用主项目统一推送渠道（Telegram / 企业微信）
 
 **Crontab 条目：**
 ```cron
@@ -270,23 +291,26 @@ tail -f /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/cron.log
 2. **PDF 下载**：按优先级尝试多个下载源
 3. **PDF 验证**：验证文件名与文章标题匹配
 4. **AI 总结**：调用 HiAgent 生成 Markdown 格式摘要
-5. **并行上传**：同时上传到四个子系统
+5. **并行上传**：同时上传到三个子系统
    - HiAgent RAG 知识库
    - LIS-RSS 系统（更新 ai_summary 字段）
    - Memos（创建论文笔记）
-   - 企业微信（推送论文摘要）
-6. **生成报告**：生成每日处理报告
+6. **统一推送**：调用主项目统一推送渠道发送 PDF 总结
+   - Telegram：按主项目 `pdf_summary` 接收配置发送
+   - 企业微信：按主项目 webhook `pdf_summary` 配置发送
+7. **生成报告**：生成每日处理报告
 
 ### 运行模式对比
 
-| 模式 | 触发方式 | 步骤1-3 | 步骤4上传 | WeChat推送 | 适用场景 |
+| 模式 | 触发方式 | 步骤1-4 | 步骤5上传 | 步骤6通知 | 适用场景 |
 |------|---------|--------|-----------|-----------|---------|
-| **数据库模式** | cron定时任务 | ✅ | ✅ 完整 | ✅ | 每日自动处理 |
-| **命令行模式** | 直接运行 `main.py --title xxx` | ✅ | ✅ 完整 | ✅ | 手动单篇处理 |
+| **数据库模式** | cron定时任务 | ✅ | ✅ 完整 | ✅ 主项目统一推送 | 每日自动处理 |
+| **命令行模式** | 直接运行 `main.py --title xxx` | ✅ | ✅ 完整 | ✅ 主项目统一推送 | 手动单篇处理 |
 
 **说明**：
-- 步骤1-3：PDF下载 → PDF验证 → AI总结
-- 步骤4：上传到 HiAgent RAG、LIS-RSS、Memos、WeChat
+- 步骤1-4：获取文章 → PDF下载 → PDF验证 → AI总结
+- 步骤5：上传到 HiAgent RAG、LIS-RSS、Memos
+- 步骤6：调用主项目统一推送渠道发送 Telegram / 企业微信
 
 ## 日志和报告
 
