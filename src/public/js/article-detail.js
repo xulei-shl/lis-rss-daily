@@ -4,6 +4,17 @@
 
 let articleData = null;
 
+// 将详情页中的返回链接统一指向带筛选参数的列表页
+function updateBackLinks() {
+  const queryString = window.location.search || '';
+  const backUrl = queryString ? '/articles' + queryString : '/articles';
+  const backLinks = document.querySelectorAll('.back-link, #errorState a');
+
+  backLinks.forEach((link) => {
+    link.href = backUrl;
+  });
+}
+
 // 检查向量配置
 async function checkVectorConfig() {
   try {
@@ -35,6 +46,8 @@ async function checkVectorConfig() {
 
 // 页面就绪后加载文章
 document.addEventListener('DOMContentLoaded', () => {
+  updateBackLinks();
+
   // 移除尾部斜杠并解析文章 ID
   const pathname = window.location.pathname.replace(/\/$/, '');
   const pathParts = pathname.split('/');
@@ -402,7 +415,8 @@ async function deleteArticle() {
     const res = await fetch('/api/articles/' + articleData.id, { method: 'DELETE' });
 
     if (res.ok) {
-      window.location.href = '/articles';
+      const queryString = window.location.search || '';
+      window.location.href = queryString ? '/articles' + queryString : '/articles';
     } else {
       const result = await res.json();
       await showConfirm(result.error || '删除失败', {

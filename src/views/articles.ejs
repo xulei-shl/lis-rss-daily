@@ -120,10 +120,12 @@ const pageActions = isGuest ? '' : `
     const isGuest = ${isGuestValue};
 
     // Load on page ready
-    document.addEventListener('DOMContentLoaded', () => {
-      loadSources();
-      loadArticles();
+    document.addEventListener('DOMContentLoaded', async () => {
+      restoreFiltersFromUrl();
       setupEventListeners();
+      await loadSources();
+      restoreSourceFilterFromUrl();
+      loadArticles();
     });
 
     // Setup event listeners
@@ -219,6 +221,9 @@ const pageActions = isGuest ? '' : `
 
       // Expose getter for selected value
       input.getSelectedValue = () => selectedValue;
+      input.setSelectedValue = (value) => {
+        selectedValue = value || '';
+      };
     }
 
     // Load merged sources for filter (RSS sources + journals)
@@ -228,6 +233,93 @@ const pageActions = isGuest ? '' : `
     function findSourceById(sourceId) {
       if (!sourceId) return null;
       return sources.find(source => source.id === sourceId) || null;
+    }
+
+    // 读取当前筛选条件
+    function getCurrentFilters() {
+      const sourceInput = document.getElementById('filterSource');
+
+      return {
+        page: currentPage,
+        sourceId: sourceInput && sourceInput.getSelectedValue ? sourceInput.getSelectedValue() : '',
+        filterStatus: document.getElementById('filterStatus').value,
+        processStatus: document.getElementById('filterProcess').value,
+        filterRead: document.getElementById('filterRead').value,
+        search: document.getElementById('searchInput').value.trim(),
+        dateFrom: document.getElementById('dateFrom').value,
+        dateTo: document.getElementById('dateTo').value,
+        filterRating: document.getElementById('filterRating').value
+      };
+    }
+
+    // 将列表状态同步到地址栏
+    function syncUrlWithFilters() {
+      const filters = getCurrentFilters();
+      const params = new URLSearchParams();
+
+      if (filters.page > 1) params.set('page', filters.page.toString());
+      if (filters.sourceId) params.set('sourceId', filters.sourceId);
+      if (filters.filterStatus) params.set('filterStatus', filters.filterStatus);
+      if (filters.processStatus) params.set('processStatus', filters.processStatus);
+      if (filters.filterRead) params.set('filterRead', filters.filterRead);
+      if (filters.search) params.set('search', filters.search);
+      if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
+      if (filters.dateTo) params.set('dateTo', filters.dateTo);
+      if (filters.filterRating) params.set('filterRating', filters.filterRating);
+
+      const nextUrl = params.toString() ? \`/articles?\${params.toString()}\` : '/articles';
+      window.history.replaceState({}, '', nextUrl);
+    }
+
+    // 从地址栏恢复筛选条件
+    function restoreFiltersFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const page = parseInt(params.get('page') || '1', 10);
+
+      currentPage = Number.isNaN(page) || page < 1 ? 1 : page;
+      document.getElementById('filterStatus').value = params.get('filterStatus') || '';
+      document.getElementById('filterProcess').value = params.get('processStatus') || '';
+      document.getElementById('filterRead').value = params.get('filterRead') || '';
+      document.getElementById('filterRating').value = params.get('filterRating') || '';
+      document.getElementById('searchInput').value = params.get('search') || '';
+      document.getElementById('dateFrom').value = params.get('dateFrom') || '';
+      document.getElementById('dateTo').value = params.get('dateTo') || '';
+    }
+
+    // 来源筛选需要等选项加载后再恢复
+    function restoreSourceFilterFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const sourceId = params.get('sourceId');
+      const sourceInput = document.getElementById('filterSource');
+
+      if (!sourceId || !sourceInput) return;
+
+      const selectedSource = findSourceById(sourceId);
+      if (!selectedSource) return;
+
+      sourceInput.value = selectedSource.name;
+      if (typeof sourceInput.setSelectedValue === 'function') {
+        sourceInput.setSelectedValue(sourceId);
+      }
+    }
+
+    // 获取当前列表页查询参数，用于跳转详情页后返回
+    function getArticleListQueryString() {
+      const filters = getCurrentFilters();
+      const params = new URLSearchParams();
+
+      if (filters.page > 1) params.set('page', filters.page.toString());
+      if (filters.sourceId) params.set('sourceId', filters.sourceId);
+      if (filters.filterStatus) params.set('filterStatus', filters.filterStatus);
+      if (filters.processStatus) params.set('processStatus', filters.processStatus);
+      if (filters.filterRead) params.set('filterRead', filters.filterRead);
+      if (filters.search) params.set('search', filters.search);
+      if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
+      if (filters.dateTo) params.set('dateTo', filters.dateTo);
+      if (filters.filterRating) params.set('filterRating', filters.filterRating);
+
+      const queryString = params.toString();
+      return queryString ? \`?\${queryString}\` : '';
     }
 
     // 将一组 ID 追加到查询参数
@@ -273,6 +365,7 @@ const pageActions = isGuest ? '' : `
     async function loadArticles() {
       const container = document.getElementById('articlesContainer');
       container.innerHTML = '<div class="loading">加载中...</div>';
+      syncUrlWithFilters();
 
       const params = new URLSearchParams({
         page: currentPage,
@@ -395,7 +488,7 @@ const summary = article.summary_zh || article.content || article.markdown_conten
     <div class="\${cardClass}" style="animation-delay: \${index * 30}ms" data-article-id="\${article.id}">
       <div class="article-card-header">
         <h3 class="article-title">
-          \${readIcon}<a href="/articles/\${article.id}">\${escapeHtml(article.title)}</a>
+          \${readIcon}<a href="/articles/\${article.id}\${getArticleListQueryString()}">\${escapeHtml(article.title)}</a>
         </h3>
         <span class="badge \${article.filter_status}">\${statusLabel[article.filter_status] || '未知'}</span>
       </div>

@@ -27,7 +27,7 @@ export const PUSH_TYPE_LABELS: Record<PushType, string> = {
   daily_summary: '每日总结（通过的期刊 + 资讯）',
   journal_all: '全部期刊总结（包含未通过）',
   new_articles: '新增文章通知',
-  insights: '洞察总结（15天周期）',
+  insights: '洞察总结（10天周期）',
   pdf_summary: 'PDF 全文总结',
 } as const;
 

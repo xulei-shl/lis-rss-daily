@@ -53,7 +53,7 @@ export const PUSH_TYPES = {
 };
 export const PUSH_TYPE_LABELS: Record<PushType, string> = {
   // ... existing
-  insights: '洞察总结（15天周期）',
+  insights: '洞察总结（10天周期）',
 };
 ```
 
