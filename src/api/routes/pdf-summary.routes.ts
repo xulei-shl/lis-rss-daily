@@ -1,6 +1,4 @@
 import express from 'express';
-import fs from 'fs/promises';
-import path from 'path';
 import type { AuthRequest } from '../../middleware/auth.js';
 import { requireAuth, requireAdmin } from '../../middleware/auth.js';
 import { getArticleById } from '../../api/articles.js';
@@ -42,16 +40,7 @@ router.post('/pdf-summary', requireAuth, requireAdmin, async (req: AuthRequest, 
     const articleId = typeof id === 'number' ? id : undefined;
 
     if (result.success) {
-      let summaryContent = '';
-
-      if (result.md_path) {
-        try {
-          const resolvedPath = path.resolve(result.md_path);
-          summaryContent = await fs.readFile(resolvedPath, 'utf-8');
-        } catch (readError) {
-          console.error('Failed to read PDF summary markdown:', readError);
-        }
-      }
+      const summaryContent = article?.ai_summary || '';
 
       const notifyData = {
         articleId,
