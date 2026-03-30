@@ -59,6 +59,11 @@ function renderWeChatWebhooks() {
     } else if (webhook.push_types?.insights !== undefined) {
       pushTypeTags.push('<span class="wechat-webhook-tag insights disabled">洞察报告</span>');
     }
+    if (webhook.push_types?.pdf_summary) {
+      pushTypeTags.push('<span class="wechat-webhook-tag pdf-summary">PDF 总结</span>');
+    } else if (webhook.push_types?.pdf_summary !== undefined) {
+      pushTypeTags.push('<span class="wechat-webhook-tag pdf-summary disabled">PDF 总结</span>');
+    }
 
     const statusClass = webhook.enabled ? '' : 'inactive';
 
@@ -110,6 +115,7 @@ function openWeChatWebhookModal(webhookId) {
     document.getElementById('wechatWebhookJournalAll').checked = webhook.push_types?.journal_all !== false;
     document.getElementById('wechatWebhookNewArticles').checked = webhook.push_types?.new_articles !== false;
     document.getElementById('wechatWebhookInsights').checked = webhook.push_types?.insights !== false;
+    document.getElementById('wechatWebhookPdfSummary').checked = webhook.push_types?.pdf_summary !== false;
     document.getElementById('wechatWebhookEnabled').checked = webhook.enabled;
   } else {
     title.textContent = '添加 Webhook';
@@ -118,6 +124,7 @@ function openWeChatWebhookModal(webhookId) {
     document.getElementById('wechatWebhookJournalAll').checked = true;
     document.getElementById('wechatWebhookNewArticles').checked = true;
     document.getElementById('wechatWebhookInsights').checked = true;
+    document.getElementById('wechatWebhookPdfSummary').checked = true;
     document.getElementById('wechatWebhookEnabled').checked = true;
   }
 
@@ -222,6 +229,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const journal_all = document.getElementById('wechatWebhookJournalAll').checked;
       const new_articles = document.getElementById('wechatWebhookNewArticles').checked;
       const insights = document.getElementById('wechatWebhookInsights').checked;
+      const pdf_summary = document.getElementById('wechatWebhookPdfSummary').checked;
 
       try {
         const body = {
@@ -232,7 +240,8 @@ document.addEventListener('DOMContentLoaded', function() {
             daily_summary,
             journal_all,
             new_articles,
-            insights
+            insights,
+            pdf_summary
           }
         };
 

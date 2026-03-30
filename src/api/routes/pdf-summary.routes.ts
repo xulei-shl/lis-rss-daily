@@ -1,15 +1,18 @@
 import express from 'express';
+import fs from 'fs/promises';
+import path from 'path';
 import type { AuthRequest } from '../../middleware/auth.js';
 import { requireAuth, requireAdmin } from '../../middleware/auth.js';
+import { getArticleById } from '../../api/articles.js';
 import { getTelegramNotifier } from '../../telegram/index.js';
-import type { ArticleWithSource } from '../../api/articles.js';
+import { getWeChatNotifier } from '../../wechat/index.js';
 
 const router = express.Router();
 
 const PDF_API_URL = process.env.PDF_SUMMARY_API_URL || 'http://localhost:8081';
 
 router.post('/pdf-summary', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
-  const { title, id, push_wechat } = req.body;
+  const { title, id } = req.body;
 
   if (!title) {
     return res.status(400).json({ error: 'Title is required' });
@@ -19,73 +22,69 @@ router.post('/pdf-summary', requireAuth, requireAdmin, async (req: AuthRequest, 
     const response = await fetch(`${PDF_API_URL}/process`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, id, push_wechat })
+      body: JSON.stringify({ title, id, push_wechat: false })
     });
 
     const result = await response.json();
+    const userId = req.userId;
 
-    // PDF 总结失败时发送 Telegram 通知
-    if (!result.success && result.reason && req.userId) {
-      const telegramNotifier = getTelegramNotifier();
-      try {
-        // 构建通知数据（使用类型断言绕过严格的类型检查）
-        const notifyData = {
-          id: id || 0,
-          title: title,
-          url: '',
-          source_name: 'PDF全文总结失败',
-          source_origin: 'keyword' as const,
-          summary: `❌ ${result.reason}`,
-          filter_status: 'passed' as const,
-          process_status: 'completed' as const,
-          is_read: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          rss_source_id: null,
-          journal_id: null,
-          keyword_id: null,
-          ai_summary: null,
-          content: null,
-          markdown_content: null,
-          error_message: null,
-          rating: null,
-          published_at: null
-        } as ArticleWithSource;
-        await telegramNotifier.sendNewArticle(req.userId, notifyData);
-      } catch (telegramError) {
-        console.error('Failed to send Telegram notification:', telegramError);
-      }
+    if (!userId) {
+      return res.json(result);
     }
 
-    // PDF 总结成功时发送 Telegram 通知
-    if (result.success && req.userId) {
-      const telegramNotifier = getTelegramNotifier();
+    const article = typeof id === 'number' ? await getArticleById(id, userId) : undefined;
+    const sourceName =
+      article?.source_name ||
+      article?.rss_source_name ||
+      article?.journal_name ||
+      article?.keyword_name ||
+      'PDF 全文总结';
+    const articleId = typeof id === 'number' ? id : undefined;
+
+    if (result.success) {
+      let summaryContent = '';
+
+      if (result.md_path) {
+        try {
+          const resolvedPath = path.resolve(result.md_path);
+          summaryContent = await fs.readFile(resolvedPath, 'utf-8');
+        } catch (readError) {
+          console.error('Failed to read PDF summary markdown:', readError);
+        }
+      }
+
+      const notifyData = {
+        articleId,
+        title,
+        sourceName,
+        summary: summaryContent,
+        success: true,
+      };
+
       try {
-        const notifyData = {
-          id: id || 0,
-          title: title,
-          url: '',
-          source_name: 'PDF全文总结成功',
-          source_origin: 'keyword' as const,
-          summary: `✅ PDF 全文总结已生成`,
-          filter_status: 'passed' as const,
-          process_status: 'completed' as const,
-          is_read: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          rss_source_id: null,
-          journal_id: null,
-          keyword_id: null,
-          ai_summary: null,
-          content: null,
-          markdown_content: null,
-          error_message: null,
-          rating: null,
-          published_at: null
-        } as ArticleWithSource;
-        await telegramNotifier.sendNewArticle(req.userId, notifyData);
-      } catch (telegramError) {
-        console.error('Failed to send Telegram notification:', telegramError);
+        await Promise.all([
+          getTelegramNotifier().sendPdfSummary(userId, notifyData),
+          getWeChatNotifier().sendPdfSummary(userId, notifyData),
+        ]);
+      } catch (notifyError) {
+        console.error('Failed to send PDF summary notification:', notifyError);
+      }
+    } else {
+      const notifyData = {
+        articleId,
+        title,
+        sourceName,
+        reason: result.reason || '未知错误',
+        success: false,
+      };
+
+      try {
+        await Promise.all([
+          getTelegramNotifier().sendPdfSummary(userId, notifyData),
+          getWeChatNotifier().sendPdfSummary(userId, notifyData),
+        ]);
+      } catch (notifyError) {
+        console.error('Failed to send PDF summary failure notification:', notifyError);
       }
     }
 

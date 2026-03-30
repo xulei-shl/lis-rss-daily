@@ -67,6 +67,7 @@ router.post('/wechat/webhooks', requireAuth, requireAdmin, async (req: AuthReque
       journal_all: push_types?.journal_all !== false,
       new_articles: push_types?.new_articles !== false,
       insights: push_types?.insights !== false,
+      pdf_summary: push_types?.pdf_summary !== false,
     };
 
     const webhook = addWeChatWebhook({
@@ -134,6 +135,7 @@ router.put('/wechat/webhooks/:id', requireAuth, requireAdmin, async (req: AuthRe
         journal_all: push_types.journal_all !== false,
         new_articles: push_types.new_articles !== false,
         insights: push_types.insights !== false,
+        pdf_summary: push_types.pdf_summary !== false,
       };
     }
 

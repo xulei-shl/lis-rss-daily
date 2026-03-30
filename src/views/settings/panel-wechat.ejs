@@ -91,6 +91,10 @@
             <input type="checkbox" id="wechatWebhookInsights" name="insights" checked>
             接收洞察报告（15天周期）
           </label>
+          <label>
+            <input type="checkbox" id="wechatWebhookPdfSummary" name="pdf_summary" checked>
+            接收 PDF 全文总结
+          </label>
         </div>
       </div>
 
@@ -238,6 +242,12 @@
   background: rgba(139, 92, 246, 0.1);
   color: #8b5cf6;
   border-color: rgba(139, 92, 246, 0.2);
+}
+
+.wechat-webhook-tag.pdf-summary {
+  background: rgba(14, 116, 144, 0.1);
+  color: #0e7490;
+  border-color: rgba(14, 116, 144, 0.2);
 }
 
 .wechat-webhook-tag.disabled {

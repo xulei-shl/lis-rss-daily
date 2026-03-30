@@ -299,6 +299,7 @@ export interface TelegramChatsTable {
   journal_all: number;  // 接收全部期刊总结（包含未通过）
   new_articles: number;
   insights: number;
+  pdf_summary: number;
   is_active: number;
   created_at: Generated<string>;
   updated_at: string;

@@ -48,6 +48,18 @@ export interface NewArticleData {
 }
 
 /**
+ * PDF 全文总结通知数据接口
+ */
+export interface PdfSummaryData {
+  articleId?: number;
+  title: string;
+  sourceName: string;
+  summary?: string;
+  reason?: string;
+  success: boolean;
+}
+
+/**
  * 将 Markdown 转换为企业微信支持的 Markdown 格式
  *
  * 企业微信 Markdown 支持的语法：
@@ -179,6 +191,29 @@ export function formatNewArticle(data: NewArticleData): string {
   }
 
   message += `\n🔗 [查看原文](${data.url})`;
+
+  return message;
+}
+
+/**
+ * 格式化 PDF 全文总结通知
+ */
+export function formatPdfSummary(data: PdfSummaryData): string {
+  let message = data.success ? '# 📄 PDF 全文总结\n\n' : '# ❌ PDF 全文总结失败\n\n';
+
+  if (data.articleId !== undefined) {
+    message += `**ID：** ${data.articleId}\n`;
+  }
+
+  message += `**来源：** ${data.sourceName}\n`;
+  message += `**标题：** ${data.title}\n\n`;
+
+  if (data.success) {
+    message += '## 📝 摘要内容\n';
+    message += convertToWeChatMarkdown(data.summary || '未生成摘要内容');
+  } else {
+    message += `**失败原因：** ${data.reason || '未知错误'}\n`;
+  }
 
   return message;
 }

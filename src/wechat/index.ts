@@ -12,10 +12,12 @@ import {
   formatDailySummary,
   formatJournalAllSummary,
   formatNewArticle,
+  formatPdfSummary,
   formatTestMessage,
   type WeChatDailySummaryData,
   type JournalAllSummaryData,
   type NewArticleData,
+  type PdfSummaryData,
 } from './formatters.js';
 import {
   getWebhooksForPushType,
@@ -313,6 +315,60 @@ class WeChatNotifier {
             error: error instanceof Error ? error.message : String(error),
           },
           'Failed to send new article to WeChat'
+        );
+      }
+    }
+
+    return successCount > 0;
+  }
+
+  /**
+   * 发送 PDF 全文总结通知到所有配置了该类型的 webhook
+   */
+  async sendPdfSummary(userId: number, data: PdfSummaryData): Promise<boolean> {
+    const webhooks = getWebhooksForPushType('pdf_summary');
+
+    if (webhooks.length === 0) {
+      log.debug({ userId }, 'No WeChat webhooks configured for PDF summary');
+      return false;
+    }
+
+    const message = formatPdfSummary(data);
+    let successCount = 0;
+
+    for (const webhook of webhooks) {
+      try {
+        const client = new WeChatClient(webhook.url);
+        const success = await client.sendMarkdown(message);
+
+        if (success) {
+          successCount++;
+          log.info(
+            {
+              userId,
+              webhookId: webhook.id,
+              webhookName: webhook.name,
+              articleId: data.articleId,
+              title: data.title,
+            },
+            'PDF summary sent to WeChat'
+          );
+        } else {
+          log.warn(
+            { userId, webhookId: webhook.id, webhookName: webhook.name, articleId: data.articleId },
+            'Failed to send PDF summary to WeChat'
+          );
+        }
+      } catch (error) {
+        log.error(
+          {
+            userId,
+            webhookId: webhook.id,
+            webhookName: webhook.name,
+            articleId: data.articleId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'Failed to send PDF summary to WeChat'
         );
       }
     }

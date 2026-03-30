@@ -22,6 +22,7 @@ export interface TelegramChatConfig {
   journalAll: boolean;
   insights: boolean;
   newArticles: boolean;
+  pdfSummary: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -35,6 +36,7 @@ export interface CreateTelegramChatInput {
   journalAll?: boolean;
   insights?: boolean;
   newArticles?: boolean;
+  pdfSummary?: boolean;
   isActive?: boolean;
 }
 
@@ -45,6 +47,7 @@ export interface UpdateTelegramChatInput {
   journalAll?: boolean;
   insights?: boolean;
   newArticles?: boolean;
+  pdfSummary?: boolean;
   isActive?: boolean;
 }
 
@@ -62,6 +65,7 @@ function rowToConfig(row: TelegramChatsSelection): TelegramChatConfig {
     journalAll: row.journal_all === 1,
     insights: (row as any).insights === 1,
     newArticles: row.new_articles === 1,
+    pdfSummary: (row as any).pdf_summary === 1,
     isActive: row.is_active === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -151,6 +155,7 @@ export async function addTelegramChat(userId: number, input: CreateTelegramChatI
       journal_all: input.journalAll !== false ? 1 : 0,
       insights: input.insights !== false ? 1 : 0,
       new_articles: input.newArticles !== false ? 1 : 0,
+      pdf_summary: input.pdfSummary !== false ? 1 : 0,
       is_active: input.isActive !== false ? 1 : 0,
       updated_at: now,
     } as any)
@@ -193,6 +198,9 @@ export async function updateTelegramChat(
   }
   if (input.newArticles !== undefined) {
     updates.new_articles = input.newArticles ? 1 : 0;
+  }
+  if (input.pdfSummary !== undefined) {
+    updates.pdf_summary = input.pdfSummary ? 1 : 0;
   }
   if (input.isActive !== undefined) {
     updates.is_active = input.isActive ? 1 : 0;
@@ -370,6 +378,24 @@ export async function getInsightsChats(userId: number): Promise<TelegramChatConf
     .where('user_id', '=', userId)
     .where('is_active', '=', 1)
     .where('insights', '=', 1)
+    .orderBy('created_at', 'asc')
+    .selectAll()
+    .execute();
+
+  return rows.map(rowToConfig);
+}
+
+/**
+ * Get chats that should receive PDF summary
+ */
+export async function getPdfSummaryChats(userId: number): Promise<TelegramChatConfig[]> {
+  const db = getDb();
+
+  const rows = await db
+    .selectFrom('telegram_chats')
+    .where('user_id', '=', userId)
+    .where('is_active', '=', 1)
+    .where('pdf_summary', '=', 1)
     .orderBy('created_at', 'asc')
     .selectAll()
     .execute();

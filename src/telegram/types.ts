@@ -22,6 +22,15 @@ export interface DailySummaryData {
   };
 }
 
+export interface PdfSummaryNotificationData {
+  articleId?: number;
+  title: string;
+  sourceName: string;
+  summary?: string;
+  reason?: string;
+  success: boolean;
+}
+
 export interface TelegramMessageResponse {
   ok: boolean;
   result?: {

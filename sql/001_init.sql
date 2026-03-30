@@ -441,6 +441,7 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
   journal_all INTEGER DEFAULT 0,        -- 接收全部期刊总结（包含未通过）
   insights INTEGER DEFAULT 1,        -- 接收洞察总结（15天周期）
   new_articles INTEGER DEFAULT 1,        -- 接收新增文章
+  pdf_summary INTEGER DEFAULT 1,         -- 接收 PDF 全文总结
   is_active INTEGER DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,

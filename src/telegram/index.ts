@@ -8,8 +8,8 @@
 
 import { logger } from '../logger.js';
 import { TelegramClient } from './client.js';
-import { formatDailySummary, formatNewArticle, createArticleKeyboard } from './formatters.js';
-import type { TelegramConfig, DailySummaryData } from './types.js';
+import { formatDailySummary, formatNewArticle, formatPdfSummary, createArticleKeyboard } from './formatters.js';
+import type { TelegramConfig, DailySummaryData, PdfSummaryNotificationData } from './types.js';
 import { getUserSettings } from '../api/settings.js';
 import type { ArticleWithSource } from '../api/articles.js';
 import {
@@ -17,6 +17,7 @@ import {
   getJournalAllChats,
   getNewArticlesChats,
   getInsightsChats,
+  getPdfSummaryChats,
   getActiveTelegramChats,
   hasTelegramChats,
   type TelegramChatConfig
@@ -454,6 +455,64 @@ class TelegramNotifier {
           articleId: article.id,
           error: error instanceof Error ? error.message : String(error),
         }, 'Failed to send new article to Telegram');
+      }
+    }
+
+    return successCount > 0;
+  }
+
+  /**
+   * Send PDF summary notification to all configured chats
+   */
+  async sendPdfSummary(userId: number, data: PdfSummaryNotificationData): Promise<boolean> {
+    const config = await loadTelegramConfig(userId);
+
+    if (!config) {
+      log.debug({ userId }, 'Telegram not configured, skipping PDF summary notification');
+      return false;
+    }
+
+    const chats = await getPdfSummaryChats(userId);
+
+    if (chats.length === 0) {
+      log.debug({ userId }, 'No chats configured for PDF summary');
+      return false;
+    }
+
+    const client = new TelegramClient(config.botToken);
+    const message = formatPdfSummary(data);
+
+    let successCount = 0;
+
+    for (const chat of chats) {
+      try {
+        const result = await client.sendMessage(chat.chatId, message);
+
+        if (result.ok) {
+          successCount++;
+          log.info({
+            userId,
+            chatId: chat.chatId,
+            chatName: chat.chatName,
+            articleId: data.articleId,
+            title: data.title,
+            messageId: result.result?.message_id,
+          }, 'PDF summary sent to Telegram');
+        } else {
+          log.warn({
+            userId,
+            chatId: chat.chatId,
+            articleId: data.articleId,
+            error: result.description,
+          }, 'Failed to send PDF summary to Telegram');
+        }
+      } catch (error) {
+        log.error({
+          userId,
+          chatId: chat.chatId,
+          articleId: data.articleId,
+          error: error instanceof Error ? error.message : String(error),
+        }, 'Failed to send PDF summary to Telegram');
       }
     }
 

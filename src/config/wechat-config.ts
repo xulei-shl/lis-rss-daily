@@ -19,6 +19,7 @@ export interface WeChatPushTypes {
   journal_all: boolean;
   new_articles: boolean;
   insights: boolean;
+  pdf_summary: boolean;
 }
 
 /**
@@ -121,12 +122,16 @@ function loadConfig(): WeChatConfig {
             journal_all: true,
             new_articles: true,
             insights: true,
+            pdf_summary: true,
           },
         };
       }
       // 确保新增的推送类型有默认值
       if (webhook.push_types.insights === undefined) {
         webhook.push_types.insights = true;
+      }
+      if (webhook.push_types.pdf_summary === undefined) {
+        webhook.push_types.pdf_summary = true;
       }
       return webhook;
     });

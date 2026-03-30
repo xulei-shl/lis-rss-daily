@@ -4,7 +4,7 @@
  * Format data into Telegram messages with appropriate length limits.
  */
 
-import type { DailySummaryData, InlineKeyboardMarkup } from './types.js';
+import type { DailySummaryData, InlineKeyboardMarkup, PdfSummaryNotificationData } from './types.js';
 
 const MAX_MESSAGE_LENGTH = 4096;
 const MAX_SUMMARY_LENGTH = 3500; // Leave room for header and footer
@@ -153,6 +153,33 @@ export function formatNewArticle(data: {
   }
 
   return message;
+}
+
+/**
+ * Format PDF summary notification for Telegram
+ */
+export function formatPdfSummary(data: PdfSummaryNotificationData): string {
+  const lines: string[] = [];
+
+  lines.push(data.success ? '📄 PDF 全文总结' : '❌ PDF 全文总结失败');
+  lines.push('');
+
+  if (data.articleId !== undefined) {
+    lines.push(`ID: ${data.articleId}`);
+  }
+
+  lines.push(`来源: ${data.sourceName}`);
+  lines.push(`标题: ${data.title}`);
+  lines.push('');
+
+  if (data.success) {
+    lines.push('摘要内容:');
+    lines.push(data.summary || '未生成摘要内容');
+  } else {
+    lines.push(`失败原因: ${data.reason || '未知错误'}`);
+  }
+
+  return lines.join('\n');
 }
 
 /**

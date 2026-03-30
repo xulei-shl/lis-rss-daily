@@ -622,6 +622,20 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
       }
 
       // ============================================================
+      // 030: 添加 pdf_summary 字段到 telegram_chats 表
+      // ============================================================
+      if (file === '030_telegram_pdf_summary.sql') {
+        const hasPdfSummary = hasColumn(db, 'telegram_chats', 'pdf_summary');
+        if (!hasPdfSummary) {
+          db.exec('ALTER TABLE telegram_chats ADD COLUMN pdf_summary INTEGER DEFAULT 1;');
+          console.log('      → Added pdf_summary column to telegram_chats table');
+        } else {
+          console.log('      → Skipped (pdf_summary column already exists)');
+        }
+        continue;
+      }
+
+      // ============================================================
       // 028: 添加 deepsearch_tasks 表
       // ============================================================
       if (file === '028_add_deepsearch_tasks.sql') {
