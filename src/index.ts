@@ -14,6 +14,7 @@ import { initRelatedScheduler } from './related-scheduler.js';
 import { initJournalScheduler } from './journal-scheduler.js';
 import { initKeywordScheduler } from './keyword-scheduler.js';
 import { initDailySummaryScheduler } from './daily-summary-scheduler.js';
+import { initInsightsScheduler } from './insights-scheduler.js';
 import { initTelegramBotManager } from './telegram/bot-manager.js';
 import { config } from './config.js';
 import { createApp, startServer } from './api/web.js';
@@ -41,6 +42,8 @@ async function main() {
     relatedRefreshSchedule: config.relatedRefreshSchedule,
     dailySummaryEnabled: config.dailySummaryEnabled,
     dailySummarySchedule: config.dailySummarySchedule,
+    insightsEnabled: config.insightsEnabled,
+    insightsSchedule: config.insightsSchedule,
   }, 'Configuration loaded');
 
   // Initialize database
@@ -117,6 +120,15 @@ async function main() {
     log.info('📨 Daily summary scheduler disabled');
   }
 
+  // Initialize and start Insights scheduler
+  const insightsScheduler = initInsightsScheduler();
+  if (config.insightsEnabled) {
+    insightsScheduler.start();
+    log.info(`💡 Insights scheduler started (schedule: ${config.insightsSchedule}, days: ${config.insightsDays})`);
+  } else {
+    log.info('💡 Insights scheduler disabled');
+  }
+
   // Initialize and start Telegram Bot
   const telegramBotManager = await initTelegramBotManager();
   if (telegramBotManager) {
@@ -151,6 +163,10 @@ async function main() {
     // Stop daily summary push scheduler
     await dailySummaryScheduler.stop();
     log.info('📨 Daily summary push scheduler stopped');
+
+    // Stop insights scheduler
+    await insightsScheduler.stop();
+    log.info('💡 Insights scheduler stopped');
 
     // Stop Telegram bot manager
     if (telegramBotManager) {
