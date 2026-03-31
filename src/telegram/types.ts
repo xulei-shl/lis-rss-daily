@@ -44,6 +44,9 @@ export interface TelegramMessageResponse {
   };
   error_code?: number;
   description?: string;
+  parameters?: {
+    retry_after?: number;
+  };
 }
 
 /**

@@ -12,7 +12,7 @@ import type {
   GetUpdatesResponse,
 } from './types.js';
 import { ProxyAgent } from 'undici';
-import { splitMessage, getByteLength, DEFAULT_MAX_LENGTH } from '../utils/message-splitter.js';
+import { splitMessage, getByteLength, smartTruncate } from '../utils/message-splitter.js';
 
 const log = logger.child({ module: 'telegram-client' });
 
@@ -20,9 +20,14 @@ const TELEGRAM_API_BASE = 'https://api.telegram.org';
 const DEFAULT_TIMEOUT = 30000;
 const MAX_RETRIES = 3;
 const TELEGRAM_MAX_LENGTH = 4096;
+const CHUNK_SEND_DELAY_MS = 1000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
 }
 
 /**
@@ -57,7 +62,8 @@ export class TelegramClient {
     // Build body for POST request
     const body = JSON.stringify(params);
 
-    // Retry logic: only retry on 5xx or 429 (rate limit)
+    // Retry logic: retry on 5xx and 429. Avoid retrying aborted sendMessage requests
+    // because Telegram may have already accepted the message, which can cause duplicates.
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       this.abortController = new AbortController();
       const timer = setTimeout(() => this.abortController!.abort(), DEFAULT_TIMEOUT);
@@ -94,14 +100,16 @@ export class TelegramClient {
           const retryable = statusCode >= 500 || statusCode === 429;
 
           if (!retryable || attempt === MAX_RETRIES) {
-            const error = data.description || `HTTP \${statusCode}`;
+            const error = data.description || `HTTP ${statusCode}`;
             log.error({ method, statusCode, error }, 'Telegram API request failed');
-            throw new Error(`Telegram API error: \${error}`);
+            throw new Error(`Telegram API error: ${error}`);
           }
 
-          // Exponential backoff: 500ms * 2^attempt
-          const delay = 500 * Math.pow(2, attempt);
-          log.info({ method, attempt, delay }, 'Retrying Telegram API request');
+          const retryAfterSeconds = data.parameters?.retry_after;
+          const delay = statusCode === 429 && typeof retryAfterSeconds === 'number'
+            ? retryAfterSeconds * 1000
+            : 500 * Math.pow(2, attempt);
+          log.info({ method, attempt, delay, statusCode, retryAfterSeconds }, 'Retrying Telegram API request');
           await sleep(delay);
           continue;
         }
@@ -110,6 +118,11 @@ export class TelegramClient {
         return data;
 
       } catch (error) {
+        if (isAbortError(error) && method === 'sendMessage') {
+          log.error({ method, error }, 'Telegram API request aborted, skipping retry to avoid duplicate message');
+          throw error;
+        }
+
         if (attempt >= MAX_RETRIES) {
           log.error({ method, error }, 'Telegram API request failed after retries');
           throw error;
@@ -152,26 +165,9 @@ export class TelegramClient {
     const chunks = splitMessage(text, TELEGRAM_MAX_LENGTH - reservedSpace);
     log.info({ chunkCount: chunks.length }, 'Split message into chunks');
 
-    let lastResult: TelegramMessageResponse | null = null;
-    for (let i = 0; i < chunks.length; i++) {
-      const marker = chunks.length > 1 ? `[${i + 1}/${chunks.length}]\n\n` : '';
-      const markedChunk = marker + chunks[i];
-
-      const markedBytes = getByteLength(markedChunk);
-      if (markedBytes > TELEGRAM_MAX_LENGTH) {
-        const truncated = chunks[i].substring(0, TELEGRAM_MAX_LENGTH - getByteLength(marker));
-        const finalChunk = marker + truncated;
-        lastResult = await this.sendSingleMessage(chatId, finalChunk, parseMode);
-      } else {
-        lastResult = await this.sendSingleMessage(chatId, markedChunk, parseMode);
-      }
-
-      if (i < chunks.length - 1) {
-        await sleep(300);
-      }
-    }
-
-    return lastResult!;
+    return this.sendMessageChunks(chatId, chunks, async (chunkText) => {
+      return this.sendSingleMessage(chatId, chunkText, parseMode);
+    });
   }
 
   /**
@@ -217,20 +213,50 @@ export class TelegramClient {
 
     const reservedSpace = 20;
     const chunks = splitMessage(text, TELEGRAM_MAX_LENGTH - reservedSpace);
+    log.info({ chunkCount: chunks.length }, 'Split message with keyboard into chunks');
 
+    return this.sendMessageChunks(chatId, chunks, async (chunkText) => {
+      return this.sendSingleMessageWithKeyboard(chatId, chunkText, keyboard, parseMode);
+    });
+  }
+
+  private async sendMessageChunks(
+    chatId: string,
+    chunks: string[],
+    sender: (chunkText: string) => Promise<TelegramMessageResponse>
+  ): Promise<TelegramMessageResponse> {
     let lastResult: TelegramMessageResponse | null = null;
-    for (let i = 0; i < chunks.length; i++) {
-      const marker = chunks.length > 1 ? `[${i + 1}/${chunks.length}]\n\n` : '';
-      const markedChunk = marker + chunks[i];
 
-      lastResult = await this.sendSingleMessageWithKeyboard(chatId, markedChunk, keyboard, parseMode);
+    for (let i = 0; i < chunks.length; i++) {
+      const chunkIndex = i + 1;
+      const chunkCount = chunks.length;
+      const marker = chunkCount > 1 ? `[${chunkIndex}/${chunkCount}]\n\n` : '';
+      const finalChunk = this.buildChunkText(marker, chunks[i]);
+
+      log.debug({ chatId, chunkIndex, chunkCount }, 'Sending Telegram message chunk');
+      lastResult = await sender(finalChunk);
 
       if (i < chunks.length - 1) {
-        await sleep(300);
+        await sleep(CHUNK_SEND_DELAY_MS);
       }
     }
 
     return lastResult!;
+  }
+
+  private buildChunkText(marker: string, chunk: string): string {
+    if (!marker) {
+      return chunk;
+    }
+
+    const markedChunk = marker + chunk;
+    if (getByteLength(markedChunk) <= TELEGRAM_MAX_LENGTH) {
+      return markedChunk;
+    }
+
+    const maxContentBytes = TELEGRAM_MAX_LENGTH - getByteLength(marker);
+    const { truncated } = smartTruncate(chunk, maxContentBytes);
+    return marker + truncated;
   }
 
   /**
