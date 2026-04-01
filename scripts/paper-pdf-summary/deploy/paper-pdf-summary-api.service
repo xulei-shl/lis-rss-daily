@@ -9,7 +9,8 @@ WorkingDirectory=/opt/lis-rss-daily/scripts/paper-pdf-summary
 ExecStart=/home/xulei/.pyenvs/env_camoufox/bin/uvicorn api:app --host 0.0.0.0 --port 8081
 Restart=always
 RestartSec=5
-Environment="PATH=/home/xulei/.pyenvs/env_camoufox/bin"
+EnvironmentFile=/opt/lis-rss-daily/scripts/paper-pdf-summary/.env
+Environment="PATH=/home/xulei/.pyenvs/env_camoufox/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 [Install]
 WantedBy=multi-user.target
