@@ -112,11 +112,13 @@ HIAGENT_PDF_URL=https://your-hiagent-pdf-url.com
 
 #### 脚本侧企业微信配置（可选）
 ```env
+PDF_SUMMARY_PUSH_WECHAT=false
 WECHAT_WEBHOOK_KEY=your_wechat_webhook_key_here
 ```
 
-> 当前定时任务默认通过主项目统一推送渠道发送通知，不再依赖脚本侧企业微信 Webhook。
-> 仅在你需要保留脚本内部独立推送能力时，才需要配置 `WECHAT_WEBHOOK_KEY`。
+> `PDF_SUMMARY_PUSH_WECHAT=false` 时，脚本默认不走内部企业微信 Webhook，仅在 Telegram `/papers ... --wechat` 时强制推送全文。
+> `PDF_SUMMARY_PUSH_WECHAT=true` 时，脚本会默认将生成的 Markdown 全文推送到脚本内企业微信 Webhook。
+> `WECHAT_WEBHOOK_KEY` 仅对脚本内部企业微信模块有效，不影响主项目统一推送。
 
 ### 3. 配置虚拟环境
 
@@ -241,6 +243,7 @@ PDF_SUMMARY_NOTIFY_USER_ID=1
 **当前行为**：
 - `main.py` 在摘要生成并完成上传后，会调用主项目 `/api/pdf-summary/notify/cli`
 - 实际发送渠道由主项目统一控制，包括 Telegram 和企业微信
+- 同时可选启用脚本内部企业微信全文推送，开关由 `PDF_SUMMARY_PUSH_WECHAT` 控制
 - `WECHAT_WEBHOOK_KEY` 仅对脚本内部企业微信模块有效，不影响主项目统一推送
 
 ## 使用方法
@@ -279,6 +282,7 @@ sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && xvfb-r
   - 提供 ID：执行完整流程，包含 LIS-RSS API 调用
   - 不提供 ID：跳过 LIS-RSS API 调用，只执行 HiAgent RAG、Memos，并调用主项目统一推送
 - `--skip-wechat`：跳过最终通知发送（历史参数名保留，当前实际含义是跳过主项目统一推送）
+- `PDF_SUMMARY_PUSH_WECHAT`：控制是否默认启用脚本内部企业微信全文推送
 
 ### 定时任务配置
 
@@ -413,17 +417,20 @@ npx tsx index.ts
 |------|------|
 | `/start` | 欢迎信息 |
 | `/help` | 使用帮助 |
-| `/papers <标题> [@ID]` | 触发论文处理 |
+| `/papers <标题> [@ID] [--wechat]` | 触发论文处理 |
 
 ### 使用示例
 
 ```
 /papers Attention Is All You Need
 /papers Attention Is All You Need @123
+/papers Attention Is All You Need --wechat
+/papers Attention Is All You Need @123 --wechat
 ```
 
 - `<标题>`：论文标题（必填）
 - `@ID`：LIS-RSS系统ID（可选，不传则跳过LIS-RSS上传）
+- `--wechat`：强制启用脚本内部企业微信全文推送；不传时按 `.env` 中 `PDF_SUMMARY_PUSH_WECHAT` 决定
 
 ### 日志
 
@@ -433,6 +440,7 @@ Bot 日志保存在 `logs/telegram-node.log`
 
 - 同一时间只能处理一个任务
 - Bot 使用 Node.js + undici ProxyAgent 连接 Telegram
+- 修改 `.env` 或 Telegram Bot / API 代码后，需要重启对应服务进程才能生效
 
 ## 故障排查
 
