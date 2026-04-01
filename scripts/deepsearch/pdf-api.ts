@@ -10,7 +10,7 @@ export async function callPdfApi(
   articleId: number | null
 ): Promise<PdfApiResult> {
   const config = getConfig();
-  const apiUrl = process.env.PAPER_PDF_API_URL || config.pdf_summary.api_url;
+  const apiUrl = process.env.PDF_SUMMARY_API_URL || config.pdf_summary.api_url;
   const timeout = config.pdf_summary.timeout * 1000;
 
   const controller = new AbortController();

@@ -84,6 +84,16 @@ async function dispatchPdfSummaryNotification(userId: number, data: PdfSummaryNo
   };
 }
 
+function getArticleSourceName(article: Awaited<ReturnType<typeof getArticleById>>): string {
+  return (
+    article?.source_name ||
+    article?.rss_source_name ||
+    article?.journal_name ||
+    article?.keyword_name ||
+    DEFAULT_SOURCE_NAME
+  );
+}
+
 function formatAdminFailureMessage(data: {
   articleId?: number;
   title: string;
@@ -132,6 +142,30 @@ async function sendAdminFailureMessage(data: {
   }
 }
 
+async function notifyPdfSummaryFailure(
+  userId: number | undefined,
+  data: {
+    articleId?: number;
+    title: string;
+    reason: string;
+  }
+): Promise<void> {
+  if (!userId) {
+    return;
+  }
+
+  const article = data.articleId !== undefined
+    ? await getArticleById(data.articleId, userId)
+    : undefined;
+
+  await sendAdminFailureMessage({
+    articleId: data.articleId,
+    title: data.title,
+    sourceName: getArticleSourceName(article),
+    reason: data.reason,
+  });
+}
+
 router.post('/pdf-summary', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   const { title, id } = req.body;
 
@@ -165,27 +199,21 @@ router.post('/pdf-summary', requireAuth, requireAdmin, async (req: AuthRequest, 
         console.error('Failed to send PDF summary notification:', notifyError);
       }
     } else {
-      const article = typeof id === 'number' ? await getArticleById(id, userId) : undefined;
-      const sourceName =
-        article?.source_name ||
-        article?.rss_source_name ||
-        article?.journal_name ||
-        article?.keyword_name ||
-        DEFAULT_SOURCE_NAME;
-      const articleId = typeof id === 'number' ? id : undefined;
-      const notifyData = {
-        articleId,
+      await notifyPdfSummaryFailure(userId, {
+        articleId: typeof id === 'number' ? id : undefined,
         title,
-        sourceName,
         reason: result.reason || '未知错误',
-      };
-
-      await sendAdminFailureMessage(notifyData);
+      });
     }
 
     res.json(result);
   } catch (error) {
     console.error('PDF summary proxy error:', error);
+    await notifyPdfSummaryFailure(req.userId, {
+      articleId: typeof id === 'number' ? id : undefined,
+      title,
+      reason: `请求 PDF 总结服务失败（${PDF_API_URL}/process）：${error instanceof Error ? error.message : String(error)}`,
+    });
     res.status(500).json({ error: 'Failed to call PDF summary service' });
   }
 });
