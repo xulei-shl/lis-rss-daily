@@ -9,10 +9,24 @@ webhooks:
       journal_all: true
       new_articles: false
       insights: true
+      pdf_summary: true
     id: webhook-1773061649022-aqmqb0j19
     created_at: '2026-03-09T13:07:29.022Z'
     updated_at: '2026-03-24T00:57:49.520Z'
+  - name: 徐帆
+    url: >-
+      https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=d0a5ddb7-8aa8-4472-ba1f-ef89b444f6db
+    enabled: true
+    push_types:
+      daily_summary: false
+      journal_all: true
+      new_articles: false
+      insights: true
+      pdf_summary: true
+    id: webhook-1774948985038-xyli3rc39
+    created_at: '2026-03-31T09:23:05.038Z'
+    updated_at: '2026-03-31T09:23:05.038Z'
 metadata:
   created_at: '2026-03-09T00:00:00Z'
-  updated_at: '2026-03-24T00:57:49.520Z'
+  updated_at: '2026-03-31T09:23:05.039Z'
   schema_version: '1.0'
