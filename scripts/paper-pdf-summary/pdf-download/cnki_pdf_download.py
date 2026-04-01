@@ -11,6 +11,7 @@ import json
 import shutil
 from pathlib import Path
 from camoufox.sync_api import Camoufox
+from camoufox.addons import DefaultAddons
 
 # 导入关键词处理工具
 from keyword_processor import sanitize_for_playwright, diagnose_keyword_issue
@@ -347,10 +348,11 @@ def cnki_download(keyword: str, output_dir: str = None, reuse_session: bool = Tr
     max_retries = 3
 
     with Camoufox(
-        headless=False,
-        geoip=True,
-        humanize=True,
+        headless=True,
+        geoip=False,
+        humanize=False,
         os="linux",
+        exclude_addons=[DefaultAddons.UBO]
     ) as browser:
         context = browser.new_context(
             accept_downloads=True,

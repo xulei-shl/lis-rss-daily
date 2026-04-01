@@ -9,6 +9,7 @@ import os
 import shutil
 from pathlib import Path
 from camoufox.sync_api import Camoufox
+from camoufox.addons import DefaultAddons
 
 # 导入关键词处理工具
 from keyword_processor import sanitize_for_playwright, diagnose_keyword_issue
@@ -40,8 +41,9 @@ def wanfang_download(keyword: str, output_dir: str = None):
 
     # 使用 Camoufox 启动浏览器
     with Camoufox(
-        headless=False,
-        geoip=True
+        headless=True,
+        geoip=False,
+        exclude_addons=[DefaultAddons.UBO]
     ) as browser:
         context = browser.new_context(
             accept_downloads=True,

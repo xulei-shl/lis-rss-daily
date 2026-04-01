@@ -128,15 +128,44 @@ export PYTHONPATH=/home/xulei/.pyenvs/env_camoufox/bin/python
 ### 4. 安装依赖
 
 ```bash
-# 安装 Camoufox（如需要需要的）
+# 安装 Camoufox（如需要）
 pip install camoufox[geoip]
 
-# 安装 Playwright 浏览器
+# 安装 Playwright 浏览器（必须为运行用户安装）
 playwright install chromium
 
-# 安装企业微信推送依赖
-pip install aiohttp
+# 安装 PDF 处理、剪贴板等依赖
+pip install pymupdf pyperclip aiohttp
+
+# 安装 xclip（pyperclip 在 Linux 下需要）
+apt-get install xclip
 ```
+
+### 5. 目录权限初始化
+
+首次部署或切换运行用户后，必须修复目录权限：
+
+```bash
+# 修复所有需要写入的目录权限（假设运行用户为 xulei）
+chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/download/
+chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/
+chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/pdf-download/cnki_session/
+chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/
+```
+
+### 6. Camoufox 浏览器初始化
+
+需要为运行用户初始化 Camoufox 浏览器：
+
+```bash
+# 以运行用户身份执行（关键：设置正确的 HOME 环境变量）
+sudo -u xulei bash -c "HOME=/home/xulei /home/xulei/.pyenvs/env_camoufox/bin/python -c 'from camoufox.sync_api import Camoufox; from camoufox.addons import DefaultAddons; Camoufox(headless=True, geoip=False, exclude_addons=[DefaultAddons.UBO])'"
+```
+
+> **注意**：Camoufox 默认会尝试下载 UBO 插件，但国内网络可能导致下载失败。上述命令会初始化浏览器并跳过 UBO 插件。如果后续运行仍遇到 `InvalidAddonPath: manifest.json is missing` 错误，手动删除损坏的插件目录：
+> ```bash
+> rm -rf /home/xulei/.cache/camoufox/addons/UBO
+> ```
 
 ## 配置说明
 
@@ -414,6 +443,52 @@ Bot 日志保存在 `logs/telegram-node.log`
 2. 下载源网站是否可访问
 3. PDF 下载脚本配置是否正确
 
+### Camoufox 浏览器启动失败
+
+**常见错误**：`InvalidAddonPath: manifest.json is missing`
+
+**原因**：Camoufox 的 UBO 插件下载失败或损坏
+
+**解决方案**：
+```bash
+# 1. 删除损坏的插件目录
+rm -rf ~/.cache/camoufox/addons/UBO
+
+# 2. 重新初始化（跳过 UBO 插件）
+sudo -u xulei bash -c "HOME=/home/xulei /home/xulei/.pyenvs/env_camoufox/bin/python -c 'from camoufox.sync_api import Camoufox; from camoufox.addons import DefaultAddons; Camoufox(headless=True, geoip=False, exclude_addons=[DefaultAddons.UBO])'"
+```
+
+### Playwright 浏览器未安装
+
+**常见错误**：`BrowserType.launch: Executable doesn't exist`
+
+**解决方案**：
+```bash
+# 必须为运行用户安装 Playwright 浏览器
+sudo -u xulei bash -c "HOME=/home/xulei /home/xulei/.pyenvs/env_camoufox/bin/python -m playwright install chromium"
+```
+
+### pyperclip 复制机制缺失
+
+**常见错误**：`Pyperclip could not find a copy/paste mechanism`
+
+**解决方案**：
+```bash
+apt-get install xclip
+```
+
+### 目录权限问题
+
+**常见错误**：`Permission denied` 对 `logs/`, `download/`, `cnki_session/` 等目录
+
+**解决方案**：
+```bash
+chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/download/
+chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/
+chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/pdf-download/cnki_session/
+chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/
+```
+
 ### PDF 验证失败
 
 检查：
@@ -433,6 +508,58 @@ Bot 日志保存在 `logs/telegram-node.log`
 1. 对应服务的环境变量是否正确配置
 2. 服务是否可访问
 3. 查看各子系统的详细错误日志
+
+## 部署检查清单
+
+首次部署或重新部署时，按以下顺序执行：
+
+### 1. 环境检查
+```bash
+# 确认虚拟环境存在
+ls -la /home/xulei/.pyenvs/env_camoufox/bin/python
+
+# 确认 Python 版本
+/home/xulei/.pyenvs/env_camoufox/bin/python --version
+```
+
+### 2. 安装 Python 依赖
+```bash
+/home/xulei/.pyenvs/env_camoufox/bin/pip install camoufox[geoip] pymupdf pyperclip aiohttp
+```
+
+### 3. 安装系统依赖
+```bash
+apt-get install xclip
+```
+
+### 4. 为运行用户安装浏览器
+```bash
+# 安装 Playwright 浏览器
+sudo -u xulei bash -c "HOME=/home/xulei /home/xulei/.pyenvs/env_camoufox/bin/python -m playwright install chromium"
+
+# 初始化 Camoufox 浏览器（跳过 UBO 插件）
+sudo -u xulei bash -c "HOME=/home/xulei /home/xulei/.pyenvs/env_camoufox/bin/python -c 'from camoufox.sync_api import Camoufox; from camoufox.addons import DefaultAddons; Camoufox(headless=True, geoip=False, exclude_addons=[DefaultAddons.UBO])'"
+```
+
+### 5. 修复目录权限
+```bash
+chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/download/
+chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/
+chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/pdf-download/cnki_session/
+chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/
+```
+
+### 6. 测试运行
+```bash
+# 测试单篇论文处理
+sudo -u xulei bash -c "HOME=/home/xulei cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/xulei/.pyenvs/env_camoufox/bin/python main.py --title '测试论文标题'"
+```
+
+### 7. 验证结果
+- 检查 `download/` 目录是否有 PDF 文件
+- 检查 `logs/` 目录是否有当日日志
+- 检查 LIS-RSS 系统是否有 AI 总结更新
+- 检查 Memos 是否有新笔记
 
 ## 技术栈
 
