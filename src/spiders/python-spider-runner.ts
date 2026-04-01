@@ -6,6 +6,7 @@
  */
 
 import { spawn } from 'child_process';
+import { existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../logger.js';
@@ -25,13 +26,46 @@ export class PythonSpiderRunner {
 
   constructor() {
     // Python 解释器路径，可通过环境变量配置
-    // 默认使用项目虚拟环境中的 Python
-    this.pythonPath = process.env.PYTHON_PATH || path.join(process.cwd(), 'venv', 'bin', 'python');
+    // 默认会自动探测常见 Python 环境，优先使用明确存在的路径
+    this.pythonPath = this.resolvePythonPath();
 
     // Python 脚本目录
     // 开发环境：docs/期刊网页定时爬取/
     // 生产环境：需要将脚本复制到相应位置
     this.scriptsDir = this.getScriptsDir();
+  }
+
+  /**
+   * 解析 Python 解释器路径
+   */
+  private resolvePythonPath(): string {
+    const configuredPath = process.env.PYTHON_PATH?.trim();
+    if (configuredPath) {
+      if (existsSync(configuredPath)) {
+        log.info({ pythonPath: configuredPath, source: 'PYTHON_PATH' }, 'Using configured Python interpreter');
+        return configuredPath;
+      }
+
+      log.warn({ pythonPath: configuredPath, source: 'PYTHON_PATH' }, 'Configured Python interpreter does not exist, falling back to auto-detection');
+    }
+
+    const candidates = [
+      path.join(process.cwd(), 'venv', 'bin', 'python'),
+      path.join(process.cwd(), 'lis-rss', 'bin', 'python'),
+      '/home/xulei/.pyenvs/env_camoufox/bin/python',
+      '/usr/bin/python3',
+      '/usr/local/bin/python3',
+    ];
+
+    const resolvedPath = candidates.find(candidate => existsSync(candidate));
+    if (resolvedPath) {
+      log.info({ pythonPath: resolvedPath, source: 'fallback' }, 'Using detected Python interpreter');
+      return resolvedPath;
+    }
+
+    const defaultPath = path.join(process.cwd(), 'venv', 'bin', 'python');
+    log.warn({ pythonPath: defaultPath, candidates }, 'No available Python interpreter detected, using default path');
+    return defaultPath;
   }
 
   /**
@@ -67,7 +101,7 @@ export class PythonSpiderRunner {
       const script = scriptMap[spiderType];
       const args = this.buildArgs(spiderType, params);
 
-      log.info({ script, args, cwd: this.scriptsDir, proxy: HTTP_PROXY ? 'enabled' : 'disabled' }, 'Running Python spider');
+      log.info({ script, args, cwd: this.scriptsDir, pythonPath: this.pythonPath, proxy: HTTP_PROXY ? 'enabled' : 'disabled' }, 'Running Python spider');
 
       const startTime = Date.now();
 

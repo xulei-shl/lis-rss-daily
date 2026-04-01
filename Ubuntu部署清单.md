@@ -25,23 +25,24 @@ sudo apt-get install -y curl git build-essential
 
 ### 2. 安装 Node.js 20+
 
+推荐使用 `n` 工具快速安装 Node.js：
+
 ```bash
-# Download and install nvm:
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+# 安装 n 工具
+npm install -g n
 
-# in lieu of restarting the shell
-\. "$HOME/.nvm/nvm.sh"
+# 安装 Node.js 24 (推荐)
+n 24
 
-# Download and install Node.js:
-nvm install 24
+# 刷新 shell 路径
+hash -r
 
-# Verify the Node.js version:
-node -v # Should print "v24.13.1".
-
-# Verify npm version:
-npm -v # Should print "11.8.0".
-
+# 验证安装
+node -v  # Should print "v24.x.x"
+npm -v
 ```
+
+> **注意**：Node.js 24+ 可解决 `undici` 库的兼容性问题（`File is not defined` 错误）。
 
 ### 3. 安装 pnpm
 
@@ -98,18 +99,59 @@ pnpm rebuild better-sqlite3
 pnpm install --force
 ```
 
-### 7. 安装 ChromaDB
+### 7. 安装 ChromaDB 和 Python 依赖
 
 ```bash
-# 虚拟环境
+# 创建虚拟环境
 python3 -m venv lis-rss
 source lis-rss/bin/activate
 
 # 使用 pip 安装 ChromaDB
 pip3 install chromadb
 
+# 安装 Paper PDF API 和 DeepSearch API 所需依赖
+pip3 install fastapi "uvicorn[standard]" pydantic python-telegram-bot httpx PyYAML aiohttp
+
+# 安装 PDF 下载所需依赖（Camoufox 浏览器）
+pip3 install camoufox
+
 # 验证安装
 chroma --version
+```
+
+### 7.1 安装系统依赖
+
+```bash
+# 安装 xvfb（用于无头浏览器 PDF 下载）
+sudo apt-get update
+sudo apt-get install -y xvfb
+
+# 验证安装
+xvfb-run --version
+```
+
+### 7.2 安装 DeepSearch API 虚拟环境
+
+```bash
+# 为 DeepSearch API 创建独立虚拟环境
+python3 -m venv lis-rss-deepsearch
+source lis-rss-deepsearch/bin/activate
+
+# 安装依赖
+pip3 install fastapi "uvicorn[standard]" pydantic python-telegram-bot httpx PyYAML
+
+# 验证安装
+uvicorn --version
+```
+
+### 7.3 安装 Telegram Bot 依赖
+
+```bash
+# 进入 telegram-bot 目录
+cd /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot
+
+# 安装 Node.js 依赖
+pnpm install
 ```
 
 ### 8. 配置环境变量
@@ -322,29 +364,25 @@ After=network.target chromadb.service
 Type=simple
 User=root
 WorkingDirectory=/opt/lis-rss-daily
-# PATH 包含 nvm 安装的 Node.js 和 pnpm
-Environment="PATH=/root/.nvm/versions/node/v24.13.1/bin:/usr/local/bin:/usr/bin:/bin"
-Environment="NODE_ENV=production"
-Environment="PORT=8007"
-Environment="TERM=dumb"  # 支持 systemd 环境下的 clear 命令
-# 直接调用启动脚本，无需激活虚拟环境
-ExecStart=/bin/bash /opt/lis-rss-daily/scripts/start-app.sh
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/lis-rss-daily/.env
+ExecStart=/usr/local/bin/pnpm dev
 Restart=always
 RestartSec=10
 
 # --- 防止进程残留配置 ---
-# 确保停止服务时，杀死该服务启动的所有子进程
-KillMode=control
-# 发送 SIGINT 信号，让 Node 进程有机会优雅退出
+KillMode=control-group
 KillSignal=SIGINT
-# 等待 10 秒让进程退出，如果还没退出则强制 SIGKILL
 TimeoutStopSec=10
 # ------------------------------
 
-StandardOutput=append:/opt/lis-rss-daily/logs/app.log
-StandardError=append:/opt/lis-rss-daily/logs/error.log
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lis-rss
 
 [Install]
+WantedBy=multi-user.target
+```
 WantedBy=multi-user.target
 ```
 
@@ -447,8 +485,11 @@ sudo systemctl status lis-rss
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 
-# 如果不使用 Nginx，直接允许应用端口
-sudo ufw allow 8007/tcp
+# 允许应用端口（主应用 + 附属服务）
+sudo ufw allow 8007/tcp  # LIS-RSS 主应用
+sudo ufw allow 8000/tcp  # ChromaDB
+sudo ufw allow 8081/tcp # Paper PDF API
+sudo ufw allow 8082/tcp # DeepSearch API
 
 # 启用防火墙
 sudo ufw enable
@@ -456,6 +497,151 @@ sudo ufw enable
 # 查看状态
 sudo ufw status
 ```
+
+---
+
+## 一键部署脚本
+
+### 创建所有 systemd 服务
+
+```bash
+# 1. ChromaDB 服务
+cat > /etc/systemd/system/chromadb.service << 'EOF'
+[Unit]
+Description=ChromaDB Vector Database
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/lis-rss-daily
+Environment="PATH=/opt/lis-rss-daily/lis-rss/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/opt/lis-rss-daily/lis-rss/bin/chroma run --host 127.0.0.1 --port 8000 --path /opt/lis-rss-daily/data/vector/chroma
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 2. LIS-RSS 主应用服务
+cat > /etc/systemd/system/lis-rss.service << 'EOF'
+[Unit]
+Description=LIS-RSS Literature Tracker
+After=network.target chromadb.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/lis-rss-daily
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/lis-rss-daily/.env
+ExecStart=/usr/local/bin/pnpm dev
+Restart=always
+RestartSec=10
+
+KillMode=control-group
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lis-rss
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 3. DeepSearch API 服务
+cat > /etc/systemd/system/deepsearch-api.service << 'EOF'
+[Unit]
+Description=DeepSearch API Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/lis-rss-daily
+ExecStart=/opt/lis-rss-daily/lis-rss-deepsearch/bin/uvicorn scripts.deepsearch.api:app --host 0.0.0.0 --port 8082
+Restart=always
+RestartSec=5
+Environment="PATH=/opt/lis-rss-daily/lis-rss-deepsearch/bin:/usr/bin:/usr/local/bin"
+Environment="DATABASE_PATH=/opt/lis-rss-daily/data/rss-tracker.db"
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 4. Paper PDF API 服务
+cat > /etc/systemd/system/paper-pdf-api.service << 'EOF'
+[Unit]
+Description=Paper PDF Summary API Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/lis-rss-daily/scripts/paper-pdf-summary
+ExecStart=/opt/lis-rss-daily/lis-rss/bin/uvicorn api:app --host 0.0.0.0 --port 8081
+Restart=always
+RestartSec=5
+Environment="PATH=/opt/lis-rss-daily/lis-rss/bin:/usr/bin:/usr/local/bin"
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 5. Paper PDF Telegram Bot 服务
+cat > /etc/systemd/system/paper-pdf-summary-telegram.service << 'EOF'
+[Unit]
+Description=Paper PDF Summary Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot
+ExecStart=/usr/local/bin/node /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/cli.mjs /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot/index.ts
+Restart=always
+RestartSec=5
+Environment="PATH=/usr/local/bin:/usr/bin"
+EnvironmentFile=/opt/lis-rss-daily/scripts/paper-pdf-summary/.env
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+### 启动所有服务
+
+```bash
+# 重新加载 systemd
+systemctl daemon-reload
+
+# 启用所有服务
+systemctl enable chromadb lis-rss deepsearch-api paper-pdf-api paper-pdf-summary-telegram
+
+# 按依赖顺序启动
+systemctl start chromadb
+sleep 3
+systemctl start lis-rss
+systemctl start deepsearch-api
+systemctl start paper-pdf-api
+systemctl start paper-pdf-summary-telegram
+
+# 验证所有服务状态
+systemctl status chromadb lis-rss deepsearch-api paper-pdf-api paper-pdf-summary-telegram
+```
+
+### 服务端口一览
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| ChromaDB | 8000 | 向量数据库 |
+| LIS-RSS | 8007 | 主应用 Web UI |
+| DeepSearch API | 8082 | 深度检索 API |
+| Paper PDF API | 8081 | PDF 处理 API |
+| Paper PDF Telegram Bot | - | Telegram 机器人（无端口）|
 
 ---
 
@@ -818,6 +1004,83 @@ sudo journalctl -u lis-rss -f
 | ChromaDB 启动失败 | 重建虚拟环境 |
 
 ---
+
+## 常见问题排查（新增）
+
+### Node.js 版本问题
+
+**症状**：`undici` 库报错 `ReferenceError: File is not defined`
+
+**原因**：Node.js 18.x 与 `undici@7.x` 不兼容
+
+**解决**：使用 Node.js 24+
+
+```bash
+# 安装 n 工具
+npm install -g n
+
+# 升级到 Node.js 24
+n 24
+
+# 重新编译 native 模块
+pnpm rebuild better-sqlite3
+
+# 重启服务
+systemctl restart lis-rss
+```
+
+### Telegram Bot 启动失败
+
+**症状**：日志显示 `TELEGRAM_BOT_TOKEN environment variable is not set`
+
+**原因**：`.env` 文件中未配置 `TELEGRAM_BOT_TOKEN`
+
+**解决**：在 `scripts/paper-pdf-summary/.env` 中添加：
+
+```env
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+TELEGRAM_USER_ID=your_user_id
+TELEGRAM_API_URL=http://localhost:8081
+HTTP_PROXY=http://127.0.0.1:7890
+```
+
+然后重启服务：
+```bash
+systemctl restart paper-pdf-summary-telegram
+```
+
+### PDF 下载失败
+
+**症状**：日志显示 `No such file or directory: 'xvfb-run'`
+
+**原因**：未安装 `xvfb` 系统依赖
+
+**解决**：
+```bash
+sudo apt-get update
+sudo apt-get install -y xvfb
+systemctl restart paper-pdf-api
+```
+
+### tsx 路径问题
+
+**症状**：`SyntaxError: missing ) after argument list` 在调用 `node_modules/.bin/tsx` 时
+
+**原因**：pnpm 的 shim 脚本在 Node.js 24 下有问题
+
+**解决**：直接使用 tsx 的完整路径：
+```bash
+# 替换 ExecStart 中的路径
+ExecStart=/usr/local/bin/node /path/to/project/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/cli.mjs /path/to/project/index.ts
+```
+
+### DeepSearch API 导入错误
+
+**症状**：`ModuleNotFoundError: No module named 'md_parser'`
+
+**原因**：工作目录不正确
+
+**解决**：确保 `WorkingDirectory` 设置为 `/opt/lis-rss-daily`
 
 ---
 
