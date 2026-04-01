@@ -18,9 +18,8 @@ from dotenv import load_dotenv
 from typing import Optional, List, Dict
 from datetime import datetime
 
-# 配置文件路径（从根目录加载）
-from pathlib import Path
-ENV_FILE = Path(__file__).parent.parent / ".env"
+# 配置文件路径（从 paper-pdf-summary 根目录加载）
+ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 load_dotenv(ENV_FILE)
 
 
@@ -241,7 +240,7 @@ Examples:
 
     if not base_url or not access_token:
         print("❌ Configuration error: MEMOS_BASE_URL and MEMOS_ACCESS_TOKEN required in .env file")
-        print(f"   Expected location: {ENV_PATH}")
+        print(f"   Expected location: {ENV_FILE}")
         sys.exit(1)
 
     try:

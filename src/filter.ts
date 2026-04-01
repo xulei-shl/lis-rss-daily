@@ -138,7 +138,9 @@ async function llmFilter(
     };
   }
 
-  const userPrompt = `请评估以下文章：
+  const userPrompt = `${systemPrompt}
+
+请评估以下文章：
 
 # 文章信息
 题目: ${input.title}
@@ -148,7 +150,6 @@ ${input.content ? `内容预览: ${input.content.substring(0, 2000)}...` : ''}
 请严格按照指定的 JSON 格式返回评估结果。`;
 
   const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt },
   ];
 

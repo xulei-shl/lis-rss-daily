@@ -49,6 +49,8 @@ export interface LLMConfigOptions {
 interface FailoverEntry {
   configId: number;
   provider: LLMProvider;
+  matchType: 'task' | 'default' | 'general';
+  taskType?: string;
 }
 
 /* ── Rate Limiter Integration ── */
@@ -348,16 +350,32 @@ export function getLLM(): LLMProvider {
  * @throws Error if no LLM config found for user
  */
 export async function getUserLLMProvider(userId: number, taskType?: string): Promise<LLMProvider> {
-  const dbConfigs = taskType
+  const taskConfigs = taskType
     ? await getActiveConfigListByTypeAndTask(userId, 'llm', taskType)
     : await getActiveConfigListByType(userId, 'llm');
 
+  const exactTaskConfigs = taskType
+    ? taskConfigs.filter((config) => config.task_type === taskType)
+    : taskConfigs;
+  const defaultConfigs = taskType
+    ? taskConfigs.filter((config) => config.task_type === null)
+    : [];
+
   const entries: FailoverEntry[] = [];
-  for (const dbConfig of dbConfigs) {
-    const provider = buildProviderFromDbConfig(dbConfig);
-    if (provider) {
-      entries.push({ configId: dbConfig.id, provider });
+  const pushEntries = (configs: LLMConfigRecord[], matchType: FailoverEntry['matchType']) => {
+    for (const dbConfig of configs) {
+      const provider = buildProviderFromDbConfig(dbConfig);
+      if (provider) {
+        entries.push({ configId: dbConfig.id, provider, matchType, taskType });
+      }
     }
+  };
+
+  if (!taskType) {
+    pushEntries(taskConfigs, 'general');
+  } else {
+    pushEntries(exactTaskConfigs, 'task');
+    pushEntries(defaultConfigs, 'default');
   }
 
   if (entries.length === 0 && !taskType) {
@@ -368,31 +386,88 @@ export async function getUserLLMProvider(userId: number, taskType?: string): Pro
   }
 
   if (entries.length === 0 && taskType) {
-    const defaultConfigs = await getActiveConfigListByType(userId, 'llm');
-    for (const dbConfig of defaultConfigs) {
-      const provider = buildProviderFromDbConfig(dbConfig);
-      if (provider) {
-        entries.push({ configId: dbConfig.id, provider });
-      }
-    }
-
-    if (entries.length === 0) {
-      log.warn(
-        { userId, taskType },
-        '未找到任务类型 LLM 配置，fallback 到环境变量默认配置'
-      );
-      return getLLM();
-    }
-
-    log.info(
-      { userId, taskType, provider: entries[0].provider.name, count: entries.length },
-      '任务类型 LLM 配置为空，fallback 到默认配置'
+    log.warn(
+      { userId, taskType },
+      '未找到任务类型或默认 LLM 配置，fallback 到环境变量默认配置'
     );
+    return getLLM();
+  }
+
+  if (taskType) {
+    const selectedEntry = entries[0];
+    const fallbackEntries = entries.slice(1).map((entry) => ({
+      configId: entry.configId,
+      provider: entry.provider.name,
+      matchType: entry.matchType,
+    }));
+
+    if (exactTaskConfigs.length > 0 && defaultConfigs.length > 0) {
+      log.info(
+        {
+          userId,
+          taskType,
+          selectedConfigId: selectedEntry.configId,
+          selectedProvider: selectedEntry.provider.name,
+          selectedMatchType: selectedEntry.matchType,
+          taskCount: exactTaskConfigs.length,
+          defaultCount: defaultConfigs.length,
+          fallbackChain: fallbackEntries,
+        },
+        'LLM provider initialized with task-specific config and default fallback'
+      );
+    } else if (exactTaskConfigs.length > 0) {
+      log.info(
+        {
+          userId,
+          taskType,
+          selectedConfigId: selectedEntry.configId,
+          selectedProvider: selectedEntry.provider.name,
+          selectedMatchType: selectedEntry.matchType,
+          taskCount: exactTaskConfigs.length,
+          fallbackChain: fallbackEntries,
+        },
+        'LLM provider initialized from task-specific config'
+      );
+    } else {
+      log.info(
+        {
+          userId,
+          taskType,
+          selectedConfigId: selectedEntry.configId,
+          selectedProvider: selectedEntry.provider.name,
+          selectedMatchType: selectedEntry.matchType,
+          defaultCount: defaultConfigs.length,
+          fallbackChain: fallbackEntries,
+        },
+        '任务类型 LLM 配置不存在，fallback 到默认配置'
+      );
+    }
   } else if (entries.length === 1) {
-    log.info({ userId, taskType, provider: entries[0].provider.name }, 'LLM provider initialized from database');
+    log.info(
+      {
+        userId,
+        taskType,
+        selectedConfigId: entries[0].configId,
+        selectedProvider: entries[0].provider.name,
+        selectedMatchType: entries[0].matchType,
+      },
+      'LLM provider initialized from database'
+    );
   } else {
     log.info(
-      { userId, taskType, provider: entries[0].provider.name, count: entries.length },
+      {
+        userId,
+        taskType,
+        selectedConfigId: entries[0].configId,
+        selectedProvider: entries[0].provider.name,
+        selectedMatchType: entries[0].matchType,
+        count: entries.length,
+        fallbackChain: entries.slice(1).map((entry) => ({
+          configId: entry.configId,
+          provider: entry.provider.name,
+          matchType: entry.matchType,
+        })),
+      },
       'LLM provider initialized with failover'
     );
   }
@@ -447,34 +522,75 @@ function buildProviderFromDbConfig(dbConfig: LLMConfigRecord): LLMProvider | nul
 }
 
 function createFailoverProvider(entries: FailoverEntry[]): LLMProvider {
-  const names = entries.map((entry) => entry.provider.name).join(' -> ');
+  const names = entries.map((entry) => `${entry.provider.name}[${entry.matchType}]`).join(' -> ');
   const provider: LLMProvider = {
     name: `failover(${names})`,
     async chat(messages, options = {}) {
       let lastError: Error | null = null;
-      for (const entry of entries) {
+      for (let index = 0; index < entries.length; index++) {
+        const entry = entries[index];
+        const nextEntry = entries[index + 1];
         try {
           const text = await entry.provider.chat(messages, options);
           if (text && text.trim().length > 0) {
+            if (index > 0) {
+              log.info(
+                {
+                  label: options.label,
+                  activeConfigId: entry.configId,
+                  activeProvider: entry.provider.name,
+                  activeMatchType: entry.matchType,
+                  attempt: index + 1,
+                },
+                'LLM failover recovered with fallback config'
+              );
+            }
             return text;
           }
           const emptyError = new Error('空响应');
           lastError = emptyError;
           log.warn(
-            { configId: entry.configId, provider: entry.provider.name, label: options.label },
-            'LLM 空响应，尝试下一个配置'
+            {
+              label: options.label,
+              configId: entry.configId,
+              provider: entry.provider.name,
+              matchType: entry.matchType,
+              attempt: index + 1,
+              nextConfigId: nextEntry?.configId,
+              nextProvider: nextEntry?.provider.name,
+              nextMatchType: nextEntry?.matchType,
+            },
+            'LLM 空响应，切换到下一个配置'
           );
         } catch (error) {
           lastError = error instanceof Error ? error : new Error('未知错误');
           log.warn(
-            { error: lastError, configId: entry.configId, provider: entry.provider.name, label: options.label },
-            'LLM 调用失败，尝试下一个配置'
+            {
+              error: lastError,
+              label: options.label,
+              configId: entry.configId,
+              provider: entry.provider.name,
+              matchType: entry.matchType,
+              attempt: index + 1,
+              nextConfigId: nextEntry?.configId,
+              nextProvider: nextEntry?.provider.name,
+              nextMatchType: nextEntry?.matchType,
+            },
+            'LLM 调用失败，切换到下一个配置'
           );
         }
       }
 
       log.warn(
-        { userId: entries[0].configId, label: options.label },
+        {
+          label: options.label,
+          attemptedConfigs: entries.map((entry) => ({
+            configId: entry.configId,
+            provider: entry.provider.name,
+            matchType: entry.matchType,
+          })),
+          lastError: lastError?.message,
+        },
         '全部 LLM 配置均失败，fallback 到环境变量默认配置'
       );
       return getLLM().chat(messages, options);

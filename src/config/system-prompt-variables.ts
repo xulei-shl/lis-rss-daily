@@ -241,4 +241,4 @@ export const TASK_TYPES = _taskTypes as readonly string[];
 /**
  * 任务类型（用于 LLM 配置验证）
  */
-export type TaskType = 'filter' | 'summary' | 'keywords' | 'translation' | 'daily_summary' | 'analysis';
+export type TaskType = 'filter' | 'summary' | 'keywords' | 'translation' | 'daily_summary' | 'analysis' | 'insights';
