@@ -246,6 +246,32 @@ function buildArticlesListText(articlesByType: {
   return text;
 }
 
+function getPromptTypeForSummaryType(type: SummaryType): 'daily_summary' | 'insights' {
+  return type === 'insights' ? 'insights' : 'daily_summary';
+}
+
+function buildDailySummaryTypeInstruction(type: SummaryType, date: string): string {
+  switch (type) {
+    case 'journal':
+      return `请生成 ${date} 的期刊类文章总结，重点关注学术研究、方法进展与专业领域趋势。`;
+    case 'blog_news':
+      return `请生成 ${date} 的博客与资讯类总结，重点关注技术动态、产品更新与行业信息。`;
+    case 'journal_all':
+      return `请生成 ${date} 的全部期刊文章总结，本次输入包含未通过筛选的期刊文章，也需要完整覆盖。`;
+    case 'search':
+      return '请基于下面选中的文章生成总结。';
+    case 'insights':
+      return `请生成 ${date} 的研究趋势洞察报告，突出主题聚类、趋势判断与选题建议。`;
+    case 'all':
+    default:
+      return `请生成 ${date} 的综合总结，综合分析期刊、博客与资讯内容。`;
+  }
+}
+
+function buildSummaryUserMessage(type: SummaryType, date: string, articlesText: string): string {
+  return `${buildDailySummaryTypeInstruction(type, date)}\n\n## 文章列表\n${articlesText}`;
+}
+
 /**
  * 生成当日总结
  */
@@ -281,39 +307,25 @@ export async function generateDailySummary(
   // 构建文章列表文本
   const articlesText = buildArticlesListText(articlesByType);
 
-  // 根据总结类型定制提示词
-  const typePrompt = type === 'journal' 
-    ? '这是一份期刊类文章总结，请重点关注学术研究和专业领域的内容。'
-    : type === 'blog_news'
-    ? '这是一份博客和资讯类文章总结，请重点关注技术动态和行业资讯。'
-    : '请综合分析期刊、博客和资讯的内容。';
-
   // 获取系统提示词并渲染
+  const promptType = getPromptTypeForSummaryType(type);
   const promptTemplate = await resolveSystemPrompt(
     userId,
-    'daily_summary',
-    `你是专业的内容总结助手。请根据以下文章列表生成当日总结。
-
-## 文章列表
-${articlesText}
-
-## 输出要求
-1. 生成 800-1000 字的中文总结
-2. 按主题领域归纳文章内容
-3. ${typePrompt}
-4. 使用清晰的层次结构（Markdown 格式）`,
+    promptType,
+    `你是专业的内容总结助手，请根据用户提供的文章列表生成结果。`,
     {
       ARTICLES_LIST: articlesText,
       DATE_RANGE: today,
+      SUMMARY_LENGTH: '800-1000',
     }
   );
 
   // 调用 LLM 生成总结
-  const llm = await getUserLLMProvider(userId, 'daily_summary');
+  const llm = await getUserLLMProvider(userId, promptType);
   const summary = await llm.chat(
     [
       { role: 'system', content: promptTemplate },
-      { role: 'user', content: `请生成 ${today} 的当日总结。` },
+      { role: 'user', content: buildSummaryUserMessage(type, today, articlesText) },
     ],
     {
       temperature: 0.3,
@@ -544,24 +556,17 @@ export async function generateSearchSummary(
 
   // 构建文章列表文本
   const articlesText = buildArticlesListText(articlesByType);
+  const today = await getUserLocalDate(userId);
 
   // 获取系统提示词并渲染
-  const today = await getUserLocalDate(userId);
   const promptTemplate = await resolveSystemPrompt(
     userId,
     'daily_summary',
-    `你是专业的内容总结助手。请根据以下文章列表生成总结。
-
-## 文章列表
-${articlesText}
-
-## 输出要求
-1. 生成 500-800 字的中文总结
-2. 按主题领域归纳文章内容
-3. 使用清晰的层次结构（Markdown 格式）`,
+    `你是专业的内容总结助手，请根据用户提供的文章列表生成结果。`,
     {
       ARTICLES_LIST: articlesText,
       DATE_RANGE: today,
+      SUMMARY_LENGTH: '500-800',
     }
   );
 
@@ -570,7 +575,7 @@ ${articlesText}
   const summary = await llm.chat(
     [
       { role: 'system', content: promptTemplate },
-      { role: 'user', content: '请生成这些文章的总结。' },
+      { role: 'user', content: buildSummaryUserMessage('search', today, articlesText) },
     ],
     {
       temperature: 0.3,
@@ -733,19 +738,11 @@ export async function generateJournalAllSummary(
   const promptTemplate = await resolveSystemPrompt(
     userId,
     'daily_summary',
-    `你是专业的内容总结助手。请根据以下文章列表生成当日总结。
-
-## 文章列表
-${articlesText}
-
-## 输出要求
-1. 生成 800-1000 字的中文总结
-2. 按主题领域归纳文章内容
-3. 这是一份期刊类文章总结，请重点关注学术研究和专业领域的内容。
-4. 使用清晰的层次结构（Markdown 格式）`,
+    `你是专业的内容总结助手，请根据用户提供的文章列表生成结果。`,
     {
       ARTICLES_LIST: articlesText,
       DATE_RANGE: today,
+      SUMMARY_LENGTH: '800-1000',
     }
   );
 
@@ -754,7 +751,7 @@ ${articlesText}
   const summary = await llm.chat(
     [
       { role: 'system', content: promptTemplate },
-      { role: 'user', content: `请生成 ${today} 的期刊文章总结。` },
+      { role: 'user', content: buildSummaryUserMessage('journal_all', today, articlesText) },
     ],
     {
       temperature: 0.3,
