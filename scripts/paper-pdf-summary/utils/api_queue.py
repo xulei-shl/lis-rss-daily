@@ -12,7 +12,7 @@ from utils.database import get_connection
 from utils.pdf_downloader import load_config, create_download_directory, download_pdf
 from utils.pdf_validator import validate_and_cleanup
 from utils.pdf_summarizer import summarize_pdf
-from utils.summary_uploader import upload_all as parallel_upload
+from utils.summary_uploader import upload_all as parallel_upload, get_env_bool
 from utils.logger import DailyLogger
 import yaml
 
@@ -97,6 +97,8 @@ class QueueManager:
     async def _process_single_article(self, title: str, article_id: Optional[int], push_wechat: bool = False) -> Dict:
         article_id = article_id if article_id else 0
         skip_lis_rss = article_id == 0
+        default_push_wechat = get_env_bool('PDF_SUMMARY_PUSH_WECHAT', False)
+        final_push_wechat = push_wechat or default_push_wechat
 
         config = self._ensure_config()
         today = datetime.now().strftime("%Y-%m-%d")
@@ -182,7 +184,6 @@ class QueueManager:
         result["md_path"] = str(md_path)
 
         try:
-            skip_wechat = not push_wechat
             upload_results = await parallel_upload(
                 md_path=str(md_path),
                 article_id=article_id,
@@ -190,7 +191,7 @@ class QueueManager:
                 source_name="API调用",
                 config=config,
                 skip_lis_rss=skip_lis_rss,
-                skip_wechat=skip_wechat
+                skip_wechat=not final_push_wechat
             )
             result["stages"]["upload"] = upload_results
         except Exception as e:

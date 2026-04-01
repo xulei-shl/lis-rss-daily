@@ -52,6 +52,17 @@ def load_env():
         load_dotenv(script_env_path, override=True)
 
 
+def get_env_bool(name: str, default: bool = False) -> bool:
+    """读取布尔环境变量，支持常见真值写法"""
+    load_env()
+
+    value = os.getenv(name)
+    if value is None:
+        return default
+
+    return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 async def upload_to_hiagent_rag(md_path: str, config: Dict, delete_md: bool = True) -> bool:
     """
     上传到HiAgent RAG知识库

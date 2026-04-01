@@ -37,7 +37,7 @@ from utils.database import (
 from utils.pdf_downloader import load_config, create_download_directory, download_pdf
 from utils.pdf_validator import validate_and_cleanup, get_pdf_info
 from utils.pdf_summarizer import summarize_pdf
-from utils.summary_uploader import upload_all as parallel_upload, load_env
+from utils.summary_uploader import upload_all as parallel_upload, load_env, get_env_bool
 from utils.logger import DailyLogger
 import yaml
 
@@ -400,6 +400,7 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
     """
     article_id = article['id']
     title = article['title']
+    push_wechat_via_webhook = get_env_bool('PDF_SUMMARY_PUSH_WECHAT', False)
     
     print_article_info(article)
     
@@ -513,7 +514,7 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
             source_name=source_name,
             config=config,
             skip_lis_rss=skip_lis_rss,
-            skip_wechat=True
+            skip_wechat=not push_wechat_via_webhook
         ))
         
         result['stages']['upload'] = upload_results
