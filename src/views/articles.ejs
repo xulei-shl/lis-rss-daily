@@ -413,8 +413,9 @@ const pageActions = isGuest ? '' : `
       if (dateTo) params.append('createdBefore', dateTo);
       // 评级筛选
       if (filterRating) params.append('rating', filterRating);
-      // 只有在没有日期范围时才使用默认的30天过滤
-      if (!hasDateRange) {
+      // 页面首次加载且无任何筛选条件时，默认只显示30天内文章（性能优化）
+      const hasAnyFilter = sourceId || filterStatus || processStatus || filterRead || searchQuery || dateFrom || dateTo || filterRating;
+      if (!hasAnyFilter && currentPage === 1) {
         params.append('daysAgo', '30');
       }
 
