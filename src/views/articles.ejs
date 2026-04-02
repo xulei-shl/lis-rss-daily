@@ -415,7 +415,8 @@ const pageActions = isGuest ? '' : `
       if (filterRating) params.append('rating', filterRating);
       // 页面首次加载且无任何筛选条件时，默认只显示30天内文章（性能优化）
       const hasAnyFilter = sourceId || filterStatus || processStatus || filterRead || searchQuery || dateFrom || dateTo || filterRating;
-      if (!hasAnyFilter && currentPage === 1) {
+      const isLimitedTo30Days = !hasAnyFilter && currentPage === 1;
+      if (isLimitedTo30Days) {
         params.append('daysAgo', '30');
       }
 
@@ -428,7 +429,7 @@ const pageActions = isGuest ? '' : `
         totalPages = data.totalPages || 1;
 
         renderArticles(data.articles || []);
-        renderResultsCount(data.total || 0);
+        renderResultsCount(data.total || 0, isLimitedTo30Days);
         renderPagination();
       } catch (err) {
         console.error('Failed to load articles:', err);
@@ -527,13 +528,17 @@ const summary = article.summary_zh || article.content || article.markdown_conten
 }
 
 // Render results count
-function renderResultsCount(total) {
+function renderResultsCount(total, isLimitedTo30Days) {
   const countEl = document.getElementById('resultsCount');
   const start = (currentPage - 1) * perPage + 1;
   const end = Math.min(currentPage * perPage, total);
-  countEl.textContent = total > 0
-    ? \`显示 \${start}-\${end} / 共 \${total} 篇文章\`
+  let text = total > 0
+    ? '显示 ' + start + '-' + end + ' / 共 ' + total + ' 篇文章'
     : '暂无文章';
+  if (isLimitedTo30Days) {
+    text += ' <span style="color: #888;">(近30天)</span>';
+  }
+  countEl.innerHTML = text;
 }
 
 // Render pagination
