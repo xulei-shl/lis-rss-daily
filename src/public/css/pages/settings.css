@@ -423,7 +423,7 @@
 
 .telegram-config-fields {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: minmax(260px, 0.85fr) minmax(420px, 1.15fr);
     gap: var(--space-4);
     margin-top: var(--space-4);
     transition: opacity 0.2s ease;
