@@ -52,6 +52,7 @@ const DEFAULT_PROMPT_CONFIG: Record<
   keywords: { fileName: 'keywords.md', name: '默认关键词提示词' },
   translation: { fileName: 'translation.md', name: '默认翻译提示词' },
   daily_summary: { fileName: 'daily_summary.md', name: '默认当日总结提示词' },
+  insights: { fileName: 'insights.md', name: '默认洞察报告提示词' },
 };
 
 /**
@@ -130,10 +131,11 @@ export async function resolveSystemPrompt(
   fallback: string,
   variables: Record<string, string>
 ): Promise<string> {
-  if (!userId) return fallback;
+  const renderedFallback = renderSystemPrompt(fallback, variables);
+  if (!userId) return renderedFallback;
   const record = await getActiveSystemPromptByType(userId, type);
   if (!record || !record.template || record.template.trim().length === 0) {
-    return fallback;
+    return renderedFallback;
   }
   return renderSystemPrompt(record.template, variables);
 }

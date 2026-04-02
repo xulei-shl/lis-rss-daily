@@ -272,6 +272,34 @@ function buildSummaryUserMessage(type: SummaryType, date: string, articlesText: 
   return `${buildDailySummaryTypeInstruction(type, date)}\n\n## 文章列表\n${articlesText}`;
 }
 
+function buildDailySummaryPromptVariables(
+  articlesText: string,
+  date: string,
+  summaryLength: string
+): Record<string, string> {
+  return {
+    ARTICLES_LIST: articlesText,
+    DATE_RANGE: date,
+    SUMMARY_LENGTH: summaryLength,
+  };
+}
+
+async function buildResolvedDailySummaryUserPrompt(
+  userId: number,
+  type: SummaryType,
+  date: string,
+  articlesText: string,
+  summaryLength: string
+): Promise<string> {
+  const promptType = getPromptTypeForSummaryType(type);
+  return resolveSystemPrompt(
+    userId,
+    promptType,
+    buildSummaryUserMessage(type, date, articlesText),
+    buildDailySummaryPromptVariables(articlesText, date, summaryLength)
+  );
+}
+
 /**
  * 生成当日总结
  */
@@ -307,25 +335,19 @@ export async function generateDailySummary(
   // 构建文章列表文本
   const articlesText = buildArticlesListText(articlesByType);
 
-  // 获取系统提示词并渲染
-  const promptType = getPromptTypeForSummaryType(type);
-  const promptTemplate = await resolveSystemPrompt(
+  const userPrompt = await buildResolvedDailySummaryUserPrompt(
     userId,
-    promptType,
-    `你是专业的内容总结助手，请根据用户提供的文章列表生成结果。`,
-    {
-      ARTICLES_LIST: articlesText,
-      DATE_RANGE: today,
-      SUMMARY_LENGTH: '800-1000',
-    }
+    type,
+    today,
+    articlesText,
+    '800-1000'
   );
 
   // 调用 LLM 生成总结
-  const llm = await getUserLLMProvider(userId, promptType);
+  const llm = await getUserLLMProvider(userId, getPromptTypeForSummaryType(type));
   const summary = await llm.chat(
     [
-      { role: 'system', content: promptTemplate },
-      { role: 'user', content: buildSummaryUserMessage(type, today, articlesText) },
+      { role: 'user', content: userPrompt },
     ],
     {
       temperature: 0.3,
@@ -558,24 +580,19 @@ export async function generateSearchSummary(
   const articlesText = buildArticlesListText(articlesByType);
   const today = await getUserLocalDate(userId);
 
-  // 获取系统提示词并渲染
-  const promptTemplate = await resolveSystemPrompt(
+  const userPrompt = await buildResolvedDailySummaryUserPrompt(
     userId,
-    'daily_summary',
-    `你是专业的内容总结助手，请根据用户提供的文章列表生成结果。`,
-    {
-      ARTICLES_LIST: articlesText,
-      DATE_RANGE: today,
-      SUMMARY_LENGTH: '500-800',
-    }
+    'search',
+    today,
+    articlesText,
+    '500-800'
   );
 
   // 调用 LLM 生成总结
   const llm = await getUserLLMProvider(userId, 'daily_summary');
   const summary = await llm.chat(
     [
-      { role: 'system', content: promptTemplate },
-      { role: 'user', content: buildSummaryUserMessage('search', today, articlesText) },
+      { role: 'user', content: userPrompt },
     ],
     {
       temperature: 0.3,
@@ -734,24 +751,19 @@ export async function generateJournalAllSummary(
   // 构建文章列表文本（复用现有逻辑）
   const articlesText = buildArticlesListText(articlesByType);
 
-  // 获取系统提示词并渲染（复用现有逻辑，使用 daily_summary 类型）
-  const promptTemplate = await resolveSystemPrompt(
+  const userPrompt = await buildResolvedDailySummaryUserPrompt(
     userId,
-    'daily_summary',
-    `你是专业的内容总结助手，请根据用户提供的文章列表生成结果。`,
-    {
-      ARTICLES_LIST: articlesText,
-      DATE_RANGE: today,
-      SUMMARY_LENGTH: '800-1000',
-    }
+    'journal_all',
+    today,
+    articlesText,
+    '800-1000'
   );
 
   // 调用 LLM 生成总结（复用现有逻辑）
   const llm = await getUserLLMProvider(userId, 'daily_summary');
   const summary = await llm.chat(
     [
-      { role: 'system', content: promptTemplate },
-      { role: 'user', content: buildSummaryUserMessage('journal_all', today, articlesText) },
+      { role: 'user', content: userPrompt },
     ],
     {
       temperature: 0.3,
@@ -961,7 +973,7 @@ export async function generateInsightsSummary(
   addSection('博客推荐', articlesByType.blog);
   addSection('资讯动态', articlesByType.news);
 
-  const promptTemplate = await resolveSystemPrompt(
+  const userPrompt = await resolveSystemPrompt(
     userId,
     'insights',
     `你是专业的研究趋势洞察助手。请根据以下文章列表生成研究趋势洞察报告。
@@ -988,8 +1000,7 @@ ${articlesText}
   const llm = await getUserLLMProvider(userId, 'insights');
   const summary = await llm.chat(
     [
-      { role: 'system', content: promptTemplate },
-      { role: 'user', content: `请生成 ${dateStr} 的研究趋势洞察报告。` },
+      { role: 'user', content: userPrompt },
     ],
     {
       temperature: 0.3,
