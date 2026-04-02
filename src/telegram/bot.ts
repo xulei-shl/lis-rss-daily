@@ -650,10 +650,7 @@ export class TelegramBot {
     }
 
     const parts = text.trim().split(/\s+/);
-    const command = parts[0];
-
-    // Check if this chat has admin role for write operations
-    const isAdmin = this.isAdminChat(chatId);
+    const command = parts[0]?.split('@')[0] || '';
 
     switch (command) {
       case '/getarticles':
