@@ -20,6 +20,7 @@ import {
   type PdfSummaryData,
 } from './formatters.js';
 import {
+  getWebhooksForDailySummaryType,
   getWebhooksForPushType,
   getWeChatWebhooks,
   getWeChatWebhookById,
@@ -67,7 +68,11 @@ class WeChatNotifier {
       log.info({ userId, type: data.type, date: data.date }, '[DEBUG] Skipping duplicate sendDailySummary');
       return false;
     }
-    const webhooks = getWebhooksForPushType('daily_summary');
+    if (data.type !== 'journal' && data.type !== 'blog_news' && data.type !== 'all') {
+      log.debug({ userId, type: data.type }, 'Unsupported daily summary type for WeChat push');
+      return false;
+    }
+    const webhooks = getWebhooksForDailySummaryType(data.type);
 
     if (webhooks.length === 0) {
       log.debug({ userId }, 'No WeChat webhooks configured for daily summary');

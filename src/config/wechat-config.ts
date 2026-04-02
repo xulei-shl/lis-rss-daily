@@ -15,7 +15,8 @@ const log = logger.child({ module: 'wechat-config' });
  * 推送类型配置接口
  */
 export interface WeChatPushTypes {
-  daily_summary: boolean;
+  daily_summary_journal: boolean;
+  daily_summary_blog_news: boolean;
   journal_all: boolean;
   new_articles: boolean;
   insights: boolean;
@@ -118,13 +119,21 @@ function loadConfig(): WeChatConfig {
         return {
           ...webhook,
           push_types: {
-            daily_summary: true,
+            daily_summary_journal: true,
+            daily_summary_blog_news: true,
             journal_all: true,
             new_articles: true,
             insights: true,
             pdf_summary: true,
           },
         };
+      }
+      const legacyDailySummary = (webhook.push_types as any).daily_summary;
+      if (webhook.push_types.daily_summary_journal === undefined) {
+        webhook.push_types.daily_summary_journal = legacyDailySummary !== false;
+      }
+      if (webhook.push_types.daily_summary_blog_news === undefined) {
+        webhook.push_types.daily_summary_blog_news = legacyDailySummary !== false;
       }
       // 确保新增的推送类型有默认值
       if (webhook.push_types.insights === undefined) {
@@ -196,6 +205,23 @@ export function getActiveWeChatWebhooks(): WeChatWebhook[] {
 export function getWebhooksForPushType(pushType: keyof WeChatPushTypes): WeChatWebhook[] {
   const config = loadConfig();
   return config.webhooks.filter((w) => w.enabled && w.push_types[pushType]);
+}
+
+export function getWebhooksForDailySummaryType(type: 'journal' | 'blog_news' | 'all'): WeChatWebhook[] {
+  const config = loadConfig();
+
+  return config.webhooks.filter((webhook) => {
+    if (!webhook.enabled) {
+      return false;
+    }
+    if (type === 'journal') {
+      return webhook.push_types.daily_summary_journal;
+    }
+    if (type === 'blog_news') {
+      return webhook.push_types.daily_summary_blog_news;
+    }
+    return webhook.push_types.daily_summary_journal || webhook.push_types.daily_summary_blog_news;
+  });
 }
 
 /**

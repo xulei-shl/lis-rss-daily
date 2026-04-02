@@ -6,7 +6,8 @@ export interface TelegramConfig {
   enabled: boolean;
   botToken: string;
   chatId: string;
-  dailySummary: boolean;
+  dailySummaryJournal: boolean;
+  dailySummaryBlogNews: boolean;
   newArticles: boolean;
 }
 

@@ -18,7 +18,8 @@ export interface TelegramChatConfig {
   chatId: string;
   chatName: string | null;
   role: TelegramChatRole;
-  dailySummary: boolean;
+  dailySummaryJournal: boolean;
+  dailySummaryBlogNews: boolean;
   journalAll: boolean;
   insights: boolean;
   newArticles: boolean;
@@ -32,7 +33,8 @@ export interface CreateTelegramChatInput {
   chatId: string;
   chatName?: string;
   role?: TelegramChatRole;
-  dailySummary?: boolean;
+  dailySummaryJournal?: boolean;
+  dailySummaryBlogNews?: boolean;
   journalAll?: boolean;
   insights?: boolean;
   newArticles?: boolean;
@@ -43,7 +45,8 @@ export interface CreateTelegramChatInput {
 export interface UpdateTelegramChatInput {
   chatName?: string;
   role?: TelegramChatRole;
-  dailySummary?: boolean;
+  dailySummaryJournal?: boolean;
+  dailySummaryBlogNews?: boolean;
   journalAll?: boolean;
   insights?: boolean;
   newArticles?: boolean;
@@ -61,7 +64,8 @@ function rowToConfig(row: TelegramChatsSelection): TelegramChatConfig {
     chatId: row.chat_id,
     chatName: row.chat_name,
     role: row.role,
-    dailySummary: row.daily_summary === 1,
+    dailySummaryJournal: (row as any).daily_summary_journal === 1,
+    dailySummaryBlogNews: (row as any).daily_summary_blog_news === 1,
     journalAll: row.journal_all === 1,
     insights: (row as any).insights === 1,
     newArticles: row.new_articles === 1,
@@ -151,7 +155,8 @@ export async function addTelegramChat(userId: number, input: CreateTelegramChatI
       chat_id: input.chatId.trim(),
       chat_name: input.chatName?.trim() || null,
       role: input.role || 'viewer',
-      daily_summary: input.dailySummary !== false ? 1 : 0,
+      daily_summary_journal: input.dailySummaryJournal !== false ? 1 : 0,
+      daily_summary_blog_news: input.dailySummaryBlogNews !== false ? 1 : 0,
       journal_all: input.journalAll !== false ? 1 : 0,
       insights: input.insights !== false ? 1 : 0,
       new_articles: input.newArticles !== false ? 1 : 0,
@@ -187,8 +192,11 @@ export async function updateTelegramChat(
   if (input.role !== undefined) {
     updates.role = input.role;
   }
-  if (input.dailySummary !== undefined) {
-    updates.daily_summary = input.dailySummary ? 1 : 0;
+  if (input.dailySummaryJournal !== undefined) {
+    updates.daily_summary_journal = input.dailySummaryJournal ? 1 : 0;
+  }
+  if (input.dailySummaryBlogNews !== undefined) {
+    updates.daily_summary_blog_news = input.dailySummaryBlogNews ? 1 : 0;
   }
   if (input.insights !== undefined) {
     updates.insights = input.insights ? 1 : 0;
@@ -316,14 +324,32 @@ export async function hasTelegramChats(userId: number): Promise<boolean> {
 /**
  * Get chats that should receive daily summary
  */
-export async function getDailySummaryChats(userId: number): Promise<TelegramChatConfig[]> {
+export async function getDailySummaryJournalChats(userId: number): Promise<TelegramChatConfig[]> {
   const db = getDb();
 
   const rows = await db
     .selectFrom('telegram_chats')
     .where('user_id', '=', userId)
     .where('is_active', '=', 1)
-    .where('daily_summary', '=', 1)
+    .where('daily_summary_journal', '=', 1)
+    .orderBy('created_at', 'asc')
+    .selectAll()
+    .execute();
+
+  return rows.map(rowToConfig);
+}
+
+/**
+ * Get chats that should receive blog/news daily summary
+ */
+export async function getDailySummaryBlogNewsChats(userId: number): Promise<TelegramChatConfig[]> {
+  const db = getDb();
+
+  const rows = await db
+    .selectFrom('telegram_chats')
+    .where('user_id', '=', userId)
+    .where('is_active', '=', 1)
+    .where('daily_summary_blog_news', '=', 1)
     .orderBy('created_at', 'asc')
     .selectAll()
     .execute();

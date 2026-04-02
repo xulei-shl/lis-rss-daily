@@ -13,7 +13,8 @@ import type { TelegramConfig, DailySummaryData, PdfSummaryNotificationData } fro
 import { getUserSettings } from '../api/settings.js';
 import type { ArticleWithSource } from '../api/articles.js';
 import {
-  getDailySummaryChats,
+  getDailySummaryJournalChats,
+  getDailySummaryBlogNewsChats,
   getJournalAllChats,
   getNewArticlesChats,
   getInsightsChats,
@@ -51,7 +52,8 @@ async function loadTelegramConfig(userId: number): Promise<TelegramConfig | null
       enabled,
       botToken,
       chatId: '', // Not used anymore, but kept for compatibility
-      dailySummary: true, // Not used anymore
+      dailySummaryJournal: true, // 不再使用，仅保留兼容结构
+      dailySummaryBlogNews: true, // 不再使用，仅保留兼容结构
       newArticles: true, // Not used anymore
     };
   } catch (error) {
@@ -89,6 +91,27 @@ class TelegramNotifier {
     return false;
   }
 
+  private async getDailySummaryChatsByType(userId: number, type: DailySummaryData['type']): Promise<TelegramChatConfig[]> {
+    if (type === 'journal') {
+      return getDailySummaryJournalChats(userId);
+    }
+    if (type === 'blog_news') {
+      return getDailySummaryBlogNewsChats(userId);
+    }
+    if (type === 'all') {
+      const [journalChats, blogNewsChats] = await Promise.all([
+        getDailySummaryJournalChats(userId),
+        getDailySummaryBlogNewsChats(userId),
+      ]);
+      const chatMap = new Map<number, TelegramChatConfig>();
+      for (const chat of [...journalChats, ...blogNewsChats]) {
+        chatMap.set(chat.id, chat);
+      }
+      return Array.from(chatMap.values());
+    }
+    return [];
+  }
+
   /**
    * Send daily summary notification to all configured chats
    */
@@ -107,7 +130,7 @@ class TelegramNotifier {
     }
 
     // Get all chats that should receive daily summary
-    const chats = await getDailySummaryChats(userId);
+    const chats = await this.getDailySummaryChatsByType(userId, data.type);
 
     if (chats.length === 0) {
       log.debug({ userId }, 'No chats configured for daily summary');

@@ -636,6 +636,44 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
       }
 
       // ============================================================
+      // 031: 拆分 Telegram 每日总结推送配置
+      // ============================================================
+      if (file === '031_split_daily_summary_push.sql') {
+        const hasDailySummaryJournal = hasColumn(db, 'telegram_chats', 'daily_summary_journal');
+        const hasDailySummaryBlogNews = hasColumn(db, 'telegram_chats', 'daily_summary_blog_news');
+        const hasLegacyDailySummary = hasColumn(db, 'telegram_chats', 'daily_summary');
+
+        if (!hasDailySummaryJournal) {
+          db.exec('ALTER TABLE telegram_chats ADD COLUMN daily_summary_journal INTEGER DEFAULT 1;');
+          console.log('      → Added daily_summary_journal column to telegram_chats table');
+        }
+
+        if (!hasDailySummaryBlogNews) {
+          db.exec('ALTER TABLE telegram_chats ADD COLUMN daily_summary_blog_news INTEGER DEFAULT 1;');
+          console.log('      → Added daily_summary_blog_news column to telegram_chats table');
+        }
+
+        if (hasLegacyDailySummary) {
+          db.exec(`
+            UPDATE telegram_chats
+            SET
+              daily_summary_journal = COALESCE(daily_summary_journal, daily_summary, 1),
+              daily_summary_blog_news = COALESCE(daily_summary_blog_news, daily_summary, 1)
+          `);
+          console.log('      → Migrated legacy daily_summary values to split columns');
+        } else {
+          db.exec(`
+            UPDATE telegram_chats
+            SET
+              daily_summary_journal = COALESCE(daily_summary_journal, 1),
+              daily_summary_blog_news = COALESCE(daily_summary_blog_news, 1)
+          `);
+          console.log('      → Initialized split daily summary columns');
+        }
+        continue;
+      }
+
+      // ============================================================
       // 028: 添加 deepsearch_tasks 表
       // ============================================================
       if (file === '028_add_deepsearch_tasks.sql') {

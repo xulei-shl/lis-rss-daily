@@ -39,10 +39,15 @@ function renderWeChatWebhooks() {
 
   listEl.innerHTML = wechatWebhooks.map(function(webhook) {
     const pushTypeTags = [];
-    if (webhook.push_types?.daily_summary) {
-      pushTypeTags.push('<span class="wechat-webhook-tag daily-summary">每日总结</span>');
-    } else if (webhook.push_types?.daily_summary !== undefined) {
-      pushTypeTags.push('<span class="wechat-webhook-tag daily-summary disabled">每日总结</span>');
+    if (webhook.push_types?.daily_summary_journal) {
+      pushTypeTags.push('<span class="wechat-webhook-tag daily-summary">通过期刊</span>');
+    } else if (webhook.push_types?.daily_summary_journal !== undefined) {
+      pushTypeTags.push('<span class="wechat-webhook-tag daily-summary disabled">通过期刊</span>');
+    }
+    if (webhook.push_types?.daily_summary_blog_news) {
+      pushTypeTags.push('<span class="wechat-webhook-tag daily-summary">通过资讯</span>');
+    } else if (webhook.push_types?.daily_summary_blog_news !== undefined) {
+      pushTypeTags.push('<span class="wechat-webhook-tag daily-summary disabled">通过资讯</span>');
     }
     if (webhook.push_types?.journal_all) {
       pushTypeTags.push('<span class="wechat-webhook-tag journal-all">全部期刊</span>');
@@ -111,7 +116,8 @@ function openWeChatWebhookModal(webhookId) {
     document.getElementById('wechatWebhookId').value = webhook.id;
     document.getElementById('wechatWebhookName').value = webhook.name;
     document.getElementById('wechatWebhookUrl').value = webhook.url;
-    document.getElementById('wechatWebhookDailySummary').checked = webhook.push_types?.daily_summary !== false;
+    document.getElementById('wechatWebhookDailySummaryJournal').checked = webhook.push_types?.daily_summary_journal !== false;
+    document.getElementById('wechatWebhookDailySummaryBlogNews').checked = webhook.push_types?.daily_summary_blog_news !== false;
     document.getElementById('wechatWebhookJournalAll').checked = webhook.push_types?.journal_all !== false;
     document.getElementById('wechatWebhookNewArticles').checked = webhook.push_types?.new_articles !== false;
     document.getElementById('wechatWebhookInsights').checked = webhook.push_types?.insights !== false;
@@ -120,7 +126,8 @@ function openWeChatWebhookModal(webhookId) {
   } else {
     title.textContent = '添加 Webhook';
     document.getElementById('wechatWebhookId').value = '';
-    document.getElementById('wechatWebhookDailySummary').checked = true;
+    document.getElementById('wechatWebhookDailySummaryJournal').checked = true;
+    document.getElementById('wechatWebhookDailySummaryBlogNews').checked = true;
     document.getElementById('wechatWebhookJournalAll').checked = true;
     document.getElementById('wechatWebhookNewArticles').checked = true;
     document.getElementById('wechatWebhookInsights').checked = true;
@@ -225,7 +232,8 @@ document.addEventListener('DOMContentLoaded', function() {
       const name = document.getElementById('wechatWebhookName').value.trim();
       const url = document.getElementById('wechatWebhookUrl').value.trim();
       const enabled = document.getElementById('wechatWebhookEnabled').checked;
-      const daily_summary = document.getElementById('wechatWebhookDailySummary').checked;
+      const daily_summary_journal = document.getElementById('wechatWebhookDailySummaryJournal').checked;
+      const daily_summary_blog_news = document.getElementById('wechatWebhookDailySummaryBlogNews').checked;
       const journal_all = document.getElementById('wechatWebhookJournalAll').checked;
       const new_articles = document.getElementById('wechatWebhookNewArticles').checked;
       const insights = document.getElementById('wechatWebhookInsights').checked;
@@ -237,7 +245,8 @@ document.addEventListener('DOMContentLoaded', function() {
           url,
           enabled,
           push_types: {
-            daily_summary,
+            daily_summary_journal,
+            daily_summary_blog_news,
             journal_all,
             new_articles,
             insights,

@@ -63,7 +63,8 @@ router.post('/wechat/webhooks', requireAuth, requireAdmin, async (req: AuthReque
 
     // 构建 push_types
     const pushTypes: WeChatPushTypes = {
-      daily_summary: push_types?.daily_summary !== false,
+      daily_summary_journal: push_types?.daily_summary_journal !== false,
+      daily_summary_blog_news: push_types?.daily_summary_blog_news !== false,
       journal_all: push_types?.journal_all !== false,
       new_articles: push_types?.new_articles !== false,
       insights: push_types?.insights !== false,
@@ -131,7 +132,8 @@ router.put('/wechat/webhooks/:id', requireAuth, requireAdmin, async (req: AuthRe
 
     if (push_types !== undefined) {
       updates.push_types = {
-        daily_summary: push_types.daily_summary !== false,
+        daily_summary_journal: push_types.daily_summary_journal !== false,
+        daily_summary_blog_news: push_types.daily_summary_blog_news !== false,
         journal_all: push_types.journal_all !== false,
         new_articles: push_types.new_articles !== false,
         insights: push_types.insights !== false,

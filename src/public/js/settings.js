@@ -1796,10 +1796,15 @@ function renderTelegramChats() {
 
     // Build tags
     const tags = [];
-    if (chat.dailySummary) {
-      tags.push('<span class="telegram-chat-tag daily-summary">每日总结</span>');
+    if (chat.dailySummaryJournal) {
+      tags.push('<span class="telegram-chat-tag daily-summary">通过期刊</span>');
     } else {
-      tags.push('<span class="telegram-chat-tag disabled">每日总结</span>');
+      tags.push('<span class="telegram-chat-tag disabled">通过期刊</span>');
+    }
+    if (chat.dailySummaryBlogNews) {
+      tags.push('<span class="telegram-chat-tag daily-summary">通过资讯</span>');
+    } else {
+      tags.push('<span class="telegram-chat-tag disabled">通过资讯</span>');
     }
     if (chat.journalAll) {
       tags.push('<span class="telegram-chat-tag journal-all">全部期刊</span>');
@@ -1962,7 +1967,8 @@ function openTelegramChatModal(chat = null) {
     document.getElementById('telegramChatChatId').value = chat.chatId;
     document.getElementById('telegramChatName').value = chat.chatName || '';
     document.getElementById('telegramChatRole').value = chat.role;
-    document.getElementById('telegramChatDailySummary').checked = chat.dailySummary;
+    document.getElementById('telegramChatDailySummaryJournal').checked = chat.dailySummaryJournal;
+    document.getElementById('telegramChatDailySummaryBlogNews').checked = chat.dailySummaryBlogNews;
     document.getElementById('telegramChatJournalAll').checked = chat.journalAll;
     document.getElementById('telegramChatNewArticles').checked = chat.newArticles;
     document.getElementById('telegramChatInsights').checked = chat.insights;
@@ -2030,7 +2036,8 @@ async function saveTelegramChat(e) {
   const chatId = document.getElementById('telegramChatChatId').value.trim();
   const chatName = document.getElementById('telegramChatName').value.trim();
   const role = document.getElementById('telegramChatRole').value;
-  const dailySummary = document.getElementById('telegramChatDailySummary').checked;
+  const dailySummaryJournal = document.getElementById('telegramChatDailySummaryJournal').checked;
+  const dailySummaryBlogNews = document.getElementById('telegramChatDailySummaryBlogNews').checked;
   const journalAll = document.getElementById('telegramChatJournalAll').checked;
   const newArticles = document.getElementById('telegramChatNewArticles').checked;
   const insights = document.getElementById('telegramChatInsights').checked;
@@ -2046,7 +2053,8 @@ async function saveTelegramChat(e) {
   const payload = {
     chatName: chatName || null,
     role,
-    dailySummary,
+    dailySummaryJournal,
+    dailySummaryBlogNews,
     journalAll,
     newArticles,
     insights,
