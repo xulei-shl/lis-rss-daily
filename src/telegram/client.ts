@@ -30,6 +30,30 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
+function serializeError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    const cause = error.cause;
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      cause: cause instanceof Error
+        ? {
+            name: cause.name,
+            message: cause.message,
+            stack: cause.stack,
+          }
+        : cause,
+    };
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    return error as Record<string, unknown>;
+  }
+
+  return { value: String(error) };
+}
+
 /**
  * Telegram Bot API Client Client
  */
@@ -119,12 +143,12 @@ export class TelegramClient {
 
       } catch (error) {
         if (isAbortError(error) && method === 'sendMessage') {
-          log.error({ method, error }, 'Telegram API request aborted, skipping retry to avoid duplicate message');
+          log.error({ method, error: serializeError(error) }, 'Telegram API request aborted, skipping retry to avoid duplicate message');
           throw error;
         }
 
         if (attempt >= MAX_RETRIES) {
-          log.error({ method, error }, 'Telegram API request failed after retries');
+          log.error({ method, error: serializeError(error) }, 'Telegram API request failed after retries');
           throw error;
         }
 

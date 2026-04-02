@@ -37,6 +37,30 @@ async function ensureStateDir() {
   }
 }
 
+function serializeError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    const cause = error.cause;
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      cause: cause instanceof Error
+        ? {
+            name: cause.name,
+            message: cause.message,
+            stack: cause.stack,
+          }
+        : cause,
+    };
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    return error as Record<string, unknown>;
+  }
+
+  return { value: String(error) };
+}
+
 export class TelegramBot {
   private client: TelegramClient;
   private botToken: string;
@@ -760,7 +784,14 @@ export class TelegramBot {
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
         failedCount++;
-        log.error({ error, articleId: article.id, title: article.title }, 'Failed to send article via /getarticles');
+        log.error({
+          error: serializeError(error),
+          articleId: article.id,
+          title: article.title,
+          chatId,
+          parseMode: 'HTML',
+          messageLength: message.length,
+        }, 'Failed to send article via /getarticles');
         // Continue with next article instead of stopping
       }
     }
@@ -853,7 +884,15 @@ export class TelegramBot {
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
         failedCount++;
-        log.error({ error, articleId: article.id, title: article.title }, 'Failed to send article via /getarticles by source');
+        log.error({
+          error: serializeError(error),
+          articleId: article.id,
+          title: article.title,
+          chatId,
+          parseMode: 'HTML',
+          messageLength: message.length,
+          sourceName: matchedSource.name,
+        }, 'Failed to send article via /getarticles by source');
         // Continue with next article instead of stopping
       }
     }
@@ -935,7 +974,15 @@ export class TelegramBot {
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
         failedCount++;
-        log.error({ error, articleId: article.id, title: article.title }, 'Failed to send article via /getarticles by search');
+        log.error({
+          error: serializeError(error),
+          articleId: article.id,
+          title: article.title,
+          chatId,
+          parseMode: 'HTML',
+          messageLength: message.length,
+          keyword,
+        }, 'Failed to send article via /getarticles by search');
         // Continue with next article instead of stopping
       }
     }
