@@ -85,7 +85,10 @@ const pageActions = isGuest ? '' : `
       </div>
 
       <div class="filter-group search-group">
-        <span class="filter-label">关键词</span>
+        <div class="filter-label-row">
+          <span class="filter-label">关键词</span>
+          <button type="button" id="clearFiltersBtn" class="filter-clear-btn">全部清空</button>
+        </div>
         <div class="search-box">
           <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
             stroke="currentColor" stroke-width="2">
@@ -153,6 +156,8 @@ const pageActions = isGuest ? '' : `
           loadArticles();
         });
       });
+
+      document.getElementById('clearFiltersBtn').addEventListener('click', clearAllFilters);
 
       // Setup searchable select for source
       setupSearchableSelect('sourceSearchableSelect', 'filterSource', 'sourceDropdown', () => {
@@ -252,6 +257,46 @@ const pageActions = isGuest ? '' : `
       };
     }
 
+    function updateClearFiltersButton() {
+      const button = document.getElementById('clearFiltersBtn');
+      if (!button) return;
+
+      const filters = getCurrentFilters();
+      const hasActiveFilters = Boolean(
+        filters.sourceId ||
+        filters.filterStatus ||
+        filters.processStatus ||
+        filters.filterRead ||
+        filters.search ||
+        filters.dateFrom ||
+        filters.dateTo ||
+        filters.filterRating
+      );
+
+      button.disabled = !hasActiveFilters;
+    }
+
+    function clearAllFilters() {
+      const sourceInput = document.getElementById('filterSource');
+
+      if (sourceInput) {
+        sourceInput.value = '';
+        if (typeof sourceInput.setSelectedValue === 'function') {
+          sourceInput.setSelectedValue('');
+        }
+      }
+
+      document.getElementById('filterStatus').value = '';
+      document.getElementById('filterProcess').value = '';
+      document.getElementById('filterRead').value = '';
+      document.getElementById('filterRating').value = '';
+      document.getElementById('searchInput').value = '';
+      document.getElementById('dateFrom').value = '';
+      document.getElementById('dateTo').value = '';
+      currentPage = 1;
+      loadArticles();
+    }
+
     // 将列表状态同步到地址栏
     function syncUrlWithFilters() {
       const filters = getCurrentFilters();
@@ -292,15 +337,23 @@ const pageActions = isGuest ? '' : `
       const sourceId = params.get('sourceId');
       const sourceInput = document.getElementById('filterSource');
 
-      if (!sourceId || !sourceInput) return;
+      if (!sourceInput) return;
+      if (!sourceId) {
+        updateClearFiltersButton();
+        return;
+      }
 
       const selectedSource = findSourceById(sourceId);
-      if (!selectedSource) return;
+      if (!selectedSource) {
+        updateClearFiltersButton();
+        return;
+      }
 
       sourceInput.value = selectedSource.name;
       if (typeof sourceInput.setSelectedValue === 'function') {
         sourceInput.setSelectedValue(sourceId);
       }
+      updateClearFiltersButton();
     }
 
     // 获取当前列表页查询参数，用于跳转详情页后返回
@@ -366,6 +419,7 @@ const pageActions = isGuest ? '' : `
       const container = document.getElementById('articlesContainer');
       container.innerHTML = '<div class="loading">加载中...</div>';
       syncUrlWithFilters();
+      updateClearFiltersButton();
 
       const params = new URLSearchParams({
         page: currentPage,
