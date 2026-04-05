@@ -653,7 +653,6 @@ def main():
         
         # 获取来源名称
         article['source_name'] = get_source_name(article, conn)
-        processed_article_ids.add(article_id)
         
         print(f"\n{'#'*60}")
         print(f"# 处理第 {success_count + failure_count + 1} 条 (成功: {success_count}, 失败: {failure_count})")
@@ -670,6 +669,7 @@ def main():
         
         if is_fully_successful:
             success_count += 1
+            processed_article_ids.add(article_id)
             print(f"\n[进度] 成功: {success_count}, 失败: {failure_count} (此条成功计入)")
         else:
             failure_count += 1
