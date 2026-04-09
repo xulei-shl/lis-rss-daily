@@ -769,6 +769,7 @@ export class TelegramBot {
           sourceType: article.source_origin === 'journal' ? '期刊文章' :
                       article.source_origin === 'keyword' ? '关键词订阅' : 'RSS订阅',
           summary,
+          aiSummary: article.ai_summary || undefined,
         });
 
         const keyboard = createArticleKeyboard(
@@ -869,6 +870,7 @@ export class TelegramBot {
           sourceType: article.source_origin === 'journal' ? '期刊文章' :
                       article.source_origin === 'keyword' ? '关键词订阅' : 'RSS订阅',
           summary,
+          aiSummary: article.ai_summary || undefined,
         });
 
         const keyboard = createArticleKeyboard(
@@ -959,6 +961,7 @@ export class TelegramBot {
           sourceType: article.source_origin === 'journal' ? '期刊文章' :
                       article.source_origin === 'keyword' ? '关键词订阅' : 'RSS订阅',
           summary,
+          aiSummary: article.ai_summary || undefined,
         });
 
         const keyboard = createArticleKeyboard(

@@ -127,6 +127,7 @@ export function formatNewArticle(data: {
   sourceName: string;
   sourceType: string;
   summary?: string;
+  aiSummary?: string;
 }): string {
   let message = '🆕 新文献推荐\n\n';
 
@@ -144,6 +145,15 @@ export function formatNewArticle(data: {
       ? data.summary.substring(0, maxPreview) + '...'
       : data.summary;
     message += `\n摘要: ${escapeHtml(preview)}\n`;
+  }
+
+  if (data.aiSummary) {
+    const availableSpace = MAX_MESSAGE_LENGTH - message.length - 50;
+    let aiSummaryText = data.aiSummary;
+    if (aiSummaryText.length > availableSpace) {
+      aiSummaryText = aiSummaryText.substring(0, availableSpace) + '...\n';
+    }
+    message += `\n🤖 AI总结:\n${escapeHtml(aiSummaryText)}\n`;
   }
 
   message += `\n🔗 ${data.url}`;
