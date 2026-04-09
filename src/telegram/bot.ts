@@ -215,6 +215,17 @@ export class TelegramBot {
   }
 
   /**
+   * 获取 Telegram 展示用的 AI 总结文本
+   */
+  private getTelegramAiSummary(aiSummary: string | null | undefined): string {
+    if (typeof aiSummary === 'string' && aiSummary.trim() !== '') {
+      return aiSummary;
+    }
+
+    return '未生成 AI 总结';
+  }
+
+  /**
    * Start polling for updates
    */
   async start(): Promise<void> {
@@ -749,6 +760,8 @@ export class TelegramBot {
 
     // Send articles with delay to avoid rate limits
     for (const article of articles) {
+      let formattedMessage = '';
+
       try {
         // Use translated summary if available, otherwise use original summary or content
         // Priority: summary_zh > summary > markdown_content > content
@@ -761,7 +774,7 @@ export class TelegramBot {
           }
         }
 
-        const message = formatNewArticle({
+        formattedMessage = formatNewArticle({
           id: article.id,
           title: article.title,
           url: article.url,
@@ -769,7 +782,7 @@ export class TelegramBot {
           sourceType: article.source_origin === 'journal' ? '期刊文章' :
                       article.source_origin === 'keyword' ? '关键词订阅' : 'RSS订阅',
           summary,
-          aiSummary: article.ai_summary || undefined,
+          aiSummary: this.getTelegramAiSummary(article.ai_summary),
         });
 
         const keyboard = createArticleKeyboard(
@@ -778,7 +791,7 @@ export class TelegramBot {
           article.rating
         );
 
-        await this.client.sendMessageWithKeyboard(chatId, message, keyboard, 'HTML');
+        await this.client.sendMessageWithKeyboard(chatId, formattedMessage, keyboard, 'HTML');
         sentCount++;
 
         // Rate limiting: 1 second between messages
@@ -791,7 +804,7 @@ export class TelegramBot {
           title: article.title,
           chatId,
           parseMode: 'HTML',
-          messageLength: message.length,
+          messageLength: formattedMessage.length,
         }, 'Failed to send article via /getarticles');
         // Continue with next article instead of stopping
       }
@@ -850,6 +863,8 @@ export class TelegramBot {
 
     // Send articles with delay to avoid rate limits
     for (const article of result.articles) {
+      let formattedMessage = '';
+
       try {
         // Use translated summary if available, otherwise use original summary or content
         // Priority: summary_zh > summary > markdown_content > content
@@ -862,7 +877,7 @@ export class TelegramBot {
           }
         }
 
-        const message = formatNewArticle({
+        formattedMessage = formatNewArticle({
           id: article.id,
           title: article.title,
           url: article.url,
@@ -870,7 +885,7 @@ export class TelegramBot {
           sourceType: article.source_origin === 'journal' ? '期刊文章' :
                       article.source_origin === 'keyword' ? '关键词订阅' : 'RSS订阅',
           summary,
-          aiSummary: article.ai_summary || undefined,
+          aiSummary: this.getTelegramAiSummary(article.ai_summary),
         });
 
         const keyboard = createArticleKeyboard(
@@ -879,7 +894,7 @@ export class TelegramBot {
           article.rating
         );
 
-        await this.client.sendMessageWithKeyboard(chatId, message, keyboard, 'HTML');
+        await this.client.sendMessageWithKeyboard(chatId, formattedMessage, keyboard, 'HTML');
         sentCount++;
 
         // Rate limiting: 1 second between messages
@@ -892,7 +907,7 @@ export class TelegramBot {
           title: article.title,
           chatId,
           parseMode: 'HTML',
-          messageLength: message.length,
+          messageLength: formattedMessage.length,
           sourceName: matchedSource.name,
         }, 'Failed to send article via /getarticles by source');
         // Continue with next article instead of stopping
@@ -941,6 +956,8 @@ export class TelegramBot {
 
     // Send articles with delay to avoid rate limits
     for (const article of result.articles) {
+      let formattedMessage = '';
+
       try {
         // Use translated summary if available, otherwise use original summary or content
         // Priority: summary_zh > summary > markdown_content > content
@@ -953,7 +970,7 @@ export class TelegramBot {
           }
         }
 
-        const message = formatNewArticle({
+        formattedMessage = formatNewArticle({
           id: article.id,
           title: article.title,
           url: article.url,
@@ -961,7 +978,7 @@ export class TelegramBot {
           sourceType: article.source_origin === 'journal' ? '期刊文章' :
                       article.source_origin === 'keyword' ? '关键词订阅' : 'RSS订阅',
           summary,
-          aiSummary: article.ai_summary || undefined,
+          aiSummary: this.getTelegramAiSummary(article.ai_summary),
         });
 
         const keyboard = createArticleKeyboard(
@@ -970,7 +987,7 @@ export class TelegramBot {
           article.rating
         );
 
-        await this.client.sendMessageWithKeyboard(chatId, message, keyboard, 'HTML');
+        await this.client.sendMessageWithKeyboard(chatId, formattedMessage, keyboard, 'HTML');
         sentCount++;
 
         // Rate limiting: 1 second between messages
@@ -983,7 +1000,7 @@ export class TelegramBot {
           title: article.title,
           chatId,
           parseMode: 'HTML',
-          messageLength: message.length,
+          messageLength: formattedMessage.length,
           keyword,
         }, 'Failed to send article via /getarticles by search');
         // Continue with next article instead of stopping

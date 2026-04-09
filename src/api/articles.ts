@@ -788,6 +788,7 @@ export async function getUserArticles(
     'articles.title',
     'articles.url',
     'articles.summary',
+    'articles.ai_summary',
     'articles.content',
     'articles.markdown_content',
     'articles.filter_status',
