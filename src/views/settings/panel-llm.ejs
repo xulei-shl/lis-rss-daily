@@ -3,7 +3,13 @@
 <div class="llm-section">
   <div class="section-header">
     <h2>LLM 配置</h2>
-    <button class="btn btn-primary" onclick="showLLMAddModal()">+ 添加 LLM 配置</button>
+    <div class="header-actions">
+      <select id="llmSortBy" class="sort-select" onchange="onLLMSortChange()">
+        <option value="priority">按优先级</option>
+        <option value="task_type_priority">按任务类型+优先级</option>
+      </select>
+      <button class="btn btn-primary" onclick="showLLMAddModal()">+ 添加 LLM 配置</button>
+    </div>
   </div>
 
   <table class="llm-table" id="llmConfigsTable">

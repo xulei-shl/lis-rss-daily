@@ -66,6 +66,26 @@
     margin: 0;
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.sort-select {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    cursor: pointer;
+}
+
+.sort-select:hover {
+    border-color: var(--text-dim);
+}
+
 /* Common UI Elements in Settings */
 /* Common UI Elements in Settings (Tables) */
 .rss-sources-table,

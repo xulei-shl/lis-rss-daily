@@ -10,6 +10,7 @@ import { logger } from '../logger.js';
 import { encryptAPIKey, decryptAPIKey } from '../utils/crypto.js';
 import { config } from '../config.js';
 import { TASK_TYPES, type TaskType } from '../config/system-prompt-variables.js';
+import { getTaskTypeCodes } from '../config/types-config.js';
 
 const log = logger.child({ module: 'llm-configs-service' });
 
@@ -52,6 +53,7 @@ export interface QueryOptions {
   provider?: string;
   configType?: 'llm' | 'embedding' | 'rerank';
   taskType?: TaskType;
+  sortBy?: 'priority' | 'task_type_priority';
 }
 
 export interface PaginatedResult<T> {
@@ -118,14 +120,56 @@ export async function getUserLLMConfigs(
   const total = Number(totalCountResult?.count ?? 0);
 
   // Get paginated results
-  const configs = await query
-    .selectAll()
-    .orderBy('is_default', 'desc')
-    .orderBy('priority', 'asc')
-    .orderBy('created_at', 'asc')
-    .limit(limit)
-    .offset(offset)
-    .execute();
+  const sortBy = options.sortBy ?? 'priority';
+  let configs;
+  if (sortBy === 'task_type_priority') {
+    const taskTypeCodes = getTaskTypeCodes();
+    const taskTypeOrder: Record<string, number> = {};
+    taskTypeCodes.forEach((code: string, index: number) => {
+      taskTypeOrder[code] = index;
+    });
+
+    configs = await query
+      .selectAll()
+      .execute();
+
+    // Sort in memory: task_type grouping + priority within group
+    configs.sort((a, b) => {
+      const aTaskType = a.task_type as string | null | undefined;
+      const bTaskType = b.task_type as string | null | undefined;
+      const aHasTaskType = !!aTaskType;
+      const bHasTaskType = !!bTaskType;
+
+      // Both have task_type: compare by task_type priority, then by priority
+      if (aHasTaskType && bHasTaskType) {
+        const aOrder = aTaskType ? (taskTypeOrder[aTaskType] ?? 999) : 999;
+        const bOrder = bTaskType ? (taskTypeOrder[bTaskType] ?? 999) : 999;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return (a.priority ?? 100) - (b.priority ?? 100);
+      }
+
+      // a has task_type, b doesn't: a first
+      if (aHasTaskType && !bHasTaskType) return -1;
+      // a doesn't have, b has: b first
+      if (!aHasTaskType && bHasTaskType) return 1;
+
+      // Neither has task_type: is_default first, then priority, then created_at
+      if (a.is_default !== b.is_default) return a.is_default ? -1 : 1;
+      return (a.priority ?? 100) - (b.priority ?? 100);
+    });
+
+    // Apply pagination after sorting
+    configs = configs.slice(offset, offset + limit);
+  } else {
+    configs = await query
+      .selectAll()
+      .orderBy('is_default', 'desc')
+      .orderBy('priority', 'asc')
+      .orderBy('created_at', 'asc')
+      .limit(limit)
+      .offset(offset)
+      .execute();
+  }
 
   return {
     configs: configs.map(toSafeRecord),

@@ -25,10 +25,16 @@ router.get('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
     const provider = req.query.provider as string | undefined;
     const configType = req.query.configType as 'llm' | 'embedding' | 'rerank' | undefined;
     const taskType = req.query.taskType as TaskType | undefined;
+    const sortBy = req.query.sortBy as 'priority' | 'task_type_priority' | undefined;
 
     // Validate taskType if provided
     if (taskType && !getTaskTypeCodes().includes(taskType)) {
       return res.status(400).json({ error: `taskType must be one of: ${getTaskTypeCodes().join(', ')}` });
+    }
+
+    // Validate sortBy if provided
+    if (sortBy && !['priority', 'task_type_priority'].includes(sortBy)) {
+      return res.status(400).json({ error: 'sortBy must be one of: priority, task_type_priority' });
     }
 
     const result = await llmConfigService.getUserLLMConfigs(req.userId!, {
@@ -37,6 +43,7 @@ router.get('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
       provider,
       configType,
       taskType,
+      sortBy,
     });
 
     res.json(result);
