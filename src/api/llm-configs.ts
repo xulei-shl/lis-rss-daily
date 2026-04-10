@@ -119,8 +119,8 @@ export async function getUserLLMConfigs(
 
   const total = Number(totalCountResult?.count ?? 0);
 
-  // Get paginated results
-  const sortBy = options.sortBy ?? 'priority';
+  // Get paginated results - default to task_type_priority sort
+  const sortBy = options.sortBy ?? 'task_type_priority';
   let configs;
   if (sortBy === 'task_type_priority') {
     const taskTypeCodes = getTaskTypeCodes();
@@ -133,28 +133,27 @@ export async function getUserLLMConfigs(
       .selectAll()
       .execute();
 
-    // Sort in memory: task_type grouping + priority within group
+    // Sort in memory: task_type 为空的通用配置排在前面，相同任务类型按优先级排序
     configs.sort((a, b) => {
       const aTaskType = a.task_type as string | null | undefined;
       const bTaskType = b.task_type as string | null | undefined;
       const aHasTaskType = !!aTaskType;
       const bHasTaskType = !!bTaskType;
 
-      // Both have task_type: compare by task_type priority, then by priority
-      if (aHasTaskType && bHasTaskType) {
-        const aOrder = aTaskType ? (taskTypeOrder[aTaskType] ?? 999) : 999;
-        const bOrder = bTaskType ? (taskTypeOrder[bTaskType] ?? 999) : 999;
-        if (aOrder !== bOrder) return aOrder - bOrder;
+      // Neither has task_type (通用配置): is_default first, then priority
+      if (!aHasTaskType && !bHasTaskType) {
+        if (a.is_default !== b.is_default) return a.is_default ? -1 : 1;
         return (a.priority ?? 100) - (b.priority ?? 100);
       }
 
-      // a has task_type, b doesn't: a first
-      if (aHasTaskType && !bHasTaskType) return -1;
-      // a doesn't have, b has: b first
-      if (!aHasTaskType && bHasTaskType) return 1;
+      // One has task_type, one doesn't: 通用配置（无task_type）排在前面
+      if (!aHasTaskType && bHasTaskType) return -1;
+      if (aHasTaskType && !bHasTaskType) return 1;
 
-      // Neither has task_type: is_default first, then priority, then created_at
-      if (a.is_default !== b.is_default) return a.is_default ? -1 : 1;
+      // Both have task_type: compare by task_type priority, then by priority
+      const aOrder = aTaskType ? (taskTypeOrder[aTaskType] ?? 999) : 999;
+      const bOrder = bTaskType ? (taskTypeOrder[bTaskType] ?? 999) : 999;
+      if (aOrder !== bOrder) return aOrder - bOrder;
       return (a.priority ?? 100) - (b.priority ?? 100);
     });
 

@@ -564,8 +564,7 @@ let llmPagination = {
   page: 1,
   limit: 10,
   total: 0,
-  totalPages: 0,
-  sortBy: 'priority'
+  totalPages: 0
 };
 let systemPrompts = [];
 
@@ -597,8 +596,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 async function loadLLMConfigs(page = 1) {
   try {
-    const sortBy = llmPagination.sortBy || 'priority';
-    const res = await fetch(`/api/llm-configs?page=${page}&limit=${llmPagination.limit}&sortBy=${sortBy}`, { cache: 'no-store' });
+    const res = await fetch(`/api/llm-configs?page=${page}&limit=${llmPagination.limit}`, { cache: 'no-store' });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       console.error('LLM configs API error:', res.status, errData);
@@ -635,12 +633,6 @@ function renderLLMTable() {
 
   table.style.display = 'table';
   emptyState.style.display = 'none';
-
-  // 同步 sortSelect 值
-  const sortSelect = document.getElementById('llmSortBy');
-  if (sortSelect) {
-    sortSelect.value = llmPagination.sortBy || 'priority';
-  }
 
   // 任务类型显示名称映射
   const taskTypeLabels = {
@@ -684,14 +676,6 @@ function renderLLMTable() {
       '</td>' +
       '</tr>';
   }).join('');
-}
-
-function onLLMSortChange() {
-  const sortSelect = document.getElementById('llmSortBy');
-  if (sortSelect) {
-    llmPagination.sortBy = sortSelect.value;
-    loadLLMConfigs(1);
-  }
 }
 
 function showLLMAddModal() {
