@@ -641,10 +641,6 @@ function renderLLMTable() {
   if (sortSelect) {
     sortSelect.value = llmPagination.sortBy || 'priority';
   }
-}
-
-  table.style.display = 'table';
-  emptyState.style.display = 'none';
 
   // 任务类型显示名称映射
   const taskTypeLabels = {
