@@ -278,9 +278,25 @@ export class TelegramClient {
       return markedChunk;
     }
 
-    const maxContentBytes = TELEGRAM_MAX_LENGTH - getByteLength(marker);
-    const { truncated } = smartTruncate(chunk, maxContentBytes);
-    return marker + truncated;
+    const markerBytes = getByteLength(marker);
+    const maxContentBytes = TELEGRAM_MAX_LENGTH - markerBytes;
+
+    const { truncated, remaining } = smartTruncate(chunk, maxContentBytes);
+
+    if (remaining.length > 0 && getByteLength(marker + truncated) <= TELEGRAM_MAX_LENGTH) {
+      return marker + truncated;
+    }
+
+    if (truncated.length > 0) {
+      return marker + truncated;
+    }
+
+    const encoder = new TextEncoder();
+    let len = 1;
+    while (len < chunk.length && encoder.encode(chunk.substring(0, len + 1)).length <= maxContentBytes) {
+      len++;
+    }
+    return marker + chunk.substring(0, len);
   }
 
   /**
