@@ -115,8 +115,8 @@ function createOpenAIProvider(llmConfig: LLMConfigOptions, configId?: number): L
   const client = new OpenAI({
     apiKey: llmConfig.apiKey,
     baseURL: llmConfig.baseURL,
-    timeout: llmConfig.timeout ?? 180000,
-    maxRetries: llmConfig.maxRetries ?? 3,
+    timeout: llmConfig.timeout ?? 300000,
+    maxRetries: llmConfig.maxRetries ?? 1,
   });
   const model = llmConfig.model;
 
