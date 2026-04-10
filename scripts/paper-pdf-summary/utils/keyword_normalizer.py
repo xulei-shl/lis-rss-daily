@@ -170,6 +170,8 @@ def is_match(title: str, filename: str, threshold: float = 0) -> Tuple[bool, str
     匹配规则：
     - 完全匹配：标准化后的标题与文件名完全相同
     - 前端匹配：标准化后的标题是标准化后的文件名的前缀
+    - 截断匹配：标准化后的文件名是标准化后的标题的前缀（CNKI下载的文件名被截断情况）
+    - 公共子串匹配：标题和文件名有足够长的公共子串（处理中间截断差异）
     - 相似度匹配：相似度大于等于阈值（仅当threshold > 0时启用）
     
     Args:
@@ -195,6 +197,19 @@ def is_match(title: str, filename: str, threshold: float = 0) -> Tuple[bool, str
     if normalized_filename.startswith(normalized_title):
         return True, f"前端匹配（检索词是PDF文件名的前缀）"
     
+    # 截断匹配：标准化后的文件名是标准化后的标题的前缀
+    # （处理CNKI下载时文件名被截断的情况，如"技术迭代驱动下美国高校图书馆数...2025_ACRL"）
+    if normalized_title.startswith(normalized_filename):
+        return True, f"截断匹配（PDF文件名是标题的截断版本）"
+    
+    # 公共子串匹配：检查标题和文件名是否有足够长的公共子串
+    # 处理"与启示" vs "与启12025"这类中间截断差异
+    min_len = min(len(normalized_title), len(normalized_filename))
+    if min_len >= 20:
+        common_len = longest_common_substring_length(normalized_title, normalized_filename)
+        if common_len >= min_len * 0.5:
+            return True, f"公共子串匹配（公共长度{common_len}/{min_len}，{common_len/min_len:.0%}）"
+    
     # 如果设置了阈值，尝试相似度匹配
     if threshold > 0:
         similarity = calculate_similarity(title, filename)
@@ -204,6 +219,33 @@ def is_match(title: str, filename: str, threshold: float = 0) -> Tuple[bool, str
     # 不匹配，提供诊断信息
     reason = f"不匹配 - 标题标准化: '{normalized_title[:30]}...' vs 文件名: '{normalized_filename[:30]}...'"
     return False, reason
+
+
+def longest_common_substring_length(s1: str, s2: str) -> int:
+    """
+    计算两个字符串的最长公共子串长度（简化版，贪心匹配）
+    
+    Args:
+        s1: 字符串1
+        s2: 字符串2
+        
+    Returns:
+        最长公共子串长度
+    """
+    if not s1 or not s2:
+        return 0
+    
+    max_len = 0
+    # 从较短字符串的开始位置尝试匹配
+    for start in range(len(s2)):
+        for length in range(min(len(s2) - start, len(s1)), 0, -1):
+            substring = s2[start:start + length]
+            if substring in s1 and length > max_len:
+                max_len = length
+        if max_len >= len(s2) - start:
+            break
+    
+    return max_len
 
 
 def diagnose_text(text: str) -> dict:
