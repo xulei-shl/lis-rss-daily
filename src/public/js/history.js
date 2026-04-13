@@ -518,11 +518,34 @@
     if (!textToCopy) return;
 
     try {
-      await navigator.clipboard.writeText(textToCopy);
-      window.toast.success('已复制到剪贴板');
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(textToCopy);
+      } else {
+        fallbackCopyText(textToCopy);
+      }
+      showToastMessage('已复制到剪贴板', 'success');
     } catch (err) {
       console.error('Failed to copy:', err);
-      window.toast.error('复制失败，请重试');
+      showToastMessage('复制失败，请重试', 'error');
+    }
+  }
+
+  // 兼容不支持 Clipboard API 的环境
+  function fallbackCopyText(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', 'readonly');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  }
+
+  function showToastMessage(message, type) {
+    if (window.toast && typeof window.toast[type] === 'function') {
+      window.toast[type](message);
     }
   }
 
