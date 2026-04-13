@@ -29,6 +29,7 @@ class ProcessRequest(BaseModel):
     score_threshold: Optional[float] = None
     semantic_limit: Optional[int] = None
     max_final_articles: Optional[int] = None
+    skip_pdf_summary: bool = False
     output_dir: Optional[str] = None
     config_path: Optional[str] = None
 
@@ -49,6 +50,7 @@ async def run_deepsearch_task(
     score_threshold: Optional[float],
     semantic_limit: Optional[int],
     max_final_articles: Optional[int],
+    skip_pdf_summary: bool,
     output_dir: Optional[str],
     config_path: Optional[str],
 ):
@@ -75,6 +77,7 @@ async def run_deepsearch_task(
             "scoreThreshold": score_threshold,
             "semanticLimit": semantic_limit,
             "maxFinalArticles": max_final_articles,
+            "skipPdfSummary": skip_pdf_summary,
             "outputDir": str(task_output_dir),
             "configPath": config_path,
         }
@@ -144,6 +147,7 @@ async def process(request: ProcessRequest, background_tasks: BackgroundTasks):
         request.score_threshold,
         request.semantic_limit,
         request.max_final_articles,
+        request.skip_pdf_summary,
         request.output_dir,
         request.config_path,
     )

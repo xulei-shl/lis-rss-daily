@@ -117,6 +117,7 @@ export interface ProcessOptions {
   scoreThreshold?: number;
   semanticLimit?: number;
   maxFinalArticles?: number;
+  skipPdfSummary?: boolean;
   outputDir?: string;
 }
 

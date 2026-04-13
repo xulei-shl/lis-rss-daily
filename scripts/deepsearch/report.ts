@@ -109,14 +109,15 @@ export async function generateArticleSummaryMD(
   content: string,
   pdfSuccess: boolean,
   pdfReason?: string,
-  skipped?: boolean
+  skipped?: boolean,
+  skipReason?: string
 ): Promise<string> {
   let statusEmoji = '✅';
   let statusText = '';
 
   if (skipped) {
     statusEmoji = '⏭️';
-    statusText = '已有摘要，跳过 PDF 总结';
+    statusText = skipReason || '已有摘要，跳过 PDF 总结';
   } else if (pdfSuccess) {
     statusText = 'PDF 总结成功';
   } else {

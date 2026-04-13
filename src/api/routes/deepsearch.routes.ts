@@ -34,6 +34,7 @@ interface DeepSearchTaskResponse {
   semanticLimit: number;
   scoreThreshold: number;
   maxFinalArticles: number;
+  skipPdfSummary: boolean;
   status: string;
   externalTaskId: string | null;
   progress: { step: string; current: number; total: number } | null;
@@ -81,6 +82,17 @@ function parseStringArray(value: string | null): string[] {
 function toNumber(value: unknown, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function toBoolean(value: unknown, fallback = false): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'off', ''].includes(normalized)) return false;
+  }
+  return fallback;
 }
 
 function getDefaultProgress(status: string): { step: string; current: number; total: number } | null {
@@ -194,7 +206,7 @@ router.get('/tasks', requireAuth, async (req: AuthRequest, res) => {
 
 router.post('/tasks', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const { task_name, input_md, rounds, semantic_limit, score_threshold, max_final_articles } = req.body;
+    const { task_name, input_md, rounds, semantic_limit, score_threshold, max_final_articles, skip_pdf_summary } = req.body;
 
     if (!task_name || !input_md) {
       return res.status(400).json({ error: 'task_name and input_md are required' });
@@ -204,6 +216,7 @@ router.post('/tasks', requireAuth, async (req: AuthRequest, res) => {
     const semanticLimitNum = toNumber(semantic_limit, 5);
     const scoreThresholdNum = toNumber(score_threshold, 0.65);
     const maxFinalArticlesNum = toNumber(max_final_articles, 10);
+    const skipPdfSummary = toBoolean(skip_pdf_summary, false);
 
     const db = getDb();
     const userId = req.userId!;
@@ -220,6 +233,7 @@ router.post('/tasks', requireAuth, async (req: AuthRequest, res) => {
         semantic_limit: semanticLimitNum,
         score_threshold: scoreThresholdNum,
         max_final_articles: maxFinalArticlesNum,
+        skip_pdf_summary: skipPdfSummary ? 1 : 0,
         external_task_id: internalTaskId,
         status: 'running',
         article_count: 0,
@@ -253,6 +267,7 @@ router.post('/tasks', requireAuth, async (req: AuthRequest, res) => {
       scoreThreshold: scoreThresholdNum,
       semanticLimit: semanticLimitNum,
       maxFinalArticles: maxFinalArticlesNum,
+      skipPdfSummary,
       onCompleted: async (result: DeepSearchRuntimeResult) => {
         const finishTime = new Date().toISOString();
         const runtime = getRuntimeTask(internalTaskId);
@@ -300,6 +315,7 @@ router.post('/tasks', requireAuth, async (req: AuthRequest, res) => {
       id: taskId,
       taskName: task_name,
       status: 'running',
+      skipPdfSummary,
       externalTaskId: internalTaskId,
       createdAt: now,
     });
@@ -392,6 +408,7 @@ router.get('/tasks/:id', requireAuth, async (req: AuthRequest, res) => {
       semanticLimit: task.semantic_limit,
       scoreThreshold: task.score_threshold,
       maxFinalArticles: task.max_final_articles,
+      skipPdfSummary: Boolean(task.skip_pdf_summary),
       status: responseStatus,
       externalTaskId: task.external_task_id,
       progress,

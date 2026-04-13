@@ -723,6 +723,33 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
         continue;
       }
 
+      // ============================================================
+      // 032: deepsearch_tasks 增加 skip_pdf_summary 字段
+      // ============================================================
+      if (file === '032_add_deepsearch_skip_pdf_summary.sql') {
+        if (!hasTable(db, 'deepsearch_tasks')) {
+          const bootstrapPath = path.join(sqlDir, '028_add_deepsearch_tasks.sql');
+          if (fs.existsSync(bootstrapPath)) {
+            const bootstrapSql = fs.readFileSync(bootstrapPath, 'utf-8');
+            db.exec(bootstrapSql);
+            console.log('      → deepsearch_tasks table missing, created from 028');
+          } else {
+            throw new Error('deepsearch_tasks table missing and 028_add_deepsearch_tasks.sql not found');
+          }
+        }
+
+        const hasSkipPdfSummary = hasColumn(db, 'deepsearch_tasks', 'skip_pdf_summary');
+
+        if (!hasSkipPdfSummary) {
+          db.exec('ALTER TABLE deepsearch_tasks ADD COLUMN skip_pdf_summary INTEGER DEFAULT 0;');
+          console.log('      → Added skip_pdf_summary column to deepsearch_tasks');
+        } else {
+          console.log('      → skip_pdf_summary column already exists');
+        }
+
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

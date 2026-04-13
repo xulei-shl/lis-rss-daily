@@ -4,6 +4,8 @@
 
 DeepSearch API 提供深度学术文章检索和 PDF 总结服务，基于 FastAPI 构建，异步处理任务。
 
+- 支持通过参数跳过 PDF 总结，仅执行深度检索并导出文章内容
+
 - **服务端口**: 8082
 - **基础 URL**: `http://localhost:8082`
 
@@ -42,6 +44,7 @@ POST /process
 | score_threshold | float | 否 | 相似度阈值，默认使用配置 |
 | semantic_limit | integer | 否 | 语义检索返回数量，默认使用配置 |
 | max_final_articles | integer | 否 | 最终保留的最大文章数，默认使用配置 |
+| skip_pdf_summary | boolean | 否 | 是否跳过 PDF 总结，默认 `false`。为 `true` 时不调用 PDF 总结服务，仅导出文章内容 |
 | output_dir | string | 否 | 自定义输出目录 |
 | config_path | string | 否 | 自定义配置文件路径 |
 
@@ -54,6 +57,11 @@ POST /process
 格式说明：
 - 有 ID: `- 标题：ID`
 - 无 ID: `- 标题`
+
+**关于 `skip_pdf_summary`**:
+- `false` 或不传：执行完整流程，包含 PDF 总结
+- `true`：跳过 PDF 总结 API 调用，但仍会生成 `report.md` 和 `articles/` 下的 md 文件
+- 跳过后，任务结果中的 `pdfSummarySkipped` 通常会等于本次导出的文章数
 
 **响应示例**:
 ```json
@@ -133,6 +141,14 @@ curl -X POST http://localhost:8082/process \
     "input_md": "- 深度学习在医学影像中的应用：12345\n- 基于Transformer的图像分割方法"
   }'
 
+# 跳过 PDF 总结
+curl -X POST http://localhost:8082/process \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_md": "- 深度学习在医学影像中的应用：12345",
+    "skip_pdf_summary": true
+  }'
+
 # 返回: {"task_id": "xxx", "status": "running", ...}
 
 # 2. 查询状态
@@ -174,7 +190,12 @@ def download_result(task_id):
 input_md = """- 深度学习在医学影像中的应用：12345
 - 基于Transformer的图像分割方法"""
 
-task = submit_task(input_md, rounds=2, max_final_articles=10)
+task = submit_task(
+    input_md,
+    rounds=2,
+    max_final_articles=10,
+    skip_pdf_summary=True,
+)
 task_id = task["task_id"]
 
 # 轮询等待完成

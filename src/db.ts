@@ -315,6 +315,7 @@ export interface DeepSearchTasksTable {
   semantic_limit: number;
   score_threshold: number;
   max_final_articles: number;
+  skip_pdf_summary: number;
   external_task_id: string | null;
   status: 'pending' | 'running' | 'completed' | 'failed';
   result_report_path: string | null;

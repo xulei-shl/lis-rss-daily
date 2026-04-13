@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS deepsearch_tasks (
     semantic_limit INTEGER DEFAULT 5,
     score_threshold REAL DEFAULT 0.65,
     max_final_articles INTEGER DEFAULT 10,
+    skip_pdf_summary INTEGER DEFAULT 0,
     external_task_id TEXT,
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed')),
     result_report_path TEXT,

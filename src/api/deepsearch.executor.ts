@@ -42,6 +42,7 @@ interface StartTaskOptions {
   scoreThreshold?: number;
   semanticLimit?: number;
   maxFinalArticles?: number;
+  skipPdfSummary?: boolean;
   configPath?: string;
   onCompleted?: (result: DeepSearchRuntimeResult) => Promise<void> | void;
   onFailed?: (error: string) => Promise<void> | void;
@@ -95,7 +96,10 @@ export function startDeepSearchTask(options: StartTaskOptions): void {
     progress: { step: 'pending', current: 0, total: 100 },
     result: null,
     error: null,
-    logs: [`[${formatLogTimestamp()}] 任务已创建`],
+    logs: [
+      `[${formatLogTimestamp()}] 任务已创建`,
+      `[${formatLogTimestamp()}] 任务配置：${options.skipPdfSummary ? '跳过 PDF 总结' : '执行 PDF 总结'}`,
+    ],
   });
 
   void (async () => {
@@ -115,6 +119,7 @@ export function startDeepSearchTask(options: StartTaskOptions): void {
         scoreThreshold: options.scoreThreshold,
         semanticLimit: options.semanticLimit,
         maxFinalArticles: options.maxFinalArticles,
+        skipPdfSummary: options.skipPdfSummary,
         configPath: options.configPath,
         outputDir,
         onProgress: (step, current, total) => {

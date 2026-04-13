@@ -19,6 +19,7 @@ interface CliOptions {
   threshold?: number;
   limit?: number;
   maxFinal?: number;
+  skipPdfSummary?: boolean;
   output?: string;
   result?: string;
 }
@@ -53,6 +54,9 @@ function parseCliArgs(): CliOptions {
       type: 'string' as const,
       short: 'm',
     },
+    skipPdfSummary: {
+      type: 'boolean' as const,
+    },
     output: {
       type: 'string' as const,
       short: 'o',
@@ -82,6 +86,7 @@ function parseCliArgs(): CliOptions {
     threshold: values.threshold ? parseFloat(values.threshold as string) : undefined,
     limit: values.limit ? parseInt(values.limit as string, 10) : undefined,
     maxFinal: values.maxFinal ? parseInt(values.maxFinal as string, 10) : undefined,
+    skipPdfSummary: values.skipPdfSummary as boolean | undefined,
     output: values.output as string | undefined,
     result: values.result as string | undefined,
   };
@@ -101,6 +106,7 @@ DeepSearch - 深度检索工具
   -t, --threshold <n>    相关性分数阈值 (可选，覆盖配置)
   -l, --limit <n>        语义检索返回数量 (可选，覆盖配置)
   -m, --maxFinal <n>    最终结果保留数量 (可选，覆盖配置)
+      --skipPdfSummary   跳过 PDF 总结，直接导出文章内容
   -o, --output <dir>     输出目录 (可选，覆盖配置)
       --result <path>    结果 JSON 文件输出路径 (可选)
   -h, --help             显示帮助信息
@@ -122,6 +128,7 @@ async function main(): Promise<void> {
       scoreThreshold?: number;
       semanticLimit?: number;
       maxFinalArticles?: number;
+      skipPdfSummary?: boolean;
       outputDir?: string;
       configPath?: string;
     } = {};
@@ -136,6 +143,7 @@ async function main(): Promise<void> {
         scoreThreshold: inputData.scoreThreshold,
         semanticLimit: inputData.semanticLimit,
         maxFinalArticles: inputData.maxFinalArticles,
+        skipPdfSummary: inputData.skipPdfSummary,
         outputDir: inputData.outputDir,
         configPath: inputData.configPath,
       };
@@ -147,6 +155,7 @@ async function main(): Promise<void> {
         scoreThreshold: options.threshold,
         semanticLimit: options.limit,
         maxFinalArticles: options.maxFinal,
+        skipPdfSummary: options.skipPdfSummary,
         outputDir: options.output,
         configPath: options.config,
       };

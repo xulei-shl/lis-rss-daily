@@ -164,6 +164,29 @@
   color: var(--text-primary);
 }
 
+.form-group-checkbox {
+  margin-top: 16px;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.checkbox-label input {
+  margin: 0;
+}
+
+.form-help {
+  margin-top: 6px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
 .detail-inline-badges {
   display: inline-flex;
   align-items: center;

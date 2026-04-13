@@ -467,12 +467,57 @@ async function processPdfSummary(
   return { success, failed, skipped, failedItems };
 }
 
+async function processPdfSummaryWithoutApi(
+  candidates: CandidateArticle[],
+  onLog?: (message: string) => void
+): Promise<{
+  success: number;
+  failed: number;
+  skipped: number;
+  failedItems: Array<{ title: string; articleId: number | null; reason?: string }>;
+}> {
+  const log = (message: string): void => {
+    console.log(message);
+    onLog?.(message);
+  };
+
+  for (const candidate of candidates) {
+    log(`[PDF 总结] ${candidate.title}...`);
+    log('  - 按任务配置跳过 PDF 总结');
+
+    let content = '';
+    if (candidate.articleId !== null) {
+      const article = await getArticleById(candidate.articleId);
+      content = article?.ai_summary || article?.markdown_content || article?.content || '';
+    }
+
+    const mdContent = await generateArticleSummaryMD(
+      candidate.articleId,
+      candidate.title,
+      content,
+      false,
+      undefined,
+      true,
+      '按任务配置跳过 PDF 总结'
+    );
+    await saveArticleMD(candidate.articleId, candidate.title, mdContent);
+  }
+
+  return {
+    success: 0,
+    failed: 0,
+    skipped: candidates.length,
+    failedItems: [],
+  };
+}
+
 export interface DeepSearchOptions {
   inputMd: string;
   rounds?: number;
   scoreThreshold?: number;
   semanticLimit?: number;
   maxFinalArticles?: number;
+  skipPdfSummary?: boolean;
   outputDir?: string;
   configPath?: string;
   onProgress?: (step: string, current: number, total: number) => void;
@@ -517,10 +562,14 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
   const threshold = options.scoreThreshold ?? config.search.score_threshold;
   const limit = options.semanticLimit ?? config.search.semantic_limit;
   const maxFinal = options.maxFinalArticles ?? config.search.max_final_articles;
+  const skipPdfSummary = options.skipPdfSummary === true;
 
   console.log(`\n开始检索 (轮次: ${rounds}, 阈值: ${threshold}, 限制: ${limit})`);
-  await writeStepReport('步骤一：检索相关文章', `检索参数: 轮次=${rounds}, 阈值=${threshold}, 限制=${limit}`);
-  emitLog(`步骤一：开始检索，轮次=${rounds}，阈值=${threshold}，限制=${limit}`);
+  await writeStepReport(
+    '步骤一：检索相关文章',
+    `检索参数: 轮次=${rounds}, 阈值=${threshold}, 限制=${limit}, 跳过 PDF 总结=${skipPdfSummary ? '是' : '否'}`
+  );
+  emitLog(`步骤一：开始检索，轮次=${rounds}，阈值=${threshold}，限制=${limit}，跳过 PDF 总结=${skipPdfSummary ? '是' : '否'}`);
   emitProgress('searching', 20);
 
   const iterativeResult = await iterativeSearch(seedArticles, rounds, threshold, limit, emitLog);
@@ -563,11 +612,18 @@ export async function runDeepSearch(options: DeepSearchOptions): Promise<DeepSea
     `找到 ${candidates.length} 篇候选文章（max_final_articles 后）:\n${candidateList || '(无)'}\n\nPDF处理集合（含种子）共 ${candidatesForPdf.length} 篇`
   );
 
-  await writeStepReport('步骤二：PDF 总结', `开始处理 ${candidatesForPdf.length} 篇文章的 PDF 总结（含种子）...`);
-  emitLog(`步骤二：开始处理 ${candidatesForPdf.length} 篇文章的 PDF 总结（含种子）`);
+  const pdfStartMessage = skipPdfSummary
+    ? `根据任务配置跳过 PDF 总结，改为直接导出 ${candidatesForPdf.length} 篇文章（含种子）的内容。`
+    : `开始处理 ${candidatesForPdf.length} 篇文章的 PDF 总结（含种子）...`;
+  await writeStepReport('步骤二：PDF 总结', pdfStartMessage);
+  emitLog(skipPdfSummary
+    ? `步骤二：根据任务配置跳过 PDF 总结，直接导出 ${candidatesForPdf.length} 篇文章（含种子）`
+    : `步骤二：开始处理 ${candidatesForPdf.length} 篇文章的 PDF 总结（含种子）`);
   emitProgress('pdf_summary', 70);
 
-  const pdfResult = await processPdfSummary(candidatesForPdf, emitLog);
+  const pdfResult = skipPdfSummary
+    ? await processPdfSummaryWithoutApi(candidatesForPdf, emitLog)
+    : await processPdfSummary(candidatesForPdf, emitLog);
   emitProgress('pdf_summary', 95);
 
   console.log(`\nPDF 总结完成: 成功 ${pdfResult.success}, 失败 ${pdfResult.failed}, 跳过 ${pdfResult.skipped}`);
