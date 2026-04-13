@@ -294,6 +294,12 @@ curl http://localhost:8007
 
 # 检查 ChromaDB 是否运行
 curl http://127.0.0.1:8000/api/v1/heartbeat
+
+# 检查统一检索外部 API（需要先在 .env 中配置 CLI_API_KEY）
+curl -X POST "http://localhost:8007/api/external/search" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: your-cli-api-key-here" \
+  -d '{"userId":1,"mode":"hybrid","query":"machine learning","limit":3}'
 ```
 
 访问 `http://your-server-ip:8007`，使用默认账号登录：
@@ -642,6 +648,29 @@ systemctl status chromadb lis-rss deepsearch-api paper-pdf-api paper-pdf-summary
 | DeepSearch API | 8082 | 深度检索 API |
 | Paper PDF API | 8081 | PDF 处理 API |
 | Paper PDF Telegram Bot | - | Telegram 机器人（无端口）|
+
+### 统一检索外部 API 部署说明
+
+统一检索外部 API `POST /api/external/search` 是挂载在 LIS-RSS 主应用中的 HTTP 路由，不是独立进程。
+
+这意味着：
+
+- 不需要单独创建新的 systemd 服务
+- 不需要单独开放新的端口
+- 只要 `lis-rss` 主服务已经启动，外部检索 API 就会同时可用
+- 外部接口默认复用主应用端口 `8007`
+
+调用地址示例：
+
+```text
+http://your-server-ip:8007/api/external/search
+```
+
+注意事项：
+
+- 该接口使用 `CLI_API_KEY` 鉴权，请确认 `.env` 已正确配置
+- 语义检索和相关文章能力依赖 ChromaDB，因此 `chromadb` 服务也必须正常运行
+- 如果只需要关键词检索，ChromaDB 不可用时通常仍可返回结果；混合检索则可能回退到关键词模式
 
 ---
 
