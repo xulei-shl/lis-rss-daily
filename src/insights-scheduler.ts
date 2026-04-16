@@ -2,14 +2,18 @@
  * Insights Scheduler
  *
  * Scheduled insights report generation and push (WeChat + Telegram).
- * Runs every 15 days by default.
+ * 默认每天检查一次，满足间隔天数后再执行。
  */
 
 import cron from 'node-cron';
 import { logger } from './logger.js';
 import { generateInsightsSummary } from './api/daily-summary.js';
+import { config as appConfig } from './config.js';
+import { getUserSetting, setUserSetting } from './api/settings.js';
 
 const log = logger.child({ module: 'insights-scheduler' });
+const INSIGHTS_LAST_SUCCESS_AT_KEY = 'insights_last_success_at';
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Scheduler configuration
@@ -17,6 +21,7 @@ const log = logger.child({ module: 'insights-scheduler' });
 export interface InsightsSchedulerConfig {
   enabled: boolean;
   schedule: string;
+  intervalDays: number;
   days: number;
   userId: number;
 }
@@ -89,7 +94,7 @@ export class InsightsScheduler {
       this.scheduledTask = cron.schedule(
         this.config.schedule,
         () => {
-          this.runInsightsReport().catch((err) => {
+          this.runScheduledInsightsReport().catch((err) => {
             log.error({ err }, 'Scheduled insights report error');
           });
         },
@@ -105,6 +110,7 @@ export class InsightsScheduler {
       log.info(
         {
           schedule: this.config.schedule,
+          intervalDays: this.config.intervalDays,
           days: this.config.days,
         },
         'Insights scheduler started'
@@ -165,9 +171,34 @@ export class InsightsScheduler {
   }
 
   /**
-   * Scheduled execution entry point
+   * 定时任务入口：只有满足间隔天数才真正执行
    */
-  private async runInsightsReport(): Promise<void> {
+  private async runScheduledInsightsReport(): Promise<void> {
+    const lastSuccessAt = await this.getLastSuccessAt();
+    if (!this.shouldRunScheduledReport(lastSuccessAt)) {
+      log.debug(
+        {
+          lastSuccessAt: lastSuccessAt?.toISOString(),
+          intervalDays: this.config.intervalDays,
+        },
+        'Insights interval not reached, skipping scheduled run'
+      );
+      return;
+    }
+
+    await this.runInsightsReport({
+      shouldPersistSuccessTime: true,
+      trigger: 'scheduled',
+    });
+  }
+
+  /**
+   * 执行洞察报告生成
+   */
+  private async runInsightsReport(options: {
+    shouldPersistSuccessTime: boolean;
+    trigger: 'scheduled' | 'manual';
+  }): Promise<void> {
     if (this.isExecuting) {
       log.warn('Previous execution still in progress, skipping this run');
       return;
@@ -176,7 +207,7 @@ export class InsightsScheduler {
     const runId = `run-${Date.now()}`;
     const runLog = log.child({ runId });
 
-    runLog.info('Starting scheduled insights report generation');
+    runLog.info({ trigger: options.trigger }, 'Starting insights report generation');
 
     this.isExecuting = true;
     this.stats.lastRunTime = new Date();
@@ -192,8 +223,17 @@ export class InsightsScheduler {
         articleCount: result.totalArticles,
       };
 
+      if (options.shouldPersistSuccessTime) {
+        await setUserSetting(
+          this.config.userId,
+          INSIGHTS_LAST_SUCCESS_AT_KEY,
+          new Date().toISOString()
+        );
+      }
+
       runLog.info(
         {
+          trigger: options.trigger,
           date: result.date,
           articleCount: result.totalArticles,
         },
@@ -206,17 +246,57 @@ export class InsightsScheduler {
         error: errorMessage,
       };
 
-      runLog.error({ error: errorMessage }, 'Failed to generate/push insights report');
+      runLog.error(
+        { trigger: options.trigger, error: errorMessage },
+        'Failed to generate/push insights report'
+      );
     } finally {
       this.isExecuting = false;
     }
   }
 
   /**
+   * 获取上次成功执行时间
+   */
+  private async getLastSuccessAt(): Promise<Date | undefined> {
+    const value = await getUserSetting(this.config.userId, INSIGHTS_LAST_SUCCESS_AT_KEY);
+    if (!value) {
+      return undefined;
+    }
+
+    const lastSuccessAt = new Date(value);
+    if (Number.isNaN(lastSuccessAt.getTime())) {
+      log.warn({ value }, 'Invalid insights last success time found in settings');
+      return undefined;
+    }
+
+    return lastSuccessAt;
+  }
+
+  /**
+   * 判断是否已达到下一次定时执行的最小间隔
+   */
+  private shouldRunScheduledReport(lastSuccessAt?: Date): boolean {
+    if (!lastSuccessAt) {
+      return true;
+    }
+
+    const elapsedMs = Date.now() - lastSuccessAt.getTime();
+    return elapsedMs >= this.config.intervalDays * DAY_IN_MS;
+  }
+
+  /**
    * Get scheduler status
    */
   getStatus(): InsightsSchedulerStatus {
-    const nextRun = this.isRunning ? new Date(Date.now() + 60000) : undefined;
+    let nextRun: Date | undefined;
+
+    if (this.isRunning && this.stats.lastRunTime) {
+      const intervalMs = this.stats.lastRunResult?.success
+        ? this.config.intervalDays * DAY_IN_MS
+        : DAY_IN_MS;
+      nextRun = new Date(this.stats.lastRunTime.getTime() + intervalMs);
+    }
 
     return {
       isRunning: this.isRunning,
@@ -233,15 +313,10 @@ export class InsightsScheduler {
     log.info({ days: this.config.days }, 'Manual insights report triggered');
 
     try {
-      const result = await generateInsightsSummary({
-        userId: this.config.userId,
-        days: this.config.days,
+      await this.runInsightsReport({
+        shouldPersistSuccessTime: false,
+        trigger: 'manual',
       });
-
-      log.info(
-        { date: result.date, articleCount: result.totalArticles },
-        'Insights report generated and pushed successfully (manual)'
-      );
     } catch (error) {
       log.error(
         { error },
@@ -255,12 +330,13 @@ export class InsightsScheduler {
  * Initialize and get scheduler instance
  */
 export function initInsightsScheduler(): InsightsScheduler {
-  const config: InsightsSchedulerConfig = {
-    enabled: process.env.INSIGHTS_ENABLED !== 'false',
-    schedule: process.env.INSIGHTS_SCHEDULE || '0 1 */15 * *',
-    days: parseInt(process.env.INSIGHTS_DAYS || '15', 10),
-    userId: parseInt(process.env.INSIGHTS_USER_ID || '1', 10),
+  const schedulerConfig: InsightsSchedulerConfig = {
+    enabled: appConfig.insightsEnabled,
+    schedule: appConfig.insightsSchedule,
+    intervalDays: appConfig.insightsIntervalDays,
+    days: appConfig.insightsDays,
+    userId: appConfig.insightsUserId,
   };
 
-  return InsightsScheduler.getInstance(config);
+  return InsightsScheduler.getInstance(schedulerConfig);
 }

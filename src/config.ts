@@ -53,6 +53,7 @@ export interface Config {
   // Insights
   insightsEnabled: boolean;
   insightsSchedule: string;
+  insightsIntervalDays: number;
   insightsDays: number;
   insightsUserId: number;
 
@@ -190,8 +191,9 @@ function getConfig(): Config {
 
     // Insights
     insightsEnabled: process.env.INSIGHTS_ENABLED !== 'false',
-    insightsSchedule: process.env.INSIGHTS_SCHEDULE || '0 1 */15 * *',
-    insightsDays: parseInt(process.env.INSIGHTS_DAYS || '15', 10),
+    insightsSchedule: process.env.INSIGHTS_SCHEDULE || '15 7 * * *',
+    insightsIntervalDays: parseInt(process.env.INSIGHTS_INTERVAL_DAYS || '10', 10),
+    insightsDays: parseInt(process.env.INSIGHTS_DAYS || '10', 10),
     insightsUserId: parseInt(process.env.INSIGHTS_USER_ID || '1', 10),
 
     // Search AI Summary

@@ -44,6 +44,7 @@ async function main() {
     dailySummarySchedule: config.dailySummarySchedule,
     insightsEnabled: config.insightsEnabled,
     insightsSchedule: config.insightsSchedule,
+    insightsIntervalDays: config.insightsIntervalDays,
   }, 'Configuration loaded');
 
   // Initialize database
@@ -124,7 +125,7 @@ async function main() {
   const insightsScheduler = initInsightsScheduler();
   if (config.insightsEnabled) {
     insightsScheduler.start();
-    log.info(`💡 Insights scheduler started (schedule: ${config.insightsSchedule}, days: ${config.insightsDays})`);
+    log.info(`💡 Insights scheduler started (schedule: ${config.insightsSchedule}, intervalDays: ${config.insightsIntervalDays}, days: ${config.insightsDays})`);
   } else {
     log.info('💡 Insights scheduler disabled');
   }
