@@ -216,9 +216,15 @@ export class TelegramBot {
 
   /**
    * 获取 Telegram 展示用的 AI 总结文本
+   * 截取"二、核心逻辑图谱"之前的内容
    */
   private getTelegramAiSummary(aiSummary: string | null | undefined): string {
     if (typeof aiSummary === 'string' && aiSummary.trim() !== '') {
+      const marker = '二、核心逻辑图谱';
+      const markerIndex = aiSummary.indexOf(marker);
+      if (markerIndex !== -1) {
+        return aiSummary.substring(0, markerIndex).trim();
+      }
       return aiSummary;
     }
 
