@@ -715,7 +715,8 @@ export class TelegramBot {
           '❌ 格式错误。\n' +
           '按日期：/getarticles YYYY-MM-DD 或 YYYYMMDD\n' +
           '按来源：/getarticles 来源名称\n' +
-          '例如：/getarticles 2026-3-1 或 /getarticles MIT Technology Review');
+          '可选：添加 @all 返回所有文章（不限已读/未读）\n' +
+          '例如：/getarticles 2026-3-1 或 /getarticles MIT Technology Review @all');
         return;
       }
 
@@ -734,7 +735,7 @@ export class TelegramBot {
    * Handle /getarticles command by date
    */
   private async handleGetArticlesByDate(command: GetArticlesDateCommand, chatId: string): Promise<void> {
-    const { year, month, day } = command;
+    const { year, month, day, includeAll } = command;
     // Format date string (YYYY-MM-DD)
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
@@ -742,7 +743,7 @@ export class TelegramBot {
     const result = await getUserArticles(this.userId, {
       createdAfter: dateStr,
       createdBefore: dateStr,
-      isRead: false,
+      isRead: includeAll ? undefined : false,
       filterStatus: 'passed',
       limit: 5,
       page: 1,
@@ -752,14 +753,16 @@ export class TelegramBot {
     const articles = result.articles;
 
     if (articles.length === 0) {
+      const statusText = includeAll ? '所有' : '未读';
       await this.client.sendMessage(chatId,
-        `📭 ${year}年${month}月${day}日没有符合条件的未读文章`);
+        `📭 ${year}年${month}月${day}日没有符合条件的${statusText}文章`);
       return;
     }
 
     // Send summary
+    const statusText = includeAll ? '所有' : '未读';
     await this.client.sendMessage(chatId,
-      `📚 找到 ${articles.length} 篇${year}年${month}月${day}日的未读文章：`);
+      `📚 找到 ${articles.length} 篇${year}年${month}月${day}日的${statusText}文章：`);
 
     let sentCount = 0;
     let failedCount = 0;
@@ -831,18 +834,19 @@ export class TelegramBot {
    * Handle /getarticles command by source name
    */
   private async handleGetArticlesBySource(command: GetArticlesSourceCommand, chatId: string): Promise<void> {
+    const { name, includeAll } = command;
     const sources = await this.getSources();
-    const matchedSource = this.matchSourceName(command.name, sources);
+    const matchedSource = this.matchSourceName(name, sources);
 
     // Fallback: if no source matched, treat as keyword search
     if (!matchedSource) {
-      await this.handleGetArticlesBySearch(command.name, chatId);
+      await this.handleGetArticlesBySearch(name, chatId, includeAll);
       return;
     }
 
     // Build query parameters
     const queryParams: any = {
-      isRead: false,
+      isRead: includeAll ? undefined : false,
       filterStatus: 'passed',
       limit: 5,
       page: 1,
@@ -856,13 +860,15 @@ export class TelegramBot {
     const result = await getUserArticles(this.userId, queryParams);
 
     if (result.articles.length === 0) {
+      const statusText = includeAll ? '所有' : '未读';
       await this.client.sendMessage(chatId,
-        `📭 来源 "${this.escapeHtml(matchedSource.name)}" 没有符合条件的未读文章`);
+        `📭 来源 "${this.escapeHtml(matchedSource.name)}" 没有符合条件的${statusText}文章`);
       return;
     }
 
+    const statusText = includeAll ? '所有' : '未读';
     await this.client.sendMessage(chatId,
-      `📚 找到 ${result.articles.length} 篇来自 "${this.escapeHtml(matchedSource.name)}" 的未读文章：`);
+      `📚 找到 ${result.articles.length} 篇来自 "${this.escapeHtml(matchedSource.name)}" 的${statusText}文章：`);
 
     let sentCount = 0;
     let failedCount = 0;
@@ -931,31 +937,33 @@ export class TelegramBot {
     }
   }
 
-  /**
-   * Handle /getarticles command by keyword search
-   * (fallback when source name is not found)
-   */
-  private async handleGetArticlesBySearch(keyword: string, chatId: string): Promise<void> {
-    const queryParams: any = {
-      search: keyword,
-      isRead: false,
-      filterStatus: 'passed',
-      limit: 5,
-      page: 1,
-      randomOrder: true,
-      skipDaysFilterForSearch: true,  // Skip time filter for full-text search
-    };
+/**
+ * Handle /getarticles command by keyword search
+ * (fallback when source name is not found)
+ */
+private async handleGetArticlesBySearch(keyword: string, chatId: string, includeAll?: boolean): Promise<void> {
+  const queryParams: any = {
+    search: keyword,
+    isRead: includeAll ? undefined : false,
+    filterStatus: 'passed',
+    limit: 5,
+    page: 1,
+    randomOrder: true,
+    skipDaysFilterForSearch: true,  // Skip time filter for full-text search
+  };
 
-    const result = await getUserArticles(this.userId, queryParams);
+  const result = await getUserArticles(this.userId, queryParams);
 
-    if (result.articles.length === 0) {
-      await this.client.sendMessage(chatId,
-        `📭 关键词 "${this.escapeHtml(keyword)}" 没有找到符合条件的未读文章`);
-      return;
-    }
-
+  if (result.articles.length === 0) {
+    const statusText = includeAll ? '所有' : '未读';
     await this.client.sendMessage(chatId,
-      `🔍 关键词 "${this.escapeHtml(keyword)}" 找到 ${result.articles.length} 篇未读文章：`);
+      `📭 关键词 "${this.escapeHtml(keyword)}" 没有找到符合条件的${statusText}文章`);
+    return;
+  }
+
+  const statusText = includeAll ? '所有' : '未读';
+  await this.client.sendMessage(chatId,
+    `🔍 关键词 "${this.escapeHtml(keyword)}" 找到 ${result.articles.length} 篇${statusText}文章：`);
 
     let sentCount = 0;
     let failedCount = 0;

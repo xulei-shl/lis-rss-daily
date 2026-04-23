@@ -9,11 +9,13 @@ export interface GetArticlesDateCommand {
   year: number;
   month: number;
   day: number;
+  includeAll?: boolean;
 }
 
 export interface GetArticlesSourceCommand {
   type: 'source';
   name: string;
+  includeAll?: boolean;
 }
 
 export type GetArticlesCommand = GetArticlesDateCommand | GetArticlesSourceCommand;
@@ -23,6 +25,7 @@ export type GetArticlesCommand = GetArticlesDateCommand | GetArticlesSourceComma
  * Supported formats:
  * - Date: YYYY-M-D (e.g., 2026-3-1), YYYY-MM-DD (e.g., 2026-03-01), YYYYMMDD (e.g., 20260301)
  * - Source: any non-date string (e.g., "MIT Technology Review", "关键词: 人工智能")
+ * - @all suffix: optionally add "@all" to include all articles (not just unread)
  */
 export function parseGetArticlesCommand(args: string): GetArticlesCommand | null {
   if (!args || args.trim() === '') {
@@ -31,14 +34,18 @@ export function parseGetArticlesCommand(args: string): GetArticlesCommand | null
 
   const trimmed = args.trim();
 
+  // Check for @all suffix
+  const includeAll = trimmed.toLowerCase().endsWith('@all');
+  const cleanArgs = includeAll ? trimmed.slice(0, -4).trim() : trimmed;
+
   // Try to parse as date first
-  const dateMatch = tryParseDate(trimmed);
+  const dateMatch = tryParseDate(cleanArgs);
   if (dateMatch) {
-    return { type: 'date', ...dateMatch };
+    return { type: 'date', ...dateMatch, includeAll };
   }
 
   // Not a date format, treat as source name
-  return { type: 'source', name: trimmed };
+  return { type: 'source', name: cleanArgs, includeAll };
 }
 
 /**
