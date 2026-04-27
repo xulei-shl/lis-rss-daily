@@ -210,6 +210,18 @@ RELATED_REFRESH_BATCH_SIZE=100
 # 刷新过期天数（超过此天数未刷新的文章会被重新处理）
 RELATED_REFRESH_STALE_DAYS=7
 
+# ============ 洞察报告配置 ============
+# 是否启用洞察报告定时任务
+INSIGHTS_ENABLED=true
+# 每天早上 7:15 检查一次
+INSIGHTS_SCHEDULE=15 7 * * *
+# 距离上次定时成功执行满 10 个自然日后触发
+INSIGHTS_INTERVAL_DAYS=10
+# 洞察统计最近 10 天文章
+INSIGHTS_DAYS=10
+# 推送用户 ID
+INSIGHTS_USER_ID=1
+
 # ============ 日志配置 ============
 # 日志级别（debug | info | warn | error）
 LOG_LEVEL=info
@@ -300,6 +312,12 @@ curl -X POST "http://localhost:8007/api/external/search" \
   -H "Content-Type: application/json" \
   -H "x-api-key: your-cli-api-key-here" \
   -d '{"userId":1,"mode":"hybrid","query":"machine learning","limit":3}'
+
+# 手动触发一次洞察报告
+pnpm run trigger-insights
+
+# 运行洞察调度回归检查
+pnpm run test:insights-scheduler
 ```
 
 访问 `http://your-server-ip:8007`，使用默认账号登录：
@@ -747,6 +765,50 @@ sudo systemctl restart lis-rss
 - 应用内置调度器在 `.env` 中配置：`DAILY_SUMMARY_SCHEDULE=0 7 * * *`
 - 内置调度器支持多种总结类型：`journal`、`blog_news`、`journal_all`
 - WeChat 和 Telegram 通知器都有 60 秒防重复机制，但多进程同时运行时会失效
+
+### 洞察报告未按预期触发
+
+**症状**：洞察报告在预期日期早上没有执行，或怀疑调度器未生效。
+
+**当前实现说明**：
+- 洞察调度运行在 `lis-rss` 主服务内，不是独立服务
+- 修改洞察相关 `.env` 配置后，仍然只需要重启主服务：`sudo systemctl restart lis-rss`
+- 调度器使用 `Asia/Shanghai` 时区
+- 间隔判断按“自然日”计算，不按精确秒差计算
+- 默认配置为每天 `07:15` 检查一次，满足 `INSIGHTS_INTERVAL_DAYS` 后执行
+
+**排查步骤**：
+```bash
+# 1. 检查洞察配置
+grep -E "INSIGHTS_ENABLED|INSIGHTS_SCHEDULE|INSIGHTS_INTERVAL_DAYS|INSIGHTS_DAYS|INSIGHTS_USER_ID" /opt/lis-rss-daily/.env
+
+# 2. 重启主服务使配置生效
+sudo systemctl restart lis-rss
+
+# 3. 查看主服务状态
+sudo systemctl status lis-rss --no-pager
+
+# 4. 查看洞察调度相关日志
+sudo journalctl -u lis-rss -n 200 --no-pager | grep -i insights
+
+# 5. 查看指定时间段日志（示例）
+sudo journalctl -u lis-rss --since "2026-04-27 07:00:00" --until "2026-04-27 07:30:00"
+```
+
+**手动验证**：
+```bash
+# 手动触发洞察报告
+cd /opt/lis-rss-daily
+pnpm run trigger-insights
+
+# 运行边界场景回归检查
+pnpm run test:insights-scheduler
+```
+
+**补充说明**：
+- 主应用后端端口是 `8007`，不要把 `3000` 端口误判成 LIS-RSS 主后端
+- 如果 `8007` 可访问且 `/api/daily-summary/insights/latest` 返回 `401/404`，通常说明后端路由存在，只是当前请求未登录或当天尚无报告
+- 如果需要确认是否真的执行成功，应结合 `journalctl -u lis-rss` 和数据库中的 `insights_last_success_at` 一起判断
 
 ### Telegram 推送失败
 

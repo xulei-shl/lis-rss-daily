@@ -11,6 +11,7 @@
     "db:backfill-title-normalized": "tsx scripts/backfill-title-normalized.ts",
     "gen-password": "tsx scripts/gen-password.ts",
     "trigger-insights": "tsx scripts/trigger-insights.ts",
+    "test:insights-scheduler": "tsx scripts/test-insights-scheduler.ts",
     "test:search": "tsx scripts/search-smoke.ts"
   },
   "dependencies": {

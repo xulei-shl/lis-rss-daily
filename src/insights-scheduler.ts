@@ -10,10 +10,82 @@ import { logger } from './logger.js';
 import { generateInsightsSummary } from './api/daily-summary.js';
 import { config as appConfig } from './config.js';
 import { getUserSetting, setUserSetting } from './api/settings.js';
+import { buildUtcRangeFromLocalDate } from './api/timezone.js';
 
 const log = logger.child({ module: 'insights-scheduler' });
 const INSIGHTS_LAST_SUCCESS_AT_KEY = 'insights_last_success_at';
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const SCHEDULER_TIMEZONE = appConfig.defaultTimezone || 'Asia/Shanghai';
+
+const localDateFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: SCHEDULER_TIMEZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+function getLocalDateKey(date: Date): string {
+  return localDateFormatter.format(date);
+}
+
+function getLocalDateStartMs(date: Date): number {
+  const [year, month, day] = getLocalDateKey(date).split('-').map(Number);
+  return Date.UTC(year, month - 1, day);
+}
+
+function shiftLocalDateKey(localDateKey: string, days: number): string {
+  const [year, month, day] = localDateKey.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+function parseFixedDailySchedule(schedule: string): { hour: number; minute: number } | undefined {
+  const parts = schedule.trim().split(/\s+/);
+  if (parts.length !== 5) {
+    return undefined;
+  }
+
+  const [minutePart, hourPart, dayOfMonth, month, dayOfWeek] = parts;
+  if (dayOfMonth !== '*' || month !== '*' || dayOfWeek !== '*') {
+    return undefined;
+  }
+
+  const hour = Number(hourPart);
+  const minute = Number(minutePart);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) {
+    return undefined;
+  }
+
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return undefined;
+  }
+
+  return { hour, minute };
+}
+
+function getScheduledRunTimeForLocalDate(
+  localDateKey: string,
+  schedule: { hour: number; minute: number }
+): Date {
+  const [startUtc] = buildUtcRangeFromLocalDate(localDateKey, SCHEDULER_TIMEZONE);
+  const runTime = new Date(startUtc);
+  runTime.setUTCMinutes(runTime.getUTCMinutes() + schedule.hour * 60 + schedule.minute);
+  return runTime;
+}
+
+function getNextFixedDailyRunTime(schedule: string, currentTime: Date = new Date()): Date | undefined {
+  const parsedSchedule = parseFixedDailySchedule(schedule);
+  if (!parsedSchedule) {
+    return undefined;
+  }
+
+  const currentLocalDate = getLocalDateKey(currentTime);
+  const todayRunTime = getScheduledRunTimeForLocalDate(currentLocalDate, parsedSchedule);
+  if (todayRunTime > currentTime) {
+    return todayRunTime;
+  }
+
+  return getScheduledRunTimeForLocalDate(shiftLocalDateKey(currentLocalDate, 1), parsedSchedule);
+}
 
 /**
  * Scheduler configuration
@@ -33,6 +105,9 @@ export interface InsightsSchedulerStatus {
   isRunning: boolean;
   lastRunTime?: Date;
   nextRunTime?: Date;
+  lastSuccessAt?: Date;
+  nextEligibleLocalDate?: string;
+  schedulerTimezone: string;
   lastRunResult?: {
     success: boolean;
     articleCount?: number;
@@ -50,6 +125,7 @@ export class InsightsScheduler {
   private config: InsightsSchedulerConfig;
   private isRunning: boolean = false;
   private isExecuting: boolean = false;
+  private lastSuccessfulScheduledRunAt?: Date;
   private stats = {
     lastRunTime: undefined as Date | undefined,
     lastRunResult: undefined as { success: boolean; articleCount?: number; error?: string } | undefined,
@@ -100,7 +176,7 @@ export class InsightsScheduler {
         },
         {
           scheduled: false,
-          timezone: 'Asia/Shanghai',
+          timezone: SCHEDULER_TIMEZONE,
         }
       );
 
@@ -175,10 +251,14 @@ export class InsightsScheduler {
    */
   private async runScheduledInsightsReport(): Promise<void> {
     const lastSuccessAt = await this.getLastSuccessAt();
-    if (!this.shouldRunScheduledReport(lastSuccessAt)) {
+    const intervalCheck = this.getScheduledReportIntervalCheck(lastSuccessAt);
+    if (!intervalCheck.shouldRun) {
       log.debug(
         {
           lastSuccessAt: lastSuccessAt?.toISOString(),
+          lastSuccessLocalDate: intervalCheck.lastSuccessLocalDate,
+          currentLocalDate: intervalCheck.currentLocalDate,
+          elapsedDays: intervalCheck.elapsedDays,
           intervalDays: this.config.intervalDays,
         },
         'Insights interval not reached, skipping scheduled run'
@@ -224,11 +304,13 @@ export class InsightsScheduler {
       };
 
       if (options.shouldPersistSuccessTime) {
+        const successAt = new Date();
         await setUserSetting(
           this.config.userId,
           INSIGHTS_LAST_SUCCESS_AT_KEY,
-          new Date().toISOString()
+          successAt.toISOString()
         );
+        this.lastSuccessfulScheduledRunAt = successAt;
       }
 
       runLog.info(
@@ -270,38 +352,53 @@ export class InsightsScheduler {
       return undefined;
     }
 
+    this.lastSuccessfulScheduledRunAt = lastSuccessAt;
     return lastSuccessAt;
   }
 
   /**
    * 判断是否已达到下一次定时执行的最小间隔
    */
-  private shouldRunScheduledReport(lastSuccessAt?: Date): boolean {
+  private getScheduledReportIntervalCheck(lastSuccessAt?: Date, currentTime: Date = new Date()): {
+    shouldRun: boolean;
+    lastSuccessLocalDate?: string;
+    currentLocalDate?: string;
+    elapsedDays?: number;
+  } {
     if (!lastSuccessAt) {
-      return true;
+      return { shouldRun: true };
     }
 
-    const elapsedMs = Date.now() - lastSuccessAt.getTime();
-    return elapsedMs >= this.config.intervalDays * DAY_IN_MS;
+    const lastSuccessLocalDate = getLocalDateKey(lastSuccessAt);
+    const currentLocalDate = getLocalDateKey(currentTime);
+    const elapsedDays = Math.floor(
+      (getLocalDateStartMs(currentTime) - getLocalDateStartMs(lastSuccessAt)) / DAY_IN_MS
+    );
+
+    return {
+      shouldRun: elapsedDays >= this.config.intervalDays,
+      lastSuccessLocalDate,
+      currentLocalDate,
+      elapsedDays,
+    };
   }
 
   /**
    * Get scheduler status
    */
   getStatus(): InsightsSchedulerStatus {
-    let nextRun: Date | undefined;
-
-    if (this.isRunning && this.stats.lastRunTime) {
-      const intervalMs = this.stats.lastRunResult?.success
-        ? this.config.intervalDays * DAY_IN_MS
-        : DAY_IN_MS;
-      nextRun = new Date(this.stats.lastRunTime.getTime() + intervalMs);
-    }
+    const nextRun = this.isRunning ? getNextFixedDailyRunTime(this.config.schedule) : undefined;
+    const nextEligibleLocalDate = this.lastSuccessfulScheduledRunAt
+      ? shiftLocalDateKey(getLocalDateKey(this.lastSuccessfulScheduledRunAt), this.config.intervalDays)
+      : undefined;
 
     return {
       isRunning: this.isRunning,
       lastRunTime: this.stats.lastRunTime,
       nextRunTime: nextRun,
+      lastSuccessAt: this.lastSuccessfulScheduledRunAt,
+      nextEligibleLocalDate,
+      schedulerTimezone: SCHEDULER_TIMEZONE,
       lastRunResult: this.stats.lastRunResult,
     };
   }
