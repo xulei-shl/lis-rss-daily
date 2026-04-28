@@ -58,6 +58,10 @@ summary_upload:
     enabled: true
     script: "summary-update/memos/memos_client.py"
 
+  # Blinko上传
+  blinko:
+    enabled: true
+
   # 企业微信推送
   wechat:
     enabled: true

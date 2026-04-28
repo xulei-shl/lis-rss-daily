@@ -277,6 +277,7 @@ class PaperTelegramBot {
         lines.push(`   • HiAgent RAG: ${upload['hiagent_rag'] ? '✅' : '❌'}`);
         lines.push(`   • LIS-RSS: ${upload['lis_rss'] ? '✅' : '❌'}`);
         lines.push(`   • Memos: ${upload['memos'] ? '✅' : '❌'}`);
+        lines.push(`   • Blinko: ${upload['blinko'] ? '✅' : '❌'}`);
         lines.push(`   • 企业微信: ${upload['wechat'] ? '✅' : '❌'}`);
       }
 

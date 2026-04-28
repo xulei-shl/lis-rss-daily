@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-并行上传模块 - 并行执行四个子系统的MD文件上传
+并行上传模块 - 并行执行五个子系统的MD文件上传
 
 功能：
 1. 并行上传MD到HiAgent RAG知识库
 2. 并行上传MD内容到LIS-RSS系统更新ai_summary
 3. 并行上传MD到Memos
-4. 推送摘要到企业微信
-5. 汇总各子系统上传结果
+4. 并行上传MD到Blinko
+5. 推送摘要到企业微信
+6. 汇总各子系统上传结果
 """
 
 import asyncio
@@ -18,6 +19,12 @@ import re
 from pathlib import Path
 from typing import Dict, Optional, List
 import yaml
+
+# 添加 Blinko 客户端路径
+script_dir = Path(__file__).parent.parent
+blinko_client_path = script_dir / "summary-update" / "blinko-api" / "src"
+if str(blinko_client_path) not in sys.path:
+    sys.path.insert(0, str(blinko_client_path))
 
 # 导入企业微信推送模块
 try:
@@ -307,6 +314,58 @@ async def upload_to_memos(title: str, md_content: str, config: Dict) -> bool:
         return False
 
 
+async def upload_to_blinko(title: str, md_content: str, config: Dict) -> bool:
+    """
+    上传到Blinko
+
+    Args:
+        title: 文章标题
+        md_content: MD文件内容
+        config: 配置字典
+
+    Returns:
+        是否成功
+    """
+    print(f"\n{'='*60}")
+    print(f"  [子系统4/4] Blinko上传")
+    print(f"{'='*60}")
+
+    summary_config = config.get('summary_upload', {}).get('blinko', {})
+
+    if not summary_config.get('enabled', True):
+        print("[跳过] Blinko上传已禁用")
+        return True
+
+    # 读取.env配置
+    load_env()
+
+    try:
+        print(f"[信息] 文章标题: {title}")
+        print(f"[信息] 内容长度: {len(md_content)} 字符")
+
+        from blinko_client import BlinkoClient
+        client = BlinkoClient()
+
+        content = f"**{title}**\n\n---\n\n{md_content}"
+
+        result = client.notes.upsert(
+            content=content,
+            note_type=1,
+            tags=["bot", "AI速读"]
+        )
+
+        note_id = result.get('id')
+        print(f"[成功] Blinko上传完成")
+        print(f"  笔记ID: {note_id}")
+        return True
+
+    except Exception as e:
+        print(f"[错误] Blinko上传异常: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 async def upload_to_wechat(
     md_content: str,
     article_id: int,
@@ -416,7 +475,7 @@ async def upload_all(
         各子系统上传结果字典
     """
     print(f"\n{'='*60}")
-    print(f"  并行上传到四个子系统")
+    print(f"  并行上传到五个子系统")
     print(f"{'='*60}")
     print(f"[信息] MD文件: {md_path}")
     print(f"[信息] 文章ID: {article_id}")
@@ -431,6 +490,7 @@ async def upload_all(
             'hiagent_rag': False,
             'lis_rss': False,
             'memos': False,
+            'blinko': False,
             'wechat': False
         }
 
@@ -455,6 +515,9 @@ async def upload_all(
 
     tasks.append(upload_to_memos(article_title, md_content, config))
 
+    # 添加 Blinko 上传任务
+    tasks.append(upload_to_blinko(article_title, md_content, config))
+
     # 只有当 skip_wechat 为 False 时才添加 WeChat 任务
     if skip_wechat:
         print(f"[跳过] WeChat推送已禁用")
@@ -471,7 +534,8 @@ async def upload_all(
         'hiagent_rag': results[0] if isinstance(results[0], bool) else False,
         'lis_rss': results[1] if isinstance(results[1], bool) else False,
         'memos': results[2] if isinstance(results[2], bool) else False,
-        'wechat': results[3] if isinstance(results[3], bool) else False
+        'blinko': results[3] if isinstance(results[3], bool) else False,
+        'wechat': results[4] if isinstance(results[4], bool) else False
     }
     
     # 记录哪些子系统被跳过（用于判断是否"全部失败"）
@@ -499,6 +563,7 @@ async def upload_all(
     print(f"  HiAgent RAG: {'✅ 成功' if upload_results['hiagent_rag'] else '❌ 失败'}")
     print(f"  LIS-RSS:     {'✅ 成功' if upload_results['lis_rss'] else '❌ 失败'}")
     print(f"  Memos:       {'✅ 成功' if upload_results['memos'] else '❌ 失败'}")
+    print(f"  Blinko:      {'✅ 成功' if upload_results['blinko'] else '❌ 失败'}")
     print(f"  WeChat:      {'✅ 成功' if upload_results['wechat'] else '❌ 失败'}")
     print(f"{'='*60}")
 
