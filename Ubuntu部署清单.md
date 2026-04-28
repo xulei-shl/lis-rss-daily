@@ -667,6 +667,26 @@ systemctl status chromadb lis-rss deepsearch-api paper-pdf-api paper-pdf-summary
 | Paper PDF API | 8081 | PDF 处理 API |
 | Paper PDF Telegram Bot | - | Telegram 机器人（无端口）|
 
+### Paper PDF 相关服务职责与重启对照
+
+`scripts/paper-pdf-summary` 目前拆分为两个独立 systemd 服务：
+
+- `paper-pdf-api`：负责 PDF 处理流程本身，包括下载 PDF、校验、生成摘要、上传到 HiAgent RAG / LIS-RSS / Memos / Blinko / 企业微信。
+- `paper-pdf-summary-telegram`：负责 Telegram Bot 交互与返回消息格式，包括 `/papers` 命令、处理中提示、最终结果文本拼装。
+
+常见判断方式：
+
+- 如果修改的是 `scripts/paper-pdf-summary/utils/*.py`、`main.py`、`api.py` 等 Python 处理逻辑，需要重启 `paper-pdf-api`
+- 如果修改的是 `scripts/paper-pdf-summary/telegram-bot/index.ts` 等 Telegram Bot 代码，需要重启 `paper-pdf-summary-telegram`
+- 如果两边都改了，最稳妥的做法是两个服务都重启
+
+推荐命令：
+
+```bash
+sudo systemctl restart paper-pdf-api
+sudo systemctl restart paper-pdf-summary-telegram
+```
+
 ### 统一检索外部 API 部署说明
 
 统一检索外部 API `POST /api/external/search` 是挂载在 LIS-RSS 主应用中的 HTTP 路由，不是独立进程。
@@ -1089,6 +1109,11 @@ sudo journalctl -u lis-rss -f
 | 应用配置修改 (.env) | `systemctl restart lis-rss` |
 | 依赖更新 | `pnpm install` + `systemctl restart lis-rss` |
 | 应用服务卡死 | `systemctl restart lis-rss` |
+| PDF 处理 Python 代码更新 | `systemctl restart paper-pdf-api` |
+| PDF 处理脚本 `.env` / 依赖修改 | `systemctl restart paper-pdf-api` |
+| Telegram Bot 代码更新 | `systemctl restart paper-pdf-summary-telegram` |
+| Telegram Bot `.env` 修改 | `systemctl restart paper-pdf-summary-telegram` |
+| Paper PDF 两侧都修改 | `systemctl restart paper-pdf-api && systemctl restart paper-pdf-summary-telegram` |
 | ChromaDB 配置修改 | `systemctl restart chromadb` |
 | ChromaDB 版本更新 | 重建虚拟环境 + `systemctl restart chromadb` |
 | 端口占用无法释放 | 彻底重启流程 |
