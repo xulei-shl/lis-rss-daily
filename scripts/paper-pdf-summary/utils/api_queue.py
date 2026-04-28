@@ -90,6 +90,8 @@ class QueueManager:
             success_count += 1
         if 'memos' not in skipped and upload_results.get('memos', False):
             success_count += 1
+        if 'blinko' not in skipped and upload_results.get('blinko', False):
+            success_count += 1
         if 'wechat' not in skipped and upload_results.get('wechat', False):
             success_count += 1
         return success_count == 0

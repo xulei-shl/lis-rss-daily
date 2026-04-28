@@ -41,6 +41,9 @@ class NoteClient:
         if id is not None:
             data["id"] = id
 
+        if tags is not None:
+            data["tags"] = tags
+
         return self._client.post("/note/upsert", json=data)
 
     def list(
