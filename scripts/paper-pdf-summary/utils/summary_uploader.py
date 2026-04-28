@@ -346,7 +346,7 @@ async def upload_to_blinko(title: str, md_content: str, config: Dict) -> bool:
         from blinko_client import BlinkoClient
         client = BlinkoClient()
 
-        content = f"**{title}**\n\n---\n\n{md_content}"
+        content = f"#bot #AI速读\n\n**{title}**\n\n---\n\n{md_content}"
 
         result = client.notes.upsert(
             content=content,
