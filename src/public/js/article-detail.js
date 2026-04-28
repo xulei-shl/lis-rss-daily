@@ -105,6 +105,12 @@ async function loadArticle(id) {
   try {
     const res = await fetch('/api/articles/' + id);
 
+    // 处理 401 未授权（token 过期或无效），重定向到登录页面
+    if (res.status === 401) {
+      window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+      return;
+    }
+
     if (!res.ok) {
       showError();
       return;
