@@ -1,0 +1,82 @@
+# 科研文献摘要主配置模板
+#
+# 使用方法：
+# 1. 复制本文件为 config.local.yaml。
+# 2. 只在 config.local.yaml 中修改本地真实配置。
+# 3. 不要提交 config.local.yaml、credentials.json、token.json、.env、data/、outputs/。
+
+gmail:
+  # Gmail 搜索语法。默认读取所有未读邮件。
+  query: "is:unread"
+
+  # 单次最多读取多少封邮件。积压很多时建议先 30-50 封分批处理。
+  max_emails_per_run: 50
+
+  # 是否在成功处理后把邮件标记为已读。测试阶段建议 false。
+  mark_as_read: false
+
+  # 是否包含 Gmail spam/trash。通常保持 false。
+  include_spam_trash: false
+
+  # Google OAuth Desktop Client 下载得到的凭据文件。
+  credentials_path: "credentials.json"
+
+  # 首次授权后自动生成。不要手动填写，不要提交到 git。
+  token_path: "token.json"
+
+llm:
+  # 主配置只选择一个 LLM 配置文件。
+  # 默认使用 Codex CLI；如需切换 DeepSeek，请改为：
+  # config_path: "config/llm/deepseek.local.yaml"
+  config_path: "config/llm/codex_cli.example.yaml"
+
+research_interests:
+  # 用自然语言维护近期研究兴趣。排序优先级默认来自这个文档。
+  path: "research_interests.md"
+  refresh_each_run: true
+
+filtering:
+  skip_promotional: true
+  audit_skipped_emails: true
+  academic_sender_allowlist: []
+  sender_blocklist: []
+  promotional_keywords:
+    - sale
+    - webinar
+    - discount
+    - offer
+    - unsubscribe
+    - sponsored
+    - marketing
+
+parsing:
+  save_toc_images: true
+  toc_image_dir: "data/toc_images"
+  max_images_per_email: 20
+  fuzzy_title_threshold: 92
+  # 非 Google Scholar 的出版社/期刊/RSS 邮件，先用快速 LLM 抽取结构化论文条目。
+  llm_structure_non_scholar: true
+
+digest:
+  output_dir: "outputs"
+  output_formats:
+    - "md"
+    - "html"
+  # false 时，同一天多次运行不会覆盖已有 digest，而是自动追加 -2、-3。
+  overwrite_existing: false
+  include_low_relevance: true
+  language: "zh-CN"
+  max_high_relevance: 20
+  max_medium_relevance: 30
+  max_low_relevance: 80
+
+safety:
+  dry_run_default: true
+  never_delete_emails: true
+  redact_secrets_in_logs: true
+  allow_sample_without_credentials: true
+  allow_offline_llm_for_sample: true
+
+progress:
+  enabled: true
+  show_timestamps: true

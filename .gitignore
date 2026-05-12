@@ -42,3 +42,5 @@ backup/
 lis-rss/
 
 /scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/playwright_user_data/
+docs/gmail/gmail-skill/scripts/credentials.json
+/docs/gmail/gmail-skill/scripts/tokens

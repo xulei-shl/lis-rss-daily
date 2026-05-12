@@ -1,0 +1,30 @@
+# Codex CLI LLM 配置模板
+#
+# 使用方法：
+# 1. 如果你继续使用 Codex CLI，可以直接让主配置指向本文件。
+# 2. 如果需要本地私有修改，可复制为 config/llm/codex_cli.local.yaml。
+# 3. config/llm/*.local.yaml 已加入 .gitignore。
+
+provider: "codex_cli"
+
+# Codex CLI 使用的模型。摘要任务通常从 mini/nano + low 开始。
+model: "gpt-5.4-mini"
+
+# Codex 推理强度。摘要、分类、翻译任务建议 low。
+reasoning_effort: "low"
+
+# 单次 Codex CLI 调用超时秒数。
+timeout_seconds: 180
+
+# 限制单次 LLM 输出 token。最终 digest 文件大小不受这里直接限制。
+max_output_tokens: 4000
+
+codex_cli:
+  # 如果 codex 不在 PATH 中，可改为 codex.cmd 或 codex.exe 的完整路径。
+  executable: "codex"
+
+  # true 表示使用 codex exec --ephemeral，避免中间会话持久化到 Codex 项目/会话列表。
+  ephemeral: true
+
+  # 额外传给 Codex CLI 的参数。通常留空。
+  extra_args: []
