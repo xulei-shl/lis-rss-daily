@@ -26,6 +26,7 @@ class ProcessResponse(BaseModel):
     success: bool
     article_id: Optional[int]
     md_path: Optional[str]
+    md_content: Optional[str]
     stages: dict
     reason: Optional[str]
 
@@ -74,6 +75,7 @@ async def process(req: ProcessRequest) -> ProcessResponse:
         success=result.get("success", False),
         article_id=result.get("article_id"),
         md_path=result.get("md_path"),
+        md_content=result.get("md_content"),
         stages=result.get("stages", {}),
         reason=result.get("reason")
     )

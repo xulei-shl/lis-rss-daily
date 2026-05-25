@@ -47,6 +47,7 @@ POST /process
   "success": true,
   "article_id": 42,
   "md_path": "/opt/lis-rss-daily/scripts/paper-pdf-summary/download/2026-05-25/xxx.md",
+  "md_content": "# 摘要标题\n\n摘要正文...",
   "stages": {
     "pdf_download": "success",
     "pdf_validate": "success",
@@ -69,6 +70,7 @@ POST /process
 | `success` | `bool` | 工作流整体是否成功（至少一个上传目标成功即视为成功） |
 | `article_id` | `int` / `null` | 文章 ID（回显） |
 | `md_path` | `string` / `null` | 生成的摘要 Markdown 文件路径 |
+| `md_content` | `string` / `null` | 摘要 Markdown 原文内容（可直接使用，无需再通过路径读取） |
 | `stages` | `object` | 各阶段详细结果 |
 | `reason` | `string` / `null` | 失败原因（成功时为 `null`） |
 
@@ -258,6 +260,10 @@ result = resp.json()
 print(result["success"])
 print(result["stages"]["upload"])
 
+# 直接使用摘要内容（无需再访问服务端文件系统）
+if result.get("md_content"):
+    print(result["md_content"])
+
 # 健康检查
 health = requests.get("http://localhost:8081/health")
 print(health.json())
@@ -278,6 +284,9 @@ const resp = await fetch("http://localhost:8081/process", {
 });
 const result = await resp.json();
 console.log(result.success, result.stages.upload);
+
+// 直接获取摘要内容
+console.log(result.md_content);
 
 // 健康检查
 const health = await fetch("http://localhost:8081/health");

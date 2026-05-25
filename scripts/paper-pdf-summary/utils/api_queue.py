@@ -184,6 +184,7 @@ class QueueManager:
 
         result["stages"]["pdf_summary"] = "success"
         result["md_path"] = str(md_path)
+        result["md_content"] = md_content
 
         try:
             upload_results = await parallel_upload(
