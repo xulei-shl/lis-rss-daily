@@ -586,6 +586,123 @@ def sync_upload_all(md_path: str, article_id: int, article_title: str, config: D
     return asyncio.run(upload_all(md_path, article_id, article_title, config))
 
 
+def is_all_upload_failed(upload_results: Optional[Dict]) -> bool:
+    """
+    判断是否所有上传均失败（排除被跳过的子系统）
+
+    Args:
+        upload_results: upload_all() 或 upload_all_from_text() 返回的结果字典
+
+    Returns:
+        所有非跳过的子系统均失败时返回 True
+    """
+    if not upload_results:
+        return True
+    skipped = upload_results.get('_skipped', [])
+    for key in ('hiagent_rag', 'lis_rss', 'memos', 'blinko', 'wechat'):
+        if key not in skipped and upload_results.get(key, False):
+            return False
+    return True
+
+
+async def upload_all_from_text(
+    md_content: str,
+    article_id: int,
+    article_title: str,
+    config: Dict,
+    source_name: Optional[str] = None,
+    skip_lis_rss: bool = False,
+    skip_wechat: bool = False
+) -> Dict[str, bool]:
+    """
+    直接上传文本内容到所有子系统（无需MD文件）
+
+    Args:
+        md_content: MD文本内容
+        article_id: 文章ID
+        article_title: 文章标题
+        config: 配置字典
+        source_name: 来源名称（可选）
+        skip_lis_rss: 是否跳过LIS-RSS上传
+        skip_wechat: 是否跳过微信推送
+
+    Returns:
+        各子系统上传结果字典
+    """
+    import tempfile
+
+    print(f"\n{'='*60}")
+    print(f"  直接上传文本到五个子系统（无文件模式）")
+    print(f"{'='*60}")
+    print(f"[信息] 文章ID: {article_id}")
+    print(f"[信息] 文章标题: {article_title}")
+    print(f"[信息] 来源: {source_name or '未知'}")
+    print(f"[信息] 文本大小: {len(md_content)} 字符")
+
+    tmp_file_path = None
+    try:
+        # HiAgent RAG 需要文件路径，创建临时文件
+        with tempfile.NamedTemporaryFile(suffix='.md', mode='w', encoding='utf-8', delete=False) as f:
+            f.write(md_content)
+            tmp_file_path = f.name
+
+        tasks = [
+            upload_to_hiagent_rag(tmp_file_path, config, delete_md=False),
+        ]
+
+        if skip_lis_rss:
+            tasks.append(asyncio.sleep(0))
+        else:
+            tasks.append(upload_to_lis_rss(article_id, md_content, config))
+
+        tasks.append(upload_to_memos(article_title, md_content, config))
+        tasks.append(upload_to_blinko(article_title, md_content, config))
+
+        if skip_wechat:
+            tasks.append(asyncio.sleep(0))
+        else:
+            tasks.append(upload_to_wechat(md_content, article_id, article_title, source_name, config))
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        upload_results = {
+            'hiagent_rag': results[0] if isinstance(results[0], bool) else False,
+            'lis_rss': results[1] if isinstance(results[1], bool) else False,
+            'memos': results[2] if isinstance(results[2], bool) else False,
+            'blinko': results[3] if isinstance(results[3], bool) else False,
+            'wechat': results[4] if isinstance(results[4], bool) else False
+        }
+
+        upload_results['_skipped'] = []
+        if skip_lis_rss:
+            upload_results['_skipped'].append('lis_rss')
+        if skip_wechat:
+            upload_results['_skipped'].append('wechat')
+        if not config.get('summary_upload', {}).get('wechat', {}).get('enabled', False):
+            if 'wechat' not in upload_results['_skipped']:
+                upload_results['_skipped'].append('wechat')
+
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                print(f"[错误] 子系统{i+1}执行异常: {result}")
+
+        print(f"\n{'='*60}")
+        print(f"  上传结果汇总")
+        print(f"{'='*60}")
+        print(f"  HiAgent RAG: {'✅ 成功' if upload_results['hiagent_rag'] else '❌ 失败'}")
+        print(f"  LIS-RSS:     {'✅ 成功' if upload_results['lis_rss'] else '❌ 失败'}")
+        print(f"  Memos:       {'✅ 成功' if upload_results['memos'] else '❌ 失败'}")
+        print(f"  Blinko:      {'✅ 成功' if upload_results['blinko'] else '❌ 失败'}")
+        print(f"  WeChat:      {'✅ 成功' if upload_results['wechat'] else '❌ 失败'}")
+        print(f"{'='*60}")
+
+        return upload_results
+    finally:
+        if tmp_file_path and Path(tmp_file_path).exists():
+            Path(tmp_file_path).unlink()
+            print(f"[清理] 临时文件已删除: {tmp_file_path}")
+
+
 # 测试入口
 if __name__ == "__main__":
     import sys

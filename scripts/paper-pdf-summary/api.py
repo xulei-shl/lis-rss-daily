@@ -1,3 +1,4 @@
+import os
 import sys
 import asyncio
 from contextlib import asynccontextmanager
@@ -12,6 +13,7 @@ from pydantic import BaseModel
 sys.path.insert(0, str(Path(__file__).parent))
 
 from utils.api_queue import QueueManager
+from utils.summary_uploader import upload_all_from_text, load_config, is_all_upload_failed
 
 queue_manager = QueueManager(max_concurrent=1)
 
@@ -27,6 +29,22 @@ class ProcessResponse(BaseModel):
     article_id: Optional[int]
     md_path: Optional[str]
     md_content: Optional[str]
+    stages: dict
+    reason: Optional[str]
+
+
+class UploadTextRequest(BaseModel):
+    content: str
+    title: str
+    id: Optional[int] = None
+    source_name: Optional[str] = None
+    push_wechat: bool = False
+
+
+class UploadTextResponse(BaseModel):
+    success: bool
+    article_id: Optional[int]
+    title: Optional[str]
     stages: dict
     reason: Optional[str]
 
@@ -49,8 +67,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Paper PDF Summary API",
-    description="论文PDF摘要工作流 API - 支持 PDF下载、总结、并行上传",
-    version="1.0.0",
+    description="论文PDF摘要工作流 API - 支持 PDF下载、总结、并行上传，以及直接文本上传",
+    version="1.1.0",
     lifespan=lifespan
 )
 
@@ -79,6 +97,38 @@ async def process(req: ProcessRequest) -> ProcessResponse:
         stages=result.get("stages", {}),
         reason=result.get("reason")
     )
+
+
+@app.post("/upload-text", response_model=UploadTextResponse)
+async def upload_text(req: UploadTextRequest) -> UploadTextResponse:
+    article_id = req.id or 0
+    skip_lis_rss = article_id == 0
+    default_push_wechat = os.environ.get('PDF_SUMMARY_PUSH_WECHAT', 'false').lower() in {'1', 'true', 'yes', 'on'}
+    final_push_wechat = req.push_wechat or default_push_wechat
+
+    try:
+        config = load_config()
+        upload_results = await upload_all_from_text(
+            md_content=req.content,
+            article_id=article_id,
+            article_title=req.title,
+            source_name=req.source_name,
+            config=config,
+            skip_lis_rss=skip_lis_rss,
+            skip_wechat=not final_push_wechat
+        )
+
+        is_success = not is_all_upload_failed(upload_results)
+
+        return UploadTextResponse(
+            success=is_success,
+            article_id=req.id,
+            title=req.title,
+            stages={"upload": upload_results},
+            reason=None if is_success else "所有上传任务均失败"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/health", response_model=HealthResponse)
