@@ -9,6 +9,14 @@ database:
 # 每日处理限制
 daily_process_limit: 3
 
+# 最大尝试次数（含成功和失败），防止无限重试
+# 达到上限后停止，即使未完成 daily_process_limit
+max_attempts: 10
+
+# 重试间隔（秒），按尝试次数递增使用
+# 例：第1次失败等60s，第2次等180s，第3次等300s，之后始终等300s
+retry_intervals: [60, 180, 300]
+
 # 文件存储配置
 storage:
   # PDF和MD文件下载保存根目录

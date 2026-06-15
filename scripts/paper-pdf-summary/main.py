@@ -17,6 +17,7 @@ import os
 import asyncio
 import argparse
 import json
+import time
 import urllib.request
 import urllib.parse
 from datetime import datetime
@@ -568,6 +569,8 @@ def main():
     config = load_workflow_config()
     print(f"  数据库: {config['database']['path']}")
     print(f"  每日处理限制: {config['daily_process_limit']}")
+    print(f"  最大尝试次数: {config.get('max_attempts', '无限制')}")
+    print(f"  重试间隔: {config.get('retry_intervals', [])}秒")
 
     # 获取当日日期
     today = datetime.now().strftime("%Y-%m-%d")
@@ -610,11 +613,11 @@ def main():
     journals = load_journals_list(journals_path)
     print(f"  期刊白名单: {len(journals)}个")
     
-    # 获取待处理数据
-    print_section("获取待处理数据")
-    
+    # 获取配置
     db_path = config['database']['path']
     limit = config['daily_process_limit']
+    max_attempts = config.get('max_attempts', 0)  # 0 表示无限制
+    retry_intervals = config.get('retry_intervals', [])
     
     # 创建当日工作目录
     download_root = config['storage']['download_root']
@@ -629,14 +632,20 @@ def main():
     
     success_count = 0
     failure_count = 0
-    processed_article_ids = set()  # 记录已处理的文章ID，避免重复处理
+    attempt_count = 0
+    processed_article_ids = set()
     
     while success_count < limit:
+        # 检查最大尝试次数
+        if max_attempts > 0 and attempt_count >= max_attempts:
+            print(f"\n[信息] 已达到最大尝试次数 ({max_attempts})，停止处理")
+            break
+        
         # 每次获取一条数据
         articles = fetch_pending_articles(
             db_path=db_path,
             journals=journals,
-            limit=1,  # 每次只获取一条
+            limit=1,
             use_priority=True
         )
         
@@ -655,10 +664,12 @@ def main():
         article['source_name'] = get_source_name(article, conn)
         
         print(f"\n{'#'*60}")
-        print(f"# 处理第 {success_count + failure_count + 1} 条 (成功: {success_count}, 失败: {failure_count})")
+        print(f"# 处理第 {attempt_count + 1} 次 (成功: {success_count}, 失败: {failure_count})")
         print('#'*60)
         
         result = process_article(article, config, daily_dir, logger)
+        
+        attempt_count += 1
         
         # 判断是否为成功：必须 PDF下载成功 + 总结成功 + 并行上传不是全部失败
         is_fully_successful = (
@@ -674,6 +685,13 @@ def main():
         else:
             failure_count += 1
             print(f"\n[进度] 成功: {success_count}, 失败: {failure_count} (此条失败不计入，继续处理)")
+            
+            # 梯次间隔等待
+            interval_index = min(failure_count - 1, len(retry_intervals) - 1) if retry_intervals else -1
+            if interval_index >= 0:
+                wait_seconds = retry_intervals[interval_index]
+                print(f"[等待] 第 {failure_count} 次失败，等待 {wait_seconds} 秒后重试...")
+                time.sleep(wait_seconds)
         
         # 检查是否达到每日处理上限
         if success_count >= limit:
@@ -690,6 +708,7 @@ def main():
     print(f"\n{'='*60}")
     print(f"  处理完成")
     print('='*60)
+    print(f"  总尝试次数: {attempt_count}")
     print(f"  成功: {success_count}")
     print(f"  失败: {failure_count}")
     print(f"  报告: {report_path}")
