@@ -60,6 +60,14 @@ task_types:
     description: "每15天汇总通过的文章，生成研究趋势洞察报告"
     priority: 7
     enabled: true
+
+  email_parse:
+    code: "email_parse"
+    label: "邮件文章解析"
+    label_en: "Email Parse"
+    description: "从邮件内容中提取多篇文章的结构化信息"
+    priority: 8
+    enabled: true
 source_types:
   journal:
     code: "journal"

@@ -179,6 +179,27 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
       required: true,
     },
   },
+
+  /**
+   * email_parse 类型变量 - 邮件文章解析
+   */
+  email_parse: {
+    EMAIL_SUBJECT: {
+      description: '邮件主题',
+      source: 'email.subject',
+      required: true,
+    },
+    EMAIL_CONTENT: {
+      description: '邮件正文（HTML 或纯文本）',
+      source: 'email.html || email.text',
+      required: true,
+    },
+    EMAIL_FROM: {
+      description: '发件人地址',
+      source: 'email.from',
+      required: false,
+    },
+  },
 };
 
 /**
@@ -241,4 +262,4 @@ export const TASK_TYPES = _taskTypes as readonly string[];
 /**
  * 任务类型（用于 LLM 配置验证）
  */
-export type TaskType = 'filter' | 'summary' | 'keywords' | 'translation' | 'daily_summary' | 'analysis' | 'insights';
+export type TaskType = 'filter' | 'summary' | 'keywords' | 'translation' | 'daily_summary' | 'analysis' | 'insights' | 'email_parse';

@@ -12,6 +12,15 @@ import { getActiveTopicDomains } from './topic-domains.js';
 import { getActiveKeywordsForDomain } from './topic-keywords.js';
 import { SOURCE_TYPE_PRIORITY, SOURCE_TYPE_LABELS, type SourceType } from '../constants/source-types.js';
 
+/**
+ * 邮件上下文 - 用于 email_parse 类型
+ */
+export interface EmailContext {
+  subject: string;
+  content: string;
+  from: string;
+}
+
 /* ── Types ── */
 
 /**
@@ -46,6 +55,7 @@ export interface VariableBuildContext {
   userId?: number;
   article?: ArticleContext;
   articles?: ArticlesContext;
+  email?: EmailContext;
   [key: string]: unknown;
 }
 
@@ -321,6 +331,25 @@ async function buildAnalysisVariables(context: VariableBuildContext): Promise<Bu
   return { variables };
 }
 
+/**
+ * email_parse 类型变量构建器
+ */
+async function buildEmailParseVariables(context: VariableBuildContext): Promise<BuildVariablesResult> {
+  const { email } = context;
+
+  if (!email) {
+    return { variables: {}, error: 'email_parse 类型需要 email 上下文' };
+  }
+
+  const variables: Record<string, string> = {
+    EMAIL_SUBJECT: email.subject || '无主题',
+    EMAIL_CONTENT: email.content || '',
+    EMAIL_FROM: email.from || '未知发件人',
+  };
+
+  return { variables };
+}
+
 /* ── Main Builder Function ── */
 
 /**
@@ -353,6 +382,9 @@ export async function buildPromptVariables(
       break;
     case 'analysis':
       result = await buildAnalysisVariables(context);
+      break;
+    case 'email_parse':
+      result = await buildEmailParseVariables(context);
       break;
     default:
       result = { variables: {}, error: `未知的提示词类型: ${type}` };

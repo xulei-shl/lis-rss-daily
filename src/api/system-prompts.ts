@@ -53,6 +53,7 @@ const DEFAULT_PROMPT_CONFIG: Record<
   translation: { fileName: 'translation.md', name: '默认翻译提示词' },
   daily_summary: { fileName: 'daily_summary.md', name: '默认当日总结提示词' },
   insights: { fileName: 'insights.md', name: '默认洞察报告提示词' },
+  email_parse: { fileName: 'email_parse.md', name: '默认邮件文章解析提示词' },
 };
 
 /**

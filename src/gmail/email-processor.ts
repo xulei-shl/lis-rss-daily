@@ -2,12 +2,28 @@ import { getDb } from '../db.js';
 import { logger } from '../logger.js';
 import { generateNormalizedTitle } from '../utils/title.js';
 import { filterArticle, type FilterInput } from '../filter.js';
+import { processArticle } from '../pipeline.js';
 import { config } from '../config.js';
 import { decryptAPIKey } from '../utils/crypto.js';
 import { fetchEmails, markAndDeleteAll } from './imap-client.js';
+import { getUserLLMProvider, type ChatMessage } from '../llm.js';
+import { buildPromptVariables } from '../api/prompt-variable-builder.js';
+import { resolveSystemPrompt } from '../api/system-prompts.js';
 import type { EmailSourceConfig, ParsedEmail, EmailFetchResult } from './types.js';
 
 const log = logger.child({ module: 'gmail-processor' });
+
+interface ParsedArticle {
+  title: string;
+  summary?: string;
+  content?: string;
+  url?: string;
+  author?: string;
+}
+
+interface EmailParseResult {
+  articles: ParsedArticle[];
+}
 
 function getProxyUrl(): string | undefined {
   return config.httpProxy || process.env.EMAIL_PROXY_URL;
@@ -15,6 +31,63 @@ function getProxyUrl(): string | undefined {
 
 function getDecryptedPassword(source: EmailSourceConfig): string {
   return decryptAPIKey(source.imapPasswordEncrypted, config.llmEncryptionKey).replace(/\s+/g, '');
+}
+
+async function parseEmailContent(email: ParsedEmail, userId: number): Promise<ParsedArticle[]> {
+  try {
+    const content = email.html || email.text || '';
+    if (!content) return [];
+
+    const variables = await buildPromptVariables({
+      type: 'email_parse',
+      userId,
+      email: {
+        subject: email.subject,
+        content: content.substring(0, 30000),
+        from: email.from,
+      },
+    });
+
+    const systemPrompt = await resolveSystemPrompt(userId, 'email_parse', '', variables);
+
+    if (!systemPrompt || systemPrompt.trim().length === 0) {
+      log.warn({ emailSubject: email.subject }, 'No email_parse system prompt, treating email as single article');
+      return [{
+        title: email.subject,
+        content: content,
+        url: email.messageId,
+      }];
+    }
+
+    const userPrompt = systemPrompt;
+
+    const messages: ChatMessage[] = [
+      { role: 'user', content: userPrompt },
+    ];
+
+    const llm = await getUserLLMProvider(userId, 'email_parse');
+    const response = await llm.chat(messages, {
+      jsonMode: true,
+      temperature: 0.1,
+      label: 'email-parse',
+    });
+
+    const parsed: EmailParseResult = JSON.parse(response);
+
+    if (!parsed.articles || !Array.isArray(parsed.articles)) {
+      log.warn({ emailSubject: email.subject }, 'Invalid email parse response format');
+      return [];
+    }
+
+    return parsed.articles.filter((a) => a.title && a.title.trim());
+  } catch (err: any) {
+    log.warn({ emailSubject: email.subject, error: err.message }, 'Failed to parse email content, treating as single article');
+    return [{
+      title: email.subject,
+      content: email.html || email.text || '',
+      url: email.messageId,
+    }];
+  }
 }
 
 export async function processEmailSource(source: EmailSourceConfig): Promise<EmailFetchResult> {
@@ -33,74 +106,82 @@ export async function processEmailSource(source: EmailSourceConfig): Promise<Ema
       proxyUrl
     );
 
-    let emailsNew = 0;
+    let articlesNew = 0;
     const deletedIds: string[] = [];
 
     for (const email of emails) {
       try {
-        const titleNormalized = generateNormalizedTitle(email.subject);
-        const title = email.subject;
+        const parsedArticles = await parseEmailContent(email, source.userId);
 
-        if (titleNormalized) {
-          const existing = await db
-            .selectFrom('articles')
-            .where('title_normalized', '=', titleNormalized)
-            .select('id')
-            .executeTakeFirst();
+        for (const article of parsedArticles) {
+          try {
+            const titleNormalized = generateNormalizedTitle(article.title);
+            const title = article.title;
 
-          if (existing) {
-            deletedIds.push(email.messageId);
-            continue;
+            if (titleNormalized) {
+              const existing = await db
+                .selectFrom('articles')
+                .where('title_normalized', '=', titleNormalized)
+                .select('id')
+                .executeTakeFirst();
+
+              if (existing) continue;
+            }
+
+            const content = article.content || email.html || email.text || '';
+            const url = article.url || email.messageId;
+
+            const articleId = await db
+              .insertInto('articles')
+              .values({
+                email_source_id: source.id,
+                title,
+                title_normalized: titleNormalized,
+                url,
+                content,
+                source_origin: 'email',
+                filter_status: 'pending',
+                process_status: 'pending',
+                published_at: email.date.toISOString(),
+                is_read: 0,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              } as any)
+              .executeTakeFirstOrThrow();
+
+            const insertedId = Number(articleId.insertId);
+            articlesNew++;
+
+            process.nextTick(async () => {
+              try {
+                const filterInput: FilterInput = {
+                  articleId: insertedId,
+                  userId: source.userId,
+                  url,
+                  title,
+                  description: article.summary || content,
+                  sourceType: 'email',
+                };
+                const filterResult = await filterArticle(filterInput);
+                if (filterResult.passed) {
+                  await processArticle(insertedId, source.userId);
+                }
+              } catch (err: any) {
+                log.warn({ articleId: insertedId, error: err.message }, 'Auto-filter/process failed for email article');
+              }
+            });
+
+          } catch (err: any) {
+            if (err.message && err.message.includes('UNIQUE')) {
+              continue;
+            }
+            log.warn({ title: article.title, error: err.message }, 'Failed to save parsed article');
           }
         }
 
-        const content = email.html || email.text || '';
-        const url = email.messageId;
-
-        const articleId = await db
-          .insertInto('articles')
-          .values({
-            email_source_id: source.id,
-            title,
-            title_normalized: titleNormalized,
-            url,
-            content,
-            source_origin: 'email',
-            filter_status: 'pending',
-            process_status: 'pending',
-            published_at: email.date.toISOString(),
-            is_read: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          } as any)
-          .executeTakeFirstOrThrow();
-
-        const insertedId = Number(articleId.insertId);
-        emailsNew++;
-
         deletedIds.push(email.messageId);
-
-        process.nextTick(() => {
-          const filterInput: FilterInput = {
-            articleId: insertedId,
-            userId: source.userId,
-            url,
-            title,
-            description: content,
-            sourceType: 'email',
-          };
-          filterArticle(filterInput).catch((err) => {
-            log.warn({ articleId: insertedId, error: err }, 'Auto-filter failed for email article');
-          });
-        });
-
       } catch (err: any) {
-        if (err.message && err.message.includes('UNIQUE')) {
-          deletedIds.push(email.messageId);
-        } else {
-          log.warn({ email: email.subject, error: err.message }, 'Failed to save email');
-        }
-        continue;
+        log.warn({ email: email.subject, error: err.message }, 'Failed to process email');
       }
     }
 
@@ -121,18 +202,18 @@ export async function processEmailSource(source: EmailSourceConfig): Promise<Ema
         email_source_id: source.id,
         status: 'success',
         emails_found: emails.length,
-        emails_new: emailsNew,
+        emails_new: articlesNew,
         duration_ms: Date.now() - startTime,
       } as any)
       .execute();
 
-    log.info({ sourceId: source.id, found: emails.length, new: emailsNew }, 'Email source processed');
+    log.info({ sourceId: source.id, found: emails.length, new: articlesNew }, 'Email source processed');
 
     return {
       sourceId: source.id,
       success: true,
       emailsFound: emails.length,
-      emailsNew,
+      emailsNew: articlesNew,
       duration: Date.now() - startTime,
     };
 
