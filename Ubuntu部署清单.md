@@ -200,6 +200,16 @@ RSS_FETCH_TIMEOUT=30000
 # 首次运行最大文章数（首次抓取限制）
 RSS_FIRST_RUN_MAX_ARTICLES=50
 
+# ============ Gmail 邮件订阅源配置 ============
+# 是否启用 Gmail 邮件抓取（通过 IMAP + AppPassword 读取邮件）
+GMAIL_FETCH_ENABLED=true
+# 抓取时间（cron 表达式，默认每天凌晨 4 点）
+GMAIL_FETCH_SCHEDULE=0 4 * * *
+# 每次抓取最多处理的邮件数
+GMAIL_MAX_EMAILS=20
+# 邮件回看小时数（仅抓取此时间内的邮件）
+GMAIL_FETCH_HOURS_LOOKBACK=48
+
 # ============ 相关文章刷新配置 ============
 # 是否启用相关文章定期刷新
 RELATED_REFRESH_ENABLED=true
@@ -266,6 +276,7 @@ pnpm run db:migrate
 - 默认 admin 用户（密码：admin123）
 - 必要的数据库表和索引
 - 默认系统设置
+- `email_sources` / `email_fetch_logs` 表（Gmail 邮件订阅源支持）
 
 ### 11. 测试 ChromaDB 连接
 
@@ -1109,6 +1120,7 @@ sudo journalctl -u lis-rss -f
 | 应用配置修改 (.env) | `systemctl restart lis-rss` |
 | 依赖更新 | `pnpm install` + `systemctl restart lis-rss` |
 | 应用服务卡死 | `systemctl restart lis-rss` |
+| Gmail 邮件源配置修改 (GMAIL_*) | `systemctl restart lis-rss` |
 | PDF 处理 Python 代码更新 | `systemctl restart paper-pdf-api` |
 | PDF 处理脚本 `.env` / 依赖修改 | `systemctl restart paper-pdf-api` |
 | Telegram Bot 代码更新 | `systemctl restart paper-pdf-summary-telegram` |
