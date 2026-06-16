@@ -8,6 +8,8 @@
 > - `156be39` — 修复 markAndDelete 只删已获取 UID，不再删除 INBOX 全部邮件
 > - `41a98d1` — 移除 GMAIL_FETCH_HOURS_LOOKBACK 时间过滤，改为仅按 GMAIL_MAX_EMAILS 取最新邮件
 > - `618406b` — 修复 resolveSystemPrompt 无 DB 配置时 fallback 到默认提示词，保证 LLM 能正常运行
+> - `8378d324` — 修复文章权限检查遗漏 email_sources，邮件文章前端可见
+> - `5e04795` — email_fetch_logs 接入统一日志系统（unified-logs），前端新增"邮件订阅"日志 Tab
 
 ---
 
@@ -162,6 +164,11 @@ src/views/settings/panel-gmail.ejs   — 前端设置面板（模态框、表格
 - `src/constants/source-types.ts`：需确保 `SourceType` 中包含 'email'，且 `SOURCE_TYPE_LABELS['email']` 已配置（日报映射字段应同步更新）。
 - `src/api/daily-summary.ts`：自动把 email origin 的文章放入 `blog_news` 类型。
 - `src/telegram/` + `src/wechat/`：formatters 内的 `email_count` 字段需要关注显示逻辑。
+- `src/api/articles.ts` + `src/api/routes/articles.routes.ts`：所有涉及文章权限和查询的地方（getArticleById/getUserArticles/getUnreadCount/deleteArticle/rating/summary 等）均已在 `8378d324` 补充 `email_sources` 的 `LEFT JOIN` 和权限条件，否则具有 `email_source_id` 的文章无法被前端访问。
+- `src/api/unified-logs.ts`：UnifiedLogType 已新增 `email_fetch` 成员，统一日志聚合时自动包含。
+- `src/api/routes/logs.routes.ts`：新增 `GET /api/logs/email-fetch` endpoint，需 `requireAuth`。
+- `src/views/filter-logs.ejs`：日志中心 Tab 已新增"邮件订阅"面板，可通过 `emailStatusFilter` 下拉框筛 success/failed，自动调用 `loadEmailLogs`。
+- `src/api/email-fetch-logs.ts`：新建 service 层，负责翻页、筛选（status / emailSourceId / fromDate / toDate）并关联 `email_sources.name`。
 - `src/middleware/auth.ts`：`requireAdmin` 是部分 endpoint 的权限守门人——非管理员无法执行 POST/PUT/DELETE。
 
 ---
