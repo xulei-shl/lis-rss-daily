@@ -344,6 +344,7 @@ export async function getArticleById(
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
     .leftJoin('article_translations', 'article_translations.article_id', 'articles.id')
     .where('articles.id', '=', id)
     .where((eb) => eb.or([
@@ -358,6 +359,10 @@ export async function getArticleById(
       eb.and([
         eb('articles.keyword_id', 'is not', null),
         eb('keyword_subscriptions.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.email_source_id', 'is not', null),
+        eb('email_sources.user_id', '=', userId),
       ]),
     ]))
     .select([
@@ -421,6 +426,7 @@ export async function getArticleFilterMatches(
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
     .leftJoin('topic_domains', 'topic_domains.id', 'article_filter_logs.domain_id')
     .where('article_filter_logs.article_id', '=', articleId)
     .where((eb) => eb.or([
@@ -435,6 +441,10 @@ export async function getArticleFilterMatches(
       eb.and([
         eb('articles.keyword_id', 'is not', null),
         eb('keyword_subscriptions.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.email_source_id', 'is not', null),
+        eb('email_sources.user_id', '=', userId),
       ]),
     ]))
     .where('article_filter_logs.is_passed', '=', 1)
@@ -579,6 +589,7 @@ export async function getUserArticles(
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
     .where((eb) => eb.or([
       eb.and([
         eb('articles.rss_source_id', 'is not', null),
@@ -591,6 +602,10 @@ export async function getUserArticles(
       eb.and([
         eb('articles.keyword_id', 'is not', null),
         eb('keyword_subscriptions.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.email_source_id', 'is not', null),
+        eb('email_sources.user_id', '=', userId),
       ]),
     ]));
 
@@ -692,6 +707,7 @@ export async function getUserArticles(
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
     .leftJoin('article_translations', 'article_translations.article_id', 'articles.id')
     .where((eb) => eb.or([
       eb.and([
@@ -705,6 +721,10 @@ export async function getUserArticles(
       eb.and([
         eb('articles.keyword_id', 'is not', null),
         eb('keyword_subscriptions.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.email_source_id', 'is not', null),
+        eb('email_sources.user_id', '=', userId),
       ]),
     ]));
 
@@ -930,6 +950,12 @@ export async function deleteArticle(id: number, userId: number): Promise<void> {
           eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
         ),
       ]),
+      eb.and([
+        eb('articles.email_source_id', 'is not', null),
+        eb('articles.email_source_id', 'in', (eb) =>
+          eb.selectFrom('email_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
     ]))
     .executeTakeFirst();
 
@@ -1045,6 +1071,12 @@ export async function updateArticleReadStatus(
           eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
         ),
       ]),
+      eb.and([
+        eb('articles.email_source_id', 'is not', null),
+        eb('articles.email_source_id', 'in', (eb) =>
+          eb.selectFrom('email_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
     ]))
     .executeTakeFirst();
 
@@ -1101,6 +1133,12 @@ export async function updateArticleFilterStatus(
           eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
         ),
       ]),
+      eb.and([
+        eb('articles.email_source_id', 'is not', null),
+        eb('articles.email_source_id', 'in', (eb) =>
+          eb.selectFrom('email_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
     ]))
     .executeTakeFirst();
 
@@ -1152,6 +1190,12 @@ export async function batchUpdateArticleReadStatus(
         eb('articles.keyword_id', 'is not', null),
         eb('articles.keyword_id', 'in', (eb) =>
           eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.email_source_id', 'is not', null),
+        eb('articles.email_source_id', 'in', (eb) =>
+          eb.selectFrom('email_sources').select('id').where('user_id', '=', userId)
         ),
       ]),
     ]))
@@ -1218,6 +1262,12 @@ export async function markAllAsRead(
         eb('articles.keyword_id', 'is not', null),
         eb('articles.keyword_id', 'in', (eb) =>
           eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.email_source_id', 'is not', null),
+        eb('articles.email_source_id', 'in', (eb) =>
+          eb.selectFrom('email_sources').select('id').where('user_id', '=', userId)
         ),
       ]),
     ]))
@@ -1303,6 +1353,7 @@ export async function getUnreadCount(
     .selectFrom('articles')
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
     .where((eb) => eb.or([
       eb.and([
         eb('articles.rss_source_id', 'is not', null),
@@ -1311,6 +1362,10 @@ export async function getUnreadCount(
       eb.and([
         eb('articles.journal_id', 'is not', null),
         eb('journals.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.email_source_id', 'is not', null),
+        eb('email_sources.user_id', '=', userId),
       ]),
     ]))
     .where('articles.is_read', '=', 0);
@@ -1551,6 +1606,12 @@ export async function updateArticleRating(
           eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
         ),
       ]),
+      eb.and([
+        eb('articles.email_source_id', 'is not', null),
+        eb('articles.email_source_id', 'in', (eb) =>
+          eb.selectFrom('email_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
     ]))
     .executeTakeFirst();
 
@@ -1599,6 +1660,12 @@ export async function updateArticleAiSummary(
         eb('articles.keyword_id', 'is not', null),
         eb('articles.keyword_id', 'in', (eb) =>
           eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.email_source_id', 'is not', null),
+        eb('articles.email_source_id', 'in', (eb) =>
+          eb.selectFrom('email_sources').select('id').where('user_id', '=', userId)
         ),
       ]),
     ]))

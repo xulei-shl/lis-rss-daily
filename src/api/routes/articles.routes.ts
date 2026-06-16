@@ -66,6 +66,10 @@ function buildUserArticlePermissionCondition(userId: number) {
       eb('articles.keyword_id', 'is not', null),
       eb('keyword_subscriptions.user_id', '=', userId),
     ]),
+    eb.and([
+      eb('articles.email_source_id', 'is not', null),
+      eb('email_sources.user_id', '=', userId),
+    ]),
   ]);
 }
 
@@ -171,6 +175,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
       .where(buildUserArticlePermissionCondition(userId))
       .where('articles.created_at', '>=', todayStartUtc)
       .select((eb) => eb.fn.count('articles.id').as('count'))
@@ -184,6 +189,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
       .where(buildUserArticlePermissionCondition(userId))
       .where('articles.created_at', '>=', todayStartUtc)
       .where('articles.filter_status', '=', 'passed')
@@ -198,6 +204,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
       .where(buildUserArticlePermissionCondition(userId))
       .where('articles.filter_status', '=', 'pending')
       .select((eb) => eb.fn.count('articles.id').as('count'))
@@ -211,6 +218,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
       .where(buildUserArticlePermissionCondition(userId))
       .where('articles.process_status', '=', 'completed')
       .select((eb) => eb.fn.count('articles.id').as('count'))
@@ -224,6 +232,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
       .where(buildUserArticlePermissionCondition(userId))
       .where('articles.filter_status', '!=', 'pending')
       .select((eb) => eb.fn.count('articles.id').as('count'))
@@ -234,6 +243,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
       .where(buildUserArticlePermissionCondition(userId))
       .where('articles.filter_status', '=', 'passed')
       .select((eb) => eb.fn.count('articles.id').as('count'))
@@ -249,6 +259,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
       .where(buildUserArticlePermissionCondition(userId))
       .where('articles.filter_status', '=', 'passed')
       .where('articles.is_read', '=', 0)
