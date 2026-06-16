@@ -440,13 +440,14 @@ const pageActions = isGuest ? '' : `
       // 日期范围优先于默认的 daysAgo
       const hasDateRange = dateFrom || dateTo;
 
-      // 解析来源 ID（格式: "rss:{id}" 或 "journal:{id}" 或 "mixed:{id}" 或 "keyword:{id}"）
+      // 解析来源 ID（格式: "rss:{id}" | "journal:{id}" | "keyword:{id}" | "email:{id}" | "mixed:{id}"）
       if (sourceId) {
         const [type, rawId] = sourceId.split(':');
         const selectedSource = findSourceById(sourceId);
         const hasRssIds = selectedSource ? appendIdList(params, 'rssSourceIds', selectedSource.rssIds) : false;
         const hasJournalIds = selectedSource ? appendIdList(params, 'journalIds', selectedSource.journalIds) : false;
         const hasKeywordIds = selectedSource ? appendIdList(params, 'keywordIds', selectedSource.keywordIds) : false;
+        const hasEmailIds = selectedSource ? appendIdList(params, 'emailSourceIds', selectedSource.emailSourceIds) : false;
 
         if (!hasRssIds && (type === 'rss' || type === 'mixed') && rawId) {
           params.append('rssSourceIds', rawId);
@@ -456,6 +457,9 @@ const pageActions = isGuest ? '' : `
         }
         if (!hasKeywordIds && type === 'keyword' && rawId) {
           params.append('keywordIds', rawId);
+        }
+        if (!hasEmailIds && type === 'email' && rawId) {
+          params.append('emailSourceIds', rawId);
         }
       }
       if (filterStatus) params.append('filterStatus', filterStatus);

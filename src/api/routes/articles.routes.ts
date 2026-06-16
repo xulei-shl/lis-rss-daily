@@ -120,6 +120,7 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
     const rssSourceIds = normalizeQueryIds(req.query.rssSourceIds as string | string[] | undefined);
     const journalIds = normalizeQueryIds(req.query.journalIds as string | string[] | undefined);
     const keywordIds = normalizeQueryIds(req.query.keywordIds as string | string[] | undefined);
+    const emailSourceIds = normalizeQueryIds(req.query.emailSourceIds as string | string[] | undefined);
     // 评级筛选
     const ratingParam = req.query.rating as string | undefined;
     const rating = ratingParam === 'unrated' ? undefined : parseOptionalNumber(ratingParam);
@@ -134,6 +135,7 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
       journalIds,
       keywordId,
       keywordIds,
+      emailSourceIds,
       filterStatus,
       processStatus,
       search: searchQuery,
