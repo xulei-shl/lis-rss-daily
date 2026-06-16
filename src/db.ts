@@ -378,6 +378,7 @@ export type KeywordSubscriptionsSelection = SelectionType<KeywordSubscriptionsTa
 export type KeywordCrawlLogsSelection = SelectionType<KeywordCrawlLogsTable>;
 export type TelegramChatsSelection = SelectionType<TelegramChatsTable>;
 export type DeepSearchTasksSelection = SelectionType<DeepSearchTasksTable>;
+export type EmailFetchLogsSelection = SelectionType<EmailFetchLogsTable>;
 
 let _db: DB | null = null;
 

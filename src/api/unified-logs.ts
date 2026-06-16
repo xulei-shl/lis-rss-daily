@@ -1,13 +1,15 @@
 import { getFilterLogs } from './filter-logs.js';
 import { getCrawlLogs } from './journals.js';
 import { getRssFetchLogs } from './rss-fetch-logs.js';
+import { getEmailFetchLogs } from './email-fetch-logs.js';
 import { getProcessLogs } from './process-logs.js';
 import { getKeywordCrawlLogs } from './keywords.js';
 import type { FilterLogRecord } from './filter-logs.js';
 import type { RssFetchLogRecord } from './rss-fetch-logs.js';
+import type { EmailFetchLogRecord } from './email-fetch-logs.js';
 import type { ProcessLogRecord } from './process-logs.js';
 
-export type UnifiedLogType = 'filter' | 'rss_fetch' | 'journal_crawl' | 'process' | 'keyword_crawl';
+export type UnifiedLogType = 'filter' | 'rss_fetch' | 'email_fetch' | 'journal_crawl' | 'process' | 'keyword_crawl';
 
 export interface UnifiedLogsQuery {
   userId: number;
@@ -35,7 +37,7 @@ export interface UnifiedLogsResult {
   totalsByType: Record<UnifiedLogType, number>;
 }
 
-const ALL_TYPES: UnifiedLogType[] = ['filter', 'rss_fetch', 'journal_crawl', 'process', 'keyword_crawl'];
+const ALL_TYPES: UnifiedLogType[] = ['filter', 'rss_fetch', 'email_fetch', 'journal_crawl', 'process', 'keyword_crawl'];
 
 export async function getUnifiedLogs(params: UnifiedLogsQuery): Promise<UnifiedLogsResult> {
   const page = params.page ?? 1;
@@ -71,6 +73,19 @@ export async function getUnifiedLogs(params: UnifiedLogsQuery): Promise<UnifiedL
     resultsByType.rss_fetch = {
       entries: rssResult.logs.map(mapRssLog),
       total: rssResult.total,
+    };
+  }
+
+  if (types.includes('email_fetch')) {
+    const emailResult = await getEmailFetchLogs({
+      page: 1,
+      limit: fetchLimitPerType,
+      fromDate: params.fromDate,
+      toDate: params.toDate,
+    });
+    resultsByType.email_fetch = {
+      entries: emailResult.logs.map(mapEmailLog),
+      total: emailResult.total,
     };
   }
 
@@ -125,6 +140,7 @@ export async function getUnifiedLogs(params: UnifiedLogsQuery): Promise<UnifiedL
   const totalsByType: Record<UnifiedLogType, number> = {
     filter: resultsByType.filter?.total ?? 0,
     rss_fetch: resultsByType.rss_fetch?.total ?? 0,
+    email_fetch: resultsByType.email_fetch?.total ?? 0,
     journal_crawl: resultsByType.journal_crawl?.total ?? 0,
     process: resultsByType.process?.total ?? 0,
     keyword_crawl: resultsByType.keyword_crawl?.total ?? 0,
@@ -179,6 +195,25 @@ function mapRssLog(log: RssFetchLogRecord): UnifiedLogEntry {
       new_articles_count: log.new_articles_count,
       duration_ms: log.duration_ms,
       is_scheduled: Boolean(log.is_scheduled),
+      error_message: log.error_message,
+      created_at: log.created_at,
+    },
+  };
+}
+
+function mapEmailLog(log: EmailFetchLogRecord): UnifiedLogEntry {
+  return {
+    id: `email_fetch:${log.id}`,
+    type: 'email_fetch',
+    created_at: log.created_at,
+    status: log.status,
+    data: {
+      id: log.id,
+      email_source_id: log.email_source_id,
+      email_source_name: log.email_source_name,
+      emails_found: log.emails_found,
+      emails_new: log.emails_new,
+      duration_ms: log.duration_ms,
       error_message: log.error_message,
       created_at: log.created_at,
     },

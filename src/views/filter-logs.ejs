@@ -11,6 +11,7 @@
     <button class="logs-tab" data-tab="keyword">关键词爬取</button>
     <button class="logs-tab" data-tab="filter">过滤日志</button>
     <button class="logs-tab" data-tab="process">后处理</button>
+    <button class="logs-tab" data-tab="email">邮件订阅</button>
   </div>
 
   <div class="logs-tab-panel active" data-panel="all">
@@ -193,6 +194,40 @@
     <div class="pagination" id="filterPagination"></div>
   </div>
 
+  <div class="logs-tab-panel" data-panel="email">
+    <div class="panel-filter logs-filter-bar">
+      <div class="filter-group">
+        <label>结果:</label>
+        <select id="emailStatusFilter" class="filter-select">
+          <option value="">全部</option>
+          <option value="success">成功</option>
+          <option value="failed">失败</option>
+        </select>
+      </div>
+    </div>
+    <table class="logs-table" id="emailTable">
+      <thead>
+        <tr>
+          <th class="expand-cell"></th>
+          <th>来源</th>
+          <th>结果</th>
+          <th>新增/总数</th>
+          <th>耗时</th>
+          <th>时间</th>
+        </tr>
+      </thead>
+      <tbody id="emailBody"></tbody>
+    </table>
+    <div class="empty-state" id="emailEmpty">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <p>暂无邮件订阅抓取日志</p>
+    </div>
+    <div class="pagination" id="emailPagination"></div>
+  </div>
+
   <div class="logs-tab-panel" data-panel="process">
     <div class="panel-filter logs-filter-bar">
       <div class="filter-group">
@@ -253,6 +288,7 @@
           keyword: { page: 1, totalPages: 1 },
           filter: { page: 1, totalPages: 1 },
           process: { page: 1, totalPages: 1 },
+          email: { page: 1, totalPages: 1 },
         },
         filters: {
           domainId: '',
@@ -263,6 +299,7 @@
           keywordStatus: '',
           processStage: '',
           processStatus: '',
+          emailStatus: '',
         },
       };
 
@@ -354,6 +391,14 @@
             loadProcessLogs(1);
           });
         }
+
+        const emailStatus = document.getElementById('emailStatusFilter');
+        if (emailStatus) {
+          emailStatus.addEventListener('change', () => {
+            state.filters.emailStatus = emailStatus.value;
+            loadEmailLogs(1);
+          });
+        }
       }
 
       function reloadAllTabs() {
@@ -366,6 +411,7 @@
         loadKeywordLogs(1);
         loadFilterLogs(1);
         loadProcessLogs(1);
+        loadEmailLogs(1);
       }
 
       async function loadDomains() {
@@ -485,6 +531,22 @@
           console.error(err);
           toast.error('加载后处理日志失败：' + (err.message || '网络错误'));
           showEmptyState('processTable', 'processEmpty');
+        }
+      }
+
+      async function loadEmailLogs(page = 1) {
+        try {
+          const params = buildParams(page);
+          if (state.filters.emailStatus) params.status = state.filters.emailStatus;
+          const data = await fetchJson('/api/logs/email-fetch', params);
+          state.tabs.email.page = data.page || 1;
+          state.tabs.email.totalPages = data.totalPages || 1;
+          renderEmailLogs(data.logs || []);
+          renderPagination('emailPagination', state.tabs.email.page, state.tabs.email.totalPages, 'email');
+        } catch (err) {
+          console.error(err);
+          toast.error('加载邮件订阅日志失败：' + (err.message || '网络错误'));
+          showEmptyState('emailTable', 'emailEmpty');
         }
       }
 
@@ -616,6 +678,54 @@
     }).join('');
 
     bindExpandEvents('#rssBody');
+  }
+
+  function renderEmailLogs(logs) {
+    const table = document.getElementById('emailTable');
+    const tbody = document.getElementById('emailBody');
+    const empty = document.getElementById('emailEmpty');
+
+    if (!tbody || !table || !empty) return;
+
+    if (!logs.length) {
+      table.style.display = 'none';
+      empty.style.display = 'block';
+      tbody.innerHTML = '';
+      return;
+    }
+
+    table.style.display = 'table';
+    empty.style.display = 'none';
+
+    tbody.innerHTML = logs.map((log) => {
+      const detailId = \`email-detail-\${log.id}\`;
+      const summary = \`\${escapeHtml(log.email_source_name || '未命名订阅')}\`;
+      const counts = \`\${log.emails_new ?? 0}/\${log.emails_found ?? 0}\`;
+      return \`
+        <tr class="expand-row" data-detail-id="\${detailId}">
+          <td class="expand-cell"><span class="expand-icon">▶</span></td>
+          <td>\${summary}</td>
+          <td>\${renderStatusBadge(log.status)}</td>
+          <td>\${counts}</td>
+          <td>\${formatDuration(log.duration_ms)}</td>
+          <td>\${formatDate(log.created_at)}</td>
+        </tr>
+        <tr class="detail-row" id="\${detailId}">
+          <td colspan="6" class="detail-cell">
+            <div class="detail-content">
+              <h4>执行详情</h4>
+              <p>来源 ID：\${log.email_source_id}</p>
+              <p>新增邮件：\${log.emails_new ?? 0}</p>
+              <p>总计邮件：\${log.emails_found ?? 0}</p>
+              <p>耗时：\${formatDuration(log.duration_ms)}</p>
+              \${log.error_message ? \`<p>错误信息：\${escapeHtml(log.error_message)}</p>\` : ''}
+            </div>
+          </td>
+        </tr>
+      \`;
+    }).join('');
+
+    bindExpandEvents('#emailBody');
   }
 
   function renderCrawlLogs(logs) {
@@ -897,6 +1007,9 @@
       case 'process':
         loadProcessLogs(page);
         break;
+      case 'email':
+        loadEmailLogs(page);
+        break;
     }
     return false;
   };
@@ -928,6 +1041,8 @@
     switch (type) {
       case 'rss_fetch':
         return 'RSS 抓取';
+      case 'email_fetch':
+        return '邮件订阅';
       case 'journal_crawl':
         return '期刊爬取';
       case 'keyword_crawl':
@@ -945,6 +1060,8 @@
     switch (log.type) {
       case 'rss_fetch':
         return log.data?.rss_source_name || '未命名订阅';
+      case 'email_fetch':
+        return \`\${log.data?.email_source_name || '未命名订阅'} · \${log.data?.emails_new ?? 0}/\${log.data?.emails_found ?? 0}\`;
       case 'journal_crawl':
         return \`\${log.data?.journal_name || '-'} · \${formatYearVolumeIssue(log.data?.crawl_year, log.data?.crawl_volume, log.data?.crawl_issue)}\`;
       case 'keyword_crawl':
@@ -961,6 +1078,8 @@
     switch (log.type) {
       case 'rss_fetch':
         return buildRssDetail(log.data);
+      case 'email_fetch':
+        return buildEmailDetail(log.data);
       case 'journal_crawl':
         return buildCrawlDetail(log.data);
       case 'keyword_crawl':
@@ -994,6 +1113,17 @@
       <p>执行方式：\${schedule}</p>
       <p>新增文章：\${data?.new_articles_count ?? 0}</p>
       <p>总计文章：\${data?.articles_count ?? 0}</p>
+      <p>耗时：\${formatDuration(data?.duration_ms)}</p>
+      \${data?.error_message ? \`<p>错误信息：\${escapeHtml(data.error_message)}</p>\` : ''}
+    \`;
+  }
+
+  function buildEmailDetail(data) {
+    return \`
+      <h4>邮件订阅抓取</h4>
+      <p>来源：\${escapeHtml(data?.email_source_name || '未命名订阅')}</p>
+      <p>新增邮件：\${data?.emails_new ?? 0}</p>
+      <p>总计邮件：\${data?.emails_found ?? 0}</p>
       <p>耗时：\${formatDuration(data?.duration_ms)}</p>
       \${data?.error_message ? \`<p>错误信息：\${escapeHtml(data.error_message)}</p>\` : ''}
     \`;
