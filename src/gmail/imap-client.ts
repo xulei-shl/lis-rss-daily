@@ -41,13 +41,14 @@ export async function fetchEmails(
     const lock = await client.getMailboxLock('INBOX');
     try {
       const searchQuery = buildSearchQuery(targetSenders);
-      const uids: number[] = [];
-      for await (const msg of client.fetch(searchQuery, { uid: true })) {
-        uids.push(msg.uid);
+      const candidates: { uid: number; date: Date }[] = [];
+      for await (const msg of client.fetch(searchQuery, { uid: true, internalDate: true })) {
+        candidates.push({ uid: msg.uid, date: new Date(msg.internalDate ?? 0) });
       }
-      log.info({ email, found: uids.length }, 'Emails found');
+      log.info({ email, found: candidates.length }, 'Emails found');
 
-      const take = uids.slice(-maxEmails);
+      candidates.sort((a, b) => b.date.getTime() - a.date.getTime());
+      const take = candidates.slice(0, maxEmails).map((c) => c.uid);
       if (take.length === 0) return [];
 
       const parsed: ParsedEmail[] = [];
