@@ -38,45 +38,43 @@
 </div>
 
 <!-- 添加/编辑弹窗 -->
-<div id="gmailModal" class="modal" style="display:none;">
-  <div class="modal-content">
+<div id="gmailModal" class="modal-overlay">
+  <div class="modal">
     <div class="modal-header">
       <h3 id="gmailModalTitle">添加邮件源</h3>
       <button class="modal-close" onclick="closeGmailModal()">&times;</button>
     </div>
-    <div class="modal-body">
-      <input type="hidden" id="editGmailId">
-      <div class="form-group">
-        <label>名称</label>
-        <input type="text" id="gmailName" class="form-control" placeholder="例如：Nature Alert" required>
-      </div>
-      <div class="form-group">
-        <label>Gmail 邮箱地址</label>
-        <input type="email" id="gmailEmail" class="form-control" placeholder="example@gmail.com" required>
-      </div>
-      <div class="form-group">
-        <label>应用专用密码</label>
-        <input type="password" id="gmailPassword" class="form-control" placeholder="16位应用专用密码" required>
-        <small style="color:#666;">需在 Google 账号中开启两步验证后生成应用专用密码</small>
-      </div>
-      <div class="form-group">
-        <label>发件人白名单（每行一个邮箱）</label>
-        <textarea id="gmailSenders" class="form-control" rows="4" placeholder="scholaralerts-noreply@google.com&#10;alert@nature.com&#10;newsletter@science.org"></textarea>
-        <small style="color:#666;">只有这些发件人的邮件会被抓取和处理</small>
-      </div>
-      <div class="form-group">
-        <label>状态</label>
-        <select id="gmailStatus" class="form-control">
-          <option value="active">启用</option>
-          <option value="inactive">停用</option>
-        </select>
-      </div>
-      <div class="form-actions">
-        <button class="btn btn-secondary" onclick="testGmailConnection()">🔌 测试连接</button>
-        <button class="btn btn-primary" onclick="saveGmailSource()">保存</button>
-      </div>
-      <div id="gmailTestResult" style="margin-top:8px;font-size:0.9rem;"></div>
+    <input type="hidden" id="editGmailId">
+    <div class="form-group">
+      <label>名称</label>
+      <input type="text" id="gmailName" class="form-control" placeholder="例如：Nature Alert" required>
     </div>
+    <div class="form-group">
+      <label>Gmail 邮箱地址</label>
+      <input type="email" id="gmailEmail" class="form-control" placeholder="example@gmail.com" required>
+    </div>
+    <div class="form-group">
+      <label>应用专用密码</label>
+      <input type="password" id="gmailPassword" class="form-control" placeholder="16位应用专用密码" required>
+      <small style="color:#666;">需在 Google 账号中开启两步验证后生成应用专用密码</small>
+    </div>
+    <div class="form-group">
+      <label>发件人白名单（每行一个邮箱）</label>
+      <textarea id="gmailSenders" class="form-control" rows="4" placeholder="scholaralerts-noreply@google.com&#10;alert@nature.com&#10;newsletter@science.org"></textarea>
+      <small style="color:#666;">只有这些发件人的邮件会被抓取和处理</small>
+    </div>
+    <div class="form-group">
+      <label>状态</label>
+      <select id="gmailStatus" class="form-control">
+        <option value="active">启用</option>
+        <option value="inactive">停用</option>
+      </select>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="testGmailConnection()">🔌 测试连接</button>
+      <button class="btn btn-primary" onclick="saveGmailSource()">保存</button>
+    </div>
+    <div id="gmailTestResult" style="margin-top:8px;font-size:0.9rem;"></div>
   </div>
 </div>
 
@@ -136,11 +134,11 @@ function showGmailAddModal() {
   document.getElementById('gmailSenders').value = '';
   document.getElementById('gmailStatus').value = 'active';
   document.getElementById('gmailTestResult').innerHTML = '';
-  document.getElementById('gmailModal').style.display = 'block';
+  document.getElementById('gmailModal').classList.add('active');
 }
 
 function closeGmailModal() {
-  document.getElementById('gmailModal').style.display = 'none';
+  document.getElementById('gmailModal').classList.remove('active');
 }
 
 async function editGmailSource(id) {
@@ -157,7 +155,7 @@ async function editGmailSource(id) {
     document.getElementById('gmailSenders').value = (JSON.parse(source.target_senders || '[]')).join('\n');
     document.getElementById('gmailStatus').value = source.status || 'active';
     document.getElementById('gmailTestResult').innerHTML = '';
-    document.getElementById('gmailModal').style.display = 'block';
+    document.getElementById('gmailModal').classList.add('active');
   } catch (err) {
     alert('加载邮件源失败');
   }
