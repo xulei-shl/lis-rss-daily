@@ -5,25 +5,23 @@ import type { ParsedEmail } from './types.js';
 
 const log = logger.child({ module: 'gmail-imap' });
 
-function buildSearchQuery(senders: string[], sinceDate: Date): Record<string, any> {
-  const query: Record<string, any> = { since: sinceDate };
+function buildSearchQuery(senders: string[]): Record<string, any> {
   if (senders.length === 1) {
-    query.from = senders[0];
-  } else if (senders.length > 1) {
-    query.or = senders.map((s) => ({ from: s }));
+    return { from: senders[0] };
   }
-  return query;
+  if (senders.length > 1) {
+    return { or: senders.map((s) => ({ from: s })) };
+  }
+  return {};
 }
 
 export async function fetchEmails(
   email: string,
   password: string,
   targetSenders: string[],
-  lookbackHours: number,
   maxEmails: number,
   proxyUrl?: string
 ): Promise<ParsedEmail[]> {
-  const sinceDate = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
 
   const client = new ImapFlow({
     host: 'imap.gmail.com',
@@ -42,14 +40,14 @@ export async function fetchEmails(
 
     const lock = await client.getMailboxLock('INBOX');
     try {
-      const searchQuery = buildSearchQuery(targetSenders, sinceDate);
+      const searchQuery = buildSearchQuery(targetSenders);
       const uids: number[] = [];
       for await (const msg of client.fetch(searchQuery, { uid: true })) {
         uids.push(msg.uid);
       }
       log.info({ email, found: uids.length }, 'Emails found');
 
-      const take = uids.slice(0, maxEmails);
+      const take = uids.slice(-maxEmails);
       if (take.length === 0) return [];
 
       const parsed: ParsedEmail[] = [];

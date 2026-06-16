@@ -101,7 +101,6 @@ export async function processEmailSource(source: EmailSourceConfig): Promise<Ema
       source.emailAddress,
       imapPassword,
       source.targetSenders,
-      config.gmailFetchHoursLookback,
       config.gmailMaxEmails,
       proxyUrl
     );
