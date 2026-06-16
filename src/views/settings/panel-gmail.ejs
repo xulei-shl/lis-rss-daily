@@ -172,7 +172,7 @@ function getSendersArray() {
 
 async function testGmailConnection() {
   const email = document.getElementById('gmailEmail').value.trim();
-  const password = document.getElementById('gmailPassword').value.trim();
+  const password = document.getElementById('gmailPassword').value.replace(/\s+/g, '');
   const resultDiv = document.getElementById('gmailTestResult');
 
   if (!email || !password) {
@@ -202,7 +202,7 @@ async function saveGmailSource() {
   const id = document.getElementById('editGmailId').value;
   const name = document.getElementById('gmailName').value.trim();
   const email = document.getElementById('gmailEmail').value.trim();
-  const password = document.getElementById('gmailPassword').value.trim();
+  const password = document.getElementById('gmailPassword').value.replace(/\s+/g, '');
   const senders = getSendersArray();
   const status = document.getElementById('gmailStatus').value;
 

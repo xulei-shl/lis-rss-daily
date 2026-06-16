@@ -52,7 +52,7 @@ router.post('/email-sources', requireAuth, requireAdmin, async (req: AuthRequest
     const result = await gmailSourceService.createEmailSource(req.userId!, {
       name: name.trim(),
       emailAddress: emailAddress.trim(),
-      imapPassword,
+      imapPassword: imapPassword.replace(/\s+/g, ''),
       targetSenders: senders,
       status,
     });
@@ -88,7 +88,7 @@ router.put('/email-sources/:id', requireAuth, requireAdmin, async (req: AuthRequ
       if (imapPassword.length < 8) {
         return res.status(400).json({ error: 'App password must be at least 8 characters' });
       }
-      updateData.imapPassword = imapPassword;
+      updateData.imapPassword = imapPassword.replace(/\s+/g, '');
     }
     if (targetSenders !== undefined) {
       updateData.targetSenders = Array.isArray(targetSenders) ? targetSenders : [];
@@ -129,7 +129,8 @@ router.delete('/email-sources/:id', requireAuth, requireAdmin, async (req: AuthR
 
 router.post('/email-sources/test', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const { emailAddress, imapPassword } = req.body;
+    const { emailAddress, imapPassword: rawPassword } = req.body;
+    const imapPassword = rawPassword.replace(/\s+/g, '');
 
     if (!emailAddress || !imapPassword) {
       return res.status(400).json({ error: 'Email address and password are required' });
