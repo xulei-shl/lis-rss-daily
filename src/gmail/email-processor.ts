@@ -51,7 +51,7 @@ function getDecryptedPassword(source: EmailSourceConfig): string {
 
 async function parseEmailContent(email: ParsedEmail, userId: number): Promise<ParsedArticle[]> {
   try {
-    const content = email.html || email.text || '';
+    const content = email.text || email.html || '';
     if (!content) return [];
 
     const variables = await buildPromptVariables({
@@ -105,7 +105,7 @@ async function parseEmailContent(email: ParsedEmail, userId: number): Promise<Pa
     log.warn({ emailSubject: email.subject, error: err.message }, 'Failed to parse email content, treating as single article');
     return [{
       title: email.subject,
-      content: email.html || email.text || '',
+      content: email.text || email.html || '',
       url: email.messageId,
     }];
   }
