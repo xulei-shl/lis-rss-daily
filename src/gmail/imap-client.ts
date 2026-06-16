@@ -31,6 +31,8 @@ export async function fetchEmails(
     secure: true,
     auth: { user: email, pass: password },
     logger: false,
+    connectionTimeout: 120 * 1000,
+    greetingTimeout: 30 * 1000,
     ...(proxyUrl ? { proxy: proxyUrl } : {}),
   });
 
