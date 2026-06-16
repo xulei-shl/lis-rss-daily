@@ -10,6 +10,22 @@ import { getUserLLMProvider, type ChatMessage } from '../llm.js';
 import { buildPromptVariables } from '../api/prompt-variable-builder.js';
 import { resolveSystemPrompt } from '../api/system-prompts.js';
 import type { EmailSourceConfig, ParsedEmail, EmailFetchResult } from './types.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const DEFAULT_EMAIL_PARSE_PROMPT_PATH = path.join(__dirname, '../config/default-prompts/email_parse.md');
+
+function readDefaultEmailParsePrompt(): string {
+  try {
+    return fs.readFileSync(DEFAULT_EMAIL_PARSE_PROMPT_PATH, 'utf-8');
+  } catch {
+    return '';
+  }
+}
 
 const log = logger.child({ module: 'gmail-processor' });
 
@@ -48,10 +64,11 @@ async function parseEmailContent(email: ParsedEmail, userId: number): Promise<Pa
       },
     });
 
-    const systemPrompt = await resolveSystemPrompt(userId, 'email_parse', '', variables);
+    const defaultTemplate = readDefaultEmailParsePrompt();
+    const fullPrompt = await resolveSystemPrompt(userId, 'email_parse', defaultTemplate, variables);
 
-    if (!systemPrompt || systemPrompt.trim().length === 0) {
-      log.warn({ emailSubject: email.subject }, 'No email_parse system prompt, treating email as single article');
+    if (!fullPrompt || fullPrompt.trim().length === 0) {
+      log.warn({ emailSubject: email.subject }, 'No email_parse prompt available, treating email as single article');
       return [{
         title: email.subject,
         content: content,
@@ -59,10 +76,8 @@ async function parseEmailContent(email: ParsedEmail, userId: number): Promise<Pa
       }];
     }
 
-    const userPrompt = systemPrompt;
-
     const messages: ChatMessage[] = [
-      { role: 'user', content: userPrompt },
+      { role: 'user', content: fullPrompt },
     ];
 
     const llm = await getUserLLMProvider(userId, 'email_parse');
