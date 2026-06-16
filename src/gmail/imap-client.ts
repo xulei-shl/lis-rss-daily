@@ -5,20 +5,6 @@ import type { ParsedEmail } from './types.js';
 
 const log = logger.child({ module: 'gmail-imap' });
 
-async function withProxyEnv<T>(fn: () => Promise<T>, proxyUrl?: string): Promise<T> {
-  if (!proxyUrl) return fn();
-  const prevHttp = process.env.HTTP_PROXY;
-  const prevHttps = process.env.HTTPS_PROXY;
-  process.env.HTTP_PROXY = proxyUrl;
-  process.env.HTTPS_PROXY = proxyUrl;
-  try {
-    return await fn();
-  } finally {
-    process.env.HTTP_PROXY = prevHttp;
-    process.env.HTTPS_PROXY = prevHttps;
-  }
-}
-
 function buildSearchQuery(senders: string[], sinceDate: Date): Record<string, any> {
   const query: Record<string, any> = { since: sinceDate };
   if (senders.length === 1) {
@@ -45,10 +31,11 @@ export async function fetchEmails(
     secure: true,
     auth: { user: email, pass: password },
     logger: false,
+    ...(proxyUrl ? { proxy: proxyUrl } : {}),
   });
 
   try {
-    await withProxyEnv(() => client.connect(), proxyUrl);
+    await client.connect();
     log.info({ email }, 'IMAP connected');
 
     const lock = await client.getMailboxLock('INBOX');
@@ -103,10 +90,11 @@ export async function markAndDeleteAll(
     secure: true,
     auth: { user: email, pass: password },
     logger: false,
+    ...(proxyUrl ? { proxy: proxyUrl } : {}),
   });
 
   try {
-    await withProxyEnv(() => client.connect(), proxyUrl);
+    await client.connect();
 
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -141,10 +129,11 @@ export async function testConnection(
     secure: true,
     auth: { user: email, pass: password },
     logger: false,
+    ...(proxyUrl ? { proxy: proxyUrl } : {}),
   });
 
   try {
-    await withProxyEnv(() => client.connect(), proxyUrl);
+    await client.connect();
     await client.logout();
     return { success: true };
   } catch (err: any) {
