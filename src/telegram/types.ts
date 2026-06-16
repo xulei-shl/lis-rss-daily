@@ -20,6 +20,7 @@ export interface DailySummaryData {
     journal: number;
     blog: number;
     news: number;
+    email: number;
   };
 }
 

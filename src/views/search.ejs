@@ -526,6 +526,8 @@ function renderSearchResult(result, index) {
     sourceName = result.journal_name || 'Unknown';
   } else if (result.source_origin === 'keyword') {
     sourceName = result.keyword_name || 'Unknown';
+  } else if (result.source_origin === 'email') {
+    sourceName = result.source_name || '邮件订阅';
   } else {
     sourceName = result.rss_source_name || 'Unknown';
   }

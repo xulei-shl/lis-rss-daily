@@ -73,7 +73,7 @@ export interface SearchResult {
     published_year?: number | null;
     published_issue?: number | null;
     published_volume?: number | null;
-    source_origin?: 'rss' | 'journal' | 'keyword';
+    source_origin?: 'rss' | 'journal' | 'keyword' | 'email';
     journal_name?: string;
     keyword_name?: string;
   };

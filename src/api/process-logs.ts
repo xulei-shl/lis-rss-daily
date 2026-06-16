@@ -43,7 +43,7 @@ export async function createProcessLog(input: CreateProcessLogInput): Promise<vo
 
 export interface ProcessLogRecord extends ArticleProcessLogsSelection {
   article_title: string | null;
-  source_origin: 'rss' | 'journal';
+  source_origin: 'rss' | 'journal' | 'keyword' | 'email';
 }
 
 export interface ProcessLogQuery {

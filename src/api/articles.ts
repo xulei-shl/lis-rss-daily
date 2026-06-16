@@ -68,7 +68,7 @@ export interface ArticleWithSource {
   published_volume: number | null;  // 卷号（期刊文章使用）
   error_message: string | null;
   is_read: number;  // 0 = 未读, 1 = 已读
-  source_origin: 'rss' | 'journal' | 'keyword';  // 文章来源
+  source_origin: 'rss' | 'journal' | 'keyword' | 'email';
   rating: number | null;  // 文章评级（1-5星）
   created_at: string;
   updated_at: string;
@@ -117,7 +117,7 @@ export interface RelatedArticle {
   published_year: number | null;
   published_issue: number | null;
   published_volume: number | null;
-  source_origin: 'rss' | 'journal';
+  source_origin: 'rss' | 'journal' | 'keyword' | 'email';
   rss_source_name?: string;
   score: number;
 }

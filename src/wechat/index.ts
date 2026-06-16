@@ -205,7 +205,7 @@ class WeChatNotifier {
       type: 'insights';
       totalArticles: number;
       summary: string;
-      articlesByType: { journal: number; blog: number; news: number };
+      articlesByType: { journal: number; blog: number; news: number; email: number };
     }
   ): Promise<boolean> {
     const cacheKey = this.getCacheKey(userId, 'insights', data.date);

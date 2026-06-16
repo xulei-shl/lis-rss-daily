@@ -750,6 +750,67 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
         continue;
       }
 
+      // ============================================================
+      // 034: 添加 Gmail 邮件订阅源支持（email_sources + email_fetch_logs + articles 扩展）
+      // ============================================================
+      if (file === '034_add_email_sources.sql') {
+        const hasEmailSourceId = hasColumn(db, 'articles', 'email_source_id');
+        const hasEmailSources = hasTable(db, 'email_sources');
+
+        // 如果 articles 已有 email_source_id 列，说明 schema 已更新（新 001_init 或已执行过本迁移）
+        if (!hasEmailSourceId) {
+          // 需要重建 articles 表
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+
+          const count = db.prepare('SELECT COUNT(*) as count FROM articles').get() as { count: number };
+          console.log(`      → Rebuilt articles table with email support (${count.count} rows preserved)`);
+          console.log('      → source_origin constraint now includes: rss, journal, keyword, email');
+        } else {
+          // schema 已包含 email_source_id，仅需确保 email_sources / email_fetch_logs 表存在
+          console.log('      → articles table already has email_source_id column');
+          if (!hasEmailSources) {
+            // 如果 email_sources 表不存在，创建它们
+            db.exec(`
+CREATE TABLE IF NOT EXISTS email_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  email_address TEXT NOT NULL,
+  imap_password_encrypted TEXT NOT NULL,
+  target_senders TEXT NOT NULL DEFAULT '[]',
+  status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
+  last_fetched_at DATETIME,
+  last_error TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_email_sources_user_id ON email_sources(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_sources_status ON email_sources(status);
+
+CREATE TABLE IF NOT EXISTS email_fetch_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email_source_id INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('success', 'failed')),
+  emails_found INTEGER DEFAULT 0,
+  emails_new INTEGER DEFAULT 0,
+  error_message TEXT,
+  duration_ms INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (email_source_id) REFERENCES email_sources(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_email_source_id ON email_fetch_logs(email_source_id);
+CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(created_at);
+            `);
+            console.log('      → Created email_sources and email_fetch_logs tables');
+          } else {
+            console.log('      → email_sources table already exists');
+          }
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

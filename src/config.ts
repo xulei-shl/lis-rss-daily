@@ -95,6 +95,12 @@ export interface Config {
   keywordInterval: number;
   keywordIntervalRandom: number;
 
+  // Gmail Email Source
+  gmailFetchEnabled: boolean;
+  gmailFetchSchedule: string;
+  gmailMaxEmails: number;
+  gmailFetchHoursLookback: number;
+
   // DeepSearch
   deepSearchApiUrl: string;
 }
@@ -198,6 +204,12 @@ function getConfig(): Config {
 
     // Search AI Summary
     searchAiSummaryGuestEnabled: process.env.SEARCH_AI_SUMMARY_GUEST_ENABLED === 'true',
+
+    // Gmail Email Source
+    gmailFetchEnabled: process.env.GMAIL_FETCH_ENABLED !== 'false',
+    gmailFetchSchedule: process.env.GMAIL_FETCH_SCHEDULE || '0 4 * * *',
+    gmailMaxEmails: parseInt(process.env.GMAIL_MAX_EMAILS || '20', 10),
+    gmailFetchHoursLookback: parseInt(process.env.GMAIL_FETCH_HOURS_LOOKBACK || '48', 10),
 
     // DeepSearch
     deepSearchApiUrl: process.env.DEEPSEARCH_API_URL || 'http://localhost:8082',

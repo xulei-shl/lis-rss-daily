@@ -499,7 +499,6 @@ async function triggerArticleProcessing(articleId: number): Promise<void> {
       title: article.title,
       url: article.url,
       description: article.markdown_content || article.content || '',
-      sourceType: 'keyword' as const
     });
 
     if (!filterResult.passed) {

@@ -789,7 +789,8 @@ export class TelegramBot {
           url: article.url,
           sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
           sourceType: article.source_origin === 'journal' ? '期刊文章' :
-                      article.source_origin === 'keyword' ? '关键词订阅' : 'RSS订阅',
+                      article.source_origin === 'keyword' ? '关键词订阅' :
+                      article.source_origin === 'email' ? '邮件订阅' : 'RSS订阅',
           summary,
           aiSummary: this.getTelegramAiSummary(article.ai_summary),
         });
@@ -895,7 +896,8 @@ export class TelegramBot {
           url: article.url,
           sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
           sourceType: article.source_origin === 'journal' ? '期刊文章' :
-                      article.source_origin === 'keyword' ? '关键词订阅' : 'RSS订阅',
+                      article.source_origin === 'keyword' ? '关键词订阅' :
+                      article.source_origin === 'email' ? '邮件订阅' : 'RSS订阅',
           summary,
           aiSummary: this.getTelegramAiSummary(article.ai_summary),
         });
@@ -990,7 +992,8 @@ private async handleGetArticlesBySearch(keyword: string, chatId: string, include
           url: article.url,
           sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
           sourceType: article.source_origin === 'journal' ? '期刊文章' :
-                      article.source_origin === 'keyword' ? '关键词订阅' : 'RSS订阅',
+                      article.source_origin === 'keyword' ? '关键词订阅' :
+                      article.source_origin === 'email' ? '邮件订阅' : 'RSS订阅',
           summary,
           aiSummary: this.getTelegramAiSummary(article.ai_summary),
         });

@@ -51,6 +51,7 @@ export interface DailySummaryResult {
     journal: DailySummaryArticle[];
     blog: DailySummaryArticle[];
     news: DailySummaryArticle[];
+    email: DailySummaryArticle[];
   };
   summary: string;
   generatedAt: string;
@@ -111,11 +112,13 @@ export async function getDailyPassedArticles(
       .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
       .where('articles.filter_status', '=', 'passed')
       .where((eb) => eb.or([
         eb('rss_sources.user_id', '=', userId),
         eb('journals.user_id', '=', userId),
         eb('keyword_subscriptions.user_id', '=', userId),
+        eb('email_sources.user_id', '=', userId),
       ]))
       .where('articles.created_at', '>=', startDate)
       .where('articles.created_at', '<=', endDate);
@@ -140,10 +143,15 @@ export async function getDailyPassedArticles(
       .execute();
 
     return articles.map((row: any) => {
-      // 如果是关键词文章，修改 source_name 为 "关键词: xxx"
       let sourceName = row.source_name || '未知来源';
       if (row.source_origin === 'keyword') {
         sourceName = `关键词: ${row.source_name}`;
+      }
+
+      let sourceType = row.source_type || 'blog';
+      if (row.source_origin === 'email') {
+        sourceType = 'email';
+        sourceName = row.source_name || sourceName;
       }
 
       return {
@@ -153,7 +161,7 @@ export async function getDailyPassedArticles(
         summary: row.summary,
         markdown_content: row.markdown_content,
         source_name: sourceName,
-        source_type: row.source_type || 'blog',
+        source_type: sourceType,
         published_at: row.published_at,
       };
     });
@@ -174,10 +182,14 @@ export async function getDailyPassedArticles(
     result = await executeQuery(query, JOURNAL_LIMIT);
 
   } else if (type === 'blog_news') {
-    // 只获取博客/资讯文章，最多30篇
-    const query = buildBaseQuery()
-      .where('articles.source_origin', '=', 'rss')
-      .where('rss_sources.source_type', 'in', ['blog', 'news']);
+    // 博客/资讯/邮件文章，最多30篇
+    const query = buildBaseQuery().where((eb) => eb.or([
+      eb.and([
+        eb('articles.source_origin', '=', 'rss'),
+        eb('rss_sources.source_type', 'in', ['blog', 'news']),
+      ]),
+      eb('articles.source_origin', '=', 'email'),
+    ]));
     result = await executeQuery(query, BLOG_NEWS_LIMIT);
 
   } else {
@@ -196,9 +208,13 @@ export async function getDailyPassedArticles(
     let blogNewsArticles: DailySummaryArticle[] = [];
 
     if (remainingCount > 0) {
-      const blogNewsQuery = buildBaseQuery()
-        .where('articles.source_origin', '=', 'rss')
-        .where('rss_sources.source_type', 'in', ['blog', 'news']);
+      const blogNewsQuery = buildBaseQuery().where((eb) => eb.or([
+        eb.and([
+          eb('articles.source_origin', '=', 'rss'),
+          eb('rss_sources.source_type', 'in', ['blog', 'news']),
+        ]),
+        eb('articles.source_origin', '=', 'email'),
+      ]));
       blogNewsArticles = await executeQuery(blogNewsQuery, remainingCount);
     }
 
@@ -224,6 +240,7 @@ function buildArticlesListText(articlesByType: {
   journal: DailySummaryArticle[];
   blog: DailySummaryArticle[];
   news: DailySummaryArticle[];
+  email: DailySummaryArticle[];
 }): string {
   let text = '';
 
@@ -242,6 +259,7 @@ function buildArticlesListText(articlesByType: {
   addSection('期刊精选', articlesByType.journal);
   addSection('博客推荐', articlesByType.blog);
   addSection('资讯动态', articlesByType.news);
+  addSection('邮件订阅', articlesByType.email);
 
   return text;
 }
@@ -319,7 +337,7 @@ export async function generateDailySummary(
       date: today,
       type,
       totalArticles: 0,
-      articlesByType: { journal: [], blog: [], news: [] },
+      articlesByType: { journal: [], blog: [], news: [], email: [] },
       summary: '当日暂无通过的文章。',
       generatedAt: new Date().toISOString(),
     };
@@ -330,6 +348,7 @@ export async function generateDailySummary(
     journal: articles.filter(a => a.source_type === 'journal'),
     blog: articles.filter(a => a.source_type === 'blog'),
     news: articles.filter(a => a.source_type === 'news'),
+    email: articles.filter(a => a.source_type === 'email'),
   };
 
   // 构建文章列表文本
@@ -378,6 +397,7 @@ export async function generateDailySummary(
         journal: result.articlesByType.journal.length,
         blog: result.articlesByType.blog.length,
         news: result.articlesByType.news.length,
+        email: result.articlesByType.email.length,
       },
     }).catch(err => {
       log.warn({ error: err }, 'Failed to send daily summary to Telegram');
@@ -391,13 +411,14 @@ export async function generateDailySummary(
     totalArticles: result.totalArticles,
     summary: result.summary,
     articlesByType: {
-      journal: result.articlesByType.journal.length,
-      blog: result.articlesByType.blog.length,
-      news: result.articlesByType.news.length,
-    },
-  }).catch(err => {
-    log.warn({ error: err }, 'Failed to send daily summary to WeChat');
-  });
+        journal: result.articlesByType.journal.length,
+        blog: result.articlesByType.blog.length,
+        news: result.articlesByType.news.length,
+        email: result.articlesByType.email.length,
+      },
+    }).catch(err => {
+      log.warn({ error: err }, 'Failed to send daily summary to WeChat');
+    });
 
   return result;
 }
@@ -545,7 +566,7 @@ export async function generateSearchSummary(
       date: today,
       type: 'search',
       totalArticles: 0,
-      articlesByType: { journal: [], blog: [], news: [] },
+      articlesByType: { journal: [], blog: [], news: [], email: [] },
       summary: '未找到选中的文章。',
       generatedAt: new Date().toISOString(),
     };
@@ -574,6 +595,7 @@ export async function generateSearchSummary(
     journal: summaryArticles.filter(a => a.source_type === 'journal'),
     blog: summaryArticles.filter(a => a.source_type === 'blog'),
     news: summaryArticles.filter(a => a.source_type === 'news'),
+    email: summaryArticles.filter(a => a.source_type === 'email'),
   };
 
   // 构建文章列表文本
@@ -735,7 +757,7 @@ export async function generateJournalAllSummary(
       date: today,
       type: 'journal_all',
       totalArticles: 0,
-      articlesByType: { journal: [], blog: [], news: [] },
+      articlesByType: { journal: [], blog: [], news: [], email: [] },
       summary: '当日暂无期刊文章。',
       generatedAt: new Date().toISOString(),
     };
@@ -743,9 +765,10 @@ export async function generateJournalAllSummary(
 
   // 按类型分组（全部作为 journal）
   const articlesByType = {
-    journal: articles.filter(a => a.source_type === 'journal' || a.source_type === 'blog' || a.source_type === 'news'),
+    journal: articles.filter(a => a.source_type === 'journal' || a.source_type === 'blog' || a.source_type === 'news' || a.source_type === 'email'),
     blog: [],
     news: [],
+    email: [],
   };
 
   // 构建文章列表文本（复用现有逻辑）
@@ -813,6 +836,7 @@ export async function generateJournalAllSummary(
       journal: result.articlesByType.journal.length,
       blog: 0,
       news: 0,
+      email: 0,
     },
   }).catch(err => {
     log.warn({ error: err }, 'Failed to send journal all summary to Telegram');
@@ -944,7 +968,7 @@ export async function generateInsightsSummary(
       date: dateStr,
       type: 'insights',
       totalArticles: 0,
-      articlesByType: { journal: [], blog: [], news: [] },
+      articlesByType: { journal: [], blog: [], news: [], email: [] },
       summary: '过去15天暂无通过的文章。',
       generatedAt: new Date().toISOString(),
     };
@@ -954,6 +978,7 @@ export async function generateInsightsSummary(
     journal: articles.filter(a => a.source_type === 'journal'),
     blog: articles.filter(a => a.source_type === 'blog'),
     news: articles.filter(a => a.source_type === 'news'),
+    email: articles.filter(a => a.source_type === 'email'),
   };
 
   let articlesText = '';
@@ -972,6 +997,7 @@ export async function generateInsightsSummary(
   addSection('期刊精选', articlesByType.journal);
   addSection('博客推荐', articlesByType.blog);
   addSection('资讯动态', articlesByType.news);
+  addSection('邮件订阅', articlesByType.email);
 
   const userPrompt = await resolveSystemPrompt(
     userId,
@@ -1040,6 +1066,7 @@ ${articlesText}
       journal: result.articlesByType.journal.length,
       blog: result.articlesByType.blog.length,
       news: result.articlesByType.news.length,
+      email: result.articlesByType.email.length,
     },
   }).catch(err => {
     log.warn({ error: err }, 'Failed to send insights summary to Telegram');
@@ -1054,6 +1081,7 @@ ${articlesText}
       journal: result.articlesByType.journal.length,
       blog: result.articlesByType.blog.length,
       news: result.articlesByType.news.length,
+      email: result.articlesByType.email.length,
     },
   }).catch(err => {
     log.warn({ error: err }, 'Failed to send insights summary to WeChat');

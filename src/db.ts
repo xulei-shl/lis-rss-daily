@@ -47,6 +47,8 @@ export interface DatabaseTable {
   keyword_crawl_logs: KeywordCrawlLogsTable;
   telegram_chats: TelegramChatsTable;
   deepsearch_tasks: DeepSearchTasksTable;
+  email_sources: EmailSourcesTable;
+  email_fetch_logs: EmailFetchLogsTable;
 }
 
 export interface UsersTable {
@@ -72,9 +74,12 @@ export interface RssSourcesTable {
 
 export interface ArticlesTable {
   id: Generated<number>;
-  rss_source_id: number | null;  // RSS来源（期刊/关键词文章为 null）
+  rss_source_id: number | null;
+  journal_id: number | null;
+  keyword_id: number | null;
+  email_source_id: number | null;
   title: string;
-  title_normalized: string | null;  // 规范化标题用于去重
+  title_normalized: string | null;
   url: string;
   summary: string | null;
   content: string | null;
@@ -86,16 +91,14 @@ export interface ArticlesTable {
   process_stages: string | null;
   processed_at: string | null;
   published_at: string | null;
-  published_year: number | null;    // 年份（期刊文章使用）
-  published_issue: number | null;   // 期号（期刊文章使用）
-  published_volume: number | null;  // 卷号（期刊文章使用）
+  published_year: number | null;
+  published_issue: number | null;
+  published_volume: number | null;
   error_message: string | null;
-  is_read: number;  // 0 = 未读, 1 = 已读
-  source_origin: 'rss' | 'journal' | 'keyword';  // 文章来源
-  journal_id: number | null;  // 期刊ID（RSS/关键词文章为 null）
-  keyword_id: number | null;  // 关键词订阅ID（RSS/期刊文章为 null）
-  rating: number | null;  // 文章评级（1-5星）
-  ai_summary: string | null;  // AI 生成的文章总结
+  is_read: number;
+  source_origin: 'rss' | 'journal' | 'keyword' | 'email';
+  rating: number | null;
+  ai_summary: string | null;
   created_at: Generated<string>;
   updated_at: string;
 }
@@ -304,6 +307,31 @@ export interface TelegramChatsTable {
   is_active: number;
   created_at: Generated<string>;
   updated_at: string;
+}
+
+export interface EmailSourcesTable {
+  id: Generated<number>;
+  user_id: number;
+  name: string;
+  email_address: string;
+  imap_password_encrypted: string;
+  target_senders: string;
+  status: 'active' | 'inactive';
+  last_fetched_at: string | null;
+  last_error: string | null;
+  created_at: Generated<string>;
+  updated_at: string;
+}
+
+export interface EmailFetchLogsTable {
+  id: Generated<number>;
+  email_source_id: number;
+  status: 'success' | 'failed';
+  emails_found: number;
+  emails_new: number;
+  error_message: string | null;
+  duration_ms: number | null;
+  created_at: Generated<string>;
 }
 
 export interface DeepSearchTasksTable {

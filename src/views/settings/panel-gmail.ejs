@@ -1,0 +1,259 @@
+<section class="settings-panel" data-tab="gmail">
+<div class="settings-container">
+  <div class="section-header">
+    <h2>📧 邮件订阅源</h2>
+    <button class="btn btn-primary" onclick="showGmailAddModal()">+ 添加邮件源</button>
+  </div>
+
+  <div class="warning-banner" style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:12px;margin-bottom:16px;font-size:0.9rem;">
+    <strong>⚠️ 使用说明：</strong>
+    系统通过 IMAP 协议抓取 Gmail 中指定发件人的未读邮件，成功入库后会自动从邮箱中<span style="color:#dc3545;font-weight:bold;">永久删除</span>原邮件。
+    请确保发件人白名单仅包含通知类邮件（如期刊 Newsletter、Google Scholar 提醒等）。
+    <br>
+    <strong>密码要求：</strong>请使用 Google 账号的<a href="https://support.google.com/accounts/answer/185833" target="_blank" style="color:#0d6efd;">应用专用密码</a>（16位字母），勿填登录密码。
+  </div>
+
+  <table class="gmail-sources-table" id="gmailSourcesTable">
+    <thead>
+      <tr>
+        <th>名称</th>
+        <th>邮箱地址</th>
+        <th>发件人白名单</th>
+        <th>状态</th>
+        <th>上次抓取</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="gmailSourcesBody">
+    </tbody>
+  </table>
+
+  <div id="gmailEmptyState" class="empty-state" style="display: none;">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="48" height="48">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+    </svg>
+    <p>暂无邮件订阅源</p>
+    <p style="font-size: 0.9rem; margin-top: 8px;">点击上方按钮添加您的第一个 Gmail 邮件源</p>
+  </div>
+</div>
+
+<!-- 添加/编辑弹窗 -->
+<div id="gmailModal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="gmailModalTitle">添加邮件源</h3>
+      <button class="modal-close" onclick="closeGmailModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editGmailId">
+      <div class="form-group">
+        <label>名称</label>
+        <input type="text" id="gmailName" class="form-control" placeholder="例如：Nature Alert" required>
+      </div>
+      <div class="form-group">
+        <label>Gmail 邮箱地址</label>
+        <input type="email" id="gmailEmail" class="form-control" placeholder="example@gmail.com" required>
+      </div>
+      <div class="form-group">
+        <label>应用专用密码</label>
+        <input type="password" id="gmailPassword" class="form-control" placeholder="16位应用专用密码" required>
+        <small style="color:#666;">需在 Google 账号中开启两步验证后生成应用专用密码</small>
+      </div>
+      <div class="form-group">
+        <label>发件人白名单（每行一个邮箱）</label>
+        <textarea id="gmailSenders" class="form-control" rows="4" placeholder="scholaralerts-noreply@google.com&#10;alert@nature.com&#10;newsletter@science.org"></textarea>
+        <small style="color:#666;">只有这些发件人的邮件会被抓取和处理</small>
+      </div>
+      <div class="form-group">
+        <label>状态</label>
+        <select id="gmailStatus" class="form-control">
+          <option value="active">启用</option>
+          <option value="inactive">停用</option>
+        </select>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-secondary" onclick="testGmailConnection()">🔌 测试连接</button>
+        <button class="btn btn-primary" onclick="saveGmailSource()">保存</button>
+      </div>
+      <div id="gmailTestResult" style="margin-top:8px;font-size:0.9rem;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function loadGmailSources() {
+  try {
+    const res = await fetch('/api/email-sources');
+    const data = await res.json();
+    const tbody = document.getElementById('gmailSourcesBody');
+    const empty = document.getElementById('gmailEmptyState');
+    tbody.innerHTML = '';
+
+    if (!data.sources || data.sources.length === 0) {
+      document.getElementById('gmailSourcesTable').style.display = 'none';
+      empty.style.display = 'block';
+      return;
+    }
+
+    document.getElementById('gmailSourcesTable').style.display = '';
+    empty.style.display = 'none';
+
+    data.sources.forEach(source => {
+      const senders = JSON.parse(source.target_senders || '[]');
+      const senderPreview = senders.length > 0 ? senders.slice(0, 2).join(', ') + (senders.length > 2 ? ` +${senders.length - 2}` : '') : '-';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${esc(source.name) || esc(source.email_address)}</td>
+        <td>${esc(source.email_address)}</td>
+        <td style="font-size:0.85rem;">${esc(senderPreview)}</td>
+        <td><span class="badge badge-${source.status === 'active' ? 'success' : 'secondary'}">${source.status === 'active' ? '已启用' : '已停用'}</span></td>
+        <td>${source.last_fetched_at ? new Date(source.last_fetched_at).toLocaleString('zh-CN') : '-'}</td>
+        <td>
+          <button class="btn btn-sm btn-secondary" onclick="editGmailSource(${source.id})">编辑</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteGmailSource(${source.id})">删除</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (err) {
+    console.error('Failed to load email sources:', err);
+  }
+}
+
+function esc(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function showGmailAddModal() {
+  document.getElementById('gmailModalTitle').textContent = '添加邮件源';
+  document.getElementById('editGmailId').value = '';
+  document.getElementById('gmailName').value = '';
+  document.getElementById('gmailEmail').value = '';
+  document.getElementById('gmailPassword').value = '';
+  document.getElementById('gmailSenders').value = '';
+  document.getElementById('gmailStatus').value = 'active';
+  document.getElementById('gmailTestResult').innerHTML = '';
+  document.getElementById('gmailModal').style.display = 'block';
+}
+
+function closeGmailModal() {
+  document.getElementById('gmailModal').style.display = 'none';
+}
+
+async function editGmailSource(id) {
+  try {
+    const res = await fetch(`/api/email-sources/${id}`);
+    const source = await res.json();
+    if (source.error) return;
+
+    document.getElementById('gmailModalTitle').textContent = '编辑邮件源';
+    document.getElementById('editGmailId').value = id;
+    document.getElementById('gmailName').value = source.name || '';
+    document.getElementById('gmailEmail').value = source.email_address || '';
+    document.getElementById('gmailPassword').value = '';
+    document.getElementById('gmailSenders').value = (JSON.parse(source.target_senders || '[]')).join('\n');
+    document.getElementById('gmailStatus').value = source.status || 'active';
+    document.getElementById('gmailTestResult').innerHTML = '';
+    document.getElementById('gmailModal').style.display = 'block';
+  } catch (err) {
+    alert('加载邮件源失败');
+  }
+}
+
+function getSendersArray() {
+  const text = document.getElementById('gmailSenders').value.trim();
+  if (!text) return [];
+  return text.split('\n')
+    .map(s => s.trim())
+    .filter(s => s.length > 0 && s.includes('@'));
+}
+
+async function testGmailConnection() {
+  const email = document.getElementById('gmailEmail').value.trim();
+  const password = document.getElementById('gmailPassword').value.trim();
+  const resultDiv = document.getElementById('gmailTestResult');
+
+  if (!email || !password) {
+    resultDiv.innerHTML = '<span style="color:#dc3545;">请先填写邮箱和密码</span>';
+    return;
+  }
+
+  resultDiv.innerHTML = '<span style="color:#666;">测试中...</span>';
+  try {
+    const res = await fetch('/api/email-sources/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emailAddress: email, imapPassword: password }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      resultDiv.innerHTML = '<span style="color:#28a745;font-weight:bold;">✅ 连接成功</span>';
+    } else {
+      resultDiv.innerHTML = `<span style="color:#dc3545;">❌ 连接失败: ${esc(data.error || '未知错误')}</span>`;
+    }
+  } catch (err) {
+    resultDiv.innerHTML = `<span style="color:#dc3545;">❌ 请求失败: ${esc(err.message)}</span>`;
+  }
+}
+
+async function saveGmailSource() {
+  const id = document.getElementById('editGmailId').value;
+  const name = document.getElementById('gmailName').value.trim();
+  const email = document.getElementById('gmailEmail').value.trim();
+  const password = document.getElementById('gmailPassword').value.trim();
+  const senders = getSendersArray();
+  const status = document.getElementById('gmailStatus').value;
+
+  if (!name || !email) {
+    alert('请填写名称和邮箱地址');
+    return;
+  }
+
+  const body = { name, emailAddress: email, targetSenders: senders, status };
+
+  if (password) {
+    body.imapPassword = password;
+  } else if (!id) {
+    alert('请填写应用专用密码');
+    return;
+  }
+
+  try {
+    const url = id ? `/api/email-sources/${id}` : '/api/email-sources';
+    const method = id ? 'PUT' : 'POST';
+
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await res.json();
+
+    if (res.ok) {
+      closeGmailModal();
+      loadGmailSources();
+    } else {
+      alert('保存失败: ' + (data.error || '未知错误'));
+    }
+  } catch (err) {
+    alert('保存失败: ' + err.message);
+  }
+}
+
+async function deleteGmailSource(id) {
+  if (!confirm('确定要删除此邮件源？')) return;
+  try {
+    const res = await fetch(`/api/email-sources/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      loadGmailSources();
+    } else {
+      const data = await res.json();
+      alert('删除失败: ' + (data.error || '未知错误'));
+    }
+  } catch (err) {
+    alert('删除失败: ' + err.message);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadGmailSources);
+</script>
+</section>

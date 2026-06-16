@@ -39,6 +39,9 @@ export function formatDailySummary(data: DailySummaryData): string {
   if (articlesByType.news > 0) {
     message += `  资讯动态: ${articlesByType.news} 篇\n`;
   }
+  if (articlesByType.email > 0) {
+    message += `  邮件订阅: ${articlesByType.email} 篇\n`;
+  }
   message += `  总计: ${totalArticles} 篇\n\n`;
 
   // Summary content - convert Markdown to HTML

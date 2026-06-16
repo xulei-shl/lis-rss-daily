@@ -29,7 +29,7 @@ export const SOURCE_TYPES = SOURCE_TYPES_OBJ as {
   JOURNAL: 'journal';
   BLOG: 'blog';
   NEWS: 'news';
-  // 未来新增类型会自动添加
+  EMAIL: 'email';
 };
 
 /**

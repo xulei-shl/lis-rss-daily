@@ -48,11 +48,35 @@ CREATE INDEX IF NOT EXISTS idx_rss_sources_status ON rss_sources(status);
 CREATE INDEX IF NOT EXISTS idx_rss_sources_source_type ON rss_sources(source_type);
 
 -- ===========================================
+-- 2b. Email Sources Table
+-- ===========================================
+CREATE TABLE IF NOT EXISTS email_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  email_address TEXT NOT NULL,
+  imap_password_encrypted TEXT NOT NULL,
+  target_senders TEXT NOT NULL DEFAULT '[]',
+  status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
+  last_fetched_at DATETIME,
+  last_error TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_sources_user_id ON email_sources(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_sources_status ON email_sources(status);
+
+-- ===========================================
 -- 3. Articles Table
 -- ===========================================
 CREATE TABLE IF NOT EXISTS articles (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   rss_source_id INTEGER,  -- RSS来源（期刊文章为 null）
+  journal_id INTEGER,  -- 期刊ID（RSS文章为 null）
+  keyword_id INTEGER,  -- 关键词订阅ID（关键词文章使用）
+  email_source_id INTEGER,  -- 邮件订阅源ID（邮件文章使用）
   title TEXT NOT NULL,
   title_normalized TEXT,  -- 规范化标题用于去重
   url TEXT NOT NULL UNIQUE,
@@ -69,18 +93,17 @@ CREATE TABLE IF NOT EXISTS articles (
   published_year INTEGER,    -- 年份（期刊文章使用）
   published_issue INTEGER,   -- 期号（期刊文章使用）
   published_volume INTEGER,  -- 卷号（期刊文章使用）
-  is_read INTEGER DEFAULT 0,
-  source_origin TEXT DEFAULT 'rss' CHECK(source_origin IN ('rss', 'journal', 'keyword')),  -- 文章来源
-  journal_id INTEGER,  -- 期刊ID（RSS文章为 null）
-  keyword_id INTEGER,  -- 关键词订阅ID（关键词文章使用）
   error_message TEXT,
-  rating INTEGER CHECK(rating IS NULL OR (rating >= 1 AND rating <= 5)),
+  is_read INTEGER DEFAULT 0,
+  source_origin TEXT DEFAULT 'rss' CHECK(source_origin IN ('rss', 'journal', 'keyword', 'email')),  -- 文章来源
+  rating INTEGER,
   ai_summary TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (rss_source_id) REFERENCES rss_sources(id) ON DELETE CASCADE,
   FOREIGN KEY (journal_id) REFERENCES journals(id) ON DELETE SET NULL,
-  FOREIGN KEY (keyword_id) REFERENCES keyword_subscriptions(id) ON DELETE SET NULL
+  FOREIGN KEY (keyword_id) REFERENCES keyword_subscriptions(id) ON DELETE SET NULL,
+  FOREIGN KEY (email_source_id) REFERENCES email_sources(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_articles_rss_source_id ON articles(rss_source_id);
@@ -92,6 +115,7 @@ CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at);
 CREATE INDEX IF NOT EXISTS idx_articles_source_origin ON articles(source_origin);
 CREATE INDEX IF NOT EXISTS idx_articles_journal_id ON articles(journal_id);
 CREATE INDEX IF NOT EXISTS idx_articles_keyword_id ON articles(keyword_id);
+CREATE INDEX IF NOT EXISTS idx_articles_email_source_id ON articles(email_source_id);
 CREATE INDEX IF NOT EXISTS idx_articles_published_year ON articles(published_year);
 CREATE INDEX IF NOT EXISTS idx_articles_published_issue ON articles(published_issue);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_title_normalized ON articles(title_normalized) WHERE title_normalized IS NOT NULL;
@@ -178,6 +202,24 @@ CREATE INDEX IF NOT EXISTS idx_rss_fetch_logs_user_id ON rss_fetch_logs(user_id)
 CREATE INDEX IF NOT EXISTS idx_rss_fetch_logs_rss_source_id ON rss_fetch_logs(rss_source_id);
 CREATE INDEX IF NOT EXISTS idx_rss_fetch_logs_status ON rss_fetch_logs(status);
 CREATE INDEX IF NOT EXISTS idx_rss_fetch_logs_created_at ON rss_fetch_logs(created_at);
+
+-- ===========================================
+-- 7b. Email Fetch Logs
+-- ===========================================
+CREATE TABLE IF NOT EXISTS email_fetch_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email_source_id INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('success', 'failed')),
+  emails_found INTEGER DEFAULT 0,
+  emails_new INTEGER DEFAULT 0,
+  error_message TEXT,
+  duration_ms INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (email_source_id) REFERENCES email_sources(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_email_source_id ON email_fetch_logs(email_source_id);
+CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(created_at);
 
 -- ===========================================
 -- 8. Article Process Logs

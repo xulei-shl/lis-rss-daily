@@ -16,6 +16,7 @@ import { initKeywordScheduler } from './keyword-scheduler.js';
 import { initDailySummaryScheduler } from './daily-summary-scheduler.js';
 import { initInsightsScheduler } from './insights-scheduler.js';
 import { initTelegramBotManager } from './telegram/bot-manager.js';
+import { initGmailScheduler } from './gmail-scheduler.js';
 import { config } from './config.js';
 import { createApp, startServer } from './api/web.js';
 import path from 'path';
@@ -45,6 +46,8 @@ async function main() {
     insightsEnabled: config.insightsEnabled,
     insightsSchedule: config.insightsSchedule,
     insightsIntervalDays: config.insightsIntervalDays,
+    gmailFetchEnabled: config.gmailFetchEnabled,
+    gmailFetchSchedule: config.gmailFetchSchedule,
   }, 'Configuration loaded');
 
   // Initialize database
@@ -130,6 +133,15 @@ async function main() {
     log.info('💡 Insights scheduler disabled');
   }
 
+  // Initialize and start Gmail Email Scheduler
+  const gmailScheduler = initGmailScheduler();
+  if (config.gmailFetchEnabled) {
+    gmailScheduler.start();
+    log.info(`📧 Gmail scheduler started (schedule: ${config.gmailFetchSchedule})`);
+  } else {
+    log.info('📧 Gmail scheduler disabled');
+  }
+
   // Initialize and start Telegram Bot
   const telegramBotManager = await initTelegramBotManager();
   if (telegramBotManager) {
@@ -168,6 +180,10 @@ async function main() {
     // Stop insights scheduler
     await insightsScheduler.stop();
     log.info('💡 Insights scheduler stopped');
+
+    // Stop Gmail scheduler
+    await gmailScheduler.stop();
+    log.info('📧 Gmail scheduler stopped');
 
     // Stop Telegram bot manager
     if (telegramBotManager) {
