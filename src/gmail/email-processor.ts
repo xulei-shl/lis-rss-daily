@@ -129,7 +129,7 @@ export async function processEmailSource(source: EmailSourceConfig): Promise<Ema
     let articlesNew = 0;
     const deletedUids: number[] = [];
 
-    for (const email of emails) {
+    for (const email of [...emails].reverse()) {
       try {
         const parsedArticles = await parseEmailContent(email, source.userId);
 
