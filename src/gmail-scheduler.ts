@@ -109,6 +109,43 @@ export class GmailScheduler {
     log.info('Manual Gmail fetch triggered');
     await this.runScheduledFetch();
   }
+
+  async fetchOneNow(sourceId: number): Promise<void> {
+    const db = getDb();
+    const row = await db
+      .selectFrom('email_sources')
+      .where('id', '=', sourceId)
+      .selectAll()
+      .executeTakeFirst();
+
+    if (!row) {
+      log.warn({ sourceId }, 'Email source not found');
+      return;
+    }
+
+    const source: EmailSourceConfig = {
+      id: row.id,
+      userId: row.user_id,
+      name: row.name,
+      emailAddress: row.email_address,
+      imapPasswordEncrypted: row.imap_password_encrypted,
+      targetSenders: JSON.parse(row.target_senders || '[]'),
+      status: row.status as 'active' | 'inactive',
+      lastFetchedAt: row.last_fetched_at,
+      lastError: row.last_error,
+    };
+
+    try {
+      const result = await processEmailSource(source);
+      if (result.success) {
+        log.info({ sourceId: source.id, new: result.emailsNew }, 'Email source fetched');
+      } else {
+        log.warn({ sourceId: source.id, error: result.error }, 'Email source fetch failed');
+      }
+    } catch (err: any) {
+      log.error({ sourceId: source.id, error: err.message }, 'Email source fetch error');
+    }
+  }
 }
 
 export function initGmailScheduler(): GmailScheduler {

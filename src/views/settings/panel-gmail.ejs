@@ -107,6 +107,7 @@ async function loadGmailSources() {
         <td><span class="badge badge-${source.status === 'active' ? 'success' : 'secondary'}">${source.status === 'active' ? '已启用' : '已停用'}</span></td>
         <td>${source.last_fetched_at ? new Date(source.last_fetched_at).toLocaleString('zh-CN') : '-'}</td>
         <td>
+          <button class="btn btn-sm btn-secondary" onclick="fetchGmailNow(${source.id}, this)">立即抓取</button>
           <button class="btn btn-sm btn-secondary" onclick="editGmailSource(${source.id})">编辑</button>
           <button class="btn btn-sm btn-danger" onclick="deleteGmailSource(${source.id})">删除</button>
         </td>
@@ -249,6 +250,31 @@ async function deleteGmailSource(id) {
     }
   } catch (err) {
     alert('删除失败: ' + err.message);
+  }
+}
+
+async function fetchGmailNow(id, btn) {
+  btn.disabled = true;
+  btn.textContent = '抓取中...';
+  try {
+    const res = await fetch(`/api/email-sources/${id}/fetch`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      btn.textContent = '已触发';
+      setTimeout(() => {
+        btn.textContent = '立即抓取';
+        btn.disabled = false;
+        loadGmailSources();
+      }, 2000);
+    } else {
+      alert('抓取失败: ' + (data.error || '未知错误'));
+      btn.textContent = '立即抓取';
+      btn.disabled = false;
+    }
+  } catch (err) {
+    alert('抓取失败: ' + err.message);
+    btn.textContent = '立即抓取';
+    btn.disabled = false;
   }
 }
 

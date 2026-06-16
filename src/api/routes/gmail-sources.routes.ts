@@ -143,6 +143,22 @@ router.post('/email-sources/test', requireAuth, async (req: AuthRequest, res) =>
   }
 });
 
+router.post('/email-sources/:id/fetch', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    if (isNaN(id)) return res.status(400).json({ error: 'Invalid email source ID' });
+
+    const scheduler = initGmailScheduler();
+    scheduler.fetchOneNow(id).catch(err => {
+      log.error({ error: err, sourceId: id }, 'Manual Gmail fetch error');
+    });
+    res.json({ success: true, message: 'Gmail fetch triggered' });
+  } catch (error) {
+    log.error({ error, userId: req.userId }, 'Failed to trigger Gmail fetch');
+    res.status(500).json({ error: 'Failed to trigger fetch' });
+  }
+});
+
 router.post('/email-sources/fetch-now', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const scheduler = initGmailScheduler();
