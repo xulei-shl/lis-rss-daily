@@ -59,6 +59,7 @@ export async function fetchEmails(
         try {
           const mail = await simpleParser(msg.source as Buffer);
           parsed.push({
+            uid: msg.uid,
             messageId: mail.messageId || `${msg.uid}@unknown`,
             subject: mail.subject || '(No Subject)',
             from: (mail.from && mail.from.text) || 'unknown',
@@ -81,11 +82,14 @@ export async function fetchEmails(
   }
 }
 
-export async function markAndDeleteAll(
+export async function markAndDelete(
   email: string,
   password: string,
+  uids: number[],
   proxyUrl?: string
 ): Promise<void> {
+  if (uids.length === 0) return;
+
   const client = new ImapFlow({
     host: 'imap.gmail.com',
     port: 993,
@@ -100,16 +104,10 @@ export async function markAndDeleteAll(
 
     const lock = await client.getMailboxLock('INBOX');
     try {
-      const uids: number[] = [];
-      for await (const msg of client.fetch({ uid: '1:*' }, { uid: true })) {
-        uids.push(msg.uid);
-      }
-      if (uids.length > 0) {
-        const uidSeq = uids.join(',');
-        await client.messageFlagsAdd({ uid: uidSeq }, ['\\Deleted']);
-        await client.mailboxClose();
-        log.info({ email, deleted: uids.length }, 'Emails deleted from INBOX');
-      }
+      const uidSeq = uids.join(',');
+      await client.messageFlagsAdd({ uid: uidSeq }, ['\\Deleted']);
+      await client.mailboxClose();
+      log.info({ email, deleted: uids.length }, 'Emails deleted from INBOX');
     } finally {
       lock.release();
     }

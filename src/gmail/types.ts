@@ -11,6 +11,7 @@ export interface EmailSourceConfig {
 }
 
 export interface ParsedEmail {
+  uid: number;
   messageId: string;
   subject: string;
   from: string;

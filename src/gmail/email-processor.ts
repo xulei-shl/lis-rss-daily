@@ -5,7 +5,7 @@ import { filterArticle, type FilterInput } from '../filter.js';
 import { processArticle } from '../pipeline.js';
 import { config } from '../config.js';
 import { decryptAPIKey } from '../utils/crypto.js';
-import { fetchEmails, markAndDeleteAll } from './imap-client.js';
+import { fetchEmails, markAndDelete } from './imap-client.js';
 import { getUserLLMProvider, type ChatMessage } from '../llm.js';
 import { buildPromptVariables } from '../api/prompt-variable-builder.js';
 import { resolveSystemPrompt } from '../api/system-prompts.js';
@@ -107,7 +107,7 @@ export async function processEmailSource(source: EmailSourceConfig): Promise<Ema
     );
 
     let articlesNew = 0;
-    const deletedIds: string[] = [];
+    const deletedUids: number[] = [];
 
     for (const email of emails) {
       try {
@@ -179,14 +179,14 @@ export async function processEmailSource(source: EmailSourceConfig): Promise<Ema
           }
         }
 
-        deletedIds.push(email.messageId);
+        deletedUids.push(email.uid);
       } catch (err: any) {
         log.warn({ email: email.subject, error: err.message }, 'Failed to process email');
       }
     }
 
-    if (deletedIds.length > 0) {
-      markAndDeleteAll(source.emailAddress, imapPassword, proxyUrl)
+    if (deletedUids.length > 0) {
+      markAndDelete(source.emailAddress, imapPassword, deletedUids, proxyUrl)
         .catch(err => log.warn({ error: err }, 'Failed to delete processed emails'));
     }
 
