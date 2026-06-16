@@ -3,6 +3,7 @@ import { logger } from '../logger.js';
 import { generateNormalizedTitle } from '../utils/title.js';
 import { filterArticle, type FilterInput } from '../filter.js';
 import { config } from '../config.js';
+import { decryptAPIKey } from '../utils/crypto.js';
 import { fetchEmails, markAndDeleteAll } from './imap-client.js';
 import type { EmailSourceConfig, ParsedEmail, EmailFetchResult } from './types.js';
 
@@ -12,15 +13,20 @@ function getProxyUrl(): string | undefined {
   return config.httpProxy || process.env.EMAIL_PROXY_URL;
 }
 
+function getDecryptedPassword(source: EmailSourceConfig): string {
+  return decryptAPIKey(source.imapPasswordEncrypted, config.llmEncryptionKey);
+}
+
 export async function processEmailSource(source: EmailSourceConfig): Promise<EmailFetchResult> {
   const db = getDb();
   const startTime = Date.now();
   const proxyUrl = getProxyUrl();
 
   try {
+    const imapPassword = getDecryptedPassword(source);
     const emails = await fetchEmails(
       source.emailAddress,
-      source.imapPasswordEncrypted,
+      imapPassword,
       source.targetSenders,
       config.gmailFetchHoursLookback,
       config.gmailMaxEmails,
@@ -99,7 +105,7 @@ export async function processEmailSource(source: EmailSourceConfig): Promise<Ema
     }
 
     if (deletedIds.length > 0) {
-      markAndDeleteAll(source.emailAddress, source.imapPasswordEncrypted, proxyUrl)
+      markAndDeleteAll(source.emailAddress, imapPassword, proxyUrl)
         .catch(err => log.warn({ error: err }, 'Failed to delete processed emails'));
     }
 
