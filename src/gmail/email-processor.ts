@@ -14,7 +14,7 @@ function getProxyUrl(): string | undefined {
 }
 
 function getDecryptedPassword(source: EmailSourceConfig): string {
-  return decryptAPIKey(source.imapPasswordEncrypted, config.llmEncryptionKey);
+  return decryptAPIKey(source.imapPasswordEncrypted, config.llmEncryptionKey).replace(/\s+/g, '');
 }
 
 export async function processEmailSource(source: EmailSourceConfig): Promise<EmailFetchResult> {
