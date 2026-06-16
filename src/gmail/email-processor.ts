@@ -65,9 +65,9 @@ async function parseEmailContent(email: ParsedEmail, userId: number): Promise<Pa
     });
 
     const defaultTemplate = readDefaultEmailParsePrompt();
-    const fullPrompt = await resolveSystemPrompt(userId, 'email_parse', defaultTemplate, variables);
+    let userPrompt = await resolveSystemPrompt(userId, 'email_parse', defaultTemplate, variables);
 
-    if (!fullPrompt || fullPrompt.trim().length === 0) {
+    if (!userPrompt || userPrompt.trim().length === 0) {
       log.warn({ emailSubject: email.subject }, 'No email_parse prompt available, treating email as single article');
       return [{
         title: email.subject,
@@ -76,8 +76,14 @@ async function parseEmailContent(email: ParsedEmail, userId: number): Promise<Pa
       }];
     }
 
+    // 确保邮件内容始终在 prompt 中（模板可能不含 {{EMAIL_CONTENT}}）
+    const emailContentForLlm = content.substring(0, 30000);
+    if (!userPrompt.includes(emailContentForLlm.substring(0, 100))) {
+      userPrompt += `\n\n### 邮件内容\n\n${emailContentForLlm}`;
+    }
+
     const messages: ChatMessage[] = [
-      { role: 'user', content: fullPrompt },
+      { role: 'user', content: userPrompt },
     ];
 
     const llm = await getUserLLMProvider(userId, 'email_parse');
