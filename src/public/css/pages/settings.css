@@ -505,6 +505,36 @@
 }
 
 /* ============================================
+   WARNING BANNER
+   ============================================ */
+
+.warning-banner {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--amber);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    margin-bottom: var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    line-height: 1.6;
+}
+
+.warning-banner strong {
+    color: var(--amber);
+}
+
+.warning-banner a {
+    color: var(--accent-primary);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.warning-banner a:hover {
+    text-decoration: underline;
+}
+
+/* ============================================
    BLACKLIST PANEL STYLES
    ============================================ */
 
