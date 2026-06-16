@@ -137,9 +137,9 @@ async function main() {
   const gmailScheduler = initGmailScheduler();
   if (config.gmailFetchEnabled) {
     gmailScheduler.start();
-    log.info(`📧 Gmail scheduler started (schedule: ${config.gmailFetchSchedule})`);
+    log.info(`Gmail scheduler started (schedule: ${config.gmailFetchSchedule})`);
   } else {
-    log.info('📧 Gmail scheduler disabled');
+    log.info('Gmail scheduler disabled');
   }
 
   // Initialize and start Telegram Bot
@@ -183,7 +183,7 @@ async function main() {
 
     // Stop Gmail scheduler
     await gmailScheduler.stop();
-    log.info('📧 Gmail scheduler stopped');
+    log.info('Gmail scheduler stopped');
 
     // Stop Telegram bot manager
     if (telegramBotManager) {
