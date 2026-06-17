@@ -33,7 +33,7 @@ async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
       return result;
     } catch (err: any) {
       lastErr = err;
-      if (!isTlsError(err) || attempt > MAX_RETRIES) {
+      if (attempt > MAX_RETRIES) {
         log.error({ attempt, label, error: err.message }, `${label} failed after ${attempt} attempt(s)`);
         throw err;
       }
