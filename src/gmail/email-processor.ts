@@ -206,8 +206,11 @@ export async function processEmailSource(source: EmailSourceConfig): Promise<Ema
     }
 
     if (deletedUids.length > 0) {
-      markAndDelete(source.emailAddress, imapPassword, deletedUids, proxyUrl)
-        .catch(err => log.warn({ error: err }, 'Failed to delete processed emails'));
+      try {
+        await markAndDelete(source.emailAddress, imapPassword, deletedUids, proxyUrl);
+      } catch (err: any) {
+        log.warn({ error: err.message }, 'Failed to delete processed emails');
+      }
     }
 
     await db
