@@ -6,6 +6,7 @@
 
 - 🤖 自动上传 Markdown 文件到知识库
 - 💾 支持登录状态导出/导入，跨平台使用
+- 🔐 交互式登录：打开浏览器手动登录，按 Enter 保存登录态
 - 📦 上传成功后自动导出浏览器登录状态
 
 ## 环境要求
@@ -69,11 +70,29 @@ python upload_knowledge.py 'test.md' --workspace-id=ws_xxx --knowledge-id=kb_xxx
 
 ### 登录状态管理
 
+#### 交互式登录
+
+首次使用或登录过期时，通过交互式登录创建登录态：
+
+```bash
+# 打开浏览器手动登录，按 Enter 后自动保存
+python session_manager.py login
+
+# 指定登录页面 URL
+python session_manager.py login -u https://hiagent.library.sh.cn/product/llm/...
+
+# 指定输出路径
+python session_manager.py login -u https://... -o my_session.zip
+```
+
+流程：
+1. 打开非 headless 浏览器，导航到目标页面
+2. 在浏览器中手动完成登录
+3. 回到命令行按 Enter
+4. 自动导出登录态到 `playwright_user_data/` 目录和压缩包
+
 #### 导出登录状态
 
-首次登录成功后，脚本会自动导出登录状态到 `playwright_session_latest.zip`。
-
-手动导出：
 ```bash
 # 导出到自动命名的文件
 python session_manager.py export
@@ -97,22 +116,25 @@ python session_manager.py import playwright_session_latest.zip
 
 ### 跨平台使用方法
 
-1. **在 A 电脑（已有登录状态）：**
+1. **在 A 电脑（登录并导出）：**
    ```bash
-   # 首次上传文件，会自动导出登录状态
-   python upload_knowledge.py your_file.md
+   # 方式一：交互式登录
+   python session_manager.py login -o session.zip
+   
+   # 方式二：首次上传文件，会自动导出登录状态
+   python upload_knowledge.py your_file.md --auto-export=True
    
    # 或者手动导出
    python session_manager.py export -o session.zip
    ```
 
 2. **传输到 B 电脑：**
-   - 将 `playwright_session_latest.zip` 或 `session.zip` 复制到 B 电脑
+   - 将 `session.zip` 复制到 B 电脑
 
 3. **在 B 电脑：**
    ```bash
    # 导入登录状态
-   python session_manager.py import playwright_session_latest.zip
+   python session_manager.py import session.zip
    
    # 直接上传文件
    python upload_knowledge.py your_file.md
@@ -123,7 +145,7 @@ python session_manager.py import playwright_session_latest.zip
 | 文件 | 说明 |
 |------|------|
 | `upload_knowledge.py` | 主脚本，用于上传 Markdown 文件到知识库 |
-| `session_manager.py` | 登录状态管理脚本，用于导出/导入浏览器状态 |
+| `session_manager.py` | 登录状态管理脚本，用于导出/导入/交互式登录浏览器状态 |
 | `playwright_user_data/` | 浏览器用户数据目录（包含登录状态） |
 | `playwright_session_latest.zip` | 自动导出的登录状态压缩包 |
 

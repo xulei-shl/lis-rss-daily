@@ -166,49 +166,96 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description='Playwright 登录状态管理工具 - 导出/导入浏览器登录状态'
     )
-    
-    # 子命令
+
     subparsers = parser.add_subparsers(dest='command', help='可用命令')
-    
-    # 导出命令
+
     export_parser = subparsers.add_parser('export', help='导出登录状态到压缩包')
     export_parser.add_argument(
-        '-o', '--output',
-        type=str,
-        default=None,
+        '-o', '--output', type=str, default=None,
         help='输出压缩包路径，默认使用时间戳自动命名'
     )
     export_parser.add_argument(
-        '-d', '--dir',
-        type=str,
-        default=None,
+        '-d', '--dir', type=str, default=None,
         help='用户数据目录路径，默认使用脚本同目录下的 playwright_user_data'
     )
-    
-    # 导入命令
+
     import_parser = subparsers.add_parser('import', help='从压缩包导入登录状态')
+    import_parser.add_argument('archive', type=str, help='要导入的压缩包路径')
     import_parser.add_argument(
-        'archive',
-        type=str,
-        help='要导入的压缩包路径'
-    )
-    import_parser.add_argument(
-        '-d', '--dir',
-        type=str,
-        default=None,
+        '-d', '--dir', type=str, default=None,
         help='目标用户数据目录路径，默认使用脚本同目录下的 playwright_user_data'
     )
-    
-    # 自动导出命令（供其他脚本调用）
+
     auto_parser = subparsers.add_parser('auto-export', help='自动导出登录状态（供脚本内部使用）')
     auto_parser.add_argument(
-        '-d', '--dir',
-        type=str,
-        default=None,
+        '-d', '--dir', type=str, default=None,
         help='用户数据目录路径，默认使用脚本同目录下的 playwright_user_data'
     )
-    
+
+    login_parser = subparsers.add_parser('login', help='交互式登录：打开浏览器手动登录后保存登录态')
+    login_parser.add_argument(
+        '-u', '--url', type=str, default=None,
+        help='要打开的登录页面 URL，默认 https://hiagent.library.sh.cn'
+    )
+    login_parser.add_argument(
+        '-d', '--dir', type=str, default=None,
+        help='用户数据目录路径，默认使用脚本同目录下的 playwright_user_data'
+    )
+    login_parser.add_argument(
+        '-o', '--output', type=str, default=None,
+        help='输出压缩包路径，默认使用时间戳自动命名'
+    )
+
     return parser.parse_args()
+
+
+def login(url: str = None, user_data_dir: str = None, output: str = None):
+    """
+    交互式登录：打开浏览器让用户手动登录，确认后导出登录状态
+
+    Args:
+        url: 要打开的登录页面 URL
+        user_data_dir: 用户数据目录路径
+        output: 输出压缩包路径
+    """
+    from playwright.sync_api import sync_playwright
+
+    target_dir = get_user_data_dir(user_data_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    if not url:
+        url = "https://hiagent.library.sh.cn"
+
+    print("=" * 60)
+    print("  交互式登录模式")
+    print("=" * 60)
+    print(f"用户数据目录: {target_dir}")
+    print(f"目标 URL: {url}")
+    print()
+    print("即将打开浏览器，请在浏览器中手动完成登录。")
+    print("登录完成后，请回到命令行按 Enter 键保存登录状态。")
+    print()
+
+    with sync_playwright() as p:
+        context = p.chromium.launch_persistent_context(
+            target_dir,
+            headless=False,
+            args=['--disable-blink-features=AutomationControlled']
+        )
+
+        page = context.pages[0] if context.pages else context.new_page()
+        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+
+        input("按 Enter 键继续（确保已登录完成）...")
+
+        print("正在关闭浏览器并保存登录状态...")
+        context.close()
+
+    export_session(output, str(target_dir))
+
+    print()
+    print("✅ 登录状态已保存！")
+    print("后续运行 upload_knowledge.py 将自动复用此登录状态。")
 
 
 def main():
@@ -221,9 +268,11 @@ def main():
         )
         parser.print_help()
         print("\n示例:")
-        print("  python session_manager.py export                    # 导出登录状态")
-        print("  python session_manager.py export -o my_session.zip  # 导出到指定文件")
-        print("  python session_manager.py import my_session.zip      # 导入登录状态")
+        print("  python session_manager.py login                       # 交互式登录（打开浏览器手动登录）")
+        print("  python session_manager.py login -u https://example.com # 登录指定页面")
+        print("  python session_manager.py export                      # 导出登录状态")
+        print("  python session_manager.py export -o my_session.zip    # 导出到指定文件")
+        print("  python session_manager.py import my_session.zip       # 导入登录状态")
         return
     
     try:
@@ -233,6 +282,9 @@ def main():
         elif args.command == 'import':
             import_session(args.archive, args.dir)
             
+        elif args.command == 'login':
+            login(args.url, args.dir, args.output)
+
         elif args.command == 'auto-export':
             result = auto_export(args.dir)
             if result:
