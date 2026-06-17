@@ -47,9 +47,14 @@ export class GmailScheduler {
         { scheduled: false, timezone: 'Asia/Shanghai' }
       );
 
-      this.scheduledTask.start();
-      this.isRunning = true;
-      log.info(`Gmail scheduler started (schedule: ${config.gmailFetchSchedule})`);
+        this.scheduledTask.start();
+        this.isRunning = true;
+        log.info(`Gmail scheduler started (schedule: ${config.gmailFetchSchedule})`);
+
+        // 启动时立即执行一次，防止进程在 cron 调度时间之后启动导致当天错过执行
+        this.runScheduledFetch().catch((err) => {
+          log.error({ err }, 'Gmail startup fetch error');
+        });
     } catch (err) {
       log.error({ err }, 'Failed to start Gmail scheduler');
     }
