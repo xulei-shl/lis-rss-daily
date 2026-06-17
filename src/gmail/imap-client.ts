@@ -45,6 +45,23 @@ async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   throw lastErr;
 }
 
+async function withProxyFallback<T>(
+  fn: (proxy: string | undefined) => Promise<T>,
+  proxyUrl: string | undefined,
+  label: string
+): Promise<T> {
+  if (!proxyUrl) {
+    return withRetry(() => fn(undefined), label);
+  }
+  try {
+    return await withRetry(() => fn(proxyUrl), label);
+  } catch (err: any) {
+    if (!isTlsError(err)) throw err;
+    log.warn({ label }, `${label}: TLS error with proxy, falling back to direct connection`);
+    return withRetry(() => fn(undefined), `${label} (direct fallback)`);
+  }
+}
+
 function buildSearchQuery(senders: string[]): Record<string, any> {
   if (senders.length === 1) {
     return { from: senders[0] };
@@ -62,7 +79,7 @@ export async function fetchEmails(
   maxEmails: number,
   proxyUrl?: string
 ): Promise<ParsedEmail[]> {
-  return withRetry(async () => {
+  return withProxyFallback(async (effectiveProxy) => {
     const client = new ImapFlow({
       host: 'imap.gmail.com',
       port: 993,
@@ -71,7 +88,7 @@ export async function fetchEmails(
       logger: false,
       connectionTimeout: 120 * 1000,
       greetingTimeout: 30 * 1000,
-      ...(proxyUrl ? { proxy: proxyUrl } : {}),
+      ...(effectiveProxy ? { proxy: effectiveProxy } : {}),
     });
 
     try {
@@ -119,7 +136,7 @@ export async function fetchEmails(
         await client.logout();
       } catch { }
     }
-  }, 'fetchEmails');
+  }, proxyUrl, 'fetchEmails');
 }
 
 export async function markAndDelete(
@@ -130,14 +147,14 @@ export async function markAndDelete(
 ): Promise<void> {
   if (uids.length === 0) return;
 
-  return withRetry(async () => {
+  return withProxyFallback(async (effectiveProxy) => {
     const client = new ImapFlow({
       host: 'imap.gmail.com',
       port: 993,
       secure: true,
       auth: { user: email, pass: password },
       logger: false,
-      ...(proxyUrl ? { proxy: proxyUrl } : {}),
+      ...(effectiveProxy ? { proxy: effectiveProxy } : {}),
     });
 
     try {
@@ -157,7 +174,7 @@ export async function markAndDelete(
         await client.logout();
       } catch { }
     }
-  }, 'markAndDelete');
+  }, proxyUrl, 'markAndDelete');
 }
 
 export async function testConnection(
@@ -165,19 +182,21 @@ export async function testConnection(
   password: string,
   proxyUrl?: string
 ): Promise<{ success: boolean; error?: string }> {
-  const client = new ImapFlow({
-    host: 'imap.gmail.com',
-    port: 993,
-    secure: true,
-    auth: { user: email, pass: password },
-    logger: false,
-    ...(proxyUrl ? { proxy: proxyUrl } : {}),
-  });
-
   try {
-    await client.connect();
-    await client.logout();
-    return { success: true };
+    return await withProxyFallback(async (effectiveProxy) => {
+      const client = new ImapFlow({
+        host: 'imap.gmail.com',
+        port: 993,
+        secure: true,
+        auth: { user: email, pass: password },
+        logger: false,
+        ...(effectiveProxy ? { proxy: effectiveProxy } : {}),
+      });
+
+      await client.connect();
+      await client.logout();
+      return { success: true };
+    }, proxyUrl, 'testConnection');
   } catch (err: any) {
     return { success: false, error: err.message };
   }

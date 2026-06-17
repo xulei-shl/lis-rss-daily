@@ -42,7 +42,7 @@ interface EmailParseResult {
 }
 
 function getProxyUrl(): string | undefined {
-  return config.httpProxy || process.env.EMAIL_PROXY_URL;
+  return process.env.GMAIL_PROXY_URL || config.httpProxy || process.env.EMAIL_PROXY_URL;
 }
 
 function getDecryptedPassword(source: EmailSourceConfig): string {

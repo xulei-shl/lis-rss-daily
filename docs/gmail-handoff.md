@@ -183,6 +183,7 @@ src/views/settings/panel-gmail.ejs   — 前端设置面板（模态框、表格
 | LLM 调用报 500 / 提示词为空 | `email-processor.ts:67-76`，检查 `resolveSystemPrompt` fallback 路径 |
 | 邮件插入重复（标题重复）| 确认 `title_normalized` 生成逻辑是否符合预期，否则考虑增加 `UNIQUE(url, user_id)` 复合约束 |
 | 邮件内容被截断 | prompt builder 在 `email_parse` 类型中对 content 截断 30000 字符 (`email-processor.ts:64`) |
+| "Client network socket disconnected before secure TLS connection was established" | 代理问题，见 §13。VLESS+WS CDN 只放行 443 端口 TLS，IMAP 993 被拦截 |
 
 ---
 
@@ -197,4 +198,65 @@ src/views/settings/panel-gmail.ejs   — 前端设置面板（模态框、表格
 
 ---
 
-*Document generated from commit history + source code walkthrough on 2026-06-16.*
+## 13. 已知环境问题：代理无法转发非 443 端口 TLS（2026-06-17 排查记录）
+
+### 现象
+
+IMAP 连接报错：`Client network socket disconnected before secure TLS connection was established`，多次重试无效。
+
+### 排查过程
+
+1. **直连测试**：直连 `imap.gmail.com:993` 超时（GFW 封锁），确认必须走代理。
+2. **代理连通性**：mihomo（Clash Meta）HTTP CONNECT 隧道本身能建立（返回 200），但 TLS 握手在隧道内失败。
+3. **端口对比测试**（均通过 mihomo SOCKS5 代理）：
+
+| 端口 | 服务 | TLS 握手结果 |
+|------|------|-------------|
+| 443 | HTTPS (mail.google.com) | 成功 |
+| 993 | IMAP (imap.gmail.com) | 失败 |
+| 995 | POP3S (pop.gmail.com) | 失败 |
+| 465 | SMTPS (smtp.gmail.com) | 失败 |
+
+4. **HTTP CONNECT vs SOCKS5**：两种代理协议结果一致，均只有 443 端口通过。
+5. **mihomo sniffer 配置**：sniffer 仅对 port 443 做 TLS 嗅探，添加 port 993 无效（热重载后问题不变）。
+
+### 根因
+
+所有代理节点均为 **VLESS+WebSocket** 传输，经 CDN/WAF 中间层中转。**CDN 只放行 port 443 的 TLS 流量**，非 443 端口的 TLS ClientHello 被中间层直接断开连接。这是代理服务商的网络层限制，与代码或 mihomo 配置无关。
+
+### 代码层面排查结论
+
+- `imap-client.ts` 的 proxy 传递逻辑正确，`imapflow` 支持 HTTP CONNECT 和 SOCKS5 两种代理协议。
+- `imapflow` 内部会对 hostname 做 DNS 预解析后传给代理，不影响结果。
+- TLS 重试机制（`withRetry`，最多 2 次，间隔 60-180 秒随机）对网络层限流无效。
+
+### 已实现的代码优化
+
+1. **代理→直连自动回退（`withProxyFallback`）**：`imap-client.ts` 新增 `withProxyFallback` 辅助函数——先尝试通过代理建立 IMAP 连接（保留 7519707 的正确代理传递）；若 TLS 握手失败（`Client network socket disconnected...`），自动降级尝试直连。三个导出函数（`fetchEmails`、`markAndDelete`、`testConnection`）均已使用。
+
+2. **修复 `GMAIL_PROXY_URL` 死配置**：`.env` 中的 `GMAIL_PROXY_URL` 此前从未被代码读取。已修复代理解析链为：
+   ```
+   GMAIL_PROXY_URL → config.httpProxy (HTTP_PROXY) → EMAIL_PROXY_URL
+   ```
+   更新位置：`email-processor.ts:45` 与 `gmail-sources.ts:114`。
+
+3. **优先配置建议**：如需为 Gmail 指定独立的代理（如 SSH 隧道到 `127.0.0.1:1993`），设置 `GMAIL_PROXY_URL=socks5://127.0.0.1:1993` 即可，不影响全局 `HTTP_PROXY`。
+
+### 解决方案
+
+| 方案 | 说明 | 复杂度 |
+|------|------|--------|
+| 换代理节点/服务商 | 使用支持多端口透传的节点（VLESS+Reality/TCP 传输，非 WebSocket），或使用支持非 443 端口的机场 | 低 |
+| Gmail API 替代 IMAP | Gmail API 走 HTTPS/443，可通过当前代理。需 OAuth2 配置（比 App Password 复杂） | 中 |
+| SSH 隧道 + `GMAIL_PROXY_URL` | 通过海外 VPS 建 SSH 隧道：`ssh -L 1993:imap.gmail.com:993 vps`，然后设 `GMAIL_PROXY_URL=socks5://127.0.0.1:1993`（推荐，代码无需再改） | 中 |
+| 本地 TCP 中继 | 在 VPS 上部署 socat/Node.js 中继，将 443 入站流量转发到 Gmail 993 | 高 |
+
+### 备注
+
+- `GMAIL_PROXY_URL` / `HTTP_PROXY` 环境变量仍在 `.env` 中配置，代码层面代理支持完整，问题在外部网络。
+- 若将来更换了支持多端口的代理，代码无需修改即可直接工作。
+- 设置了 `GMAIL_PROXY_URL` 后，IMAP 连接将优先使用该代理，不再触发直连回退。
+
+---
+
+*Document generated from commit history + source code walkthrough on 2026-06-16. Proxy investigation added 2026-06-17.*

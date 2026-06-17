@@ -111,6 +111,6 @@ export async function testEmailSourceConnection(
   emailAddress: string,
   imapPassword: string
 ): Promise<{ success: boolean; error?: string }> {
-  const proxyUrl = config.httpProxy || process.env.EMAIL_PROXY_URL;
+  const proxyUrl = process.env.GMAIL_PROXY_URL || config.httpProxy || process.env.EMAIL_PROXY_URL;
   return testConnection(emailAddress, imapPassword, proxyUrl);
 }
