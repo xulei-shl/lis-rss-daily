@@ -26,10 +26,15 @@ async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   let lastErr: any;
   for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
     try {
-      return await fn();
+      const result = await fn();
+      if (attempt > 1) {
+        log.info({ attempt, label }, `${label} succeeded after retry`);
+      }
+      return result;
     } catch (err: any) {
       lastErr = err;
       if (!isTlsError(err) || attempt > MAX_RETRIES) {
+        log.error({ attempt, label, error: err.message }, `${label} failed after ${attempt} attempt(s)`);
         throw err;
       }
       const delay = randomDelay(RETRY_DELAY_MIN, RETRY_DELAY_MAX);
