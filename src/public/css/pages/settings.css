@@ -147,6 +147,37 @@
     background: var(--bg-subtle);
 }
 
+/* RSS Table Column Widths */
+.rss-sources-table th:nth-child(1),
+.rss-sources-table td:nth-child(1) {
+    width: 35%;
+}
+
+.rss-sources-table th:nth-child(2),
+.rss-sources-table td:nth-child(2) {
+    width: 15%;
+}
+
+.rss-sources-table th:nth-child(3),
+.rss-sources-table td:nth-child(3) {
+    width: 8%;
+}
+
+.rss-sources-table th:nth-child(4),
+.rss-sources-table td:nth-child(4) {
+    width: 8%;
+}
+
+.rss-sources-table th:nth-child(5),
+.rss-sources-table td:nth-child(5) {
+    width: 10%;
+}
+
+.rss-sources-table th:nth-child(6),
+.rss-sources-table td:nth-child(6) {
+    width: 14%;
+}
+
 /* Action column common styling (Last Column) */
 .rss-sources-table th:last-child,
 .rss-sources-table td:last-child,
@@ -154,8 +185,7 @@
 .prompts-table td:last-child,
 .llm-table th:last-child,
 .llm-table td:last-child {
-    width: 200px;
-    /* Unified width for actions */
+    width: 10%;
     text-align: right;
     overflow: visible;
     text-overflow: clip;
