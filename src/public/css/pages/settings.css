@@ -150,32 +150,32 @@
 /* RSS Table Column Widths */
 .rss-sources-table th:nth-child(1),
 .rss-sources-table td:nth-child(1) {
-    width: 35%;
+    width: 50%;
 }
 
 .rss-sources-table th:nth-child(2),
 .rss-sources-table td:nth-child(2) {
-    width: 15%;
+    width: 10%;
 }
 
 .rss-sources-table th:nth-child(3),
 .rss-sources-table td:nth-child(3) {
-    width: 8%;
+    width: 5%;
 }
 
 .rss-sources-table th:nth-child(4),
 .rss-sources-table td:nth-child(4) {
-    width: 8%;
+    width: 5%;
 }
 
 .rss-sources-table th:nth-child(5),
 .rss-sources-table td:nth-child(5) {
-    width: 10%;
+    width: 7%;
 }
 
 .rss-sources-table th:nth-child(6),
 .rss-sources-table td:nth-child(6) {
-    width: 14%;
+    width: 10%;
 }
 
 /* Action column common styling (Last Column) */
@@ -185,7 +185,7 @@
 .prompts-table td:last-child,
 .llm-table th:last-child,
 .llm-table td:last-child {
-    width: 10%;
+    width: 13%;
     text-align: right;
     overflow: visible;
     text-overflow: clip;
