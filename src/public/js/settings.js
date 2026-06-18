@@ -169,20 +169,25 @@ function getDefaultSourceType() {
   return 'blog';
 }
 
+let rssSearchQuery = '';
+let rssSearchTimeout;
+
 // Load RSS sources on page load
 loadRSSSources();
 
 async function loadRSSSources(page = 1) {
   try {
-    const res = await fetch(`/api/rss-sources?page=${page}&limit=${rssPagination.limit}`, { cache: 'no-store' });
+    const params = new URLSearchParams({ page: String(page), limit: String(rssPagination.limit) });
+    if (rssSearchQuery) {
+      params.set('search', rssSearchQuery);
+    }
+    const res = await fetch(`/api/rss-sources?${params}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('加载失败');
     const data = await res.json();
     rssSources = data.sources || [];
     rssPagination.page = data.page || 1;
     rssPagination.total = data.total || 0;
     rssPagination.totalPages = data.totalPages || 0;
-    console.log('Loaded RSS sources:', rssSources);
-    console.log('Source with id=1:', rssSources.find(s => s.id === 1));
     renderTable();
     renderPagination('rss');
   } catch (err) {
@@ -190,11 +195,12 @@ async function loadRSSSources(page = 1) {
   }
 }
 
-let rssSearchQuery = '';
-
 function filterRSSSources() {
-  rssSearchQuery = document.getElementById('rssSearchInput').value.trim().toLowerCase();
-  renderTable();
+  clearTimeout(rssSearchTimeout);
+  rssSearchTimeout = setTimeout(() => {
+    rssSearchQuery = document.getElementById('rssSearchInput').value.trim();
+    loadRSSSources(1);
+  }, 300);
 }
 
 function renderTable() {
@@ -202,13 +208,7 @@ function renderTable() {
   const emptyState = document.getElementById('emptyState');
   const table = document.getElementById('rssSourcesTable');
 
-  const filtered = rssSearchQuery
-    ? rssSources.filter(s =>
-        s.name.toLowerCase().includes(rssSearchQuery) ||
-        s.url.toLowerCase().includes(rssSearchQuery))
-    : rssSources;
-
-  if (filtered.length === 0) {
+  if (rssSources.length === 0) {
     table.style.display = 'none';
     emptyState.style.display = 'block';
     emptyState.innerHTML = rssSearchQuery
@@ -220,7 +220,7 @@ function renderTable() {
   table.style.display = 'table';
   emptyState.style.display = 'none';
 
-  tbody.innerHTML = filtered.map(function (source) {
+  tbody.innerHTML = rssSources.map(function (source) {
     const typeLabel = getSourceTypeLabel(source.source_type);
     console.log(`Source ${source.id}: source_type=${source.source_type}, label=${typeLabel}`);
     return '<tr>' +
@@ -552,6 +552,8 @@ function renderPagination(type) {
 function goToPage(type, page) {
   if (type === 'rss') {
     loadRSSSources(page);
+  } else if (type === 'journals') {
+    loadJournals(page);
   } else if (type === 'llm') {
     loadLLMConfigs(page);
   }
@@ -1341,12 +1343,19 @@ let journalsPagination = {
   totalPages: 0
 };
 
+let journalsSearchQuery = '';
+let journalsSearchTimeout;
+
 // Load journals on page load
 loadJournals();
 
 async function loadJournals(page = 1) {
   try {
-    const res = await fetch(`/api/journals?page=${page}&limit=${journalsPagination.limit}`, { cache: 'no-store' });
+    const params = new URLSearchParams({ page: String(page), limit: String(journalsPagination.limit) });
+    if (journalsSearchQuery) {
+      params.set('search', journalsSearchQuery);
+    }
+    const res = await fetch(`/api/journals?${params}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('加载失败');
     const data = await res.json();
     journals = data.journals || [];
@@ -1360,11 +1369,12 @@ async function loadJournals(page = 1) {
   }
 }
 
-let journalsSearchQuery = '';
-
 function filterJournals() {
-  journalsSearchQuery = document.getElementById('journalsSearchInput').value.trim().toLowerCase();
-  renderJournalsTable();
+  clearTimeout(journalsSearchTimeout);
+  journalsSearchTimeout = setTimeout(() => {
+    journalsSearchQuery = document.getElementById('journalsSearchInput').value.trim();
+    loadJournals(1);
+  }, 300);
 }
 
 function renderJournalsTable() {
@@ -1374,11 +1384,7 @@ function renderJournalsTable() {
 
   if (!tbody) return;
 
-  const filtered = journalsSearchQuery
-    ? journals.filter(j => j.name.toLowerCase().includes(journalsSearchQuery))
-    : journals;
-
-  if (filtered.length === 0) {
+  if (journals.length === 0) {
     table.style.display = 'none';
     emptyState.style.display = 'block';
     emptyState.innerHTML = journalsSearchQuery
@@ -1404,7 +1410,7 @@ function renderJournalsTable() {
     'quarterly': '季刊'
   };
 
-  tbody.innerHTML = filtered.map(function (journal) {
+  tbody.innerHTML = journals.map(function (journal) {
     const lastCrawl = journal.last_year && journal.last_issue
       ? journal.last_year + '-' + journal.last_issue
       : '从未';

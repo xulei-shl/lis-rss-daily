@@ -72,6 +72,7 @@ export interface ListJournalsParams {
   userId: number;
   status?: 'active' | 'inactive';
   sourceType?: JournalSourceType;
+  search?: string;
   page?: number;
   limit?: number;
 }
@@ -123,6 +124,17 @@ export async function listJournals(params: ListJournalsParams): Promise<ListJour
 
   if (params.sourceType) {
     query = query.where('source_type', '=', params.sourceType);
+  }
+
+  if (params.search) {
+    const searchPattern = `%${params.search}%`;
+    query = query.where((eb) =>
+      eb.or([
+        eb('name', 'like', searchPattern),
+        eb('source_url', 'like', searchPattern),
+        eb('journal_code', 'like', searchPattern),
+      ])
+    );
   }
 
   // 获取总数

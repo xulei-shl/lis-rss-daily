@@ -25,11 +25,13 @@ router.get('/rss-sources', requireAuth, async (req: AuthRequest, res) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const status = req.query.status as 'active' | 'inactive' | undefined;
+    const search = (req.query.search as string)?.trim() || undefined;
 
     const result = await rssSourceService.getUserRSSSources(req.userId!, {
       page,
       limit,
       status,
+      search,
     });
 
     res.json(result);

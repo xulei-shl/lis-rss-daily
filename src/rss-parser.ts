@@ -7,6 +7,7 @@
  */
 
 import Parser from 'rss-parser';
+import { ProxyAgent } from 'undici';
 import { logger } from './logger.js';
 import { config } from './config.js';
 
@@ -68,21 +69,48 @@ export interface ValidationResult {
 export class RSSParserImpl {
   private parser: Parser;
 
+  private proxyAgent: ProxyAgent | null = null;
+
   constructor() {
-    // rss-parser uses node-fetch under the hood which doesn't support undici ProxyAgent
-    // Proxy configuration should be handled via environment variables for node-fetch
+    const httpProxy = process.env.HTTP_PROXY;
+    if (httpProxy) {
+      log.info({ proxy: httpProxy }, 'RSS parser configured with proxy');
+      this.proxyAgent = new ProxyAgent(httpProxy);
+    }
+
     this.parser = new Parser({
       timeout: 10000,
+      customFields: {
+        item: ['author', 'categories'],
+      },
+    });
+  }
+
+  /**
+   * Fetch RSS feed XML using undici with optional proxy support
+   */
+  private async fetchFeedXML(url: string, timeoutMs: number = 10000): Promise<string> {
+    const fetchOptions: any = {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/rss+xml, application/rdf+xml, application/atom+xml, application/xml, text/xml, */*',
         'Accept-Language': 'en-US,en;q=0.9',
         'Cache-Control': 'no-cache',
       },
-      customFields: {
-        item: ['author', 'categories'],
-      },
-    });
+      signal: AbortSignal.timeout(timeoutMs),
+    };
+
+    if (this.proxyAgent) {
+      fetchOptions.dispatcher = this.proxyAgent;
+    }
+
+    const response = await fetch(url, fetchOptions);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return response.text();
   }
 
   /**
@@ -96,7 +124,8 @@ export class RSSParserImpl {
     try {
       log.debug({ url, proxy: HTTP_PROXY ? 'enabled' : 'disabled' }, 'Parsing RSS feed');
 
-      const feed = await this.parser.parseURL(url);
+      const xml = await this.fetchFeedXML(url);
+      const feed = await this.parser.parseString(xml);
       const elapsed = Date.now() - startTime;
 
       log.info(

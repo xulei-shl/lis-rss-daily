@@ -27,6 +27,7 @@ router.get('/journals', requireAuth, async (req: AuthRequest, res) => {
   try {
     const status = req.query.status as 'active' | 'inactive' | undefined;
     const sourceType = req.query.sourceType as JournalSourceType | undefined;
+    const search = (req.query.search as string)?.trim() || undefined;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
 
@@ -34,6 +35,7 @@ router.get('/journals', requireAuth, async (req: AuthRequest, res) => {
       userId: req.userId!,
       status,
       sourceType,
+      search,
       page,
       limit,
     });

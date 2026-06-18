@@ -811,6 +811,24 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
         continue;
       }
 
+      // ============================================================
+      // 035: 修复 rss_sources 表的 UNIQUE 约束（url → user_id+url 复合约束）
+      // ============================================================
+      if (file === '035_fix_rss_sources_url_unique.sql') {
+        const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='rss_sources'").get() as { sql: string } | undefined;
+        const hasGlobalUnique = tableInfo?.sql.includes('url TEXT NOT NULL UNIQUE');
+        if (hasGlobalUnique) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          const count = db.prepare('SELECT COUNT(*) as count FROM rss_sources').get() as { count: number };
+          console.log(`      → Rebuilt rss_sources table (${count.count} rows preserved)`);
+          console.log('      → UNIQUE(url) → UNIQUE(user_id, url)');
+        } else {
+          console.log('      → Skipped (already UNIQUE(user_id, url))');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

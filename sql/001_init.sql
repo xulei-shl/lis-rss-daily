@@ -33,14 +33,15 @@ CREATE TABLE IF NOT EXISTS rss_sources (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
   name TEXT NOT NULL,
-  url TEXT NOT NULL UNIQUE,
+  url TEXT NOT NULL,
   source_type TEXT DEFAULT 'blog' CHECK(source_type IN ('journal', 'blog', 'news')),
   last_fetched_at DATETIME,
   fetch_interval INTEGER DEFAULT 3600,
   status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(user_id, url)
 );
 
 CREATE INDEX IF NOT EXISTS idx_rss_sources_user_id ON rss_sources(user_id);

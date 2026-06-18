@@ -44,6 +44,7 @@ export interface UpdateRSSSourceInput {
  */
 export interface QueryOptions {
   status?: 'active' | 'inactive';
+  search?: string;
   page?: number;
   limit?: number;
 }
@@ -125,6 +126,16 @@ export async function getUserRSSSources(
 
   if (options.status) {
     query = query.where('status', '=', options.status);
+  }
+
+  if (options.search) {
+    const searchPattern = `%${options.search}%`;
+    query = query.where((eb) =>
+      eb.or([
+        eb('name', 'like', searchPattern),
+        eb('url', 'like', searchPattern),
+      ])
+    );
   }
 
   // Get total count
