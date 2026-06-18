@@ -114,6 +114,12 @@ router.post('/journals', requireAuth, requireAdmin, async (req: AuthRequest, res
       return res.status(400).json({ error: '万方期刊必须提供期刊代码' });
     }
 
+    // Check if name+sourceType already exists
+    const exists = await journalsService.checkJournalExists(req.userId!, name.trim(), sourceType);
+    if (exists) {
+      return res.status(400).json({ error: '该来源类型下已存在同名期刊' });
+    }
+
     const journal = await journalsService.createJournal({
       userId: req.userId!,
       name: name.trim(),
@@ -156,6 +162,16 @@ router.put('/journals/:id', requireAuth, requireAdmin, async (req: AuthRequest, 
       if (typeof name !== 'string' || name.trim().length === 0) {
         return res.status(400).json({ error: '期刊名称不能为空' });
       }
+
+      // Check if name+sourceType already exists (excluding current journal)
+      const existing = await journalsService.getJournal(req.userId!, id);
+      if (existing) {
+        const dup = await journalsService.checkJournalExists(req.userId!, name.trim(), existing.source_type, id);
+        if (dup) {
+          return res.status(400).json({ error: '该来源类型下已存在同名期刊' });
+        }
+      }
+
       updateData.name = name.trim();
     }
 

@@ -11,6 +11,34 @@ import type { JournalSourceType, PublicationCycle, JournalInfo } from '../spider
 const log = logger.child({ module: 'journals-api' });
 
 /**
+ * Check if journal name+sourceType already exists for user
+ */
+export async function checkJournalExists(
+  userId: number,
+  name: string,
+  sourceType: string,
+  excludeId?: number
+): Promise<boolean> {
+  const db = getDb();
+
+  let query = db
+    .selectFrom('journals')
+    .where('user_id', '=', userId)
+    .where('name', '=', name)
+    .where('source_type', '=', sourceType);
+
+  if (excludeId !== undefined) {
+    query = query.where('id', '!=', excludeId);
+  }
+
+  const result = await query
+    .select('id')
+    .executeTakeFirst();
+
+  return result !== undefined;
+}
+
+/**
  * 期刊创建参数
  */
 export interface CreateJournalParams {

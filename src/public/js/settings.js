@@ -190,23 +190,37 @@ async function loadRSSSources(page = 1) {
   }
 }
 
+let rssSearchQuery = '';
+
+function filterRSSSources() {
+  rssSearchQuery = document.getElementById('rssSearchInput').value.trim().toLowerCase();
+  renderTable();
+}
+
 function renderTable() {
   const tbody = document.getElementById('rssSourcesBody');
   const emptyState = document.getElementById('emptyState');
   const table = document.getElementById('rssSourcesTable');
 
-  if (rssSources.length === 0) {
+  const filtered = rssSearchQuery
+    ? rssSources.filter(s =>
+        s.name.toLowerCase().includes(rssSearchQuery) ||
+        s.url.toLowerCase().includes(rssSearchQuery))
+    : rssSources;
+
+  if (filtered.length === 0) {
     table.style.display = 'none';
     emptyState.style.display = 'block';
+    emptyState.innerHTML = rssSearchQuery
+      ? '<p>没有匹配的订阅源</p>'
+      : '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11c3.87 0 7 3.13 7 7M6 17a1 1 0 100 2 1 1 0 000-2z" /></svg><p>暂无 RSS 订阅源</p><p style="font-size: 0.9rem; margin-top: 8px;">点击上方按钮添加您的第一个订阅源</p>';
     return;
   }
 
   table.style.display = 'table';
   emptyState.style.display = 'none';
 
-  console.log('Rendering table with sources:', rssSources);
-
-  tbody.innerHTML = rssSources.map(function (source) {
+  tbody.innerHTML = filtered.map(function (source) {
     const typeLabel = getSourceTypeLabel(source.source_type);
     console.log(`Source ${source.id}: source_type=${source.source_type}, label=${typeLabel}`);
     return '<tr>' +
@@ -1346,6 +1360,13 @@ async function loadJournals(page = 1) {
   }
 }
 
+let journalsSearchQuery = '';
+
+function filterJournals() {
+  journalsSearchQuery = document.getElementById('journalsSearchInput').value.trim().toLowerCase();
+  renderJournalsTable();
+}
+
 function renderJournalsTable() {
   const tbody = document.getElementById('journalsBody');
   const emptyState = document.getElementById('journalsEmptyState');
@@ -1353,9 +1374,16 @@ function renderJournalsTable() {
 
   if (!tbody) return;
 
-  if (journals.length === 0) {
+  const filtered = journalsSearchQuery
+    ? journals.filter(j => j.name.toLowerCase().includes(journalsSearchQuery))
+    : journals;
+
+  if (filtered.length === 0) {
     table.style.display = 'none';
     emptyState.style.display = 'block';
+    emptyState.innerHTML = journalsSearchQuery
+      ? '<p>没有匹配的期刊</p>'
+      : '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg><p>暂无期刊配置</p><p style="font-size: 0.9rem; margin-top: 8px;">点击上方按钮添加您的第一个期刊</p>';
     return;
   }
 
@@ -1376,7 +1404,7 @@ function renderJournalsTable() {
     'quarterly': '季刊'
   };
 
-  tbody.innerHTML = journals.map(function (journal) {
+  tbody.innerHTML = filtered.map(function (journal) {
     const lastCrawl = journal.last_year && journal.last_issue
       ? journal.last_year + '-' + journal.last_issue
       : '从未';

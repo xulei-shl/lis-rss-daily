@@ -2,7 +2,10 @@
 <div class="settings-container">
   <div class="section-header">
     <h2>RSS 订阅源</h2>
-    <button class="btn btn-primary" onclick="showAddModal()">+ 添加订阅源</button>
+    <div class="section-header-actions">
+      <input type="text" id="rssSearchInput" class="search-input" placeholder="搜索名称或 URL..." oninput="filterRSSSources()">
+      <button class="btn btn-primary" onclick="showAddModal()">+ 添加订阅源</button>
+    </div>
   </div>
 
   <table class="rss-sources-table" id="rssSourcesTable">

@@ -2,7 +2,10 @@
 <div class="settings-container">
   <div class="section-header">
     <h2>期刊管理</h2>
-    <button class="btn btn-primary" onclick="showJournalAddModal()">+ 添加期刊</button>
+    <div class="section-header-actions">
+      <input type="text" id="journalsSearchInput" class="search-input" placeholder="搜索期刊名称..." oninput="filterJournals()">
+      <button class="btn btn-primary" onclick="showJournalAddModal()">+ 添加期刊</button>
+    </div>
   </div>
 
   <table class="rss-sources-table" id="journalsTable">

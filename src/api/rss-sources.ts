@@ -281,6 +281,36 @@ export async function checkURLExists(
 }
 
 /**
+ * Check if name already exists for user
+ * @param userId - User ID
+ * @param name - RSS source name
+ * @param excludeId - Exclude this RSS source ID (for updates)
+ * @returns true if name exists
+ */
+export async function checkNameExists(
+  userId: number,
+  name: string,
+  excludeId?: number
+): Promise<boolean> {
+  const db = getDb();
+
+  let query = db
+    .selectFrom('rss_sources')
+    .where('user_id', '=', userId)
+    .where('name', '=', name);
+
+  if (excludeId !== undefined) {
+    query = query.where('id', '!=', excludeId);
+  }
+
+  const result = await query
+    .select('id')
+    .executeTakeFirst();
+
+  return result !== undefined;
+}
+
+/**
  * Get all active RSS sources for fetching (used by scheduler)
  * @returns Array of active RSS sources
  */

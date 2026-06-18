@@ -96,9 +96,15 @@ router.post('/rss-sources', requireAuth, requireAdmin, async (req: AuthRequest, 
     }
 
     // Check if URL already exists
-    const exists = await rssSourceService.checkURLExists(req.userId!, url.trim());
-    if (exists) {
+    const urlExists = await rssSourceService.checkURLExists(req.userId!, url.trim());
+    if (urlExists) {
       return res.status(400).json({ error: 'URL already exists' });
+    }
+
+    // Check if name already exists
+    const nameExists = await rssSourceService.checkNameExists(req.userId!, name.trim());
+    if (nameExists) {
+      return res.status(400).json({ error: 'Name already exists' });
     }
 
     const result = await rssSourceService.createRSSSource(req.userId!, {
@@ -144,6 +150,13 @@ router.put('/rss-sources/:id', requireAuth, requireAdmin, async (req: AuthReques
       if (typeof name !== 'string' || name.trim().length === 0) {
         return res.status(400).json({ error: 'Name cannot be empty' });
       }
+
+      // Check if new name already exists (excluding current source)
+      const nameExists = await rssSourceService.checkNameExists(req.userId!, name.trim(), id);
+      if (nameExists) {
+        return res.status(400).json({ error: 'Name already exists' });
+      }
+
       updateData.name = name.trim();
     }
 
