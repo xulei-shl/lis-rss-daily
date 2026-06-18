@@ -150,12 +150,12 @@
 /* RSS Table Column Widths */
 .rss-sources-table th:nth-child(1),
 .rss-sources-table td:nth-child(1) {
-    width: 50%;
+    width: 55%;
 }
 
 .rss-sources-table th:nth-child(2),
 .rss-sources-table td:nth-child(2) {
-    width: 10%;
+    width: 5%;
 }
 
 .rss-sources-table th:nth-child(3),
