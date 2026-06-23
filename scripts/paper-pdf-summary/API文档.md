@@ -40,6 +40,9 @@ POST /process
 | `title` | `string` | **是** | — | 论文标题，用作 PDF 下载搜索关键词 |
 | `id` | `int` | 否 | `null` | LIS-RSS 文章 ID。提供则更新对应文章摘要；`null`/`0` 则跳过 LIS-RSS 回写 |
 | `push_wechat` | `bool` | 否 | `false` | 是否强制推送企业微信（默认取环境变量 `PDF_SUMMARY_PUSH_WECHAT`） |
+| `push_hiagent` | `bool` | 否 | `null` | 是否上传到 HiAgent RAG。`null` 沿用 config 配置；`true` 强制上传；`false` 强制跳过 |
+| `push_memos` | `bool` | 否 | `null` | 是否上传到 Memos。`null` 沿用 config 配置；`true` 强制上传；`false` 强制跳过 |
+| `push_blinko` | `bool` | 否 | `null` | 是否上传到 Blinko。`null` 沿用 config 配置；`true` 强制上传；`false` 强制跳过 |
 
 ### 响应（200）
 
@@ -138,6 +141,9 @@ POST /upload-text
 | `id` | `int` | 否 | `null` | LIS-RSS 文章 ID。提供则更新对应文章摘要；`null`/`0` 则跳过 LIS-RSS 回写 |
 | `source_name` | `string` | 否 | `null` | 来源名称（仅企业微信消息中展示，其余平台忽略） |
 | `push_wechat` | `bool` | 否 | `false` | 是否强制推送企业微信（默认取环境变量 `PDF_SUMMARY_PUSH_WECHAT`） |
+| `push_hiagent` | `bool` | 否 | `null` | 是否上传到 HiAgent RAG。`null` 沿用 config；`true` 强制上传；`false` 强制跳过 |
+| `push_memos` | `bool` | 否 | `null` | 是否上传到 Memos。`null` 沿用 config；`true` 强制上传；`false` 强制跳过 |
+| `push_blinko` | `bool` | 否 | `null` | 是否上传到 Blinko。`null` 沿用 config；`true` 强制上传；`false` 强制跳过 |
 
 ### 响应（200）
 

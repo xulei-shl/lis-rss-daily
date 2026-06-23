@@ -22,6 +22,9 @@ class ProcessRequest(BaseModel):
     title: str
     id: Optional[int] = None
     push_wechat: bool = False
+    push_hiagent: Optional[bool] = None
+    push_memos: Optional[bool] = None
+    push_blinko: Optional[bool] = None
 
 
 class ProcessResponse(BaseModel):
@@ -39,6 +42,9 @@ class UploadTextRequest(BaseModel):
     id: Optional[int] = None
     source_name: Optional[str] = None
     push_wechat: bool = False
+    push_hiagent: Optional[bool] = None
+    push_memos: Optional[bool] = None
+    push_blinko: Optional[bool] = None
 
 
 class UploadTextResponse(BaseModel):
@@ -83,7 +89,7 @@ app.add_middleware(
 
 @app.post("/process", response_model=ProcessResponse)
 async def process(req: ProcessRequest) -> ProcessResponse:
-    task_id = await queue_manager.enqueue(req.title, req.id, req.push_wechat)
+    task_id = await queue_manager.enqueue(req.title, req.id, req.push_wechat, req.push_hiagent, req.push_memos, req.push_blinko)
     result = await queue_manager.get_result(task_id)
 
     if "error" in result:
@@ -115,7 +121,10 @@ async def upload_text(req: UploadTextRequest) -> UploadTextResponse:
             source_name=req.source_name,
             config=config,
             skip_lis_rss=skip_lis_rss,
-            skip_wechat=not final_push_wechat
+            skip_wechat=not final_push_wechat,
+            push_hiagent=req.push_hiagent,
+            push_memos=req.push_memos,
+            push_blinko=req.push_blinko,
         )
 
         is_success = not is_all_upload_failed(upload_results)

@@ -70,25 +70,14 @@ def get_env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
-async def upload_to_hiagent_rag(md_path: str, config: Dict, delete_md: bool = True) -> bool:
-    """
-    上传到HiAgent RAG知识库
-
-    Args:
-        md_path: MD文件路径
-        config: 配置字典
-        delete_md: 是否删除MD文件（默认True）
-
-    Returns:
-        是否成功
-    """
+async def upload_to_hiagent_rag(md_path: str, config: Dict, delete_md: bool = True, enabled_override: Optional[bool] = None) -> bool:
     print(f"\n{'='*60}")
     print(f"  [子系统1/3] HiAgent RAG知识库上传")
     print(f"{'='*60}")
 
     summary_config = config.get('summary_upload', {}).get('hiagent_rag', {})
-
-    if not summary_config.get('enabled', True):
+    enabled = summary_config.get('enabled', True) if enabled_override is None else enabled_override
+    if not enabled:
         print("[跳过] HiAgent RAG上传已禁用")
         return True
 
@@ -239,25 +228,14 @@ async def upload_to_lis_rss(article_id: int, md_content: str, config: Dict) -> b
         return False
 
 
-async def upload_to_memos(title: str, md_content: str, config: Dict) -> bool:
-    """
-    上传到Memos
-
-    Args:
-        title: 文章标题
-        md_content: MD文件内容
-        config: 配置字典
-
-    Returns:
-        是否成功
-    """
+async def upload_to_memos(title: str, md_content: str, config: Dict, enabled_override: Optional[bool] = None) -> bool:
     print(f"\n{'='*60}")
     print(f"  [子系统3/3] Memos上传")
     print(f"{'='*60}")
 
     summary_config = config.get('summary_upload', {}).get('memos', {})
-
-    if not summary_config.get('enabled', True):
+    enabled = summary_config.get('enabled', True) if enabled_override is None else enabled_override
+    if not enabled:
         print("[跳过] Memos上传已禁用")
         return True
 
@@ -314,25 +292,14 @@ async def upload_to_memos(title: str, md_content: str, config: Dict) -> bool:
         return False
 
 
-async def upload_to_blinko(title: str, md_content: str, config: Dict) -> bool:
-    """
-    上传到Blinko
-
-    Args:
-        title: 文章标题
-        md_content: MD文件内容
-        config: 配置字典
-
-    Returns:
-        是否成功
-    """
+async def upload_to_blinko(title: str, md_content: str, config: Dict, enabled_override: Optional[bool] = None) -> bool:
     print(f"\n{'='*60}")
     print(f"  [子系统4/4] Blinko上传")
     print(f"{'='*60}")
 
     summary_config = config.get('summary_upload', {}).get('blinko', {})
-
-    if not summary_config.get('enabled', True):
+    enabled = summary_config.get('enabled', True) if enabled_override is None else enabled_override
+    if not enabled:
         print("[跳过] Blinko上传已禁用")
         return True
 
@@ -459,21 +426,11 @@ async def upload_all(
     config: Dict,
     source_name: Optional[str] = None,
     skip_lis_rss: bool = False,
-    skip_wechat: bool = False
+    skip_wechat: bool = False,
+    push_hiagent: Optional[bool] = None,
+    push_memos: Optional[bool] = None,
+    push_blinko: Optional[bool] = None,
 ) -> Dict[str, bool]:
-    """
-    并行执行所有上传子系统
-
-    Args:
-        md_path: MD文件路径
-        article_id: 文章ID
-        article_title: 文章标题
-        config: 配置字典
-        source_name: 来源名称（可选）
-
-    Returns:
-        各子系统上传结果字典
-    """
     print(f"\n{'='*60}")
     print(f"  并行上传到五个子系统")
     print(f"{'='*60}")
@@ -482,7 +439,6 @@ async def upload_all(
     print(f"[信息] 文章标题: {article_title}")
     print(f"[信息] 来源: {source_name or '未知'}")
 
-    # 读取MD内容
     md_file = Path(md_path)
     if not md_file.exists():
         print(f"[错误] MD文件不存在: {md_path}")
@@ -500,36 +456,54 @@ async def upload_all(
     summary_config = config.get('summary_upload', {}).get('hiagent_rag', {})
     delete_md = summary_config.get('delete_md', True)
 
-    # 创建异步任务
-    tasks = [
-        upload_to_hiagent_rag(md_path, config, delete_md=delete_md),
-    ]
+    hiagent_cfg = config.get('summary_upload', {}).get('hiagent_rag', {}).get('enabled', True)
+    skip_hiagent_rag = not (push_hiagent if push_hiagent is not None else hiagent_cfg)
 
-    # 只有当 skip_lis_rss 为 False 且 article_id 有效时才添加 LIS-RSS 任务
+    memos_cfg = config.get('summary_upload', {}).get('memos', {}).get('enabled', True)
+    skip_memos = not (push_memos if push_memos is not None else memos_cfg)
+
+    blinko_cfg = config.get('summary_upload', {}).get('blinko', {}).get('enabled', True)
+    skip_blinko = not (push_blinko if push_blinko is not None else blinko_cfg)
+
+    tasks = []
+
+    if skip_hiagent_rag:
+        print(f"[跳过] HiAgent RAG上传已禁用")
+        tasks.append(asyncio.sleep(0))
+    else:
+        print(f"[信息] HiAgent RAG上传已启用")
+        tasks.append(upload_to_hiagent_rag(md_path, config, delete_md=delete_md, enabled_override=push_hiagent))
+
     if skip_lis_rss:
         print(f"[跳过] LIS-RSS上传已禁用（直接处理模式且未提供文章ID）")
-        tasks.append(asyncio.sleep(0))  # 占位符，保持结果索引一致性
+        tasks.append(asyncio.sleep(0))
     else:
         print(f"[信息] LIS-RSS上传已启用")
         tasks.append(upload_to_lis_rss(article_id, md_content, config))
 
-    tasks.append(upload_to_memos(article_title, md_content, config))
+    if skip_memos:
+        print(f"[跳过] Memos上传已禁用")
+        tasks.append(asyncio.sleep(0))
+    else:
+        print(f"[信息] Memos上传已启用")
+        tasks.append(upload_to_memos(article_title, md_content, config, enabled_override=push_memos))
 
-    # 添加 Blinko 上传任务
-    tasks.append(upload_to_blinko(article_title, md_content, config))
+    if skip_blinko:
+        print(f"[跳过] Blinko上传已禁用")
+        tasks.append(asyncio.sleep(0))
+    else:
+        print(f"[信息] Blinko上传已启用")
+        tasks.append(upload_to_blinko(article_title, md_content, config, enabled_override=push_blinko))
 
-    # 只有当 skip_wechat 为 False 时才添加 WeChat 任务
     if skip_wechat:
         print(f"[跳过] WeChat推送已禁用")
-        tasks.append(asyncio.sleep(0))  # 占位符，保持结果索引一致性
+        tasks.append(asyncio.sleep(0))
     else:
         print(f"[信息] WeChat推送已启用")
         tasks.append(upload_to_wechat(md_content, article_id, article_title, source_name, config))
 
-    # 并行执行
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # 整理结果
     upload_results = {
         'hiagent_rag': results[0] if isinstance(results[0], bool) else False,
         'lis_rss': results[1] if isinstance(results[1], bool) else False,
@@ -538,13 +512,17 @@ async def upload_all(
         'wechat': results[4] if isinstance(results[4], bool) else False
     }
     
-    # 记录哪些子系统被跳过（用于判断是否"全部失败"）
     upload_results['_skipped'] = []
+    if skip_hiagent_rag:
+        upload_results['_skipped'].append('hiagent_rag')
     if skip_lis_rss:
         upload_results['_skipped'].append('lis_rss')
+    if skip_memos:
+        upload_results['_skipped'].append('memos')
+    if skip_blinko:
+        upload_results['_skipped'].append('blinko')
     if skip_wechat:
         upload_results['_skipped'].append('wechat')
-    # 同时检查 config 中禁用的子系统
     if not config.get('summary_upload', {}).get('wechat', {}).get('enabled', False):
         if 'wechat' not in upload_results['_skipped']:
             upload_results['_skipped'].append('wechat')
@@ -612,23 +590,11 @@ async def upload_all_from_text(
     config: Dict,
     source_name: Optional[str] = None,
     skip_lis_rss: bool = False,
-    skip_wechat: bool = False
+    skip_wechat: bool = False,
+    push_hiagent: Optional[bool] = None,
+    push_memos: Optional[bool] = None,
+    push_blinko: Optional[bool] = None,
 ) -> Dict[str, bool]:
-    """
-    直接上传文本内容到所有子系统（无需MD文件）
-
-    Args:
-        md_content: MD文本内容
-        article_id: 文章ID
-        article_title: 文章标题
-        config: 配置字典
-        source_name: 来源名称（可选）
-        skip_lis_rss: 是否跳过LIS-RSS上传
-        skip_wechat: 是否跳过微信推送
-
-    Returns:
-        各子系统上传结果字典
-    """
     import tempfile
 
     print(f"\n{'='*60}")
@@ -639,24 +605,48 @@ async def upload_all_from_text(
     print(f"[信息] 来源: {source_name or '未知'}")
     print(f"[信息] 文本大小: {len(md_content)} 字符")
 
+    hiagent_cfg = config.get('summary_upload', {}).get('hiagent_rag', {}).get('enabled', True)
+    skip_hiagent_rag = not (push_hiagent if push_hiagent is not None else hiagent_cfg)
+
+    memos_cfg = config.get('summary_upload', {}).get('memos', {}).get('enabled', True)
+    skip_memos = not (push_memos if push_memos is not None else memos_cfg)
+
+    blinko_cfg = config.get('summary_upload', {}).get('blinko', {}).get('enabled', True)
+    skip_blinko = not (push_blinko if push_blinko is not None else blinko_cfg)
+
     tmp_file_path = None
     try:
-        # HiAgent RAG 需要文件路径，创建临时文件
         with tempfile.NamedTemporaryFile(suffix='.md', mode='w', encoding='utf-8', delete=False) as f:
             f.write(md_content)
             tmp_file_path = f.name
 
-        tasks = [
-            upload_to_hiagent_rag(tmp_file_path, config, delete_md=False),
-        ]
+        tasks = []
+
+        if skip_hiagent_rag:
+            print(f"[跳过] HiAgent RAG上传已禁用")
+            tasks.append(asyncio.sleep(0))
+        else:
+            print(f"[信息] HiAgent RAG上传已启用")
+            tasks.append(upload_to_hiagent_rag(tmp_file_path, config, delete_md=False, enabled_override=push_hiagent))
 
         if skip_lis_rss:
             tasks.append(asyncio.sleep(0))
         else:
             tasks.append(upload_to_lis_rss(article_id, md_content, config))
 
-        tasks.append(upload_to_memos(article_title, md_content, config))
-        tasks.append(upload_to_blinko(article_title, md_content, config))
+        if skip_memos:
+            print(f"[跳过] Memos上传已禁用")
+            tasks.append(asyncio.sleep(0))
+        else:
+            print(f"[信息] Memos上传已启用")
+            tasks.append(upload_to_memos(article_title, md_content, config, enabled_override=push_memos))
+
+        if skip_blinko:
+            print(f"[跳过] Blinko上传已禁用")
+            tasks.append(asyncio.sleep(0))
+        else:
+            print(f"[信息] Blinko上传已启用")
+            tasks.append(upload_to_blinko(article_title, md_content, config, enabled_override=push_blinko))
 
         if skip_wechat:
             tasks.append(asyncio.sleep(0))
@@ -674,8 +664,14 @@ async def upload_all_from_text(
         }
 
         upload_results['_skipped'] = []
+        if skip_hiagent_rag:
+            upload_results['_skipped'].append('hiagent_rag')
         if skip_lis_rss:
             upload_results['_skipped'].append('lis_rss')
+        if skip_memos:
+            upload_results['_skipped'].append('memos')
+        if skip_blinko:
+            upload_results['_skipped'].append('blinko')
         if skip_wechat:
             upload_results['_skipped'].append('wechat')
         if not config.get('summary_upload', {}).get('wechat', {}).get('enabled', False):
