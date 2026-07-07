@@ -78,6 +78,8 @@ python upload_knowledge.py 'test.md' --workspace-id=ws_xxx --knowledge-id=kb_xxx
 # 打开浏览器手动登录，按 Enter 后自动保存
 python session_manager.py login
 
+python scripts\paper-pdf-summary\summary-update\hiagent-rag-upload\session_manager.py login 
+
 # 指定登录页面 URL
 python session_manager.py login -u https://hiagent.library.sh.cn/product/llm/...
 

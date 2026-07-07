@@ -178,10 +178,17 @@ def upload_to_knowledge(file_path: str, headless: bool = True, auto_export: bool
     
     with sync_playwright() as p:
         # 启动浏览器（使用持久化上下文保存登录状态）
+        # 添加更多稳定性参数，防止浏览器因 profile 损坏立即退出
         context = p.chromium.launch_persistent_context(
             user_data_dir,
             headless=headless,
-            args=['--disable-blink-features=AutomationControlled']
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--no-sandbox',
+                '--disable-gpu',
+                '--disable-dev-shm-usage',
+                '--disable-software-rasterizer'
+            ]
         )
         
         page = context.pages[0] if context.pages else context.new_page()
@@ -201,12 +208,6 @@ def upload_to_knowledge(file_path: str, headless: bool = True, auto_export: bool
             print("点击'导入文件'按钮...")
             import_button = page.locator('button:has-text("导入文件")').first
             import_button.click()
-            time.sleep(1)
-            
-            # 选择"标准导入"
-            # print("选择'标准导入'...")
-            standard_import = page.locator('text=标准导入').first
-            standard_import.click()
             time.sleep(1)
             
             # 选择"层级文本"选项
