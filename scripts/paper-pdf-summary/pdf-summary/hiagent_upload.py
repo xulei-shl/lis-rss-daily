@@ -12,13 +12,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 URL = os.getenv("HIAGENT_PDF_URL")
-ERROR_KEYWORDS = ["无法访问", "无法生成"]
+ERROR_KEYWORDS = ["无法访问", "无法生成", "抱歉，", "出错了", "请求异常，请稍后重试", "请求异常"]
+COPY_ICON_SEL = "svg.hiagent-icon-copy-areality, svg.copy-icon"
 RESULT_SELECTORS = [
     '.message-content',
     '.markdown-body',
     '[class*="message"][class*="content"]',
     '.react-markdown',
-    '.prose'
+    '.prose',
+    '[class*="chat-message"]',
+    '[class*="ai-response"]',
+    '[class*="assistant-message"]',
+    '[class*="msg-item"]',
+    '.message-text',
+    '.msg-content',
 ]
 
 
@@ -45,7 +52,6 @@ async def main(pdf_path: str, md_path: str = None, headless: bool = True, delete
             return
 
         pdf_path = str(pdf_path_obj.resolve())
-        pdf_size = pdf_path_obj.stat().st_size
 
         if md_path is None:
             md_path = str(pdf_path_obj.with_suffix(".md"))
@@ -54,7 +60,11 @@ async def main(pdf_path: str, md_path: str = None, headless: bool = True, delete
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=headless)
-            context = await browser.new_context()
+
+            clipboard_permissions = ["clipboard-read", "clipboard-write"] if not headless else []
+            context = await browser.new_context(
+                permissions=clipboard_permissions,
+            )
             page = await context.new_page()
 
             await page.goto(URL)
@@ -72,37 +82,75 @@ async def main(pdf_path: str, md_path: str = None, headless: bool = True, delete
             await upload_input.set_input_files(pdf_path)
             await page.wait_for_timeout(1000)
 
+            baseline_copy_count = await page.evaluate(f"""
+                () => document.querySelectorAll('{COPY_ICON_SEL}').length
+            """)
+
             send_button = page.locator(".send-button-nkISIzC:not(.disabled-aewpicp)")
             await send_button.click()
 
-            copy_icon = page.locator("svg.hiagent-icon-copy-areality, svg.copy-icon").first
-            await copy_icon.wait_for(state="visible", timeout=180000)
+            for i in range(180):
+                count = await page.evaluate(f"""
+                    () => document.querySelectorAll('{COPY_ICON_SEL}').length
+                """)
+                if count > baseline_copy_count:
+                    break
+                await page.wait_for_timeout(1000)
+            else:
+                raise Exception("等待 AI 结果超时（3 分钟）")
+
+            copy_icon = page.locator(COPY_ICON_SEL).last
 
             result = ""
-            for attempt in range(3):
+            if not headless:
+                for attempt in range(3):
+                    await copy_icon.scroll_into_view_if_needed()
+                    await page.wait_for_timeout(200)
+                    clip_before = await page.evaluate("""
+                        () => navigator.clipboard.readText().catch(() => '')
+                    """)
+                    await copy_icon.click()
+                    await page.wait_for_timeout(500)
+                    clip_after = await page.evaluate("""
+                        () => navigator.clipboard.readText().catch(() => '')
+                    """)
+                    if clip_after and clip_after != clip_before and len(clip_after) > 100:
+                        result = clip_after
+                        break
+
+            if not result or len(result) < 100:
                 pyperclip.copy('')
                 await page.wait_for_timeout(200)
-
-                copy_icon = page.locator("svg.hiagent-icon-copy-areality.copy-icon").first
                 await copy_icon.scroll_into_view_if_needed()
                 await copy_icon.click()
                 await page.wait_for_timeout(500)
-
                 result = pyperclip.paste()
-                if result and len(result) > 100:
-                    break
 
             if not result or len(result) < 100:
                 result = await page.evaluate(f"""
                     () => {{
                         const selectors = {json.dumps(RESULT_SELECTORS)};
                         for (const selector of selectors) {{
-                            const element = document.querySelector(selector);
-                            if (element) {{
-                                return element.innerText || element.textContent || '';
+                            const nodes = document.querySelectorAll(selector);
+                            if (nodes.length > 0) {{
+                                const text = (nodes[nodes.length - 1].innerText || '').trim();
+                                if (text.length >= 100) return text;
                             }}
                         }}
-                        return '';
+                        const icons = document.querySelectorAll('{COPY_ICON_SEL}');
+                        if (icons.length > 0) {{
+                            let parent = icons[icons.length - 1].parentElement;
+                            for (let depth = 0; parent && depth < 10; depth++) {{
+                                const dt = (parent.innerText || '').trim();
+                                if (dt.length >= 100) {{
+                                    const actions = parent.querySelector('.message-actions, [class*=\\'actions\\']');
+                                    const clean = actions ? dt.replace(actions.innerText || '', '').trim() : dt;
+                                    if (clean.length >= 100) return clean;
+                                }}
+                                parent = parent.parentElement;
+                            }}
+                        }}
+                        return (document.body?.innerText || '').trim();
                     }}
                 """)
 
