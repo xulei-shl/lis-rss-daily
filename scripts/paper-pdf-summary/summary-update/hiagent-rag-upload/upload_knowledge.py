@@ -209,9 +209,9 @@ def upload_to_knowledge(file_path: str, headless: bool = True, auto_export: bool
             standard_import.click()
             time.sleep(1)
             
-            # 选择"Markdown"选项
-            # print("选择'Markdown'...")
-            markdown_option = page.locator('.card:has-text("Markdown")').first
+            # 选择"层级文本"选项
+            # print("选择'层级文本'...")
+            markdown_option = page.locator('.card:has-text("层级文本")').first
             markdown_option.click()
             time.sleep(0.5)
             
