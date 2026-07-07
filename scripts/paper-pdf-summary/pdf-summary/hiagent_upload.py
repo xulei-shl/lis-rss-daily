@@ -61,9 +61,8 @@ async def main(pdf_path: str, md_path: str = None, headless: bool = True, delete
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=headless)
 
-            clipboard_permissions = ["clipboard-read", "clipboard-write"] if not headless else []
             context = await browser.new_context(
-                permissions=clipboard_permissions,
+                permissions=["clipboard-read", "clipboard-write"],
             )
             page = await context.new_page()
 
@@ -85,6 +84,7 @@ async def main(pdf_path: str, md_path: str = None, headless: bool = True, delete
             baseline_copy_count = await page.evaluate(f"""
                 () => document.querySelectorAll('{COPY_ICON_SEL}').length
             """)
+            baseline_body_len = await page.evaluate("() => (document.body?.innerText || '').length")
 
             send_button = page.locator(".send-button-nkISIzC:not(.disabled-aewpicp)")
             await send_button.click()
@@ -99,24 +99,32 @@ async def main(pdf_path: str, md_path: str = None, headless: bool = True, delete
             else:
                 raise Exception("等待 AI 结果超时（3 分钟）")
 
-            copy_icon = page.locator(COPY_ICON_SEL).last
+            copy_icon_el = await page.evaluate_handle(f"""
+                () => {{
+                    const icons = document.querySelectorAll('{COPY_ICON_SEL}');
+                    return icons[icons.length - 1];
+                }}
+            """)
+            copy_icon = copy_icon_el.as_element()
+            if not copy_icon:
+                raise Exception("未找到复制图标")
 
             result = ""
-            if not headless:
-                for attempt in range(3):
-                    await copy_icon.scroll_into_view_if_needed()
-                    await page.wait_for_timeout(200)
-                    clip_before = await page.evaluate("""
-                        () => navigator.clipboard.readText().catch(() => '')
-                    """)
-                    await copy_icon.click()
-                    await page.wait_for_timeout(500)
-                    clip_after = await page.evaluate("""
-                        () => navigator.clipboard.readText().catch(() => '')
-                    """)
-                    if clip_after and clip_after != clip_before and len(clip_after) > 100:
-                        result = clip_after
-                        break
+            await page.bring_to_front()
+            for attempt in range(3):
+                await copy_icon.scroll_into_view_if_needed()
+                await page.wait_for_timeout(200)
+                clip_before = await page.evaluate("""
+                    () => navigator.clipboard.readText().catch(() => '')
+                """)
+                await copy_icon.click()
+                await page.wait_for_timeout(500)
+                clip_after = await page.evaluate("""
+                    () => navigator.clipboard.readText().catch(() => '')
+                """)
+                if clip_after and clip_after != clip_before and len(clip_after) > 100:
+                    result = clip_after
+                    break
 
             if not result or len(result) < 100:
                 pyperclip.copy('')
@@ -133,7 +141,12 @@ async def main(pdf_path: str, md_path: str = None, headless: bool = True, delete
                         for (const selector of selectors) {{
                             const nodes = document.querySelectorAll(selector);
                             if (nodes.length > 0) {{
-                                const text = (nodes[nodes.length - 1].innerText || '').trim();
+                                const parts = [];
+                                for (const node of nodes) {{
+                                    const t = (node.innerText || '').trim();
+                                    if (t) parts.push(t);
+                                }}
+                                const text = parts.join('\\n').trim();
                                 if (text.length >= 100) return text;
                             }}
                         }}
@@ -143,14 +156,18 @@ async def main(pdf_path: str, md_path: str = None, headless: bool = True, delete
                             for (let depth = 0; parent && depth < 10; depth++) {{
                                 const dt = (parent.innerText || '').trim();
                                 if (dt.length >= 100) {{
-                                    const actions = parent.querySelector('.message-actions, [class*=\\'actions\\']');
-                                    const clean = actions ? dt.replace(actions.innerText || '', '').trim() : dt;
+                                    const ae = parent.querySelector('.message-actions, [class*=\"actions\"]');
+                                    const clean = ae ? dt.replace(ae.innerText || '', '').trim() : dt;
                                     if (clean.length >= 100) return clean;
                                 }}
                                 parent = parent.parentElement;
                             }}
                         }}
-                        return (document.body?.innerText || '').trim();
+                        const fullText = (document.body?.innerText || '').trim();
+                        const newText = fullText.slice({baseline_body_len}).trim();
+                        if (newText.length >= 100) return newText;
+                        if (fullText.length >= 100) return fullText;
+                        return fullText;
                     }}
                 """)
 
