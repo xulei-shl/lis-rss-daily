@@ -41,6 +41,12 @@ temp/
 backup/
 lis-rss/
 
+# Python virtual environment
+lis-rss-deepsearch/
+
+# Downloaded paper PDFs
+scripts/paper-pdf-summary/download/
+
 /scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/playwright_user_data/
 docs/gmail/gmail-skill/scripts/credentials.json
 /docs/gmail/gmail-skill/scripts/tokens
