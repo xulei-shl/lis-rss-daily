@@ -110,7 +110,7 @@
     font-family: var(--font-heading);
     font-style: italic;
     font-weight: 600;
-    color: var(--accent-primary);
+    color: var(--text-primary);
 }
 
 .ai-summary h1 {
@@ -134,7 +134,8 @@
 .ai-summary h3 {
     font-size: var(--text-base);
     margin: 1.5rem 0 0.5rem;
-    color: color-mix(in oklch, var(--accent-primary) 70%, var(--text-primary));
+    font-style: italic;
+    color: var(--text-primary);
 }
 
 .ai-summary h4 {
@@ -175,11 +176,11 @@
 .ai-summary :not(pre) > code {
     font-family: var(--font-mono);
     font-size: 0.85em;
-    background: color-mix(in oklch, var(--accent-primary) 8%, var(--bg-subtle));
-    color: color-mix(in oklch, var(--accent-primary) 80%, var(--text-primary));
+    background: var(--bg-subtle);
+    color: var(--accent-primary);
     padding: 0.15em 0.35em;
     border-radius: 3px;
-    border: 1px solid color-mix(in oklch, var(--accent-primary) 15%, var(--border));
+    border: 1px solid var(--border);
 }
 
 /* Code blocks */
@@ -188,12 +189,30 @@
     font-size: 0.75rem;
     line-height: 1.5;
     border-radius: var(--radius-md);
-    background: color-mix(in oklch, var(--accent-primary) 4%, var(--bg-subtle));
-    color: color-mix(in oklch, var(--accent-primary) 30%, var(--text-secondary));
-    border: 1px solid color-mix(in oklch, var(--accent-primary) 15%, var(--border));
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
     padding: var(--space-3);
     overflow-x: auto;
+    overflow-y: hidden;
     margin: 0.75rem 0;
+}
+
+.ai-summary pre::-webkit-scrollbar {
+    height: 6px;
+}
+
+.ai-summary pre::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.ai-summary pre::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+}
+
+.ai-summary pre::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
 }
 
 .ai-summary pre code {
