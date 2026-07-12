@@ -51,8 +51,6 @@
 
 .panel-icon {
   color: var(--accent-primary);
-  /* Subtle glow for the icon */
-  filter: drop-shadow(0 2px 4px rgba(var(--accent-primary-rgb), 0.2));
 }
 
 .panel-badge {
@@ -465,8 +463,8 @@
 }
 
 .badge-journal {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: rgba(26, 77, 122, 0.1);
+  color: var(--accent-primary);
   padding: 3px 8px;
   border-radius: 4px;
   font-size: var(--text-2xs);
@@ -476,8 +474,8 @@
 }
 
 .badge-blog_news {
-  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-  color: white;
+  background: rgba(5, 150, 105, 0.1);
+  color: var(--green);
   padding: 3px 8px;
   border-radius: 4px;
   font-size: var(--text-2xs);
@@ -487,7 +485,7 @@
 }
 
 .badge-all {
-  background: var(--bg-secondary);
+  background: var(--bg-subtle);
   color: var(--text-secondary);
   padding: 3px 8px;
   border-radius: 4px;
@@ -498,8 +496,8 @@
 }
 
 .badge-journal_all {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  color: white;
+  background: rgba(217, 119, 6, 0.1);
+  color: var(--amber);
   padding: 3px 8px;
   border-radius: 4px;
   font-size: var(--text-2xs);
@@ -509,8 +507,8 @@
 }
 
 .badge-search {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-  color: white;
+  background: rgba(96, 165, 250, 0.1);
+  color: #60a5fa;
   padding: 3px 8px;
   border-radius: 4px;
   font-size: var(--text-2xs);
@@ -520,8 +518,8 @@
 }
 
 .badge-insights {
-  background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
-  color: white;
+  background: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
   padding: 3px 8px;
   border-radius: 4px;
   font-size: var(--text-2xs);

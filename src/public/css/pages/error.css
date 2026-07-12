@@ -25,9 +25,10 @@ body.error-page {
 }
 
 .error-icon {
-    font-size: 48px;
+    color: var(--red);
     margin-bottom: var(--space-4);
-    line-height: 1;
+    display: flex;
+    justify-content: center;
 }
 
 .error-title {

@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <title><%= pageTitle %></title>
 
   <!-- Google Fonts Preload -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <!-- Main CSS Bundle -->
   <% if (process.env.NODE_ENV === 'production') { %>
@@ -28,6 +29,7 @@
   <%- pageStyles %>
 </head>
 <body>
+  <a href="#main-content" class="skip-link">跳转到内容</a>
   <header class="site-header">
     <a href="/"><img src="/images/logo.png" alt="Logo" class="logo"> LIS-RSS Literature Tracker</a>
     <nav class="site-nav">
@@ -51,9 +53,9 @@
     </nav>
   </header>
 
-  <div class="page-body">
+  <main id="main-content" class="page-body">
     <%- body %>
-  </div>
+  </main>
 
   <!-- Common JavaScript Components -->
   <script src="/js/confirm-dialog.js"></script>

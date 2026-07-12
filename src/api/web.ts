@@ -241,9 +241,8 @@ export function createApp(): express.Express {
     if (req.path.startsWith('/api/')) {
       res.status(404).json({ error: 'Not found' });
     } else {
-      res.status(404).render('error', {
-        pageTitle: 'Not Found',
-        error: 'Page not found',
+      res.status(404).render('404', {
+        pageTitle: '页面未找到 - LIS-RSS Literature Tracker',
       });
     }
   });
