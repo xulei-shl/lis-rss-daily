@@ -14,6 +14,7 @@ import { resolveSystemPrompt } from './api/system-prompts.js';
 import { parseLLMJSON } from './utils/llm-json-parser.js';
 import { buildPromptVariables, type ArticleContext } from './api/prompt-variable-builder.js';
 import { type SourceType } from './constants/source-types.js';
+import { checkTitleBlacklist } from './config/blacklist-filter.js';
 
 const log = logger.child({ module: 'article-filter' });
 
@@ -363,18 +364,32 @@ export async function filterArticle(
   requestLog.debug({ title: input.title }, 'Starting article filter');
 
   // 黑名单检查（Stage 0）
-  const { checkTitleBlacklist } = await import('./config/blacklist-filter.js');
-  const blacklistResult = checkTitleBlacklist(input.title);
+  // 使用 try-catch 确保即使黑名单检查异常，也生成兜底日志，不遗漏任何文章
+  try {
+    const blacklistResult = checkTitleBlacklist(input.title);
 
-  if (blacklistResult.isBlacklisted) {
+    if (blacklistResult.isBlacklisted) {
+      await updateArticleFilterStatus(input.articleId, 'rejected', 0);
+      await recordFilterLog(input.articleId, null, false, null, blacklistResult.reason ?? null, null, blacklistResult.matchedKeywords);
+      requestLog.info({ reason: blacklistResult.reason, matchedKeywords: blacklistResult.matchedKeywords }, 'Article rejected by blacklist');
+      return {
+        passed: false,
+        domainMatches: [],
+        filterReason: blacklistResult.reason,
+        usedFallback: false,
+      };
+    }
+  } catch (blacklistError) {
+    // 黑名单检查异常时：记录兜底日志并拒绝文章，保证不遗漏
+    const errMsg = blacklistError instanceof Error ? blacklistError.message : String(blacklistError);
+    requestLog.error({ error: errMsg }, 'Blacklist check threw, falling back to reject');
     await updateArticleFilterStatus(input.articleId, 'rejected', 0);
-    await recordFilterLog(input.articleId, null, false, null, blacklistResult.reason ?? null, null, blacklistResult.matchedKeywords);
-    requestLog.info({ reason: blacklistResult.reason, matchedKeywords: blacklistResult.matchedKeywords }, 'Article rejected by blacklist');
+    await recordFilterLog(input.articleId, null, false, null, `黑名单检查异常: ${errMsg}`, null, null);
     return {
       passed: false,
       domainMatches: [],
-      filterReason: blacklistResult.reason,
-      usedFallback: false,
+      filterReason: `黑名单检查异常: ${errMsg}`,
+      usedFallback: true,
     };
   }
 
