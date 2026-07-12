@@ -108,9 +108,14 @@
 .ai-summary h1,
 .ai-summary h2 {
     font-family: var(--font-heading);
-    font-style: italic;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--accent-primary);
+}
+
+.ai-summary h1,
+.ai-summary h2,
+.ai-summary h3 {
+    font-style: italic;
 }
 
 .ai-summary h1 {
@@ -134,8 +139,7 @@
 .ai-summary h3 {
     font-size: var(--text-base);
     margin: 1.5rem 0 0.5rem;
-    font-style: italic;
-    color: var(--text-primary);
+    color: color-mix(in oklch, var(--accent-primary) 78%, var(--text-primary));
 }
 
 .ai-summary h4 {
