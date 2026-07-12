@@ -227,7 +227,7 @@ function renderArticle(article) {
   const aiSummarySection = document.getElementById('aiSummarySection');
   if (article.ai_summary) {
     aiSummarySection.style.display = 'block';
-    document.getElementById('aiSummary').innerHTML = formatMarkdown(article.ai_summary);
+    document.getElementById('aiSummary').innerHTML = formatMarkdown(preprocessMarkdown(article.ai_summary));
   }
 
   // 过滤匹配
@@ -440,7 +440,97 @@ async function deleteArticle() {
   }
 }
 
-// 简易 Markdown 格式化（支持表格、列表、标题等）
+// 结构清洗：将非标准文本转换为标准 Markdown（适用于 AI 总结等后端产出）
+function preprocessMarkdown(text) {
+  if (!text) return '';
+
+  const lines = text.split(/\r?\n/);
+  const processedLines = [];
+  let inLogicMap = false;
+  let isFirstLine = true;
+  let isFirstMapLine = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (isFirstLine) {
+      if (trimmed) {
+        if (!trimmed.startsWith('#')) {
+          processedLines.push('# ' + trimmed);
+        } else {
+          processedLines.push(line);
+        }
+        isFirstLine = false;
+      }
+      continue;
+    }
+
+    const sectionMatch = trimmed.match(/^([一二三四五六七八九十百]+)[、.，,\s]\s*(.*)$/);
+    if (sectionMatch && !inLogicMap) {
+      const num = sectionMatch[1];
+      const title = sectionMatch[2];
+      processedLines.push('## ' + num + '、' + title);
+      if (title.includes('核心逻辑图谱')) {
+        inLogicMap = true;
+        isFirstMapLine = true;
+        var prevLine = processedLines.length > 0 ? processedLines[processedLines.length - 1] : '';
+        if (prevLine && prevLine.startsWith('#')) {
+          processedLines.push('');
+        }
+        processedLines.push('```text');
+      }
+      continue;
+    }
+
+    if (inLogicMap) {
+      const nextSectionMatch = trimmed.match(/^([一二三四五六七八九十百]+)[、.，,\s]\s*(.*)$/);
+      if (nextSectionMatch) {
+        const num = nextSectionMatch[1];
+        const title = nextSectionMatch[2];
+        processedLines.push('```');
+        processedLines.push('');
+        inLogicMap = false;
+        processedLines.push('## ' + num + '、' + title);
+        continue;
+      }
+    }
+
+    const subSectionMatch = trimmed.match(/^(\d+)[.、]\s*(.*)$/);
+    if (subSectionMatch && !inLogicMap) {
+      const num = subSectionMatch[1];
+      const title = subSectionMatch[2];
+      processedLines.push('### ' + num + '. ' + title);
+      continue;
+    }
+
+    if (inLogicMap) {
+      let outputLine = line;
+      if (isFirstMapLine && trimmed) {
+        outputLine = line.replace(/^[Tt]ext/, '');
+        isFirstMapLine = false;
+      }
+      processedLines.push(outputLine);
+      continue;
+    }
+
+    if (trimmed) {
+      const lastLine = processedLines.length > 0 ? processedLines[processedLines.length - 1] : '';
+      if (lastLine && !lastLine.startsWith('#') && !lastLine.startsWith('```')) {
+        processedLines.push('');
+      }
+    }
+    processedLines.push(line);
+  }
+
+  if (inLogicMap) {
+    processedLines.push('```');
+  }
+
+  return processedLines.join('\n');
+}
+
+// 简易 Markdown 格式化（支持表格、列表、标题、代码块等）
 function formatMarkdown(text) {
   if (!text) return '';
 
@@ -470,7 +560,8 @@ function formatMarkdown(text) {
         // 遇到下一个标题、空行或分隔行则停止
         if (nextLine.startsWith('#### ') || nextLine.startsWith('### ') || 
             nextLine.startsWith('## ') || nextLine.startsWith('# ') ||
-            nextLine.startsWith('---') || nextLine === '') {
+            nextLine.startsWith('---') || nextLine.startsWith('```') || 
+            nextLine.startsWith('- ') || nextLine.match(/^\*\s/) || nextLine === '') {
           break;
         }
         if (nextLine) {
@@ -499,7 +590,8 @@ function formatMarkdown(text) {
         const nextLine = allLines[i].trim();
         if (nextLine.startsWith('#### ') || nextLine.startsWith('### ') || 
             nextLine.startsWith('## ') || nextLine.startsWith('# ') ||
-            nextLine.startsWith('---') || nextLine === '') {
+            nextLine.startsWith('---') || nextLine.startsWith('```') || 
+            nextLine.startsWith('- ') || nextLine.match(/^\*\s/) || nextLine === '') {
           break;
         }
         if (nextLine) {
@@ -527,7 +619,8 @@ function formatMarkdown(text) {
         const nextLine = allLines[i].trim();
         if (nextLine.startsWith('#### ') || nextLine.startsWith('### ') || 
             nextLine.startsWith('## ') || nextLine.startsWith('# ') ||
-            nextLine.startsWith('---') || nextLine === '') {
+            nextLine.startsWith('---') || nextLine.startsWith('```') || 
+            nextLine.startsWith('- ') || nextLine.match(/^\*\s/) || nextLine === '') {
           break;
         }
         if (nextLine) {
@@ -555,7 +648,8 @@ function formatMarkdown(text) {
         const nextLine = allLines[i].trim();
         if (nextLine.startsWith('#### ') || nextLine.startsWith('### ') || 
             nextLine.startsWith('## ') || nextLine.startsWith('# ') ||
-            nextLine.startsWith('---') || nextLine === '') {
+            nextLine.startsWith('---') || nextLine.startsWith('```') || 
+            nextLine.startsWith('- ') || nextLine.match(/^\*\s/) || nextLine === '') {
           break;
         }
         if (nextLine) {
@@ -581,6 +675,25 @@ function formatMarkdown(text) {
     if (trimmedLine === '---') {
       result.push('<hr>');
       i++;
+      continue;
+    }
+
+    // 检测代码块（围栏式）
+    if (trimmedLine.startsWith('```')) {
+      const fence = trimmedLine;
+      const codeLines = [];
+      i++;
+      while (i < allLines.length) {
+        const nextLine = allLines[i];
+        if (nextLine.trim() === '```') {
+          i++;
+          break;
+        }
+        codeLines.push(nextLine);
+        i++;
+      }
+      const codeContent = codeLines.join('\n');
+      result.push('<pre><code>' + escapeHtml(codeContent) + '</code></pre>');
       continue;
     }
 
@@ -626,6 +739,27 @@ function formatMarkdown(text) {
       continue;
     }
 
+    // 检测有序列表
+    if (trimmedLine.match(/^\d+[.、]\s/)) {
+      const listLines = [line];
+      i++;
+      while (i < allLines.length) {
+        const nextLine = allLines[i].trim();
+        if (nextLine.match(/^\d+[.、]\s/)) {
+          listLines.push(allLines[i]);
+          i++;
+        } else {
+          break;
+        }
+      }
+      const listHtml = '<ol>' + listLines.map(l => {
+        const content = l.replace(/^\d+[.、]\s+/, '').trim();
+        return '<li>' + formatInline(escapeHtml(content)) + '</li>';
+      }).join('') + '</ol>';
+      result.push(listHtml);
+      continue;
+    }
+
     // 普通段落：每一行都作为一个独立的段落
     // 遇到空行或标题分隔符才停止收集
     const paragraphLines = [line];
@@ -635,7 +769,8 @@ function formatMarkdown(text) {
       // 遇到标题、空行或分隔线则停止
       if (nextLine.startsWith('# ') || nextLine.startsWith('## ') || 
           nextLine.startsWith('### ') || nextLine.startsWith('#### ') ||
-          nextLine.startsWith('---') || nextLine === '') {
+          nextLine.startsWith('---') || nextLine.startsWith('```') || 
+          nextLine.startsWith('- ') || nextLine.match(/^\*\s/) || nextLine === '') {
         break;
       }
       if (nextLine) {
@@ -942,7 +1077,7 @@ async function saveAiSummary() {
 
     // 恢复显示模式
     if (newContent) {
-      document.getElementById('aiSummary').innerHTML = formatMarkdown(newContent);
+      document.getElementById('aiSummary').innerHTML = formatMarkdown(preprocessMarkdown(newContent));
     } else {
       // 如果内容为空，隐藏整个区域
       document.getElementById('aiSummarySection').style.display = 'none';
@@ -961,7 +1096,7 @@ function cancelEditAiSummary() {
 
   // 恢复显示模式
   if (articleData.ai_summary) {
-    document.getElementById('aiSummary').innerHTML = formatMarkdown(articleData.ai_summary);
+    document.getElementById('aiSummary').innerHTML = formatMarkdown(preprocessMarkdown(articleData.ai_summary));
   } else {
     document.getElementById('aiSummarySection').style.display = 'none';
   }
