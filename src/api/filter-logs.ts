@@ -16,6 +16,8 @@ export interface FilterLogsQuery {
   isPassed?: boolean;
   fromDate?: string;
   toDate?: string;
+  /** 'blacklist' = 命中黑名单关键词；'llm' = LLM 评估；undefined = 全部 */
+  filterType?: 'blacklist' | 'llm';
 }
 
 export interface FilterLogsResult {
@@ -44,10 +46,12 @@ export async function getFilterLogs(params: FilterLogsQuery): Promise<FilterLogs
     .innerJoin('articles', 'articles.id', 'article_filter_logs.article_id')
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
     .where((eb) =>
       eb.or([
         eb('rss_sources.user_id', '=', params.userId),
         eb.and([eb('articles.journal_id', 'is not', null), eb('journals.user_id', '=', params.userId)]),
+        eb.and([eb('articles.keyword_id', 'is not', null), eb('keyword_subscriptions.user_id', '=', params.userId)]),
       ])
     );
 
@@ -67,6 +71,23 @@ export async function getFilterLogs(params: FilterLogsQuery): Promise<FilterLogs
     baseQuery = baseQuery.where('article_filter_logs.created_at', '<=', params.toDate);
   }
 
+  if (params.filterType === 'blacklist') {
+    // 黑名单过滤日志：domain_id IS NULL 且 filter_reason 包含黑名单关键词
+    baseQuery = baseQuery.where('article_filter_logs.domain_id', 'is', null)
+      .where('article_filter_logs.filter_reason', 'like', '%黑名单%');
+  } else if (params.filterType === 'llm') {
+    // LLM 过滤日志：有 domain_id 或者 filter_reason 不含黑名单关键词
+    baseQuery = baseQuery.where((eb) =>
+      eb.or([
+        eb('article_filter_logs.domain_id', 'is not', null),
+        eb.and([
+          eb('article_filter_logs.domain_id', 'is', null),
+          eb('article_filter_logs.filter_reason', 'not like', '%黑名单%'),
+        ]),
+      ])
+    );
+  }
+
   const totalRow = await baseQuery
     .select((eb) => eb.fn.count('article_filter_logs.id').as('count'))
     .executeTakeFirst();
@@ -81,10 +102,12 @@ export async function getFilterLogs(params: FilterLogsQuery): Promise<FilterLogs
     .offset(offset)
     .execute();
 
-  // 标准化时间字段为 UTC
-  const normalizedLogs = (logs as FilterLogRecord[]).map(log =>
-    normalizeDateFields(log as Record<string, any>, ['created_at'])
-  );
+  // 增强日志记录：标记是否为黑名单过滤
+  const normalizedLogs = (logs as FilterLogRecord[]).map(log => {
+    const enhanced = normalizeDateFields(log as Record<string, any>, ['created_at']) as FilterLogRecord & { is_blacklist_rejection?: boolean };
+    enhanced.is_blacklist_rejection = !!(enhanced.filter_reason && enhanced.filter_reason.includes('黑名单'));
+    return enhanced;
+  });
 
   return {
     logs: normalizedLogs,

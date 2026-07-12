@@ -247,7 +247,8 @@ async function recordFilterLog(
   isPassed: boolean,
   relevanceScore: number | null,
   filterReason: string | null,
-  llmResponse: string | null = null
+  llmResponse: string | null = null,
+  matchedKeywords: string[] | null = null
 ): Promise<void> {
   const db = getDb();
 
@@ -285,7 +286,7 @@ async function recordFilterLog(
         domain_id: domainId,
         is_passed: isPassed ? 1 : 0,
         relevance_score: relevanceScore,
-        matched_keywords: null,
+        matched_keywords: matchedKeywords ? matchedKeywords.join(', ') : null,
         filter_reason: filterReason,
         llm_response: llmResponse,
       })
@@ -324,7 +325,8 @@ async function recordFilterResults(
       match.passed,
       match.relevanceScore ?? null,
       match.reasoning ?? null,
-      null // Individual domain logs don't need full LLM response
+      null, // Individual domain logs don't need full LLM response
+      null // Individual domain logs don't have matched keywords
     );
   }
 
@@ -366,8 +368,8 @@ export async function filterArticle(
 
   if (blacklistResult.isBlacklisted) {
     await updateArticleFilterStatus(input.articleId, 'rejected', 0);
-    await recordFilterLog(input.articleId, null, false, null, blacklistResult.reason ?? null, null);
-    requestLog.info({ reason: blacklistResult.reason }, 'Article rejected by blacklist');
+    await recordFilterLog(input.articleId, null, false, null, blacklistResult.reason ?? null, null, blacklistResult.matchedKeywords);
+    requestLog.info({ reason: blacklistResult.reason, matchedKeywords: blacklistResult.matchedKeywords }, 'Article rejected by blacklist');
     return {
       passed: false,
       domainMatches: [],

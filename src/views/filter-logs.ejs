@@ -154,7 +154,15 @@
   </div>
 
   <div class="logs-tab-panel" data-panel="filter">
-    <div class="panel-filter logs-filter-bar">
+    <div class="panel-filter logs-filter-bar logs-filter-bar--three">
+      <div class="filter-group">
+        <label>过滤类型:</label>
+        <select id="filterTypeFilter" class="filter-select">
+          <option value="">全部</option>
+          <option value="blacklist">黑名单过滤</option>
+          <option value="llm">LLM 评估</option>
+        </select>
+      </div>
       <div class="filter-group">
         <label>领域:</label>
         <select id="domainFilter" class="filter-select">
@@ -293,6 +301,7 @@
         filters: {
           domainId: '',
           filterResult: '',
+          filterType: '',
           rssStatus: '',
           rssSchedule: '',
           crawlStatus: '',
@@ -340,6 +349,14 @@
         if (filterResult) {
           filterResult.addEventListener('change', () => {
             state.filters.filterResult = filterResult.value;
+            loadFilterLogs(1);
+          });
+        }
+
+        const filterType = document.getElementById('filterTypeFilter');
+        if (filterType) {
+          filterType.addEventListener('change', () => {
+            state.filters.filterType = filterType.value;
             loadFilterLogs(1);
           });
         }
@@ -505,6 +522,7 @@
           const params = buildParams(page);
           if (state.filters.domainId) params.domainId = state.filters.domainId;
           if (state.filters.filterResult) params.isPassed = state.filters.filterResult === 'passed' ? 'true' : 'false';
+          if (state.filters.filterType) params.filterType = state.filters.filterType;
           const data = await fetchJson('/api/logs/filter', params);
           state.tabs.filter.page = data.page || 1;
           state.tabs.filter.totalPages = data.totalPages || 1;
@@ -852,14 +870,17 @@
       const detailId = \`filter-detail-\${log.id}\`;
       const domainName = getDomainName(log.domain_id);
       const statusLabel = log.is_passed ? 'passed' : 'rejected';
+      const isBlacklist = isBlacklistRejection(log);
+      const rowClass = isBlacklist ? 'expand-row row-blacklist' : 'expand-row';
+      const filterTag = isBlacklist ? '<span class="chip chip-blacklist">黑名单</span>' : '';
       return \`
-        <tr class="expand-row" data-detail-id="\${detailId}">
+        <tr class="\${rowClass}" data-detail-id="\${detailId}">
           <td class="expand-cell"><span class="expand-icon">▶</span></td>
-          <td class="article-title" title="\${escapeHtml(log.article_title || '未命名文章')}">\${escapeHtml(log.article_title || '未命名文章')}</td>
+          <td class="article-title" title="\${escapeHtml(log.article_title || '未命名文章')}">\${escapeHtml(log.article_title || '未命名文章')} \${filterTag}</td>
           <td class="domain-cell" title="\${escapeHtml(domainName)}">\${escapeHtml(domainName)}</td>
           <td>\${renderStatusBadge(statusLabel)}</td>
           <td>\${log.relevance_score !== null && log.relevance_score !== undefined ? log.relevance_score.toFixed(2) : '-'}</td>
-          <td>\${escapeHtml(log.filter_reason || '-')}</td>
+          <td class="reason-cell" title="\${escapeHtml(log.filter_reason || '-')}">\${escapeHtml(log.filter_reason || '-')}</td>
           <td>\${formatDate(log.created_at)}</td>
         </tr>
         <tr class="detail-row" id="\${detailId}">
@@ -872,6 +893,7 @@
               <p>匹配关键词：\${escapeHtml(log.matched_keywords || '-')}</p>
               <p>原因：\${escapeHtml(log.filter_reason || '-')}</p>
               \${log.llm_response ? \`<h4 style="margin-top: 12px;">LLM 响应</h4><pre>\${escapeHtml(log.llm_response)}</pre>\` : ''}
+              \${isBlacklist ? '<p class="note">此文章被黑名单关键词过滤，未经 LLM 评估</p>' : ''}
             </div>
           </td>
         </tr>
@@ -1181,6 +1203,13 @@
     if (!yearStart) return '-';
     if (!yearEnd || yearStart === yearEnd) return String(yearStart);
     return \`\${yearStart} - \${yearEnd}\`;
+  }
+
+  function isBlacklistRejection(log) {
+    // 后端已标记 is_blacklist_rejection，但前端也做一层保护判断
+    if (log.is_blacklist_rejection) return true;
+    var reason = log.filter_reason || '';
+    return reason.indexOf('黑名单') !== -1;
   }
 
   function getDomainName(domainId) {

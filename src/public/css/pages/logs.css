@@ -63,10 +63,10 @@
     display: block;
 }
 
-/* 筛选栏优化：2列布局 */
+/* 筛选栏：flex 行布局，所有筛选条件排成一行 */
 .logs-filter-bar {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--space-4);
     margin-bottom: var(--space-6);
     padding: var(--space-4);
@@ -76,9 +76,10 @@
     box-shadow: var(--shadow-sm);
 }
 
-/* 如果只有一个过滤条件（如 crawl 标签页），保持靠左 */
-.logs-tab-panel[data-panel="crawl"] .logs-filter-bar {
-    grid-template-columns: repeat(2, 1fr);
+/* 三列筛选：过滤类型、领域、结果各占 1fr */
+.logs-filter-bar--three .filter-group {
+    flex: 1 1 0;
+    min-width: 160px;
 }
 
 .filter-group {
@@ -367,6 +368,41 @@
     color: var(--text-tertiary);
     margin-left: var(--space-2);
     vertical-align: middle;
+}
+
+/* 黑名单过滤行样式 */
+.row-blacklist {
+    background: rgba(220, 38, 38, 0.03);
+}
+
+.row-blacklist:hover {
+    background: rgba(220, 38, 38, 0.06);
+}
+
+.chip-blacklist {
+    background: rgba(220, 38, 38, 0.1);
+    border-color: rgba(220, 38, 38, 0.2);
+    color: var(--red);
+    font-weight: 600;
+}
+
+.detail-content .note {
+    margin-top: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background: rgba(220, 38, 38, 0.06);
+    border: 1px solid rgba(220, 38, 38, 0.15);
+    border-radius: var(--radius-md);
+    font-size: var(--text-xs);
+    color: var(--red);
+}
+
+/* 原因列 */
+.reason-cell {
+    max-width: 180px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-secondary);
 }
 
 /* 过滤日志表格列宽优化 */

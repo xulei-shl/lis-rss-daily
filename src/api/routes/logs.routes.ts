@@ -42,6 +42,7 @@ router.get(['/logs/filter', '/filter/logs'], requireAuth, async (req: AuthReques
 
     const domainId = parseOptionalInt(req.query.domainId);
     const isPassed = parseBooleanParam(req.query.isPassed);
+    const filterType = parseFilterType(req.query.filterType);
 
     const result = await getFilterLogs({
       userId: req.effectiveUserId!,
@@ -49,6 +50,7 @@ router.get(['/logs/filter', '/filter/logs'], requireAuth, async (req: AuthReques
       limit,
       domainId,
       isPassed,
+      filterType,
       fromDate,
       toDate,
     });
@@ -420,4 +422,11 @@ function parseDateParam(value?: string): string | undefined {
     return undefined;
   }
   return parsed.toISOString();
+}
+
+function parseFilterType(value: unknown): 'blacklist' | 'llm' | undefined {
+  if (typeof value !== 'string') return undefined;
+  if (value === 'blacklist') return 'blacklist';
+  if (value === 'llm') return 'llm';
+  return undefined;
 }
