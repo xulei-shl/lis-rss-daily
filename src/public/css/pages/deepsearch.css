@@ -124,7 +124,6 @@
   border-radius: var(--radius-md);
   padding: var(--space-3);
   background: var(--bg-subtle);
-  border-left: 3px solid var(--brand-primary);
 }
 
 .detail-row-full {
@@ -132,23 +131,23 @@
 }
 
 .detail-row-progress {
-  border-left-color: var(--color-info);
   background: color-mix(in srgb, var(--color-info) 8%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--color-info) 30%, var(--border));
 }
 
 .detail-row-step1 {
-  border-left-color: var(--color-info);
   background: color-mix(in srgb, var(--color-info) 12%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--color-info) 35%, var(--border));
 }
 
 .detail-row-step2 {
-  border-left-color: var(--color-success);
   background: color-mix(in srgb, var(--color-success) 12%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--color-success) 35%, var(--border));
 }
 
 .detail-row-failed {
-  border-left-color: var(--color-danger);
   background: color-mix(in srgb, var(--color-danger) 10%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--color-danger) 30%, var(--border));
 }
 
 .detail-row span {

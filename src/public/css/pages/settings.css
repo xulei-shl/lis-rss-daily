@@ -565,9 +565,8 @@
    ============================================ */
 
 .warning-banner {
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--amber);
+    background: color-mix(in srgb, var(--amber) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--amber) 25%, transparent);
     border-radius: var(--radius-md);
     padding: var(--space-4);
     margin-bottom: var(--space-4);

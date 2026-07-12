@@ -29,11 +29,11 @@
     width: 100%;
     height: 64px;
     /* Larger than standard inputs overlay */
-    padding: 0 104px 0 24px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-full);
-    /* Pill shape for search is trendy and premium */
-    background: var(--bg-surface);
+  padding: 0 104px 0 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  /* Consistent with design system inputs */
+  background: var(--bg-surface);
     color: var(--text-primary);
     font-family: var(--font-body);
     font-size: var(--text-lg);
@@ -57,25 +57,25 @@
     top: 6px;
     bottom: 6px;
     height: auto;
-    border-radius: var(--radius-full);
-    padding: 0 24px;
-    /* Button styles */
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-2);
-    border: 1px solid transparent;
-    cursor: pointer;
-    font-family: var(--font-meta);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    letter-spacing: 0.01em;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    white-space: nowrap;
-    /* Primary button colors */
-    background: var(--accent-primary);
-    color: white;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-md);
+  padding: 0 24px;
+  /* Button styles */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: var(--font-meta);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  /* Primary button colors */
+  background: var(--accent-primary);
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .search-button:focus {

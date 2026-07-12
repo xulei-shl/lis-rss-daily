@@ -162,6 +162,26 @@
         emptyMessageGuest.style.display = 'block';
       }
     }
+
+    // Close history modal on overlay click
+    const historyModal = document.getElementById('historyModal');
+    if (historyModal) {
+      historyModal.addEventListener('click', function(e) {
+        if (e.target === this) {
+          this.classList.remove('active');
+        }
+      });
+    }
+
+    // Close history modal on Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        const activeModal = document.querySelector('.modal-overlay.active');
+        if (activeModal) {
+          activeModal.classList.remove('active');
+        }
+      }
+    });
   </script>
 ` }) %>
 

@@ -247,9 +247,8 @@
 .summary-error {
   margin: 24px;
   padding: 16px;
-  background: var(--bg-surface);
-  border: 1px solid var(--red-dim);
-  border-left: 4px solid var(--red);
+  background: color-mix(in srgb, var(--red) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 25%, transparent);
   border-radius: 8px;
   color: var(--red);
   font-size: var(--text-sm);
