@@ -564,6 +564,8 @@ export async function getUserArticles(
     ratingNull?: boolean;
     /** 随机排序（SQLite RANDOM()） */
     randomOrder?: boolean;
+    /** 默认排除拒绝状态的条目 */
+    excludeRejected?: boolean;
   } = {}
 ): Promise<PaginatedArticlesResult> {
   const db = getDb();
@@ -643,6 +645,9 @@ export async function getUserArticles(
 
   if (options.filterStatus !== undefined) {
     query = query.where('articles.filter_status', '=', options.filterStatus);
+  } else if (options.excludeRejected) {
+    // 默认排除拒绝状态的条目（只有用户明确选择"拒绝"时才显示）
+    query = query.where('articles.filter_status', '!=', 'rejected');
   }
 
   if (options.processStatus !== undefined) {
@@ -740,6 +745,8 @@ export async function getUserArticles(
   }
   if (options.filterStatus !== undefined) {
     articlesQuery = articlesQuery.where('articles.filter_status', '=', options.filterStatus);
+  } else if (options.excludeRejected) {
+    articlesQuery = articlesQuery.where('articles.filter_status', '!=', 'rejected');
   }
   if (options.processStatus !== undefined) {
     articlesQuery = articlesQuery.where('articles.process_status', '=', options.processStatus);
