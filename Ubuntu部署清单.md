@@ -725,15 +725,45 @@ http://your-server-ip:8007/api/external/search
 
 ## 常见问题排查
 
-### better-sqlite3 编译失败
+### better-sqlite3 编译失败 / ERR_DLOPEN_FAILED
+
+**症状**：执行 `pnpm rebuild better-sqlite3` 后重新启动服务，日志中出现 `ERR_DLOPEN_FAILED` 或 `Error: The module '.../better_sqlite3.node' was compiled against a different Node.js version using NODE_MODULE_VERSION`。
+
+**原因**：`pnpm rebuild` / `prebuild-install` 会尝试下载预编译的二进制文件，但下载的版本可能匹配的是与当前系统 Node.js 不同的 ABI 版本。例如：
+- 下载的 `better_sqlite3.node` 编译目标为 `NODE_MODULE_VERSION 137`（Node.js v24+）
+- 当前系统运行的是 Node.js **v22**（`NODE_MODULE_VERSION 127`）
+
+**解决**：删除 build 目录，强制从源码编译：
 
 ```bash
-# 安装编译工具
+# 1. 安装编译工具
 sudo apt-get install -y build-essential python3
 
-# 重新编译
-pnpm rebuild better-sqlite3
+# 2. 删除旧的 build 目录（关键！pnpm rebuild 不会自动清理预编译缓存）
+rm -rf node_modules/better-sqlite3/build
+
+# 3. 使用 node-gyp 从源码编译（而不是 pnpm rebuild）
+npx --yes node-gyp rebuild --release --directory=node_modules/better-sqlite3
+
+# 4. 验证编译后的二进制文件
+echo "--- 检查编译时间戳 ---"
+ls -la node_modules/better-sqlite3/build/Release/better_sqlite3.node
+
+# 5. 测试模块是否可正常加载
+node -e "const Database = require('better-sqlite3'); const db = new Database(':memory:'); console.log('Test passed:', db.prepare('SELECT 1 as test').get()); db.close();"
+
+# 6. 重启服务
+sudo systemctl restart lis-rss
+
+# 7. 验证服务状态
+sudo systemctl status lis-rss --no-pager
 ```
+
+> **提示**：编译后可以用 `file` 命令确认二进制架构：
+> ```bash
+> file node_modules/better-sqlite3/build/Release/better_sqlite3.node
+> # 期望输出：ELF 64-bit LSB shared object, x86-64
+> ```
 
 ### ChromaDB 连接失败
 
@@ -971,6 +1001,14 @@ pnpm rebuild better-sqlite3
 sudo systemctl restart lis-rss
 ```
 
+> **注意**：如果 `pnpm rebuild better-sqlite3` 后服务仍然因 `ERR_DLOPEN_FAILED` 启动失败（ABI 版本不匹配），需要从源码强制编译：
+> ```bash
+> rm -rf node_modules/better-sqlite3/build
+> npx --yes node-gyp rebuild --release --directory=node_modules/better-sqlite3
+> sudo systemctl restart lis-rss
+> ```
+> 详见 [better-sqlite3 编译失败 / ERR_DLOPEN_FAILED](#better-sqlite3-编译失败--err_dlopen_failed)。
+
 **有本地修改冲突时（强制覆盖本地）：**
 
 ```bash
@@ -982,6 +1020,8 @@ pnpm install
 pnpm rebuild better-sqlite3
 sudo systemctl restart lis-rss
 ```
+
+> **注意**：同样需要检查 `pnpm rebuild` 后的 ABI 兼容性，如遇 `ERR_DLOPEN_FAILED` 则按上述方式从源码编译。
 
 > **注意**：
 > - `git reset --hard` 会永久丢弃所有本地代码修改
