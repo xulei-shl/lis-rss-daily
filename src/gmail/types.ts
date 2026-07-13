@@ -5,6 +5,7 @@ export interface EmailSourceConfig {
   emailAddress: string;
   imapPasswordEncrypted: string;
   targetSenders: string[];
+  domainId: number;
   status: 'active' | 'inactive';
   lastFetchedAt: string | null;
   lastError: string | null;

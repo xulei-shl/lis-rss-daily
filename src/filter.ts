@@ -31,6 +31,8 @@ export interface FilterInput {
   description: string;
   content?: string;
   sourceType?: SourceType;
+  /** 可选的源绑定领域 ID。未传时 llmFilter 内部根据 articleId 反查源表获取 */
+  sourceDomainId?: number;
 }
 
 /**
@@ -107,14 +109,26 @@ async function llmFilter(
   rawResponse?: string;
 }> {
   // Import here to avoid circular dependency
-  const { getActiveTopicDomains } = await import('./api/topic-domains.js');
+  const { getTopicDomainById, getArticleSourceDomainId } = await import('./api/topic-domains.js');
 
-  // Get active domains for result mapping
-  const activeDomains = await getActiveTopicDomains(input.userId);
-  const domainNames = new Map<number, string>(activeDomains.map((d) => [d.id, d.name]));
-  if (activeDomains.length === 0) {
-    return { results: new Map(), domainNames };
+  // 确定领域 ID：优先用传入的 sourceDomainId，否则反查源表
+  let domainId = input.sourceDomainId;
+  if (domainId === undefined) {
+    try {
+      domainId = await getArticleSourceDomainId(input.articleId);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      return { results: new Map(), domainNames: new Map(), error: errMsg };
+    }
   }
+
+  // 查单个领域
+  const domain = await getTopicDomainById(domainId, input.userId);
+  const domainNames = new Map<number, string>();
+  if (!domain) {
+    return { results: new Map(), domainNames, error: `领域 ${domainId} 不存在或无权访问` };
+  }
+  domainNames.set(domain.id, domain.name);
 
   // Build variables using the unified builder
   const articleContext: ArticleContext = {
@@ -125,6 +139,7 @@ async function llmFilter(
     description: input.description,
     content: input.content,
     sourceType: input.sourceType,
+    domainId: domain.id,
   };
   const variables = await buildPromptVariables({ type: 'filter', article: articleContext });
 

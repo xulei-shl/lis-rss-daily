@@ -629,6 +629,7 @@ export class RSSScheduler {
         'articles.markdown_content',
         'articles.url',
         'rss_sources.source_type',
+        'rss_sources.domain_id',
       ])
       .execute();
 
@@ -645,6 +646,7 @@ export class RSSScheduler {
           // 优先使用清洗后的 Markdown，回退到原始 content
           content: article.markdown_content || article.content || undefined,
           sourceType: article.source_type,
+          sourceDomainId: article.domain_id,
         };
 
         const result = await filterArticle(input);

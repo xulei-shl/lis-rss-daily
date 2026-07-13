@@ -523,9 +523,10 @@ export class JournalScheduler {
     // 获取该期刊未过滤的文章
     const articles = await db
       .selectFrom('articles')
+      .innerJoin('journals', 'journals.id', 'articles.journal_id')
       .where('journal_id', '=', journalId)
       .where('filter_status', '=', 'pending')
-      .select(['id', 'title', 'content', 'url'])
+      .select(['articles.id', 'articles.title', 'articles.content', 'articles.url', 'journals.domain_id'])
       .execute();
 
     log.info({ journalId, count: articles.length }, 'Starting auto-filter for journal articles');
@@ -541,6 +542,7 @@ export class JournalScheduler {
           title: article.title,
           description: article.content || '',
           sourceType: 'journal',
+          sourceDomainId: article.domain_id,
         };
 
         const result = await filterArticle(input);

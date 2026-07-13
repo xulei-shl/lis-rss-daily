@@ -50,6 +50,7 @@ export interface CreateJournalParams {
   publicationCycle: PublicationCycle;
   issuesPerYear: number;
   volumeOffset?: number;
+  domainId?: number;
 }
 
 /**
@@ -63,6 +64,7 @@ export interface UpdateJournalParams {
   issuesPerYear?: number;
   volumeOffset?: number;
   status?: 'active' | 'inactive';
+  domainId?: number;
 }
 
 /**
@@ -189,6 +191,19 @@ export async function createJournal(params: CreateJournalParams): Promise<Journa
 
   const now = new Date().toISOString();
 
+  // 如果未指定 domain_id，使用用户优先级最高的活跃领域
+  let domainId = params.domainId;
+  if (domainId === undefined) {
+    const defaultDomain = await db
+      .selectFrom('topic_domains')
+      .where('user_id', '=', params.userId)
+      .where('is_active', '=', 1)
+      .select('id')
+      .orderBy('priority', 'desc')
+      .executeTakeFirst();
+    domainId = defaultDomain?.id;
+  }
+
   const result = await db
     .insertInto('journals')
     .values({
@@ -200,6 +215,7 @@ export async function createJournal(params: CreateJournalParams): Promise<Journa
       publication_cycle: params.publicationCycle,
       issues_per_year: params.issuesPerYear,
       volume_offset: params.volumeOffset || 1956,
+      domain_id: domainId,
       status: 'active',
       updated_at: now,
     })
@@ -254,6 +270,9 @@ export async function updateJournal(
   }
   if (params.status !== undefined) {
     updateData.status = params.status;
+  }
+  if (params.domainId !== undefined) {
+    updateData.domain_id = params.domainId;
   }
 
   const result = await db

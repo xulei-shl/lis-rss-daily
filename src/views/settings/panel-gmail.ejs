@@ -19,6 +19,7 @@
         <th>名称</th>
         <th>邮箱地址</th>
         <th>发件人白名单</th>
+        <th>领域</th>
         <th>状态</th>
         <th>上次抓取</th>
         <th>操作</th>
@@ -70,6 +71,12 @@
         <option value="inactive">停用</option>
       </select>
     </div>
+    <div class="form-group">
+      <label>主题领域</label>
+      <select id="gmailDomainId" class="form-control" onfocus="renderDomainSelect('gmailDomainId', this.value)">
+        <option value="">加载中...</option>
+      </select>
+    </div>
     <div class="form-actions">
       <button class="btn btn-secondary" onclick="testGmailConnection()">🔌 测试连接</button>
       <button class="btn btn-primary" onclick="saveGmailSource()">保存</button>
@@ -104,6 +111,7 @@ async function loadGmailSources() {
         <td>${esc(source.name) || esc(source.email_address)}</td>
         <td>${esc(source.email_address)}</td>
         <td style="font-size:0.85rem;">${esc(senderPreview)}</td>
+        <td>${getDomainName(source.domain_id)}</td>
         <td><span class="badge badge-${source.status === 'active' ? 'success' : 'secondary'}">${source.status === 'active' ? '已启用' : '已停用'}</span></td>
         <td>${source.last_fetched_at ? new Date(source.last_fetched_at).toLocaleString('zh-CN') : '-'}</td>
         <td>
@@ -135,6 +143,7 @@ function showGmailAddModal() {
   document.getElementById('gmailSenders').value = '';
   document.getElementById('gmailStatus').value = 'active';
   document.getElementById('gmailTestResult').innerHTML = '';
+  renderDomainSelect('gmailDomainId', '');
   document.getElementById('gmailModal').classList.add('active');
 }
 
@@ -156,6 +165,7 @@ async function editGmailSource(id) {
     document.getElementById('gmailSenders').value = (JSON.parse(source.target_senders || '[]')).join('\n');
     document.getElementById('gmailStatus').value = source.status || 'active';
     document.getElementById('gmailTestResult').innerHTML = '';
+    renderDomainSelect('gmailDomainId', source.domain_id);
     document.getElementById('gmailModal').classList.add('active');
   } catch (err) {
     alert('加载邮件源失败');
@@ -211,7 +221,7 @@ async function saveGmailSource() {
     return;
   }
 
-  const body = { name, emailAddress: email, targetSenders: senders, status };
+  const body = { name, emailAddress: email, targetSenders: senders, status, domainId: parseInt(document.getElementById('gmailDomainId').value) || undefined };
 
   if (password) {
     body.imapPassword = password;

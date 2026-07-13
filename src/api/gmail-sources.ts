@@ -12,6 +12,7 @@ export interface CreateEmailSourceInput {
   imapPassword: string;
   targetSenders: string[];
   status?: 'active' | 'inactive';
+  domainId?: number;
 }
 
 export interface UpdateEmailSourceInput {
@@ -20,6 +21,7 @@ export interface UpdateEmailSourceInput {
   imapPassword?: string;
   targetSenders?: string[];
   status?: 'active' | 'inactive';
+  domainId?: number;
 }
 
 function encryptPassword(password: string): string {
@@ -50,6 +52,19 @@ export async function createEmailSource(userId: number, input: CreateEmailSource
   const db = getDb();
   const encrypted = encryptPassword(input.imapPassword);
 
+  // 如果未指定 domain_id，使用用户优先级最高的活跃领域
+  let domainId = input.domainId;
+  if (domainId === undefined) {
+    const defaultDomain = await db
+      .selectFrom('topic_domains')
+      .where('user_id', '=', userId)
+      .where('is_active', '=', 1)
+      .select('id')
+      .orderBy('priority', 'desc')
+      .executeTakeFirst();
+    domainId = defaultDomain?.id;
+  }
+
   const result = await db
     .insertInto('email_sources')
     .values({
@@ -58,6 +73,7 @@ export async function createEmailSource(userId: number, input: CreateEmailSource
       email_address: input.emailAddress,
       imap_password_encrypted: encrypted,
       target_senders: JSON.stringify(input.targetSenders),
+      domain_id: domainId,
       status: input.status || 'active',
       updated_at: new Date().toISOString(),
     } as any)
@@ -77,6 +93,7 @@ export async function updateEmailSource(id: number, userId: number, input: Updat
   if (input.imapPassword !== undefined) updateData.imap_password_encrypted = encryptPassword(input.imapPassword);
   if (input.targetSenders !== undefined) updateData.target_senders = JSON.stringify(input.targetSenders);
   if (input.status !== undefined) updateData.status = input.status;
+  if (input.domainId !== undefined) updateData.domain_id = input.domainId;
 
   const result = await db
     .updateTable('email_sources')

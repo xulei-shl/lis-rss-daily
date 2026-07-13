@@ -82,7 +82,7 @@ router.get('/journals/:id', requireAuth, async (req: AuthRequest, res) => {
  */
 router.post('/journals', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const { name, sourceType, sourceUrl, journalCode, publicationCycle, issuesPerYear, volumeOffset } = req.body;
+    const { name, sourceType, sourceUrl, journalCode, publicationCycle, issuesPerYear, volumeOffset, domainId } = req.body;
 
     // 验证必填字段
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -131,6 +131,7 @@ router.post('/journals', requireAuth, requireAdmin, async (req: AuthRequest, res
       publicationCycle: publicationCycle as PublicationCycle,
       issuesPerYear,
       volumeOffset,
+      domainId: domainId ? parseInt(domainId) : undefined,
     });
 
     res.status(201).json(journal);
@@ -156,7 +157,7 @@ router.put('/journals/:id', requireAuth, requireAdmin, async (req: AuthRequest, 
       return res.status(400).json({ error: 'Invalid journal ID' });
     }
 
-    const { name, sourceUrl, journalCode, publicationCycle, issuesPerYear, volumeOffset, status } = req.body;
+    const { name, sourceUrl, journalCode, publicationCycle, issuesPerYear, volumeOffset, status, domainId } = req.body;
 
     const updateData: journalsService.UpdateJournalParams = {};
 
@@ -208,6 +209,13 @@ router.put('/journals/:id', requireAuth, requireAdmin, async (req: AuthRequest, 
         return res.status(400).json({ error: '状态必须是 active 或 inactive' });
       }
       updateData.status = status;
+    }
+
+    if (domainId !== undefined) {
+      const parsed = parseInt(domainId);
+      if (!isNaN(parsed)) {
+        updateData.domainId = parsed;
+      }
     }
 
     const journal = await journalsService.updateJournal(req.userId!, id, updateData);

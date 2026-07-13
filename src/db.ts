@@ -65,6 +65,7 @@ export interface RssSourcesTable {
   name: string;
   url: string;
   source_type: SourceType;
+  domain_id: number;
   last_fetched_at: string | null;
   fetch_interval: number;
   status: 'active' | 'inactive';
@@ -229,6 +230,7 @@ export interface JournalsTable {
   last_year: number | null;
   last_issue: number | null;
   last_volume: number | null;
+  domain_id: number;
   status: 'active' | 'inactive';
   created_at: Generated<string>;
   updated_at: string;
@@ -267,6 +269,7 @@ export interface KeywordSubscriptionsTable {
   keyword: string;
   year_start: number | null;
   year_end: number | null;
+  domain_id: number;
   is_active: number;
   spider_type: 'google_scholar' | 'cnki';
   num_results: number;
@@ -316,6 +319,7 @@ export interface EmailSourcesTable {
   email_address: string;
   imap_password_encrypted: string;
   target_senders: string;
+  domain_id: number;
   status: 'active' | 'inactive';
   last_fetched_at: string | null;
   last_error: string | null;

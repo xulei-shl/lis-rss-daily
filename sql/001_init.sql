@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS rss_sources (
   name TEXT NOT NULL,
   url TEXT NOT NULL,
   source_type TEXT DEFAULT 'blog' CHECK(source_type IN ('journal', 'blog', 'news')),
+  domain_id INTEGER NOT NULL REFERENCES topic_domains(id),
   last_fetched_at DATETIME,
   fetch_interval INTEGER DEFAULT 3600,
   status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS rss_sources (
 CREATE INDEX IF NOT EXISTS idx_rss_sources_user_id ON rss_sources(user_id);
 CREATE INDEX IF NOT EXISTS idx_rss_sources_status ON rss_sources(status);
 CREATE INDEX IF NOT EXISTS idx_rss_sources_source_type ON rss_sources(source_type);
+CREATE INDEX IF NOT EXISTS idx_rss_sources_domain_id ON rss_sources(domain_id);
 
 -- ===========================================
 -- 2b. Email Sources Table
@@ -58,6 +60,7 @@ CREATE TABLE IF NOT EXISTS email_sources (
   email_address TEXT NOT NULL,
   imap_password_encrypted TEXT NOT NULL,
   target_senders TEXT NOT NULL DEFAULT '[]',
+  domain_id INTEGER NOT NULL REFERENCES topic_domains(id),
   status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
   last_fetched_at DATETIME,
   last_error TEXT,
@@ -68,6 +71,7 @@ CREATE TABLE IF NOT EXISTS email_sources (
 
 CREATE INDEX IF NOT EXISTS idx_email_sources_user_id ON email_sources(user_id);
 CREATE INDEX IF NOT EXISTS idx_email_sources_status ON email_sources(status);
+CREATE INDEX IF NOT EXISTS idx_email_sources_domain_id ON email_sources(domain_id);
 
 -- ===========================================
 -- 3. Articles Table
@@ -388,6 +392,7 @@ CREATE TABLE IF NOT EXISTS journals (
   last_year INTEGER,                     -- 上次爬取年份
   last_issue INTEGER,                    -- 上次爬取期号
   last_volume INTEGER,                   -- 上次爬取卷号（LIS期刊使用）
+  domain_id INTEGER NOT NULL REFERENCES topic_domains(id),
   status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -397,6 +402,7 @@ CREATE TABLE IF NOT EXISTS journals (
 CREATE INDEX IF NOT EXISTS idx_journals_user_id ON journals(user_id);
 CREATE INDEX IF NOT EXISTS idx_journals_status ON journals(status);
 CREATE INDEX IF NOT EXISTS idx_journals_source_type ON journals(source_type);
+CREATE INDEX IF NOT EXISTS idx_journals_domain_id ON journals(domain_id);
 
 -- ===========================================
 -- 14. Journal Crawl Logs Table (爬取日志表)
@@ -430,6 +436,7 @@ CREATE TABLE IF NOT EXISTS keyword_subscriptions (
   keyword TEXT NOT NULL,
   year_start INTEGER,
   year_end INTEGER,
+  domain_id INTEGER NOT NULL REFERENCES topic_domains(id),
   is_active INTEGER DEFAULT 1,
   spider_type TEXT DEFAULT 'google_scholar' CHECK(spider_type IN ('google_scholar', 'cnki')),
   num_results INTEGER DEFAULT 20,
@@ -444,6 +451,7 @@ CREATE TABLE IF NOT EXISTS keyword_subscriptions (
 CREATE INDEX IF NOT EXISTS idx_keyword_subscriptions_user_id ON keyword_subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_keyword_subscriptions_is_active ON keyword_subscriptions(is_active);
 CREATE INDEX IF NOT EXISTS idx_keyword_subscriptions_spider_type ON keyword_subscriptions(spider_type);
+CREATE INDEX IF NOT EXISTS idx_keyword_subscriptions_domain_id ON keyword_subscriptions(domain_id);
 
 -- ===========================================
 -- 17. Keyword Crawl Logs Table (关键词爬取日志表)

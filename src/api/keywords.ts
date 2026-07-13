@@ -23,6 +23,7 @@ export interface CreateKeywordParams {
   spiderType?: 'google_scholar' | 'cnki';
   numResults?: number;
   isActive?: boolean;
+  domainId?: number;
 }
 
 /**
@@ -35,6 +36,7 @@ export interface UpdateKeywordParams {
   spiderType?: 'google_scholar' | 'cnki';
   numResults?: number;
   isActive?: boolean;
+  domainId?: number;
 }
 
 /**
@@ -160,7 +162,20 @@ export async function getKeyword(userId: number, keywordId: number): Promise<Key
 export async function createKeyword(params: CreateKeywordParams): Promise<KeywordSubscriptionsSelection> {
   const db = getDb();
 
-  const { userId, keyword, yearStart, yearEnd, spiderType = 'google_scholar', numResults = 20, isActive = true } = params;
+  const { userId, keyword, yearStart, yearEnd, spiderType = 'google_scholar', numResults = 20, isActive = true, domainId } = params;
+
+  // 如果未指定 domain_id，使用用户优先级最高的活跃领域
+  let resolvedDomainId = domainId;
+  if (resolvedDomainId === undefined) {
+    const defaultDomain = await db
+      .selectFrom('topic_domains')
+      .where('user_id', '=', userId)
+      .where('is_active', '=', 1)
+      .select('id')
+      .orderBy('priority', 'desc')
+      .executeTakeFirst();
+    resolvedDomainId = defaultDomain?.id;
+  }
 
   // 插入数据库
   const result = await db
@@ -170,6 +185,7 @@ export async function createKeyword(params: CreateKeywordParams): Promise<Keywor
       keyword: keyword.trim(),
       year_start: yearStart || null,
       year_end: yearEnd || null,
+      domain_id: resolvedDomainId,
       spider_type: spiderType,
       num_results: numResults,
       is_active: isActive ? 1 : 0,
@@ -224,6 +240,10 @@ export async function updateKeyword(userId: number, keywordId: number, params: U
 
   if (params.isActive !== undefined) {
     updateData.is_active = params.isActive ? 1 : 0;
+  }
+
+  if (params.domainId !== undefined) {
+    updateData.domain_id = params.domainId;
   }
 
   // 执行更新
@@ -477,12 +497,14 @@ async function saveArticles(
  */
 async function triggerArticleProcessing(articleId: number): Promise<void> {
   try {
-    // 获取文章信息
+    // 获取文章信息及关联的关键词订阅领域
     const db = getDb();
     const article = await db
       .selectFrom('articles')
-      .where('id', '=', articleId)
-      .selectAll()
+      .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+      .where('articles.id', '=', articleId)
+      .selectAll('articles')
+      .select('keyword_subscriptions.domain_id')
       .executeTakeFirst();
 
     if (!article) {
@@ -499,6 +521,7 @@ async function triggerArticleProcessing(articleId: number): Promise<void> {
       title: article.title,
       url: article.url,
       description: article.markdown_content || article.content || '',
+      sourceDomainId: (article as any).domain_id,
     });
 
     if (!filterResult.passed) {

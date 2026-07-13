@@ -231,6 +231,7 @@ function renderTable() {
       '</a>' +
       '</td>' +
       '<td><span class="type-badge">' + typeLabel + '</span></td>' +
+      '<td>' + getDomainName(source.domain_id) + '</td>' +
       '<td>' +
       '<span class="status-badge ' + source.status + '">' + (source.status === 'active' ? '启用' : '禁用') + '</span>' +
       '</td>' +
@@ -257,6 +258,7 @@ function showAddModal() {
   document.getElementById('sourceStatus').checked = true;
   document.getElementById('validationResult').className = 'validation-result';
   document.getElementById('validationResult').textContent = '';
+  renderDomainSelect('sourceDomainId', '');
   document.getElementById('sourceModal').classList.add('active');
   document.getElementById('sourceName').focus();
 }
@@ -275,6 +277,7 @@ function editSource(id) {
   document.getElementById('sourceType').value = source.source_type || 'blog';
   document.getElementById('fetchInterval').value = source.fetch_interval.toString();
   document.getElementById('sourceStatus').checked = source.status === 'active';
+  renderDomainSelect('sourceDomainId', source.domain_id);
   document.getElementById('validationResult').className = 'validation-result';
   document.getElementById('validationResult').textContent = '';
   document.getElementById('sourceModal').classList.add('active');
@@ -336,7 +339,8 @@ document.getElementById('sourceForm').addEventListener('submit', async function 
     url: document.getElementById('sourceUrl').value.trim(),
     sourceType: document.getElementById('sourceType').value,
     fetchInterval: parseInt(document.getElementById('fetchInterval').value),
-    status: document.getElementById('sourceStatus').checked ? 'active' : 'inactive'
+    status: document.getElementById('sourceStatus').checked ? 'active' : 'inactive',
+    domainId: parseInt(document.getElementById('sourceDomainId').value) || undefined
   };
 
   // Debug logging
@@ -1418,6 +1422,7 @@ function renderJournalsTable() {
     return '<tr>' +
       '<td class="rss-name">' + escapeHtml(journal.name) + '</td>' +
       '<td><span class="type-badge">' + (sourceTypeLabels[journal.source_type] || journal.source_type) + '</span></td>' +
+      '<td>' + getDomainName(journal.domain_id) + '</td>' +
       '<td>' + (cycleLabels[journal.publication_cycle] || journal.publication_cycle) + '</td>' +
       '<td>' + lastCrawl + '</td>' +
       '<td>' +
@@ -1444,6 +1449,7 @@ function showJournalAddModal() {
   document.getElementById('journalPublicationCycle').value = 'monthly';
   document.getElementById('journalIssuesPerYear').value = '12';
   document.getElementById('journalStatus').checked = true;
+  renderDomainSelect('journalDomainId', '');
   updateJournalSourceUI();
   document.getElementById('journalModal').classList.add('active');
   document.getElementById('journalName').focus();
@@ -1462,6 +1468,7 @@ function editJournal(id) {
   document.getElementById('journalPublicationCycle').value = journal.publication_cycle;
   document.getElementById('journalIssuesPerYear').value = journal.issues_per_year;
   document.getElementById('journalStatus').checked = journal.status === 'active';
+  renderDomainSelect('journalDomainId', journal.domain_id);
   updateJournalSourceUI();
   document.getElementById('journalModal').classList.add('active');
 }
@@ -1527,7 +1534,8 @@ document.getElementById('journalForm')?.addEventListener('submit', async functio
     journalCode: (sourceType === 'rdfybk' || sourceType === 'wanfang') ? document.getElementById('journalCode').value.trim() : null,
     publicationCycle: document.getElementById('journalPublicationCycle').value,
     issuesPerYear: parseInt(document.getElementById('journalIssuesPerYear').value),
-    status: document.getElementById('journalStatus').checked ? 'active' : 'inactive'
+    status: document.getElementById('journalStatus').checked ? 'active' : 'inactive',
+    domainId: parseInt(document.getElementById('journalDomainId').value) || undefined
   };
 
   try {
@@ -2223,6 +2231,7 @@ function renderKeywordsTable() {
     <tr>
       <td>${escapeHtml(kw.keyword)}</td>
       <td>${formatYearRange(kw.year_start, kw.year_end)}</td>
+      <td>${getDomainName(kw.domain_id)}</td>
       <td>${getSpiderTypeLabel(kw.spider_type)}</td>
       <td>${kw.num_results}</td>
       <td>${kw.last_crawl_time ? formatDate(kw.last_crawl_time) : '<span style="color: #999">未爬取</span>'}</td>
@@ -2292,6 +2301,7 @@ function showKeywordAddModal() {
   document.getElementById('spiderType').value = 'google_scholar';
   document.getElementById('numResults').value = '20';
   document.getElementById('keywordActive').checked = true;
+  renderDomainSelect('keywordDomainId', '');
   document.getElementById('keywordModal').classList.add('active');
 }
 
@@ -2309,6 +2319,7 @@ async function showKeywordEditModal(id) {
   document.getElementById('spiderType').value = keyword.spider_type;
   document.getElementById('numResults').value = keyword.num_results;
   document.getElementById('keywordActive').checked = keyword.is_active === 1;
+  renderDomainSelect('keywordDomainId', keyword.domain_id);
   document.getElementById('keywordModal').classList.add('active');
 }
 
@@ -2344,7 +2355,8 @@ async function saveKeyword() {
     yearEnd: yearEnd ? parseInt(yearEnd) : null,
     spiderType,
     numResults,
-    isActive
+    isActive,
+    domainId: parseInt(document.getElementById('keywordDomainId').value) || undefined
   };
 
   // 新建时才发送 keyword 字段

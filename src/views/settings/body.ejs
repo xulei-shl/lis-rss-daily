@@ -25,3 +25,38 @@
 
 <script src="/js/settings.js"></script>
 <script src="/js/wechat-settings.js"></script>
+<script>
+// 加载主题领域列表，供所有源表单的下拉框使用
+let topicDomains = [];
+
+async function loadTopicDomains() {
+  try {
+    const res = await fetch('/api/topic-domains', { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to load topic domains');
+    const data = await res.json();
+    topicDomains = data.domains || [];
+  } catch (err) {
+    console.error('加载主题领域失败:', err);
+  }
+}
+
+function renderDomainSelect(selectId, selectedDomainId) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  select.innerHTML = '<option value="">请选择领域</option>';
+  for (const d of topicDomains) {
+    const opt = document.createElement('option');
+    opt.value = d.id;
+    opt.textContent = d.name;
+    if (selectedDomainId && d.id === selectedDomainId) opt.selected = true;
+    select.appendChild(opt);
+  }
+}
+
+function getDomainName(domainId) {
+  const d = topicDomains.find(d => d.id === domainId);
+  return d ? d.name : '-';
+}
+
+document.addEventListener('DOMContentLoaded', loadTopicDomains);
+</script>

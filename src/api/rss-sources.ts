@@ -26,6 +26,7 @@ export interface CreateRSSSourceInput {
   sourceType?: SourceType;
   fetchInterval?: number;
   status?: 'active' | 'inactive';
+  domainId?: number;
 }
 
 /**
@@ -37,6 +38,7 @@ export interface UpdateRSSSourceInput {
   sourceType?: SourceType;
   fetchInterval?: number;
   status?: 'active' | 'inactive';
+  domainId?: number;
 }
 
 /**
@@ -81,6 +83,19 @@ export async function createRSSSource(
 ): Promise<CreateResult> {
   const db = getDb();
 
+  // 如果未指定 domain_id，使用用户优先级最高的活跃领域
+  let domainId = data.domainId;
+  if (domainId === undefined) {
+    const defaultDomain = await db
+      .selectFrom('topic_domains')
+      .where('user_id', '=', userId)
+      .where('is_active', '=', 1)
+      .select('id')
+      .orderBy('priority', 'desc')
+      .executeTakeFirst();
+    domainId = defaultDomain?.id;
+  }
+
   const result = await db
     .insertInto('rss_sources')
     .values({
@@ -88,6 +103,7 @@ export async function createRSSSource(
       name: data.name,
       url: data.url,
       source_type: data.sourceType ?? DEFAULT_SOURCE_TYPE,
+      domain_id: domainId,
       fetch_interval: data.fetchInterval ?? 3600,
       status: data.status ?? 'active',
       updated_at: new Date().toISOString(),
@@ -207,6 +223,7 @@ export async function updateRSSSource(
       ...(data.sourceType !== undefined && { source_type: data.sourceType }),
       ...(data.fetchInterval !== undefined && { fetch_interval: data.fetchInterval }),
       ...(data.status !== undefined && { status: data.status }),
+      ...(data.domainId !== undefined && { domain_id: data.domainId }),
       updated_at: new Date().toISOString(),
     })
     .where('id', '=', id)

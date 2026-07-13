@@ -76,7 +76,7 @@ router.get('/rss-sources/:id', requireAuth, async (req: AuthRequest, res) => {
  */
 router.post('/rss-sources', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const { name, url, sourceType, fetchInterval, status } = req.body;
+    const { name, url, sourceType, fetchInterval, status, domainId } = req.body;
 
     // Validation
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -115,6 +115,7 @@ router.post('/rss-sources', requireAuth, requireAdmin, async (req: AuthRequest, 
       sourceType,
       fetchInterval: fetchInterval ? parseInt(fetchInterval) : undefined,
       status,
+      domainId: domainId ? parseInt(domainId) : undefined,
     });
 
     res.status(201).json(result);
@@ -140,7 +141,7 @@ router.put('/rss-sources/:id', requireAuth, requireAdmin, async (req: AuthReques
       return res.status(400).json({ error: 'Invalid RSS source ID' });
     }
 
-    const { name, url, sourceType, fetchInterval, status } = req.body;
+    const { name, url, sourceType, fetchInterval, status, domainId } = req.body;
 
     // Debug logging
     log.info({ id, sourceType, bodyKeys: Object.keys(req.body) }, 'RSS source update request');
@@ -201,6 +202,13 @@ router.put('/rss-sources/:id', requireAuth, requireAdmin, async (req: AuthReques
         return res.status(400).json({ error: 'Status must be "active" or "inactive"' });
       }
       updateData.status = status;
+    }
+
+    if (domainId !== undefined) {
+      const parsed = parseInt(domainId);
+      if (!isNaN(parsed)) {
+        updateData.domainId = parsed;
+      }
     }
 
     log.info({ id, updateData }, 'About to update RSS source');

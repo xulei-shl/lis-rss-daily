@@ -351,3 +351,46 @@ export async function getTopicDomainByName(
 
   return domain;
 }
+
+/**
+ * Get article's source-bound domain_id by looking up its source_origin chain
+ * @param articleId - Article ID
+ * @returns domain_id
+ */
+export async function getArticleSourceDomainId(articleId: number): Promise<number> {
+  const db = getDb();
+
+  const article = await db
+    .selectFrom('articles')
+    .select(['source_origin', 'rss_source_id', 'journal_id', 'keyword_id', 'email_source_id'])
+    .where('id', '=', articleId)
+    .executeTakeFirst();
+
+  if (!article) {
+    throw new Error(`Article ${articleId} not found`);
+  }
+
+  const { source_origin, rss_source_id, journal_id, keyword_id, email_source_id } = article;
+
+  let domainId: number | undefined;
+
+  if (source_origin === 'rss' && rss_source_id) {
+    const src = await db.selectFrom('rss_sources').select('domain_id').where('id', '=', rss_source_id).executeTakeFirst();
+    domainId = src?.domain_id;
+  } else if (source_origin === 'journal' && journal_id) {
+    const src = await db.selectFrom('journals').select('domain_id').where('id', '=', journal_id).executeTakeFirst();
+    domainId = src?.domain_id;
+  } else if (source_origin === 'keyword' && keyword_id) {
+    const src = await db.selectFrom('keyword_subscriptions').select('domain_id').where('id', '=', keyword_id).executeTakeFirst();
+    domainId = src?.domain_id;
+  } else if (source_origin === 'email' && email_source_id) {
+    const src = await db.selectFrom('email_sources').select('domain_id').where('id', '=', email_source_id).executeTakeFirst();
+    domainId = src?.domain_id;
+  }
+
+  if (domainId === undefined) {
+    throw new Error(`Cannot determine domain_id for article ${articleId} (source_origin=${source_origin})`);
+  }
+
+  return domainId;
+}

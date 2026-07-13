@@ -8,7 +8,7 @@
  */
 
 import { getDb } from '../db.js';
-import { getActiveTopicDomains } from './topic-domains.js';
+import { getActiveTopicDomains, getTopicDomainById } from './topic-domains.js';
 import { getActiveKeywordsForDomain } from './topic-keywords.js';
 import { SOURCE_TYPE_PRIORITY, SOURCE_TYPE_LABELS, type SourceType } from '../constants/source-types.js';
 
@@ -37,6 +37,8 @@ export interface ArticleContext {
   sourceName?: string;
   author?: string;
   publishedAt?: string;
+  /** 源绑定的主题领域 ID，用于过滤时只查该领域 */
+  domainId?: number;
 }
 
 /**
@@ -71,8 +73,31 @@ export interface BuildVariablesResult {
 
 /**
  * 构建领域信息文本（用于 filter 类型）
+ * @param userId - 用户 ID
+ * @param domainId - 可选的领域 ID，传入则只返回该领域信息
  */
-async function buildDomainsInfo(userId: number): Promise<string> {
+async function buildDomainsInfo(userId: number, domainId?: number): Promise<string> {
+  if (domainId !== undefined) {
+    const domain = await getTopicDomainById(domainId, userId);
+    if (!domain) {
+      return '暂无配置主题领域';
+    }
+    const keywords = await getActiveKeywordsForDomain(domain.id);
+    return `
+## 领域ID: ${domain.id} - ${domain.name}
+描述: ${domain.description || ''}
+主题词:
+${keywords.length > 0
+    ? keywords
+      .map((k) => {
+        const descPart = k.description ? `，描述/同义词：${k.description}` : '';
+        return `- ${k.keyword}（权重：${k.weight}${descPart}）`;
+      })
+      .join('\n')
+    : '- 无'}
+`;
+  }
+
   const activeDomains = await getActiveTopicDomains(userId);
   if (activeDomains.length === 0) {
     return '暂无配置主题领域';
@@ -198,7 +223,7 @@ async function buildFilterVariables(context: VariableBuildContext): Promise<Buil
   const publishedAt = article.publishedAt ?? details.publishedAt;
 
   const variables: Record<string, string> = {
-    TOPIC_DOMAINS: await buildDomainsInfo(article.userId),
+    TOPIC_DOMAINS: await buildDomainsInfo(article.userId, article.domainId),
     ARTICLE_TITLE: article.title || '无',
     ARTICLE_URL: article.url || '无',
     ARTICLE_CONTENT: article.content ? article.content.substring(0, 2000) : '',

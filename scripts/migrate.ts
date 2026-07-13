@@ -829,6 +829,23 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
         continue;
       }
 
+      // ============================================================
+      // 037: 为所有源表添加 domain_id 字段（关联 topic_domains）
+      // ============================================================
+      if (file === '037_add_domain_id_to_sources.sql') {
+        const hasDomainId = hasColumn(db, 'rss_sources', 'domain_id');
+
+        if (!hasDomainId) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log('      → Added domain_id to rss_sources, journals, keyword_subscriptions, email_sources');
+          console.log('      → Backfilled existing rows with user\'s highest-priority active domain');
+        } else {
+          console.log('      → Skipped (domain_id already exists)');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

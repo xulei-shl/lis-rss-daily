@@ -181,6 +181,7 @@ export async function processEmailSource(source: EmailSourceConfig): Promise<Ema
                   title,
                   description: article.summary || content,
                   sourceType: 'email',
+                  sourceDomainId: source.domainId,
                 };
                 const filterResult = await filterArticle(filterInput);
                 if (filterResult.passed) {

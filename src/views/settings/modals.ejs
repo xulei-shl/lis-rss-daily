@@ -23,6 +23,12 @@
         </select>
       </div>
       <div class="form-group">
+        <label for="sourceDomainId">主题领域</label>
+        <select id="sourceDomainId" onfocus="renderDomainSelect('sourceDomainId', this.value)">
+          <option value="">加载中...</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label for="fetchInterval">抓取间隔</label>
         <select id="fetchInterval" class="fetch-interval-select">
           <option value="3600">1 小时</option>
@@ -206,6 +212,12 @@
         <input type="number" id="journalIssuesPerYear" min="1" max="52" required value="12">
       </div>
       <div class="form-group">
+        <label for="journalDomainId">主题领域</label>
+        <select id="journalDomainId" onfocus="renderDomainSelect('journalDomainId', this.value)">
+          <option value="">加载中...</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label for="journalStatus">启用</label>
         <input type="checkbox" id="journalStatus">
       </div>
@@ -287,6 +299,13 @@
         <label for="numResults">每次爬取结果数</label>
         <input type="number" id="numResults" value="20" min="10" max="100">
         <small class="form-hint">建议不超过 50，避免触发反爬</small>
+      </div>
+
+      <div class="form-group">
+        <label for="keywordDomainId">主题领域</label>
+        <select id="keywordDomainId" onfocus="renderDomainSelect('keywordDomainId', this.value)">
+          <option value="">加载中...</option>
+        </select>
       </div>
       
       <div class="form-group">
