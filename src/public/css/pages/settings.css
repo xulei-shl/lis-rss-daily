@@ -178,6 +178,47 @@
     width: 10%;
 }
 
+/* Keywords Table Column Widths (9 columns) */
+#keywordsTable th:nth-child(1),
+#keywordsTable td:nth-child(1) {
+    width: 20%;
+}
+
+#keywordsTable th:nth-child(2),
+#keywordsTable td:nth-child(2) {
+    width: 10%;
+}
+
+#keywordsTable th:nth-child(3),
+#keywordsTable td:nth-child(3) {
+    width: 8%;
+}
+
+#keywordsTable th:nth-child(4),
+#keywordsTable td:nth-child(4) {
+    width: 10%;
+}
+
+#keywordsTable th:nth-child(5),
+#keywordsTable td:nth-child(5) {
+    width: 8%;
+}
+
+#keywordsTable th:nth-child(6),
+#keywordsTable td:nth-child(6) {
+    width: 10%;
+}
+
+#keywordsTable th:nth-child(7),
+#keywordsTable td:nth-child(7) {
+    width: 8%;
+}
+
+#keywordsTable th:nth-child(8),
+#keywordsTable td:nth-child(8) {
+    width: 8%;
+}
+
 /* Action column common styling (Last Column) */
 .rss-sources-table th:last-child,
 .rss-sources-table td:last-child,
@@ -186,6 +227,14 @@
 .llm-table th:last-child,
 .llm-table td:last-child {
     width: 13%;
+    text-align: right;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+#keywordsTable th:last-child,
+#keywordsTable td:last-child {
+    width: 18%;
     text-align: right;
     overflow: visible;
     text-overflow: clip;

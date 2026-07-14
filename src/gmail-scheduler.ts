@@ -51,9 +51,10 @@ export class GmailScheduler {
       this.isRunning = true;
       log.info(`Gmail scheduler started (schedule: ${config.gmailFetchSchedule})`);
 
-      // 启动时立即执行一次，防止进程在 cron 调度时间之后启动导致当天错过执行
-      this.runScheduledFetch().catch((err) => {
-        log.error({ err }, 'Gmail startup fetch error');
+      // 启动时检查：如果今天已经通过 cron 执行过抓取，则跳过启动抓取
+      // 防止进程重启导致同一天抓取两次
+      this.runStartupFetchIfNeeded().catch((err) => {
+        log.error({ err }, 'Gmail startup fetch check error');
       });
     } catch (err) {
       log.error({ err }, 'Failed to start Gmail scheduler');
@@ -68,6 +69,38 @@ export class GmailScheduler {
     this.isRunning = false;
     log.info('Gmail scheduler stopped');
     return Promise.resolve();
+  }
+
+  /** 获取 Asia/Shanghai 时区的今日日期字符串 YYYY-MM-DD */
+  private getTodayShanghai(): string {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+  }
+
+  /**
+   * 启动时检查今天是否已有抓取记录，避免 cron 已执行后进程重启导致同一天重复抓取
+   */
+  private async runStartupFetchIfNeeded(): Promise<void> {
+    const db = getDb();
+    const today = this.getTodayShanghai();
+
+    // 查询是否有活跃邮件源在今天（Asia/Shanghai）已抓取过
+    // last_fetched_at 存储为 UTC ISO 字符串，需转换比较
+    const todayStartShanghai = new Date(`${today}T00:00:00+08:00`).toISOString();
+
+    const alreadyFetched = await db
+      .selectFrom('email_sources')
+      .where('status', '=', 'active')
+      .where('last_fetched_at', '>=', todayStartShanghai)
+      .select(db.fn.countAll<number>().as('count'))
+      .executeTakeFirst();
+
+    if (alreadyFetched && Number(alreadyFetched.count) > 0) {
+      log.info({ today }, 'Skipping startup fetch — cron already ran today');
+      return;
+    }
+
+    log.info({ today }, 'Running startup fetch (cron has not run today)');
+    await this.runScheduledFetch();
   }
 
   private async runScheduledFetch(): Promise<void> {
