@@ -135,18 +135,20 @@ CREATE INDEX idx_rejected_articles_email_source_id ON rejected_articles(email_so
 
 位置：`sql/001_init.sql:598-607`、`sql/039_add_rejected_cleanup_stats.sql`
 
-当清理移除了 rejected 文章后，首页统计（今日新增、通过率）会因缺少被移除的文章而失真。该缓存表在清理事务中**原子性地累加计数器**，首页统计时加上缓存值来补偿。
+当清理移除了 rejected 文章后，首页统计会因缺少被移除的文章而失真。该缓存表在清理事务中**原子性地累加计数器**，首页统计时加上缓存值来补偿。
 
 ```sql
 CREATE TABLE IF NOT EXISTS rejected_cleanup_stats (
   user_id INTEGER NOT NULL,
   article_date TEXT NOT NULL,       -- created_at 的 UTC 日期部分 YYYY-MM-DD
   rejected_count INTEGER NOT NULL DEFAULT 0,
+  completed_rejected_count INTEGER NOT NULL DEFAULT 0,  -- 其中 process_status='completed' 的数量
   PRIMARY KEY (user_id, article_date)
 );
 ```
 
-- 每次清理成功移走一篇文章，在同一个事务内 `INSERT ... ON CONFLICT DO UPDATE SET rejected_count = rejected_count + 1`
+- `rejected_count`：每次清理成功移走一篇文章，在同一个事务内 `INSERT ... ON CONFLICT DO UPDATE SET rejected_count = rejected_count + 1`
+- `completed_rejected_count`：仅当被清理文章的 `process_status = 'completed'` 时同步递增，用于补偿首页「已完成」统计
 - 容量极小（每用户每天一行），查询 O(log n)，无 JOIN
 
 ---
@@ -203,7 +205,12 @@ console.log(result);
 // { totalSources, totalArticlesMoved, successCount, failedCount, sourceResults[], durationMs }
 ```
 
-> ⚠️ **当前无 HTTP API 端点**：`cleanupNow()` 仅在代码级别可用，未暴露为 REST API。如需从前端或外部触发，需添加路由（如 `POST /api/scheduler/rejected-cleanup/trigger`）。
+对应的 HTTP API 端点已实现：
+- **`POST /api/scheduler/rejected-cleanup/trigger`** ─ 需要认证（`requireAuth`），可从前端或外部触发
+- 定义在 `src/api/routes/scheduler.routes.ts:51-71`，在 `src/api/routes.ts:9` 挂载
+- 请求体：无（直接触发）
+- 返回值：`{ success, totalSources, totalArticlesMoved, successCount, failedCount, durationMs, results[] }`
+- 注意：该端点为**全局操作**，会清理所有开启了 `auto_cleanup_rejected=1` 的用户源（与 `POST /api/rss-sources/fetch-all` 模式一致）
 
 ### 5.4 注册与生命周期 `src/index.ts`
 
@@ -247,6 +254,7 @@ export interface RejectedCleanupStatsTable {
   user_id: number;
   article_date: string;
   rejected_count: number;
+  completed_rejected_count: number;
 }
 ```
 
@@ -336,20 +344,34 @@ export interface RejectedCleanupStatsTable {
 
 在清理事务中原子性地累加 `rejected_cleanup_stats` 缓存，首页统计时加上缓存值：
 
-**清理侧**（`src/rejected-cleanup-scheduler.ts:371-381`，在 INSERT + DELETE 之后）：
+**清理侧**（`src/rejected-cleanup-scheduler.ts:261-277`，在 INSERT + DELETE 之后）：
 ```typescript
+const isCompleted = article.process_status === 'completed';
 await sql`
-  INSERT INTO rejected_cleanup_stats (user_id, article_date, rejected_count)
-  VALUES (${source.userId}, ${articleDate}, 1)
+  INSERT INTO rejected_cleanup_stats (user_id, article_date, rejected_count, completed_rejected_count)
+  VALUES (${source.userId}, ${articleDate}, 1, ${isCompleted ? 1 : 0})
   ON CONFLICT(user_id, article_date) DO UPDATE SET
-    rejected_count = rejected_cleanup_stats.rejected_count + 1
+    rejected_count = rejected_cleanup_stats.rejected_count + 1,
+    completed_rejected_count = rejected_cleanup_stats.completed_rejected_count + ${isCompleted ? 1 : 0}
 `.execute(trx);
 ```
 
 **统计侧**（`src/api/routes/articles.routes.ts:264-282`）：
 - `todayNew = articles_count_today + COALESCE(today_cached_rejected, 0)`
 - `passRate = passed / (passed + rejected_in_articles + total_cached_rejected)`
-- 通过 `rejected_cleanup_stats` 表的 `user_id` 和 `article_date` 字段查询，仅 2 次简单 COUNT 查询，无 JOIN，性能开销可忽略。
+- `analyzed = articles_completed + total_cached_completed_rejected`
+- 通过 `rejected_cleanup_stats` 表的 `user_id` 字段分组 SUM 查询，仅 1 次 COUNT + 1 次 SUM，无 JOIN，性能开销可忽略。
+
+### 9.3 Bug 修复：`analyzed`（已完成）统计补偿
+
+**发现的问题**：清理 rejected 文章时，如果被清理的文章有 `process_status = 'completed'`，它们被删除后首页的「已完成」统计会不准确地减少，而通过率却因为已补偿而保持不变，形成不一致。
+
+**修复**（commit `1fb952f7` 之后的补丁）：
+1. `rejected_cleanup_stats` 表新增 `completed_rejected_count` 字段
+2. 清理时检查每篇文章的 `process_status`，仅当 `=== 'completed'` 时才递增 `completed_rejected_count`
+3. 首页统计响应中 `analyzed = articles_completed + total_cached_completed_rejected`
+
+这样「已完成」统计在清理前后保持不变，与今日新增/通过率的行为一致。
 
 ---
 
@@ -395,6 +417,24 @@ if (file === '039_add_rejected_cleanup_stats.sql') {
 }
 ```
 
+### 10.3 040 迁移
+
+位置：`scripts/migrate.ts:884-893`、`sql/040_add_rejected_cleanup_completed_count.sql`
+
+```typescript
+if (file === '040_add_rejected_cleanup_completed_count.sql') {
+  const hasCompletedCount = hasColumn(db, 'rejected_cleanup_stats', 'completed_rejected_count');
+  if (!hasCompletedCount) {
+    const sql = fs.readFileSync(fullPath, 'utf-8');
+    db.exec(sql);
+    console.log('      → Added completed_rejected_count column to rejected_cleanup_stats');
+  } else {
+    console.log('      → Skipped (completed_rejected_count already exists)');
+  }
+  continue;
+}
+```
+
 ---
 
 ## 11. 验证要点
@@ -408,11 +448,13 @@ if (file === '039_add_rejected_cleanup_stats.sql') {
 | 关联数据完整性 | ⏳ 未验证 | 需手动测试确认 JSON 字段包含正确数据 |
 | 级联删除 | ✅ 由 FK CASCADE 保证 | DELETE FROM articles 自动清除关联表 |
 | 前端 UI 开关 | ✅ 已实现 | 四类源编辑弹窗均有复选框 |
-| 迁移脚本 | ✅ 已验证 | `pnpm run db:migrate` 成功执行 038 + 039 |
+| 迁移脚本 | ✅ 已验证 | `pnpm run db:migrate` 成功执行 038 + 039 + 040 |
 | 统计缓存表创建 | ✅ 已验证 | `pnpm run db:migrate` 后 `rejected_cleanup_stats` 表存在 |
 | 缓存原子性 | ✅ 代码保证 | 缓存更新与 DELETE 在同一事务中，不会出现遗漏 |
-| 首页统计补偿 | ✅ 代码就绪 | `todayNew` 和 `passRate` 已包含缓存值 |
+| 首页统计补偿 | ✅ 代码就绪 | `todayNew` / `passRate` / `analyzed` 均已补偿 |
 | 性能影响 | ✅ 无 | 缓存表每用户每日期一行，查询 O(log n)，无 JOIN |
+| `completed_rejected_count` 字段 | ✅ 已验证 | `pnpm run db:migrate` 后 040 迁移执行成功 |
+| `analyzed` 清理后不变 | ✅ 代码就绪 | 统计响应中加上 `totalCachedCompletedRejected` |
 
 ---
 
@@ -440,21 +482,20 @@ if (file === '039_add_rejected_cleanup_stats.sql') {
 | `src/views/settings/modals.ejs` | ✅ | RSS/期刊/关键词模态框加复选框 |
 | `src/views/settings/panel-gmail.ejs` | ✅ | 邮件源模态框加复选框 + 内联 JS |
 | `src/public/js/settings.js` | ✅ | 四个源类型的添加/编辑/保存流程全部更新 |
-| (HTTP API: POST /api/scheduler/...) | ⏳ **未实现** | `cleanupNow()` 尚未暴露为 REST API |
+| `src/api/routes/scheduler.routes.ts` | ✅ | 新增 `POST /api/scheduler/rejected-cleanup/trigger` HTTP 端点 |
+| `sql/040_add_rejected_cleanup_completed_count.sql` | ✅ | **新文件**，为 `rejected_cleanup_stats` 增加 `completed_rejected_count` 列 |
 
 ---
 
-## 12. 已知遗留 / 待办
+## 13. 已知遗留 / 待办
 
-1. **HTTP API 端点缺失**：`initRejectedCleanupScheduler().cleanupNow()` 仅可在代码中调用。建议添加 `POST /api/scheduler/rejected-cleanup/trigger` 路由，方便从前端或外部手动触发。可参考 `src/api/routes/scheduler.routes.ts` 中其他调度器的触发模式。
+1. **调度器状态 API 缺失**：当前无 `GET /api/scheduler/rejected-cleanup/status` 端点查看清理调度器状态（启停状态、上次运行时间等）。
 
-2. **调度器状态 API 缺失**：当前无 `GET /api/scheduler/rejected-cleanup/status` 端点查看清理调度器状态（启停状态、上次运行时间等）。
-
-3. **清理日志**：调度器仅输出 `log.info` 日志，未持久化到数据库。当前已通过 `rejected_cleanup_stats` 表记录了每用户每天的清理数量，供首页统计补偿使用。如需更详细的单次清理报告（如按来源分布），仍需额外持久化。
+2. **清理日志**：调度器仅输出 `log.info` 日志，未持久化到数据库。当前已通过 `rejected_cleanup_stats` 表记录了每用户每天的清理数量，供首页统计补偿使用。如需更详细的单次清理报告（如按来源分布），仍需额外持久化。
 
 ---
 
-## 13. 与旧报告的差异
+## 14. 与旧报告的差异
 
 - 本功能为新功能，此前的 handoff 文档中不存在。
 - 过滤逻辑（`src/filter.ts`）完全不变，仅新增清理环节。

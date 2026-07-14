@@ -877,6 +877,21 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
         continue;
       }
 
+      // ============================================================
+      // 040: 拒绝清理统计缓存增加已完成数量追踪
+      // ============================================================
+      if (file === '040_add_rejected_cleanup_completed_count.sql') {
+        const hasCompletedCount = hasColumn(db, 'rejected_cleanup_stats', 'completed_rejected_count');
+        if (!hasCompletedCount) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log('      → Added completed_rejected_count column to rejected_cleanup_stats');
+        } else {
+          console.log('      → Skipped (completed_rejected_count already exists)');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

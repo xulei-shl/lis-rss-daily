@@ -604,6 +604,7 @@ CREATE TABLE IF NOT EXISTS rejected_cleanup_stats (
   user_id INTEGER NOT NULL,
   article_date TEXT NOT NULL,
   rejected_count INTEGER NOT NULL DEFAULT 0,
+  completed_rejected_count INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, article_date)
 );
 

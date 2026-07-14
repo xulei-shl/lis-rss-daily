@@ -374,6 +374,7 @@ export interface RejectedCleanupStatsTable {
   user_id: number;
   article_date: string;
   rejected_count: number;
+  completed_rejected_count: number;
 }
 
 export interface EmailFetchLogsTable {

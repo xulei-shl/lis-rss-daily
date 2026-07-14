@@ -260,15 +260,17 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
     const passed = Number(passedResult?.count || 0);
 
     // Include rejected articles cleaned up by auto-cleanup (moved to rejected_articles)
-    // so stats like passRate / todayNew reflect the true totals.
+    // so stats like passRate / todayNew / analyzed reflect the true totals.
     const cachedResult = await db
       .selectFrom('rejected_cleanup_stats')
       .where('user_id', '=', userId)
       .select((eb) => [
         eb.fn.coalesce(eb.fn.sum('rejected_count'), eb.val(0)).as('total_rejected'),
+        eb.fn.coalesce(eb.fn.sum('completed_rejected_count'), eb.val(0)).as('total_completed_rejected'),
       ])
       .executeTakeFirst();
     const totalCachedRejected = Number(cachedResult?.total_rejected || 0);
+    const totalCachedCompletedRejected = Number(cachedResult?.total_completed_rejected || 0);
 
     const todayCachedResult = await db
       .selectFrom('rejected_cleanup_stats')
@@ -300,7 +302,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       todayNew: todayNew + todayCachedRejected,
       todayPassed,
       pending,
-      analyzed,
+      analyzed: analyzed + totalCachedCompletedRejected,
       passRate,
       total: correctedTotal,
       totalCachedRejected,

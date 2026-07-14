@@ -10,5 +10,6 @@ CREATE TABLE IF NOT EXISTS rejected_cleanup_stats (
   user_id INTEGER NOT NULL,
   article_date TEXT NOT NULL,       -- created_at 的日期部分（UTC）
   rejected_count INTEGER NOT NULL DEFAULT 0,
+  completed_rejected_count INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, article_date)
 );

@@ -373,11 +373,13 @@ export class RejectedCleanupScheduler {
           const articleDate = article.created_at
             ? article.created_at.slice(0, 10)
             : new Date().toISOString().slice(0, 10);
+          const isCompleted = article.process_status === 'completed';
           await sql`
-            INSERT INTO rejected_cleanup_stats (user_id, article_date, rejected_count)
-            VALUES (${source.userId}, ${articleDate}, 1)
+            INSERT INTO rejected_cleanup_stats (user_id, article_date, rejected_count, completed_rejected_count)
+            VALUES (${source.userId}, ${articleDate}, 1, ${isCompleted ? 1 : 0})
             ON CONFLICT(user_id, article_date) DO UPDATE SET
-              rejected_count = rejected_cleanup_stats.rejected_count + 1
+              rejected_count = rejected_cleanup_stats.rejected_count + 1,
+              completed_rejected_count = rejected_cleanup_stats.completed_rejected_count + ${isCompleted ? 1 : 0}
           `.execute(trx);
         });
 
