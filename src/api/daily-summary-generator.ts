@@ -19,6 +19,7 @@ import {
   type DailySummaryInput,
   type DailySummaryResult,
 } from './daily-summary-repository.js';
+import { clusterArticles, buildClusteredArticlesText } from './article-clustering.js';
 
 const log = logger.child({ module: 'daily-summary-generator' });
 
@@ -393,23 +394,8 @@ export async function generateInsightsSummary(
     email: articles.filter(a => a.source_type === 'email'),
   };
 
-  let articlesText = '';
-  const addSection = (title: string, list: DailySummaryArticle[]) => {
-    if (list.length === 0) return;
-    articlesText += `\n## ${title}\n`;
-    list.forEach((article) => {
-      const content = article.markdown_content || article.summary || '';
-      const preview = content.length > 500 ? content.substring(0, 500) + '...' : content;
-      articlesText += `### ID: ${article.id} - ${article.title}\n`;
-      articlesText += `来源：${article.source_name}\n`;
-      articlesText += `预览：${preview}\n\n`;
-    });
-  };
-
-  addSection('期刊精选', articlesByType.journal);
-  addSection('博客推荐', articlesByType.blog);
-  addSection('资讯动态', articlesByType.news);
-  addSection('邮件订阅', articlesByType.email);
+  const clusters = clusterArticles(articles, days);
+  const articlesText = buildClusteredArticlesText(clusters, dateStr);
 
   const userPrompt = await resolveSystemPrompt(
     userId,
