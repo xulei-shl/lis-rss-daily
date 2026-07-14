@@ -3,6 +3,10 @@
  *
  * Phase 6: Basic Markdown export to data/exports/.
  * Phase 8: 向量索引由 pipeline 统一触发。
+ *
+ * @deprecated — This file is currently dead code (no importers).
+ *   exportArticleMarkdown / exportBatchArticles / deleteArticleExport
+ *   are not imported by any module. Keep the file for future use.
  */
 
 import fs from 'fs';

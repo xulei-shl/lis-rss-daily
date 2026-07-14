@@ -7,9 +7,14 @@
 
 import { spawn } from 'child_process';
 import { readFile } from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { logger } from '../logger.js';
 import type { SpiderResult, CrawledArticle } from './types.js';
 import { config } from '../config.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const log = logger.child({ module: 'google-scholar-spider' });
 
@@ -56,7 +61,7 @@ export class GoogleScholarSpider {
 
   constructor() {
     // 指向项目内的爬虫脚本目录
-    this.spiderPath = '/opt/lis-rss-daily/src/spiders/google_scholar';
+    this.spiderPath = path.join(__dirname, 'google_scholar');
   }
 
   /**

@@ -85,6 +85,13 @@ export async function translateArticleIfNeeded(
   }
 }
 
+/* ── Constants ── */
+
+/** 英文语言检测：最少字母数阈值 */
+const MIN_ALPHA_COUNT = 10;
+/** 英文语言检测：字母占比阈值 */
+const MIN_ALPHA_RATIO = 0.6;
+
 /* ── Utility Functions ── */
 
 function detectLanguage(text?: string): 'zh' | 'en' | 'unknown' {
@@ -92,7 +99,7 @@ function detectLanguage(text?: string): 'zh' | 'en' | 'unknown' {
   if (/[\u4e00-\u9fff]/.test(text)) return 'zh';
   const letters = (text.match(/[A-Za-z]/g) || []).length;
   const total = text.replace(/\s+/g, '').length;
-  if (letters >= 10 && letters / Math.max(total, 1) > 0.6) return 'en';
+  if (letters >= MIN_ALPHA_COUNT && letters / Math.max(total, 1) > MIN_ALPHA_RATIO) return 'en';
   return 'unknown';
 }
 

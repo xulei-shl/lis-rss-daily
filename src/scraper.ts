@@ -1,6 +1,10 @@
 /**
  * Web scraper: Playwright + defuddle for content extraction.
  * Simplified version for RSS project (Twitter/X support removed).
+ *
+ * @deprecated — This file is currently dead code (no importers).
+ *   scrapeUrl may be useful for future manual re-scraping features.
+ *   Keep the file but do not import without re-activating it.
  */
 
 import playwright from 'playwright';
