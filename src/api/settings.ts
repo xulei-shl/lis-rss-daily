@@ -7,6 +7,7 @@
 
 import { getDb, type DatabaseTable } from '../db.js';
 import { logger } from '../logger.js';
+import { config } from '../config.js';
 
 const log = logger.child({ module: 'settings-service' });
 
@@ -268,8 +269,8 @@ export async function getChromaSettings(userId: number): Promise<{
     | 'ip';
 
   return {
-    host: settings.chroma_host || '127.0.0.1',
-    port: parseInt(settings.chroma_port || '8000', 10),
+    host: settings.chroma_host || config.chromaHost,
+    port: parseInt(settings.chroma_port || String(config.chromaPort), 10),
     collection: settings.chroma_collection || 'articles',
     distanceMetric,
   };

@@ -12,7 +12,10 @@ const log = logger.child({ module: 'agent' });
 /* ── Public Types ── */
 
 export interface TranslationResult {
-  summaryZh?: string; // 标题+正文整体译文
+  /** 标题单独译文（若 LLM 返回可分离的标题翻译） */
+  titleZh?: string;
+  /** 标题+正文整体译文 */
+  summaryZh?: string;
   sourceLang: 'zh' | 'en' | 'unknown';
   usedFallback: boolean;
 }
@@ -70,6 +73,7 @@ export async function translateArticleIfNeeded(
     );
 
     return {
+      titleZh: shouldTranslateTitle ? safeString(text) : undefined,
       summaryZh: shouldTranslateTitle || shouldTranslateContent ? safeString(text) : undefined,
       sourceLang: 'en',
       usedFallback: false,
@@ -77,6 +81,7 @@ export async function translateArticleIfNeeded(
   } catch (error) {
     log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Translation LLM failed');
     return {
+      titleZh: undefined,
       summaryZh: undefined,
       sourceLang: 'en',
       usedFallback: true,

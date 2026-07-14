@@ -24,6 +24,7 @@ import {
   getWebhooksForPushType,
   getWeChatWebhooks,
   getWeChatWebhookById,
+  type WeChatPushTypes,
   type WeChatWebhook,
 } from '../config/wechat-config.js';
 import type { SummaryType, DailySummaryArticle } from '../api/daily-summary.js';
@@ -84,6 +85,36 @@ class WeChatNotifier {
   }
 
   /**
+   * 通用发送方法：按推送类型获取 webhook → 格式化 → 发送
+   *
+   * 提取自 send* 方法的公共模式（cache check + webhook lookup + format + sendToWebhooks）。
+   */
+  private async sendByPushType(
+    pushType: keyof WeChatPushTypes,
+    userId: number,
+    formatFn: (data: any) => string,
+    data: any,
+    options: {
+      logLabel: string;
+      logContext: Record<string, any>;
+      cacheKey?: string;
+    }
+  ): Promise<boolean> {
+    const { logLabel, logContext, cacheKey } = options;
+    if (cacheKey) {
+      if (this.checkAndSetCache(cacheKey)) {
+        log.info({ userId, ...logContext }, `[DEBUG] Skipping duplicate ${logLabel}`);
+        return false;
+      }
+    }
+    const webhooks = getWebhooksForPushType(pushType);
+    if (webhooks.length === 0) return false;
+
+    const message = formatFn(data);
+    return this.sendToWebhooks(webhooks, message, { logLabel, logContext });
+  }
+
+  /**
    * 发送全部期刊总结通知到所有配置了该类型的 webhook
    */
   async sendJournalAllSummary(
@@ -95,19 +126,10 @@ class WeChatNotifier {
       articles: DailySummaryArticle[];
     }
   ): Promise<boolean> {
-    const cacheKey = this.getCacheKey(userId, 'journal_all', data.date);
-    if (this.checkAndSetCache(cacheKey)) {
-      log.info({ userId, date: data.date }, '[DEBUG] Skipping duplicate sendJournalAllSummary');
-      return false;
-    }
-
-    const webhooks = getWebhooksForPushType('journal_all');
-    if (webhooks.length === 0) return false;
-
-    const message = formatJournalAllSummary(data);
-    return this.sendToWebhooks(webhooks, message, {
+    return this.sendByPushType('journal_all', userId, formatJournalAllSummary, data, {
       logLabel: 'Journal all summary',
       logContext: { userId, date: data.date, articleCount: data.totalArticles },
+      cacheKey: this.getCacheKey(userId, 'journal_all', data.date),
     });
   }
 
@@ -124,19 +146,10 @@ class WeChatNotifier {
       articlesByType: { journal: number; blog: number; news: number; email: number };
     }
   ): Promise<boolean> {
-    const cacheKey = this.getCacheKey(userId, 'insights', data.date);
-    if (this.checkAndSetCache(cacheKey)) {
-      log.info({ userId, date: data.date }, '[DEBUG] Skipping duplicate sendInsightsSummary');
-      return false;
-    }
-
-    const webhooks = getWebhooksForPushType('insights');
-    if (webhooks.length === 0) return false;
-
-    const message = formatDailySummary(data);
-    return this.sendToWebhooks(webhooks, message, {
+    return this.sendByPushType('insights', userId, formatDailySummary, data, {
       logLabel: 'Insights summary',
       logContext: { userId, date: data.date, type: data.type, articleCount: data.totalArticles },
+      cacheKey: this.getCacheKey(userId, 'insights', data.date),
     });
   }
 
@@ -147,11 +160,7 @@ class WeChatNotifier {
     userId: number,
     article: NewArticleData
   ): Promise<boolean> {
-    const webhooks = getWebhooksForPushType('new_articles');
-    if (webhooks.length === 0) return false;
-
-    const message = formatNewArticle(article);
-    return this.sendToWebhooks(webhooks, message, {
+    return this.sendByPushType('new_articles', userId, formatNewArticle, article, {
       logLabel: 'New article',
       logContext: { userId, articleId: article.id, title: article.title },
     });
@@ -161,11 +170,7 @@ class WeChatNotifier {
    * 发送 PDF 全文总结通知到所有配置了该类型的 webhook
    */
   async sendPdfSummary(userId: number, data: PdfSummaryData): Promise<boolean> {
-    const webhooks = getWebhooksForPushType('pdf_summary');
-    if (webhooks.length === 0) return false;
-
-    const message = formatPdfSummary(data);
-    return this.sendToWebhooks(webhooks, message, {
+    return this.sendByPushType('pdf_summary', userId, formatPdfSummary, data, {
       logLabel: 'PDF summary',
       logContext: { userId, articleId: data.articleId, title: data.title },
     });

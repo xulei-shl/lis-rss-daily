@@ -532,9 +532,9 @@ async function runStageTranslate(
     );
 
     let translationChanged = false;
-    if (translationResult && translationResult.summaryZh) {
+    if (translationResult && (translationResult.summaryZh || translationResult.titleZh)) {
       await upsertArticleTranslation(articleId, userId, {
-        title_zh: null,
+        title_zh: translationResult.titleZh ?? null,
         summary_zh: translationResult.summaryZh ?? null,
         source_lang: translationResult.sourceLang ?? null,
       });

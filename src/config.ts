@@ -104,6 +104,10 @@ export interface Config {
   rejectedCleanupEnabled: boolean;
   rejectedCleanupSchedule: string;
 
+  // Chroma
+  chromaHost: string;
+  chromaPort: number;
+
   // DeepSearch
   deepSearchApiUrl: string;
 }
@@ -217,6 +221,10 @@ function getConfig(): Config {
     // Rejected Article Cleanup
     rejectedCleanupEnabled: process.env.REJECTED_CLEANUP_ENABLED !== 'false',
     rejectedCleanupSchedule: process.env.REJECTED_CLEANUP_SCHEDULE || '0 8 * * *',
+
+    // Chroma
+    chromaHost: process.env.CHROMA_HOST || '127.0.0.1',
+    chromaPort: parseInt(process.env.CHROMA_PORT || '8000', 10),
 
     // DeepSearch
     deepSearchApiUrl: process.env.DEEPSEARCH_API_URL || 'http://localhost:8082',
