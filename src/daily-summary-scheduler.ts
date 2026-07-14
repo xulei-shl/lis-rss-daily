@@ -11,7 +11,11 @@
 import { logger } from './logger.js';
 import { config } from './config.js';
 import { BaseScheduler } from './utils/base-scheduler.js';
-import { generateDailySummary, saveDailySummary, generateJournalAllSummary } from './api/daily-summary.js';
+import { generateDailySummary, generateJournalAllSummary } from './api/daily-summary-generator.js';
+import { saveDailySummary } from './api/daily-summary-repository.js';
+import type { DailySummaryResult } from './api/daily-summary-repository.js';
+import { getTelegramNotifier } from './telegram/index.js';
+import { getWeChatNotifier } from './wechat/index.js';
 
 const log = logger.child({ module: 'daily-summary-scheduler' });
 
@@ -38,6 +42,55 @@ export interface DailySummarySchedulerStatus {
     error?: string;
   };
 }
+
+// ============================================================================
+// Push helpers — explicit notification dispatch
+// ============================================================================
+
+async function pushDailySummaryToAll(result: DailySummaryResult, userId: number): Promise<void> {
+  const { date, type, totalArticles, summary, articlesByType } = result;
+  const counts = {
+    journal: articlesByType.journal.length,
+    blog: articlesByType.blog.length,
+    news: articlesByType.news.length,
+    email: articlesByType.email.length,
+  };
+
+  if (type === 'journal' || type === 'blog_news' || type === 'all') {
+    getTelegramNotifier().sendDailySummary(userId, { date, type, totalArticles, summary, articlesByType: counts })
+      .catch(err => log.warn({ error: err }, 'Failed to send daily summary to Telegram'));
+  }
+
+  getWeChatNotifier().sendDailySummary(userId, { date, type, totalArticles, summary, articlesByType: counts })
+    .catch(err => log.warn({ error: err }, 'Failed to send daily summary to WeChat'));
+}
+
+async function pushJournalAllToAll(result: DailySummaryResult, userId: number): Promise<void> {
+  const { date, totalArticles, summary, articlesByType } = result;
+
+  getTelegramNotifier().sendJournalAllSummary(userId, {
+    date,
+    type: 'journal_all',
+    totalArticles,
+    summary,
+    articlesByType: {
+      journal: articlesByType.journal.length,
+      blog: 0,
+      news: 0,
+      email: 0,
+    },
+  }).catch(err => log.warn({ error: err }, 'Failed to send journal all summary to Telegram'));
+
+  const allArticles = [...articlesByType.journal, ...articlesByType.blog, ...articlesByType.news, ...articlesByType.email];
+  getWeChatNotifier().sendJournalAllSummary(userId, {
+    date,
+    totalArticles,
+    summary,
+    articles: allArticles,
+  }).catch(err => log.warn({ error: err }, 'Failed to send journal all summary to WeChat'));
+}
+
+// ============================================================================
 
 /**
  * Daily Summary Scheduler class
@@ -138,13 +191,7 @@ export class DailySummaryScheduler extends BaseScheduler {
             result = await generateJournalAllSummary({
               userId: this.config.userId,
             });
-          } else {
-            result = await generateDailySummary({
-              userId: this.config.userId,
-              type: type as any,
-            });
-
-            // 保存到数据库（journal_all 类型内部已保存）
+            // Save + push for journal_all (pure generate doesn't do either)
             if (result.totalArticles > 0) {
               await saveDailySummary({
                 userId: this.config.userId,
@@ -155,6 +202,26 @@ export class DailySummaryScheduler extends BaseScheduler {
                 articlesData: result.articlesByType,
               });
             }
+            await pushJournalAllToAll(result, this.config.userId);
+          } else {
+            result = await generateDailySummary({
+              userId: this.config.userId,
+              type: type as any,
+            });
+
+            // 保存到数据库
+            if (result.totalArticles > 0) {
+              await saveDailySummary({
+                userId: this.config.userId,
+                date: result.date,
+                type: result.type,
+                articleCount: result.totalArticles,
+                summaryContent: result.summary,
+                articlesData: result.articlesByType,
+              });
+            }
+            // Push notifications (pure generate doesn't push)
+            await pushDailySummaryToAll(result, this.config.userId);
           }
 
           results.push({
@@ -242,13 +309,6 @@ export class DailySummaryScheduler extends BaseScheduler {
           result = await generateJournalAllSummary({
             userId: this.config.userId,
           });
-        } else {
-          result = await generateDailySummary({
-            userId: this.config.userId,
-            type: type as any,
-          });
-
-          // 保存到数据库（journal_all 类型内部已保存）
           if (result.totalArticles > 0) {
             await saveDailySummary({
               userId: this.config.userId,
@@ -259,6 +319,24 @@ export class DailySummaryScheduler extends BaseScheduler {
               articlesData: result.articlesByType,
             });
           }
+          await pushJournalAllToAll(result, this.config.userId);
+        } else {
+          result = await generateDailySummary({
+            userId: this.config.userId,
+            type: type as any,
+          });
+
+          if (result.totalArticles > 0) {
+            await saveDailySummary({
+              userId: this.config.userId,
+              date: result.date,
+              type: result.type,
+              articleCount: result.totalArticles,
+              summaryContent: result.summary,
+              articlesData: result.articlesByType,
+            });
+          }
+          await pushDailySummaryToAll(result, this.config.userId);
         }
 
         log.info(

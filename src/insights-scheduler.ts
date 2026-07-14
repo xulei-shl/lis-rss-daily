@@ -7,7 +7,10 @@
 
 import { logger } from './logger.js';
 import { BaseScheduler } from './utils/base-scheduler.js';
-import { generateInsightsSummary } from './api/daily-summary.js';
+import { generateInsightsSummary } from './api/daily-summary-generator.js';
+import { saveDailySummary } from './api/daily-summary-repository.js';
+import { getTelegramNotifier } from './telegram/index.js';
+import { getWeChatNotifier } from './wechat/index.js';
 import { config as appConfig } from './config.js';
 import { getUserSetting, setUserSetting } from './api/settings.js';
 import { buildUtcRangeFromLocalDate } from './api/timezone.js';
@@ -237,6 +240,43 @@ export class InsightsScheduler extends BaseScheduler {
         userId: this.config.userId,
         days: this.config.days,
       });
+
+      // Save to DB (pure generate doesn't do this)
+      if (result.totalArticles > 0) {
+        const executionDate = await (await import('./api/timezone.js')).getUserLocalDate(this.config.userId);
+        await saveDailySummary({
+          userId: this.config.userId,
+          date: executionDate,
+          type: 'insights',
+          articleCount: result.totalArticles,
+          summaryContent: result.summary,
+          articlesData: result.articlesByType,
+        });
+      }
+
+      // Push notifications (pure generate doesn't do this)
+      const { date, totalArticles, summary, articlesByType } = result;
+      const counts = {
+        journal: articlesByType.journal.length,
+        blog: articlesByType.blog.length,
+        news: articlesByType.news.length,
+        email: articlesByType.email.length,
+      };
+      getTelegramNotifier().sendInsightsSummary(this.config.userId, {
+        date,
+        type: 'insights',
+        totalArticles,
+        summary,
+        articlesByType: counts,
+      }).catch(err => log.warn({ error: err }, 'Failed to send insights summary to Telegram'));
+
+      getWeChatNotifier().sendInsightsSummary(this.config.userId, {
+        date,
+        type: 'insights',
+        totalArticles,
+        summary,
+        articlesByType: counts,
+      }).catch(err => log.warn({ error: err }, 'Failed to send insights summary to WeChat'));
 
       this.stats.lastRunResult = {
         success: true,

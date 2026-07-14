@@ -1,23 +1,24 @@
 /**
  * Telegram Bot for Interactive Callbacks
  *
- * Handles polling and processing of callback queries from Telegram inline keyboards.
- * Provides article management features: mark as read/unread, rate articles.
- * Supports multiple chat IDs with different permission levels (admin/viewer).
+ * Facade class that manages polling lifecycle and delegates to:
+ * - CallbackHandler (bot-callbacks.ts) for inline keyboard interactions
+ * - CommandHandler (bot-commands.ts) for /getarticles command processing
+ *
+ * Handles polling, state persistence, source matching, and authorization.
  */
 
 import { logger } from '../logger.js';
 import { TelegramClient } from './client.js';
-import { getArticleById, updateArticleReadStatus, updateArticleRating, getUserArticles, getMergedSources, type MergedSourceOption } from '../api/articles.js';
-import { decodeCallback, CallbackAction } from './callback-encoder.js';
-import { createArticleKeyboard, createRatingKeyboard, createEmptyKeyboard, formatNewArticle } from './formatters.js';
-import type { CallbackQuery, TelegramUpdate, InlineKeyboardMarkup, Message } from './types.js';
-import { parseGetArticlesCommand, type GetArticlesCommand, type GetArticlesDateCommand, type GetArticlesSourceCommand } from './command-parser.js';
-import { readFile, writeFile } from 'fs/promises';
+import { getMergedSources, type MergedSourceOption } from '../api/articles.js';
+
+import { CallbackHandler } from './bot-callbacks.js';
+import { CommandHandler } from './bot-commands.js';
+import type { CallbackQuery, TelegramUpdate, Message } from './types.js';
+import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { getUserLocalDate } from '../api/timezone.js';
-import { isChatAdmin, type TelegramChatConfig } from '../api/telegram-chats.js';
+import type { TelegramChatConfig } from '../api/telegram-chats.js';
 
 const log = logger.child({ module: 'telegram-bot' });
 
@@ -30,7 +31,6 @@ const POLL_ERROR_DELAY = 5000; // ms
 const STATE_DIR = process.env.TELEGRAM_STATE_DIR || '/tmp/lis-rss-daily/telegram';
 
 // Ensure state directory exists
-import { mkdir } from 'fs/promises';
 async function ensureStateDir() {
   if (!existsSync(STATE_DIR)) {
     await mkdir(STATE_DIR, { recursive: true });
@@ -43,25 +43,29 @@ export class TelegramBot {
   private client: TelegramClient;
   private botToken: string;
   private userId: number;
-  private chats: TelegramChatConfig[]; // All configured chats
+  private chats: TelegramChatConfig[];
   private isRunning: boolean = false;
   private latestUpdateId: number = 0;
   private pollTimeout: NodeJS.Timeout | null = null;
 
-  // Concurrency control: prevent duplicate callback processing
-  private pendingCallbacks: Set<string> = new Set();
-  // Dynamic polling: adjust interval based on activity
-  private lastActivityTime: number = Date.now();
-  private idlePollInterval: number = 10000; // 10s when idle
-  private activePollInterval: number = 1000; // 1s when active
+  // Handlers
+  private callbackHandler: CallbackHandler;
+  private commandHandler: CommandHandler;
 
-  // State file path for persistence
+  // Concurrency control
+  private pendingCallbacks: Set<string> = new Set();
+  // Dynamic polling
+  private lastActivityTime: number = Date.now();
+  private idlePollInterval: number = 10000;
+  private activePollInterval: number = 1000;
+
+  // State persistence
   private stateFilePath: string;
 
-  // Source cache for matching
+  // Source cache
   private sourcesCache: MergedSourceOption[] | null = null;
   private sourcesCacheTime: number = 0;
-  private readonly SOURCES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly SOURCES_CACHE_TTL = 5 * 60 * 1000;
 
   constructor(botToken: string, userId: number, chats: TelegramChatConfig[]) {
     this.botToken = botToken;
@@ -69,6 +73,25 @@ export class TelegramBot {
     this.chats = chats;
     this.client = new TelegramClient(botToken);
     this.stateFilePath = join(STATE_DIR, `bot-state-user-${userId}.json`);
+
+    // Initialize handlers with dependency injection
+    this.callbackHandler = new CallbackHandler({
+      client: this.client,
+      userId: this.userId,
+      chats: this.chats,
+      isAuthorizedChat: (chatId) => this.isAuthorizedChat(chatId),
+      isAdminChat: (chatId) => this.isAdminChat(chatId),
+      getChatConfig: (chatId) => this.getChatConfig(chatId),
+    });
+
+    this.commandHandler = new CommandHandler({
+      client: this.client,
+      userId: this.userId,
+      getSources: () => this.getSources(),
+      matchSourceName: (name, sources) => this.matchSourceName(name, sources),
+      escapeHtml: (text) => this.escapeHtml(text),
+      getTelegramAiSummary: (aiSummary) => this.getTelegramAiSummary(aiSummary),
+    });
   }
 
   /**
@@ -156,26 +179,17 @@ export class TelegramBot {
 
   /**
    * Match source name with fuzzy matching
-   * @param name - User input source name
-   * @param sources - List of available sources
-   * @returns Matched source or null
    */
   private matchSourceName(name: string, sources: MergedSourceOption[]): MergedSourceOption | null {
-    // 1. Exact match
     let match = sources.find(s => s.name === name);
     if (match) return match;
 
-    // 2. Case-insensitive match
     const lowerName = name.toLowerCase();
     match = sources.find(s => s.name.toLowerCase() === lowerName);
     if (match) return match;
 
-    // 3. Source name contains input (e.g., "MIT" matches "MIT Technology Review")
     match = sources.find(s => s.name.includes(name));
     if (match) return match;
-
-    // Note: removed "input contains source name" matching to prevent keyword searches
-    // from being mistakenly treated as source name matches (e.g., "档案学知识图谱" matching "档案学")
 
     return null;
   }
@@ -188,13 +202,12 @@ export class TelegramBot {
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
+      .replace(/\"/g, '&quot;')
       .replace(/'/g, '&#039;');
   }
 
   /**
-   * 获取 Telegram 展示用的 AI 总结文本
-   * 截取"二、核心逻辑图谱"之前的内容
+   * Get Telegram display-ready AI summary text
    */
   private getTelegramAiSummary(aiSummary: string | null | undefined): string {
     if (typeof aiSummary === 'string' && aiSummary.trim() !== '') {
@@ -218,7 +231,6 @@ export class TelegramBot {
       return;
     }
 
-    // Load persisted state before starting
     await this.loadState();
 
     this.isRunning = true;
@@ -247,7 +259,6 @@ export class TelegramBot {
       this.pollTimeout = null;
     }
 
-    // Abort any pending requests
     this.client.abort();
 
     log.info({ userId: this.userId, chatCount: this.chats.length }, 'Telegram bot stopped');
@@ -275,9 +286,8 @@ export class TelegramBot {
       })
       .finally(() => {
         if (this.isRunning) {
-          // Dynamic polling: use longer interval when idle
           const timeSinceActivity = Date.now() - this.lastActivityTime;
-          const pollInterval = timeSinceActivity > 300000 // 5 minutes idle
+          const pollInterval = timeSinceActivity > 300000
             ? this.idlePollInterval
             : this.activePollInterval;
 
@@ -309,7 +319,7 @@ export class TelegramBot {
   }
 
   /**
-   * Process updates with concurrency control and performance monitoring
+   * Process updates with concurrency control
    */
   private async processUpdates(updates: TelegramUpdate[]): Promise<void> {
     const startTime = Date.now();
@@ -317,14 +327,11 @@ export class TelegramBot {
     let errorCount = 0;
 
     for (const update of updates) {
-      // Update latest update_id for pagination
       this.latestUpdateId = update.update_id;
 
-      // Process message commands
       if (update.message) {
         const messageId = `${update.update_id}-msg`;
 
-        // Skip if already processing this message
         if (this.pendingCallbacks.has(messageId)) {
           log.debug({ messageId }, 'Message already being processed, skipping');
           continue;
@@ -340,14 +347,12 @@ export class TelegramBot {
         } finally {
           this.pendingCallbacks.delete(messageId);
         }
-        continue; // Skip callback processing for this update
+        continue;
       }
 
-      // Process callback query with duplicate prevention
       if (update.callback_query) {
         const callbackId = `${update.callback_query.id}`;
 
-        // Skip if already processing this callback
         if (this.pendingCallbacks.has(callbackId)) {
           log.debug({ callbackId }, 'Callback already being processed, skipping');
           continue;
@@ -355,7 +360,7 @@ export class TelegramBot {
 
         this.pendingCallbacks.add(callbackId);
         try {
-          await this.handleCallbackQuery(update.callback_query);
+          await this.callbackHandler.handleCallbackQuery(update.callback_query);
           successCount++;
         } catch (error) {
           errorCount++;
@@ -366,7 +371,6 @@ export class TelegramBot {
       }
     }
 
-    // Log performance metrics
     const duration = Date.now() - startTime;
     if (updates.length > 0) {
       log.info({
@@ -379,7 +383,6 @@ export class TelegramBot {
       }, 'Processed Telegram updates');
     }
 
-    // Save state after processing all updates
     if (updates.length > 0) {
       await this.saveState().catch((error) => {
         log.warn({ error }, 'Failed to save state after processing updates');
@@ -388,507 +391,31 @@ export class TelegramBot {
   }
 
   /**
-   * Handle callback query with improved error handling and permission checking
-   */
-  private async handleCallbackQuery(callbackQuery: CallbackQuery): Promise<void> {
-    const { id: queryId, from, message, data } = callbackQuery;
-
-    // Get chat ID from message
-    const chatId = String(message?.chat.id);
-
-    // Check if this chat is authorized
-    if (!this.isAuthorizedChat(chatId)) {
-      log.warn({ queryId, from: from.id, chatId }, 'Unauthorized callback query');
-      await this.client.answerCallbackQuery(queryId, '❌ 无权操作', true);
-      return;
-    }
-
-    // Check if this chat has admin role
-    const isAdmin = this.isAdminChat(chatId);
-    const chatConfig = this.getChatConfig(chatId);
-
-    // Decode callback data
-    const decoded = decodeCallback(data);
-    if (!decoded) {
-      log.warn({ queryId, data }, 'Invalid callback data');
-      await this.client.answerCallbackQuery(queryId, '❌ 无效的操作', true);
-      return;
-    }
-
-    const { action, articleId, value } = decoded;
-    const messageId = message?.message_id;
-
-    // For viewer role, only allow viewing operations, not modifications
-    if (!isAdmin) {
-      // Viewer can only view rating options, but cannot rate or mark as read
-      if (action === CallbackAction.SHOW_RATING) {
-        // Allow showing rating keyboard for viewer, but show a notice
-        await this.client.answerCallbackQuery(queryId, 'ℹ️ 您是观察者，仅管理员可评分');
-        // Still show the rating keyboard but with a visual indication
-        if (messageId !== undefined) {
-          try {
-            const keyboard = createRatingKeyboard(articleId);
-            await this.client.editMessageReplyMarkup(chatId, messageId, keyboard);
-          } catch (error) {
-            log.warn({ articleId, messageId, error }, 'Failed to show rating keyboard for viewer');
-          }
-        }
-        return;
-      }
-
-      if (action === CallbackAction.CANCEL) {
-        // Allow cancel for viewer
-        await this.client.answerCallbackQuery(queryId, '✅ 已取消');
-        return;
-      }
-
-      // All other actions require admin role
-      log.info({ queryId, chatId, action, role: chatConfig?.role }, 'Viewer attempted admin action');
-      await this.client.answerCallbackQuery(queryId, '❌ 无权限操作，仅管理员可交互', true);
-      return;
-    }
-
-    try {
-      // Route to appropriate handler (admin only)
-      switch (action) {
-        case CallbackAction.MARK_READ:
-          await this.handleMarkRead(queryId, articleId, messageId, chatId);
-          break;
-
-        case CallbackAction.RATE:
-          if (value) {
-            await this.handleRate(queryId, articleId, parseInt(value, 10), messageId, chatId);
-          }
-          break;
-
-        case CallbackAction.SHOW_RATING:
-          await this.handleShowRating(queryId, articleId, messageId, chatId);
-          break;
-
-        case CallbackAction.CANCEL:
-          await this.handleCancel(queryId, articleId, messageId, chatId);
-          break;
-
-        default:
-          await this.client.answerCallbackQuery(queryId, '❌ 未知操作', true);
-      }
-    } catch (error) {
-      const isArticleNotFound = error instanceof Error && error.message.includes('not found');
-      const isNetworkError = error instanceof Error && (
-        error.message.includes('ETIMEDOUT') ||
-        error.message.includes('ECONNREFUSED') ||
-        error.message.includes('fetch')
-      );
-
-      if (isArticleNotFound) {
-        log.warn({ queryId, action, articleId }, 'Article not found in callback');
-        await this.client.answerCallbackQuery(queryId, '❌ 文章不存在或已被删除', true);
-      } else if (isNetworkError) {
-        log.error({ queryId, action, articleId, error }, 'Network error in callback');
-        await this.client.answerCallbackQuery(queryId, '❌ 网络错误，请稍后重试', true);
-      } else {
-        log.error({ queryId, action, articleId, error }, 'Error handling callback query');
-        await this.client.answerCallbackQuery(queryId, '❌ 操作失败，请稍后重试', true);
-      }
-    }
-  }
-
-  /**
-   * Handle mark read/unread toggle with robust error handling
-   */
-  private async handleMarkRead(
-    queryId: string,
-    articleId: number,
-    messageId: number | undefined,
-    chatId: string
-  ): Promise<void> {
-    // Get current article state
-    const article = await getArticleById(articleId, this.userId);
-    if (!article) {
-      await this.client.answerCallbackQuery(queryId, '❌ 文章不存在或已被删除', true);
-      log.warn({ articleId, userId: this.userId }, 'Article not found when marking read');
-      return;
-    }
-
-    // Toggle read status
-    const newReadStatus = article.is_read === 0;
-
-    try {
-      await updateArticleReadStatus(articleId, this.userId, newReadStatus);
-    } catch (error) {
-      log.error({ articleId, userId: this.userId, error }, 'Failed to update article read status');
-      await this.client.answerCallbackQuery(queryId, '❌ 更新失败，请稍后重试', true);
-      return;
-    }
-
-    // Answer callback query
-    const statusText = newReadStatus ? '✅ 已标记为已读' : '📖 已标记为未读';
-    await this.client.answerCallbackQuery(queryId, statusText);
-
-    // Update keyboard if messageId is available
-    if (messageId !== undefined) {
-      try {
-        const keyboard = createArticleKeyboard(articleId, newReadStatus, article.rating);
-        await this.client.editMessageReplyMarkup(chatId, messageId, keyboard);
-      } catch (error) {
-        // Don't fail the operation if keyboard update fails
-        log.warn({ articleId, messageId, error }, 'Failed to update keyboard after marking read');
-      }
-    }
-
-    log.info({ articleId, userId: this.userId, isRead: newReadStatus, chatId }, 'Article read status toggled via Telegram');
-  }
-
-  /**
-   * Handle rating submission with robust error handling
-   */
-  private async handleRate(
-    queryId: string,
-    articleId: number,
-    rating: number,
-    messageId: number | undefined,
-    chatId: string
-  ): Promise<void> {
-    // Validate rating
-    if (rating < 1 || rating > 5) {
-      await this.client.answerCallbackQuery(queryId, '❌ 无效的评分', true);
-      return;
-    }
-
-    // Update article rating
-    try {
-      await updateArticleRating(articleId, this.userId, rating);
-    } catch (error) {
-      log.error({ articleId, userId: this.userId, rating, error }, 'Failed to update article rating');
-      await this.client.answerCallbackQuery(queryId, '❌ 评分失败，请稍后重试', true);
-      return;
-    }
-
-    // Answer callback query
-    await this.client.answerCallbackQuery(queryId, `⭐ 已评为 ${rating} 星`);
-
-    // Update keyboard if messageId is available
-    if (messageId !== undefined) {
-      try {
-        const keyboard = createArticleKeyboard(articleId, true, rating);
-        await this.client.editMessageReplyMarkup(chatId, messageId, keyboard);
-      } catch (error) {
-        // Don't fail the operation if keyboard update fails
-        log.warn({ articleId, messageId, error }, 'Failed to update keyboard after rating');
-      }
-    }
-
-    log.info({ articleId, userId: this.userId, rating, chatId }, 'Article rated via Telegram');
-  }
-
-  /**
-   * Handle show rating keyboard with robust error handling
-   */
-  private async handleShowRating(
-    queryId: string,
-    articleId: number,
-    messageId: number | undefined,
-    chatId: string
-  ): Promise<void> {
-    // Get article to verify ownership
-    const article = await getArticleById(articleId, this.userId);
-    if (!article) {
-      await this.client.answerCallbackQuery(queryId, '❌ 文章不存在或已被删除', true);
-      log.warn({ articleId, userId: this.userId }, 'Article not found when showing rating keyboard');
-      return;
-    }
-
-    // Answer callback query without notification
-    await this.client.answerCallbackQuery(queryId);
-
-    // Update keyboard to show rating selection
-    if (messageId !== undefined) {
-      try {
-        const keyboard = createRatingKeyboard(articleId);
-        await this.client.editMessageReplyMarkup(chatId, messageId, keyboard);
-      } catch (error) {
-        log.warn({ articleId, messageId, error }, 'Failed to show rating keyboard');
-      }
-    }
-
-    log.debug({ articleId, userId: this.userId, chatId }, 'Rating keyboard shown via Telegram');
-  }
-
-  /**
-   * Handle cancel operation with robust error handling
-   */
-  private async handleCancel(
-    queryId: string,
-    articleId: number,
-    messageId: number | undefined,
-    chatId: string
-  ): Promise<void> {
-    // Get article to verify ownership
-    const article = await getArticleById(articleId, this.userId);
-    if (!article) {
-      await this.client.answerCallbackQuery(queryId, '❌ 文章不存在或已被删除', true);
-      log.warn({ articleId, userId: this.userId }, 'Article not found when cancelling');
-      return;
-    }
-
-    // Answer callback query
-    await this.client.answerCallbackQuery(queryId, '✅ 已取消');
-
-    // Restore original keyboard
-    if (messageId !== undefined) {
-      try {
-        const keyboard = createArticleKeyboard(articleId, article.is_read === 1, article.rating);
-        await this.client.editMessageReplyMarkup(chatId, messageId, keyboard);
-      } catch (error) {
-        log.warn({ articleId, messageId, error }, 'Failed to restore keyboard after cancel');
-      }
-    }
-
-    log.debug({ articleId, userId: this.userId, chatId }, 'Rating keyboard cancelled via Telegram');
-  }
-
-  /**
-   * Handle incoming message (commands)
+   * Handle incoming message (commands) — route to CommandHandler
    */
   private async handleMessage(message: Message): Promise<void> {
     const { from, chat, text } = message;
 
-    // Get chat ID
     const chatId = String(chat.id);
 
-    // Check if this chat is authorized
     if (!this.isAuthorizedChat(chatId)) {
       log.warn({ from: from?.id, chatId }, 'Unauthorized message');
       await this.client.sendMessage(chatId, '❌ 无权操作');
       return;
     }
 
-    // Parse command
     if (!text || !text.startsWith('/')) {
-      return; // Ignore non-command messages
+      return;
     }
 
     const parts = text.trim().split(/\s+/);
     const command = parts[0]?.split('@')[0] || '';
 
-    switch (command) {
-      case '/getarticles':
-        // This is a read-only command, allowed for all authorized chats
-        await this.handleGetArticlesCommandWrapper(parts.slice(1).join(' '), chatId);
-        break;
-
-      default:
-        log.debug({ command, chatId }, 'Unknown command');
-    }
-  }
-
-  /**
-   * Wrapper for getarticles command with error handling
-   */
-  private async handleGetArticlesCommandWrapper(args: string, chatId: string): Promise<void> {
-    try {
-      const parsed = parseGetArticlesCommand(args);
-      if (!parsed) {
-        await this.client.sendMessage(chatId,
-          '❌ 格式错误。\n' +
-          '按日期：/getarticles YYYY-MM-DD 或 YYYYMMDD\n' +
-          '按来源：/getarticles 来源名称\n' +
-          '可选：添加 @all 返回所有文章（不限已读/未读）\n' +
-          '例如：/getarticles 2026-3-1 或 /getarticles MIT Technology Review @all');
-        return;
-      }
-
-      if (parsed.type === 'date') {
-        await this.handleGetArticlesByDate(parsed, chatId);
-      } else {
-        await this.handleGetArticlesBySource(parsed, chatId);
-      }
-    } catch (error) {
-      log.error({ error, args }, 'Error in getarticles command');
-      await this.client.sendMessage(chatId, '❌ 查询失败，请稍后重试');
-    }
-  }
-
-  /**
-   * Handle /getarticles command by date
-   */
-  private async handleGetArticlesByDate(command: GetArticlesDateCommand, chatId: string): Promise<void> {
-    const { year, month, day, includeAll } = command;
-    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-
-    const result = await getUserArticles(this.userId, {
-      createdAfter: dateStr,
-      createdBefore: dateStr,
-      isRead: includeAll ? undefined : false,
-      filterStatus: 'passed',
-      limit: 5,
-      page: 1,
-      randomOrder: true,
-    });
-
-    const statusText = includeAll ? '所有' : '未读';
-    await this.sendArticleBatch(result.articles, chatId, {
-      summaryMessage: `📚 找到 ${result.articles.length} 篇${year}年${month}月${day}日的${statusText}文章：`,
-      emptyMessage: `📭 ${year}年${month}月${day}日没有符合条件的${statusText}文章`,
-      logLabel: '/getarticles command',
-      logContext: { year, month, day },
-    });
-  }
-
-  /**
-   * Handle /getarticles command by source name
-   */
-  private async handleGetArticlesBySource(command: GetArticlesSourceCommand, chatId: string): Promise<void> {
-    const { name, includeAll } = command;
-    const sources = await this.getSources();
-    const matchedSource = this.matchSourceName(name, sources);
-
-    // Fallback: if no source matched, treat as keyword search
-    if (!matchedSource) {
-      await this.handleGetArticlesBySearch(name, chatId, includeAll);
-      return;
-    }
-
-    // Build query parameters
-    const queryParams: any = {
-      isRead: includeAll ? undefined : false,
-      filterStatus: 'passed',
-      limit: 5,
-      page: 1,
-      randomOrder: true,
-    };
-
-    if (matchedSource.rssIds) queryParams.rssSourceIds = matchedSource.rssIds;
-    if (matchedSource.journalIds) queryParams.journalIds = matchedSource.journalIds;
-    if (matchedSource.keywordIds) queryParams.keywordIds = matchedSource.keywordIds;
-
-    const result = await getUserArticles(this.userId, queryParams);
-
-    const statusText = includeAll ? '所有' : '未读';
-    await this.sendArticleBatch(result.articles, chatId, {
-      summaryMessage: `📚 找到 ${result.articles.length} 篇来自 "${this.escapeHtml(matchedSource.name)}" 的${statusText}文章：`,
-      emptyMessage: `📭 来源 "${this.escapeHtml(matchedSource.name)}" 没有符合条件的${statusText}文章`,
-      logLabel: '/getarticles command by source',
-      logContext: { sourceName: matchedSource.name },
-    });
-  }
-
-/**
- * Handle /getarticles command by keyword search
- * (fallback when source name is not found)
- */
-private async handleGetArticlesBySearch(keyword: string, chatId: string, includeAll?: boolean): Promise<void> {
-  const queryParams: any = {
-    search: keyword,
-    isRead: includeAll ? undefined : false,
-    filterStatus: 'passed',
-    limit: 5,
-    page: 1,
-    randomOrder: true,
-    skipDaysFilterForSearch: true,  // Skip time filter for full-text search
-  };
-
-  const result = await getUserArticles(this.userId, queryParams);
-
-  const statusText = includeAll ? '所有' : '未读';
-  await this.sendArticleBatch(result.articles, chatId, {
-    summaryMessage: `🔍 关键词 "${this.escapeHtml(keyword)}" 找到 ${result.articles.length} 篇${statusText}文章：`,
-    emptyMessage: `📭 关键词 "${this.escapeHtml(keyword)}" 没有找到符合条件的${statusText}文章`,
-    logLabel: '/getarticles command by keyword search',
-    logContext: { keyword },
-  });
-}
-
-  /**
-   * Send a batch of articles to a chat.
-   * Extracted to deduplicate code across handleGetArticlesByDate/Source/Search.
-   */
-  private async sendArticleBatch(
-    articles: any[],
-    chatId: string,
-    options: {
-      summaryMessage: string;
-      emptyMessage: string;
-      logLabel: string;
-      logContext?: Record<string, any>;
-    }
-  ): Promise<void> {
-    if (articles.length === 0) {
-      await this.client.sendMessage(chatId, options.emptyMessage);
-      return;
-    }
-
-    await this.client.sendMessage(chatId, options.summaryMessage);
-
-    let sentCount = 0;
-    let failedCount = 0;
-
-    for (const article of articles) {
-      let formattedMessage = '';
-
-      try {
-        // Use translated summary if available, otherwise use original summary or content
-        // Priority: summary_zh > summary > markdown_content > content
-        let summary = article.summary_zh || article.summary || undefined;
-        if (!summary && (article.markdown_content || article.content)) {
-          summary = article.markdown_content || article.content || undefined;
-          // Truncate content if too long (max 500 chars for preview)
-          if (summary && summary.length > 500) {
-            summary = summary.substring(0, 500) + '...';
-          }
-        }
-
-        formattedMessage = formatNewArticle({
-          id: article.id,
-          title: article.title,
-          url: article.url,
-          sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
-          sourceType: article.source_origin === 'journal' ? '期刊文章' :
-                      article.source_origin === 'keyword' ? '关键词订阅' :
-                      article.source_origin === 'email' ? '邮件订阅' : 'RSS订阅',
-          summary,
-          aiSummary: this.getTelegramAiSummary(article.ai_summary),
-        });
-
-        const keyboard = createArticleKeyboard(
-          article.id,
-          article.is_read === 1,
-          article.rating
-        );
-
-        await this.client.sendMessageWithKeyboard(chatId, formattedMessage, keyboard, 'HTML');
-        sentCount++;
-
-        // Rate limiting: 1 second between messages
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } catch (error) {
-        failedCount++;
-        log.error({
-          error: serializeError(error),
-          articleId: article.id,
-          title: article.title,
-          chatId,
-          parseMode: 'HTML',
-          messageLength: formattedMessage.length,
-          ...options.logContext,
-        }, `Failed to send article via ${options.logLabel}`);
-        // Continue with next article instead of stopping
-      }
-    }
-
-    // Log result
-    log.info({
-      userId: this.userId,
-      sentCount,
-      failedCount,
-      chatId,
-      ...options.logContext,
-    }, `Sent articles via ${options.logLabel}`);
-
-    // Notify user if some articles failed to send
-    if (failedCount > 0) {
-      await this.client.sendMessage(chatId,
-        `⚠️ ${failedCount} 篇文章发送失败，请查看日志了解详情`);
+    if (command === '/getarticles') {
+      const args = parts.slice(1).join(' ');
+      await this.commandHandler.handleGetArticlesCommand(args, chatId);
+    } else {
+      log.debug({ command, chatId }, 'Unknown command');
     }
   }
 }
