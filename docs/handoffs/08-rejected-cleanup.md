@@ -22,7 +22,7 @@
 ```mermaid
 flowchart LR
     A[源表 auto_cleanup_rejected=1] --> B[rejected-cleanup-scheduler]
-    B --> C{每天 5:00 cron}
+    B --> C{每天 8:00 cron}
     C --> D[查询 filter_status=rejected 的文章]
     D --> E[收集关联数据]
     E --> F[BEGIN TRANSACTION]
@@ -37,7 +37,7 @@ flowchart LR
 [源表 auto_cleanup_rejected = 1]
     │
     ▼
-[rejected-cleanup-scheduler]  ← cron 每天 5:00 (config.rejectedCleanupSchedule)
+[rejected-cleanup-scheduler]  ← cron 每天 8:00 (config.rejectedCleanupSchedule)
     │
     │  1. collectEnabledSources() — 4 类源表 UNION ALL 查询 auto_cleanup_rejected=1
     │  2. 对每个源：
@@ -132,12 +132,12 @@ CREATE INDEX idx_rejected_articles_email_source_id ON rejected_articles(email_so
 ```typescript
 // 新增配置项
 rejectedCleanupEnabled: boolean;       // 默认 true（可通过 REJECTED_CLEANUP_ENABLED=false 关闭）
-rejectedCleanupSchedule: string;       // 默认 '0 5 * * *'（每天 5:00 Asia/Shanghai）
+rejectedCleanupSchedule: string;       // 默认 '0 8 * * *'（每天 8:00 Asia/Shanghai）
 ```
 
 环境变量：
 - `REJECTED_CLEANUP_ENABLED` — 设为 `false` 禁用调度器
-- `REJECTED_CLEANUP_SCHEDULE` — cron 表达式，默认每天 5:00
+- `REJECTED_CLEANUP_SCHEDULE` — cron 表达式，默认每天 8:00
 
 ---
 

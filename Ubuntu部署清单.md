@@ -254,6 +254,12 @@ LLM_RATE_LIMIT_BURST_CAPACITY=10
 # 队列超时时间（毫秒）
 LLM_RATE_LIMIT_QUEUE_TIMEOUT=30000
 
+# ============ 拒绝文章自动清理配置 ============
+# 是否启用自动清理被 LLM 过滤拒绝的文章
+REJECTED_CLEANUP_ENABLED=true
+# 清理时间（cron 表达式，默认每天上午 8 点）
+# REJECTED_CLEANUP_SCHEDULE=0 8 * * *
+
 # ============ CLI API 密钥（用于每日总结 CLI）=============
 CLI_API_KEY=your-cli-api-key-here
 ```
@@ -1161,6 +1167,7 @@ sudo journalctl -u lis-rss -f
 | 依赖更新 | `pnpm install` + `systemctl restart lis-rss` |
 | 应用服务卡死 | `systemctl restart lis-rss` |
 | Gmail 邮件源配置修改 (GMAIL_*) | `systemctl restart lis-rss` |
+| 拒绝文章清理配置修改 (REJECTED_CLEANUP_*) | `systemctl restart lis-rss` |
 | PDF 处理 Python 代码更新 | `systemctl restart paper-pdf-api` |
 | PDF 处理脚本 `.env` / 依赖修改 | `systemctl restart paper-pdf-api` |
 | Telegram Bot 代码更新 | `systemctl restart paper-pdf-summary-telegram` |

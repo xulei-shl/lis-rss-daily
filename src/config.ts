@@ -216,7 +216,7 @@ function getConfig(): Config {
 
     // Rejected Article Cleanup
     rejectedCleanupEnabled: process.env.REJECTED_CLEANUP_ENABLED !== 'false',
-    rejectedCleanupSchedule: process.env.REJECTED_CLEANUP_SCHEDULE || '0 5 * * *',
+    rejectedCleanupSchedule: process.env.REJECTED_CLEANUP_SCHEDULE || '0 8 * * *',
 
     // DeepSearch
     deepSearchApiUrl: process.env.DEEPSEARCH_API_URL || 'http://localhost:8082',

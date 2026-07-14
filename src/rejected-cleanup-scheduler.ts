@@ -6,7 +6,7 @@
  * associated data (filter logs, translations, process logs, related articles).
  *
  * Only operates on sources with auto_cleanup_rejected=1 enabled.
- * Default schedule: daily at 5:00 AM.
+ * Default schedule: daily at 8:00 AM.
  */
 
 import { sql } from 'kysely';
