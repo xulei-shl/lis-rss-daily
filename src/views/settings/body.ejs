@@ -35,6 +35,16 @@ async function loadTopicDomains() {
     if (!res.ok) throw new Error('Failed to load topic domains');
     const data = await res.json();
     topicDomains = data.domains || [];
+
+    // 领域列表加载完成后，重新渲染可能已提前加载的表格
+    // （RSS 订阅源和期刊列表在 settings.js 加载时立即请求，
+    //   那时 topicDomains 可能尚未就绪，导致 getDomainName() 返回 '-'）
+    if (typeof renderTable === 'function') renderTable();
+    if (typeof renderJournalsTable === 'function') renderJournalsTable();
+    // 邮件订阅源列表（由 panel-gmail.ejs 内联脚本在 DOMContentLoaded 时加载）
+    if (typeof loadGmailSources === 'function') {
+      loadGmailSources();
+    }
   } catch (err) {
     console.error('加载主题领域失败:', err);
   }
