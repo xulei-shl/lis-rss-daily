@@ -5,6 +5,9 @@
     <div class="section-header-actions">
       <input type="text" id="journalsSearchInput" class="search-input" placeholder="搜索期刊名称..." oninput="filterJournals()">
       <button class="btn btn-primary" onclick="showJournalAddModal()">+ 添加期刊</button>
+      <button class="btn btn-secondary" onclick="triggerRejectedCleanup(this)">
+        🗑️ 立即清理
+      </button>
     </div>
   </div>
 
