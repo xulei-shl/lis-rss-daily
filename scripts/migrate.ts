@@ -862,6 +862,21 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
         continue;
       }
 
+      // ============================================================
+      // 039: 添加拒绝文章清理统计缓存表
+      // ============================================================
+      if (file === '039_add_rejected_cleanup_stats.sql') {
+        const hasCacheTable = hasTable(db, 'rejected_cleanup_stats');
+        if (!hasCacheTable) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log('      → Created rejected_cleanup_stats cache table');
+        } else {
+          console.log('      → Skipped (rejected_cleanup_stats already exists)');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

@@ -28,7 +28,8 @@ flowchart LR
     E --> F[BEGIN TRANSACTION]
     F --> G[INSERT INTO rejected_articles]
     G --> H[DELETE FROM articles CASCADE]
-    H --> I[COMMIT]
+    H --> I[UPDATE rejected_cleanup_stats 缓存]
+    I --> J[COMMIT]
 ```
 
 详细流程：
@@ -50,9 +51,14 @@ flowchart LR
     │     c. db.transaction():
     │        - INSERT INTO rejected_articles (全部字段 + JSON 关联数据 + source_name)
     │        - DELETE FROM articles WHERE id = ?  (ON DELETE CASCADE 清除关联表)
+    │        - INSERT ... ON CONFLICT DO UPDATE rejected_cleanup_stats
     │     d. 统计日志
     ▼
-[rejected_articles archive]
+[rejected_articles archive]  ← 同时更新 rejected_cleanup_stats 缓存
+                                          │
+                                          ▼
+                                 [首页统计 GET /api/articles/stats]
+                                 加回缓存值 → todayNew / passRate 准确
 ```
 
 ---
@@ -125,6 +131,24 @@ CREATE INDEX idx_rejected_articles_keyword_id ON rejected_articles(keyword_id);
 CREATE INDEX idx_rejected_articles_email_source_id ON rejected_articles(email_source_id);
 ```
 
+### 3.3 `rejected_cleanup_stats` 统计缓存表
+
+位置：`sql/001_init.sql:598-607`、`sql/039_add_rejected_cleanup_stats.sql`
+
+当清理移除了 rejected 文章后，首页统计（今日新增、通过率）会因缺少被移除的文章而失真。该缓存表在清理事务中**原子性地累加计数器**，首页统计时加上缓存值来补偿。
+
+```sql
+CREATE TABLE IF NOT EXISTS rejected_cleanup_stats (
+  user_id INTEGER NOT NULL,
+  article_date TEXT NOT NULL,       -- created_at 的 UTC 日期部分 YYYY-MM-DD
+  rejected_count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, article_date)
+);
+```
+
+- 每次清理成功移走一篇文章，在同一个事务内 `INSERT ... ON CONFLICT DO UPDATE SET rejected_count = rejected_count + 1`
+- 容量极小（每用户每天一行），查询 O(log n)，无 JOIN
+
 ---
 
 ## 4. 配置项 `src/config.ts:56-58`
@@ -164,7 +188,7 @@ export class RejectedCleanupScheduler {
 | 方法 | 可见性 | 功能 | 位置 |
 |------|--------|------|------|
 | `collectEnabledSources()` | private | 收集 4 类源表中 `auto_cleanup_rejected=1` 的活跃源 | L:151-190 |
-| `cleanupSource(source)` | private | 对单个源执行迁移：查询 → 收集关联数据 → 事务迁移 | L:196-303 |
+| `cleanupSource(source)` | private | 对单个源执行迁移：查询 → 收集关联数据 → 事务迁移（含 `rejected_cleanup_stats` INCREMENT） | L:196-303 |
 | `getSourceColumn(type)` | private | 源类型 → articles 表中外键列名映射 | L:309-321 |
 
 ### 5.3 手动触发
@@ -213,6 +237,20 @@ console.log(result);
 - `moved_at` — 迁移时间戳
 
 已注册到 `DatabaseTable` 接口（L:117）和 `RejectedArticlesSelection` 类型（L:251）。
+
+### 6.3 新增 `RejectedCleanupStatsTable` 接口
+
+位置：`src/db.ts:376-381`
+
+```typescript
+export interface RejectedCleanupStatsTable {
+  user_id: number;
+  article_date: string;
+  rejected_count: number;
+}
+```
+
+已注册到 `DatabaseTable` 接口（L:52）作为 `rejected_cleanup_stats`。
 
 ---
 
@@ -286,7 +324,38 @@ console.log(result);
 
 ---
 
-## 9. 迁移脚本 `scripts/migrate.ts`
+## 9. 首页统计集成 `src/api/routes/articles.routes.ts`
+
+### 9.1 问题
+
+清理将 `filter_status='rejected'` 的文章从 `articles` 物理删除到 `rejected_articles`，而首页统计只查 `articles` 表，导致：
+- **今日新增**（`todayNew`）：移走的 rejected 文章不再计入，数量偏少
+- **通过率**（`passRate`）：`passed / (passed + rejected)` 分母变小，通过率虚高
+
+### 9.2 解决方案
+
+在清理事务中原子性地累加 `rejected_cleanup_stats` 缓存，首页统计时加上缓存值：
+
+**清理侧**（`src/rejected-cleanup-scheduler.ts:371-381`，在 INSERT + DELETE 之后）：
+```typescript
+await sql`
+  INSERT INTO rejected_cleanup_stats (user_id, article_date, rejected_count)
+  VALUES (${source.userId}, ${articleDate}, 1)
+  ON CONFLICT(user_id, article_date) DO UPDATE SET
+    rejected_count = rejected_cleanup_stats.rejected_count + 1
+`.execute(trx);
+```
+
+**统计侧**（`src/api/routes/articles.routes.ts:264-282`）：
+- `todayNew = articles_count_today + COALESCE(today_cached_rejected, 0)`
+- `passRate = passed / (passed + rejected_in_articles + total_cached_rejected)`
+- 通过 `rejected_cleanup_stats` 表的 `user_id` 和 `article_date` 字段查询，仅 2 次简单 COUNT 查询，无 JOIN，性能开销可忽略。
+
+---
+
+## 10. 迁移脚本 `scripts/migrate.ts`
+
+### 10.1 038 迁移
 
 038 迁移分支（L:463-476）在 `migrate.ts` 中已添加：
 
@@ -308,9 +377,27 @@ if (file === '038_add_auto_cleanup_rejected.sql') {
 }
 ```
 
+### 10.2 039 迁移
+
+位置：`scripts/migrate.ts:864-879`、`sql/039_add_rejected_cleanup_stats.sql`
+
+```typescript
+if (file === '039_add_rejected_cleanup_stats.sql') {
+  const hasCacheTable = hasTable(db, 'rejected_cleanup_stats');
+  if (!hasCacheTable) {
+    const sql = fs.readFileSync(fullPath, 'utf-8');
+    db.exec(sql);
+    console.log('      → Created rejected_cleanup_stats cache table');
+  } else {
+    console.log('      → Skipped (rejected_cleanup_stats already exists)');
+  }
+  continue;
+}
+```
+
 ---
 
-## 10. 验证要点
+## 11. 验证要点
 
 | 验证项 | 状态 | 方法 |
 |--------|------|------|
@@ -321,21 +408,26 @@ if (file === '038_add_auto_cleanup_rejected.sql') {
 | 关联数据完整性 | ⏳ 未验证 | 需手动测试确认 JSON 字段包含正确数据 |
 | 级联删除 | ✅ 由 FK CASCADE 保证 | DELETE FROM articles 自动清除关联表 |
 | 前端 UI 开关 | ✅ 已实现 | 四类源编辑弹窗均有复选框 |
-| 迁移脚本 | ✅ 已验证 | `pnpm run db:migrate` 成功执行 038 |
+| 迁移脚本 | ✅ 已验证 | `pnpm run db:migrate` 成功执行 038 + 039 |
+| 统计缓存表创建 | ✅ 已验证 | `pnpm run db:migrate` 后 `rejected_cleanup_stats` 表存在 |
+| 缓存原子性 | ✅ 代码保证 | 缓存更新与 DELETE 在同一事务中，不会出现遗漏 |
+| 首页统计补偿 | ✅ 代码就绪 | `todayNew` 和 `passRate` 已包含缓存值 |
+| 性能影响 | ✅ 无 | 缓存表每用户每日期一行，查询 O(log n)，无 JOIN |
 
 ---
 
-## 11. 涉及文件汇总（最终清单）
+## 12. 涉及文件汇总（最终清单）
 
 | 文件 | 操作 | 说明 |
 |------|------|------|
 | `sql/001_init.sql` | ✅ | DDL 已包含所有变更（新数据库直接使用） |
 | `sql/038_add_auto_cleanup_rejected.sql` | ✅ | 迁移脚本（已有数据库使用） |
-| `src/db.ts` | ✅ | 类型定义：4 源表 + RejectedArticlesTable |
+| `sql/039_add_rejected_cleanup_stats.sql` | ✅ | **新文件**，统计缓存表迁移 |
+| `src/db.ts` | ✅ | 类型定义：4 源表 + RejectedArticlesTable + RejectedCleanupStatsTable |
 | `src/config.ts` | ✅ | 新增 `rejectedCleanupEnabled` / `rejectedCleanupSchedule` |
-| `src/rejected-cleanup-scheduler.ts` | ✅ **新文件** | 独立调度器，Singleton + node-cron |
+| `src/rejected-cleanup-scheduler.ts` | ✅ | 独立调度器，事务内更新 `rejected_cleanup_stats` 缓存 |
 | `src/index.ts` | ✅ | 注册调度器启动/停止 |
-| `scripts/migrate.ts` | ✅ | 添加 038 迁移分支 |
+| `scripts/migrate.ts` | ✅ | 添加 038 + 039 迁移分支 |
 | `src/api/rss-sources.ts` | ✅ | 服务接口加 `autoCleanupRejected` |
 | `src/api/journals.ts` | ✅ | 同上 |
 | `src/api/keywords.ts` | ✅ | 同上 |
@@ -344,6 +436,7 @@ if (file === '038_add_auto_cleanup_rejected.sql') {
 | `src/api/routes/journals.routes.ts` | ✅ | 同上 |
 | `src/api/routes/keywords.routes.ts` | ✅ | 同上 |
 | `src/api/routes/gmail-sources.routes.ts` | ✅ | 同上 |
+| `src/api/routes/articles.routes.ts` | ✅ | 首页统计加上 `rejected_cleanup_stats` 缓存值 |
 | `src/views/settings/modals.ejs` | ✅ | RSS/期刊/关键词模态框加复选框 |
 | `src/views/settings/panel-gmail.ejs` | ✅ | 邮件源模态框加复选框 + 内联 JS |
 | `src/public/js/settings.js` | ✅ | 四个源类型的添加/编辑/保存流程全部更新 |
@@ -357,7 +450,7 @@ if (file === '038_add_auto_cleanup_rejected.sql') {
 
 2. **调度器状态 API 缺失**：当前无 `GET /api/scheduler/rejected-cleanup/status` 端点查看清理调度器状态（启停状态、上次运行时间等）。
 
-3. **清理日志**：调度器仅输出 `log.info` 日志，未持久化到数据库。如需统计每天清理了多少篇文章，可考虑写表。
+3. **清理日志**：调度器仅输出 `log.info` 日志，未持久化到数据库。当前已通过 `rejected_cleanup_stats` 表记录了每用户每天的清理数量，供首页统计补偿使用。如需更详细的单次清理报告（如按来源分布），仍需额外持久化。
 
 ---
 

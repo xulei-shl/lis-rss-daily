@@ -596,6 +596,18 @@ CREATE INDEX IF NOT EXISTS idx_rejected_articles_keyword_id ON rejected_articles
 CREATE INDEX IF NOT EXISTS idx_rejected_articles_email_source_id ON rejected_articles(email_source_id);
 
 -- ===========================================
+-- 22. Rejected Cleanup Stats Cache (拒绝清理统计缓存)
+-- ===========================================
+-- 清理 rejected 文章时，按用户按日期累计被移除的 rejected 文章数量，
+-- 首页统计时与此缓存相加，避免因清理导致「今日新增」和「通过率」统计失真。
+CREATE TABLE IF NOT EXISTS rejected_cleanup_stats (
+  user_id INTEGER NOT NULL,
+  article_date TEXT NOT NULL,
+  rejected_count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, article_date)
+);
+
+-- ===========================================
 -- 19. Schema Metadata Table
 -- ===========================================
 -- 用于跟踪数据库 schema 版本和配置版本

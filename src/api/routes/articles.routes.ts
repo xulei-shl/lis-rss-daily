@@ -188,6 +188,8 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
 
     const todayNew = Number(todayCountResult?.count || 0);
 
+    log.info({ todayNew }, 'Today new articles count (before adding cached)');
+
     // Get today's passed articles count
     const todayPassedResult = await db
       .selectFrom('articles')
@@ -256,7 +258,28 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
 
     const total = Number(totalResult?.count || 0);
     const passed = Number(passedResult?.count || 0);
-    const passRate = total > 0 ? passed / total : 0;
+
+    // Include rejected articles cleaned up by auto-cleanup (moved to rejected_articles)
+    // so stats like passRate / todayNew reflect the true totals.
+    const cachedResult = await db
+      .selectFrom('rejected_cleanup_stats')
+      .where('user_id', '=', userId)
+      .select((eb) => [
+        eb.fn.coalesce(eb.fn.sum('rejected_count'), eb.val(0)).as('total_rejected'),
+      ])
+      .executeTakeFirst();
+    const totalCachedRejected = Number(cachedResult?.total_rejected || 0);
+
+    const todayCachedResult = await db
+      .selectFrom('rejected_cleanup_stats')
+      .where('user_id', '=', userId)
+      .where('article_date', '=', todayLocal)
+      .select((eb) => eb.fn.coalesce(eb.fn.sum('rejected_count'), eb.val(0)).as('today_rejected'))
+      .executeTakeFirst();
+    const todayCachedRejected = Number(todayCachedResult?.today_rejected || 0);
+
+    const correctedTotal = total + totalCachedRejected;
+    const passRate = correctedTotal > 0 ? passed / correctedTotal : 0;
 
     // Get unread count for passed articles within 7 days
     const unreadCountResult = await db
@@ -274,12 +297,13 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
     const unread = Number(unreadCountResult?.count || 0);
 
     res.json({
-      todayNew,
+      todayNew: todayNew + todayCachedRejected,
       todayPassed,
       pending,
       analyzed,
       passRate,
-      total,
+      total: correctedTotal,
+      totalCachedRejected,
       passed,
       unread,
     });

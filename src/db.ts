@@ -50,6 +50,7 @@ export interface DatabaseTable {
   email_sources: EmailSourcesTable;
   email_fetch_logs: EmailFetchLogsTable;
   rejected_articles: RejectedArticlesTable;
+  rejected_cleanup_stats: RejectedCleanupStatsTable;
 }
 
 export interface UsersTable {
@@ -367,6 +368,12 @@ export interface RejectedArticlesTable {
   related_data: string | null;
   source_name: string | null;
   moved_at: string | null;
+}
+
+export interface RejectedCleanupStatsTable {
+  user_id: number;
+  article_date: string;
+  rejected_count: number;
 }
 
 export interface EmailFetchLogsTable {

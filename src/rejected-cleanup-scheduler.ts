@@ -368,6 +368,17 @@ export class RejectedCleanupScheduler {
             .deleteFrom('articles')
             .where('id', '=', article.id)
             .execute();
+
+          // Update stats cache — increment per-user per-date counter
+          const articleDate = article.created_at
+            ? article.created_at.slice(0, 10)
+            : new Date().toISOString().slice(0, 10);
+          await sql`
+            INSERT INTO rejected_cleanup_stats (user_id, article_date, rejected_count)
+            VALUES (${source.userId}, ${articleDate}, 1)
+            ON CONFLICT(user_id, article_date) DO UPDATE SET
+              rejected_count = rejected_cleanup_stats.rejected_count + 1
+          `.execute(trx);
         });
 
         movedCount++;
