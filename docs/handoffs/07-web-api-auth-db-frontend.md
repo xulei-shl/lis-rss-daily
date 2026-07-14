@@ -100,7 +100,7 @@
 - 静态 JS（`public/js/`）：全局 `time-utils.js`/`toast.js`/`confirm-dialog.js`/`keyboard-shortcuts.js` + 页面控制器 `settings.js`/`wechat-settings.js`/`home.js`/`history.js`/`article-detail.js`/`daily-summary.js`/`rating.js`。
 - CSS 分层（`public/css/`）：`base/` `design-system/` `components/` `pages/`；`main.css` 为开发入口。
 - 构建：`src/scripts/build-css.js`（`pnpm run build:css`）拼接固定 `CSS_IMPORTS`（**不含 `pages/*`**）为 `main.bundle.css`/`main.bundle.min.css`；`NODE_ENV=production` 或 `--minify` 时压缩。
-- ⚠️ `layout.ejs` 开发态引用 `/css/main.css`，而构建脚本产物名为 `main.bundle.css`——命名需核对。
+- `layout.ejs` 引用层：生产态 `<link href="/css/main.bundle.min.css">`、开发态 `<link href="/css/main.bundle.css">`——**2026-07-14 已修复命名对齐**（原开发态误引用 `/css/main.css`）。`build-css.js` 产物（`main.bundle.css` / `main.bundle.min.css`）与 `layout.ejs` 引用现已一致。
 
 ## 9. 与旧报告（2026-05）的差异
 
@@ -111,3 +111,4 @@
 5. 登录在 `web.ts` 的 `POST /login`，`auth.routes.ts` 只有 `/api/logout`。
 6. 密码支持 **bcrypt + SHA256**，种子用户为 SHA256。
 7. Express **5**；`web.ts` 内无显式 view-engine 注册（在 `index.ts` 设置）。
+8. **CSS 命名已对齐（2026-07-14）**：`layout.ejs` 开发/生产分别引用 `/css/main.bundle.css` / `/css/main.bundle.min.css`，与 `build-css.js` 产物一致（旧报告差异第 7 条描述的不一致已消除，见 §8）。

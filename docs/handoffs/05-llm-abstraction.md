@@ -104,6 +104,7 @@ export interface LLMProvider {                 // :34
 | 其他 | `staggerDelayMaxMinutes`(30)、`defaultTimezone`(Asia/Shanghai)、`httpProxy?` |
 | 爬虫/邮件 | `journalCrawl*`、`keywordCrawl*`、`gmailFetch*` |
 | DeepSearch | `deepSearchApiUrl`(http://localhost:8082) |
+| Chroma | `chromaHost`(`CHROMA_HOST`,默认 127.0.0.1)、`chromaPort`(`CHROMA_PORT`,默认 8000) — 2026-07-14 新增，`settings` 表优先、回退此值（见文档 04 §2）|
 
 ⚠️ `config.ts` **不含** chroma host/port（走 `settings` 表）与检索权重（在 `search-service.ts` 常量）。
 
@@ -119,3 +120,9 @@ export interface LLMProvider {                 // :34
 4. **限流**是令牌桶 + 队列 + 超时，包裹每个 provider。
 5. `config_type` 扩展到 `embedding`/`rerank`；`task_type`/`is_default` 互斥；embedding provider 由 DB 驱动（config.ts 无 chroma 字段）。
 6. 加密算法确认为 **AES-256-GCM**，落盘 `base64(IV+Tag+Cipher)`，密钥为 hex。
+
+## 13. 近期重构差异（2026-07-14，基于代码审查实施计划）
+
+- **Chroma host/port 配置化**：`config.ts` 新增 `chromaHost` / `chromaPort` 字段，`getChromaSettings` 支持 settings 表优先、config 兜底（见 §10、文档 04 §2）。
+- **`agent.ts` 语言检测阈值命名**：`MIN_ALPHA_COUNT` / `MIN_ALPHA_RATIO` 常量化（详见文档 03 §2）。
+- **`titleZh` 修复**：`TranslationResult.titleZh` 正式声明，流水线 `runStageTranslate` 落 `title_zh`（详见文档 03 §2）。

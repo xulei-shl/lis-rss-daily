@@ -172,18 +172,17 @@ rejectedCleanupSchedule: string;       // 默认 '0 8 * * *'（每天 8:00 Asia/
 ### 5.1 类结构
 
 ```typescript
-// 文件: src/rejected-cleanup-scheduler.ts:41-58
-export class RejectedCleanupScheduler {
+// 文件: src/rejected-cleanup-scheduler.ts
+export class RejectedCleanupScheduler extends BaseScheduler {  // 2026-07-14 起继承 BaseScheduler
   private static instance: RejectedCleanupScheduler | null = null;
-  private scheduledTask: cron.ScheduledTask | null = null;
-  private isRunning = false;
 
   static getInstance(): RejectedCleanupScheduler;   // 单例
-  start(): void;                                      // 启动 cron
-  stop(): Promise<void>;                              // 停止
-  cleanupNow(): Promise<CleanupResult>;               // 手动触发
+  // start() / stop() 由 BaseScheduler 提供（cron 校验 + 生命周期 + pollWhile 等待）
+  cleanupNow(): Promise<CleanupResult>;               // 手动触发（保留为公有方法）
 }
 ```
+
+> **近期重构（2026-07-14）**：`RejectedCleanupScheduler` 已改为 `extends BaseScheduler`（`src/utils/base-scheduler.ts`），与 RSS / 期刊 / 关键词 / Gmail / 每日总结 / 洞察 / 相关文章共 8 个调度器统一基类。`scheduledTask` / `isRunning` 字段及 `start()` / `stop()` / cron 校验逻辑由基类提供，子类只需实现 `schedulerName` / `cronSchedule` / `run()`。文件:行号引用（如 L:41-58、L:151-190）为重构前的快照，实际以符号名为准。
 
 ### 5.2 核心方法
 
@@ -500,3 +499,7 @@ if (file === '040_add_rejected_cleanup_completed_count.sql') {
 - 本功能为新功能，此前的 handoff 文档中不存在。
 - 过滤逻辑（`src/filter.ts`）完全不变，仅新增清理环节。
 - 本文档从规划阶段升级为**实现完成阶段**，所有文件状态已更新为 ✅。
+
+## 15. 近期重构差异（2026-07-14，基于代码审查实施计划）
+
+- **`RejectedCleanupScheduler` 基类化**：改为 `extends BaseScheduler`，与全项目 8 个调度器统一生命周期（见 §5.1）。`start()` / `stop()` / cron 校验不再各自维护。

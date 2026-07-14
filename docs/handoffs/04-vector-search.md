@@ -22,7 +22,7 @@
 - ⚠️ **Collection 命名**：来自 `getChromaSettings().collection`，**默认字面量 `'articles'`**（`api/settings.ts:273`），可经 `chroma_collection` 设置改。**没有 `${userId}` 后缀**（旧报告的 `articles_{userId}` 是错的）。
 - `getCollection(userId)`（`:68`）：缓存键 `${collection}:${distanceMetric}`；`getOrCreateCollection({name, metadata:{'hnsw:space':distanceMetric}})`。连接错误包成 `ChromaConnectionError`。
 - **租户隔离不靠分 collection**，而靠：① Chroma 查询恒带 `where:{user_id:userId}`（`vector-store.ts:47`），upsert 写 `metadata:{article_id, user_id}`（`indexer.ts:173`）；② SQL 层所有查询 JOIN 源表并过滤 `user_id`。
-- chroma host/port 来自 `settings` 表（`chroma_host` 默认 127.0.0.1、`chroma_port` 默认 8000），**不在 `config.ts`**。
+- chroma host/port 来自 `settings` 表（`chroma_host` 默认 127.0.0.1、`chroma_port` 默认 8000），**且 2026-07-14 起也支持 `config.ts`**（`chromaHost` / `chromaPort`，对应环境变量 `CHROMA_HOST` / `CHROMA_PORT`）。`getChromaSettings(userId)`（`api/settings.ts:269`）取值优先级：**`settings` 表 → `config.chromaHost`/`config.chromaPort`**。**不在 `config.ts` 旧描述已过时**。
 
 ## 3. Embedding 客户端（`embedding-client.ts`）
 
@@ -72,6 +72,7 @@
 
 - JOIN `articles` 与三源表，OR 过滤 `user_id`。`includeRejected` 默认 **true**（返回全部 filter_status；仅 false 时加 `filter_status='passed'`）。
 - ⚠️ 多字段匹配：每个空格切分词 `eb.or([title LIKE %term%, markdown_content LIKE %term%])`，各词 AND 组合（`:281-293`）。**只搜 `title` 和 `markdown_content`**，不搜 `summary`/`content`/`title_zh`。
+- ⚠️ **近期重构（2026-07-14）**：原 `keywordSearchOnly` / `computeRelated` / `getRelatedFromCache` / `enrichWithMetadata` 四处各自重复「JOIN 三源表 + OR 过滤 user_id」模式（Shotgun Surgery 坏味），现统一提取为 `createArticlesQuery(userId)` 查询构建器（`search-service.ts:100` 附近），四处均调用它，新增来源类型只需改一处。
 - `calcRelevance`（`:251`）：完整包含 `+0.7`，前缀 `+0.3`，上限 1；作为 score 与 keywordScore。`LIMIT 100`。
 
 ### 混合融合（`hybridSearch`, `:388-400`）
@@ -119,3 +120,8 @@ topResults = highScore.length >= effectiveLimit ? highScore.slice(0,effectiveLim
 | 关键词搜多字段含 summary | 只搜 `title` + `markdown_content`，各词 AND |
 | 检索元数据含 summary | 检索元数据 `summary` 恒 null |
 | 方法名如 `hybridSearchOnly` | 实为 `semanticSearchOnly`/`keywordSearchOnly`/`hybridSearch`/`computeRelated`/`searchRelated` |
+
+## 11. 近期重构差异（2026-07-14，基于代码审查实施计划）
+
+- **Shotgun Surgery 消除**：`keywordSearchOnly` / `computeRelated` / `getRelatedFromCache` / `enrichWithMetadata` 原先各重复「LEFT JOIN 三源表 + OR 过滤 user_id」SQL 构建，现统一为 `createArticlesQuery(userId)` 构建器（见 §7）。新增来源类型只改一处。
+- **Chroma host/port 配置化**：`config.ts` 新增 `chromaHost` / `chromaPort`（`CHROMA_HOST` / `CHROMA_PORT`），`getChromaSettings` 取 settings 表优先、回退 config（见 §2）。

@@ -14,12 +14,14 @@
 
 ### 四阶段（`runPipeline`, `:379-584`）
 
+> **近期重构（2026-07-14）**：`runPipeline` 不再把 4 个阶段的内联代码写在一个 ~205 行函数里，而是仅做编排，每个阶段拆为私有方法：`runStageMarkdown` / `runStageTranslate` / `runStageVector` / `runStageRelated`（均在 `pipeline.ts`）。`runStageTranslate` 返回 `{ success, translationChanged, ... }`，`runStageVector` 据此决定是否因翻译变化而重索引。行为语义与重构前完全一致。
+
 | 阶段 | 键名 | 条件 | 动作 | 失败策略 |
 |------|------|------|------|----------|
 | 1 | `markdown` | `markdown_content` 空且 `content` 存在 | `toSimpleMarkdown(content)`（`markdown.ts:9`）→ 存 `markdown_content` | 无内容 → 整体 `failed`（`stage:'prepare'`）|
-| 2 | `translate` | `stages.translate !== 'completed'` | `translateArticleIfNeeded(...)` 包在 `executeWithRetry` | 记 `translationChanged`/`translationSucceeded`，非致命 |
-| 3 | `vector` | `vector!=='completed'` 或翻译变化 `needReindex` | `indexArticle(articleId,userId,cb)` | **非致命**（warn 后继续）|
-| 4 | `related` | `related!=='completed'` | `refreshRelatedArticles(articleId,userId,5)` | **非致命**（warn 后继续）|
+| 2 | `translate` | `stages.translate !== 'completed'` | `runStageTranslate` 内 `translateArticleIfNeeded(...)` 包在 `executeWithRetry` | 记 `translationChanged`/`translationSucceeded`，非致命 |
+| 3 | `vector` | `vector!=='completed'` 或翻译变化 `needReindex` | `runStageVector` → `indexArticle(articleId,userId,cb)` | **非致命**（warn 后继续）|
+| 4 | `related` | `related!=='completed'` | `runStageRelated` → `refreshRelatedArticles(articleId,userId,5)` | **非致命**（warn 后继续）|
 
 成功后 `updateArticleProcessStatus(articleId,'completed')`（`:550`）。
 
@@ -33,17 +35,18 @@
 
 - `processBatchArticles(articleIds, userId, options?)`（`:287`）按 `maxConcurrent ?? MAX_CONCURRENT` 分批；`MAX_CONCURRENT=parseInt(ARTICLE_PROCESS_MAX_CONCURRENT||'3')`（`:161`）。
 - `retryFailedArticle(articleId, userId)`（`:347`）重置为 processing 后重跑。
-- `getPendingArticleIds(userId, limit=50)`（`:655`）/`getFailedArticleIds(...)`（`:703`）：查 RSS/关键词/期刊中 `filter_status='passed'` 且相应 process_status 的文章。
+- `getPendingArticleIds(userId, limit=50)` / `getFailedArticleIds(...)`（`:655` / `:703`）现为 **`@deprecated` 别名**，统一转发到 `getArticleIdsByStatus(status: 'pending'|'failed', userId, limit)`（`pipeline.ts`，2026-07-14 合并去重）。`sortField` 按状态区分：`failed` 用 `updated_at`、`pending` 用 `created_at`。调用方建议直接使用 `getArticleIdsByStatus`。
+- `sleep(ms)` 已统一提取到 `src/utils/sleep.ts`，各模块（含 `pipeline.ts`、`rss-scheduler.ts`、`keyword-scheduler.ts`）均 import 使用，不再各自定义。
 
 ## 2. 语言检测与条件翻译（`src/agent.ts`）
 
 - `translateArticleIfNeeded(title?, content?, userId?)`（`:27`）返回 `TranslationResult | null`。
-- `detectLanguage(...)`（`:90`）：空 → `'unknown'`；含 CJK `/[\u4e00-\u9fff]/` → `'zh'`；否则字母数 ≥10 且字母占非空白比 >0.6 → `'en'`，否则 `'unknown'`。
+- `detectLanguage(...)`（`:90`）：空 → `'unknown'`；含 CJK `/[\u4e00-\u9fff]/` → `'zh'`；否则字母数 ≥ `MIN_ALPHA_COUNT`(=10) 且字母占非空白比 > `MIN_ALPHA_RATIO`(=0.6) → `'en'`，否则 `'unknown'`。两个阈值已提取为常量（2026-07-14，原 `#8.1` Magic Number 修复）。
 - **翻译条件**（`:34-39`）：仅当标题或内容为 `'en'` 才翻译；否则返回 `null`（中文文章完全跳过 LLM）。
 - 内容截断常量 `MAX_TRANSLATION_CONTENT=3000`（`:22`）。提示词经 `buildPromptVariables({type:'translation'})` + `resolveSystemPrompt(userId,'translation',...)`；LLM 经 `getUserLLMProvider(userId,'translation')` 或 `getLLM()`。
 - LLM 抛错 → 返回 `{summaryZh:undefined, sourceLang:'en', usedFallback:true}`（不抛）。
-- `TranslationResult`（`:14`）：`{ summaryZh?, sourceLang:'zh'|'en'|'unknown', usedFallback }`。
-- ⚠️ 流水线只落 `summary_zh` + `source_lang`（`pipeline.ts:457-461`），`title_zh` 恒为 `null`；`agent.ts` 回退路径引用了接口未声明的 `titleZh`（`:80`），潜在小 bug。
+- `TranslationResult`（`:14`）：`{ titleZh?, summaryZh?, sourceLang:'zh'|'en'|'unknown', usedFallback }`。`titleZh` 字段**已于 2026-07-14 正式声明**（此前为潜在 bug）。
+- 流水线 `runStageTranslate` 现在会落 `title_zh = translationResult.titleZh ?? null`（不再恒为 `null`），同时落 `summary_zh` + `source_lang`。仅在标题实际被翻译（`shouldTranslateTitle`）时 `titleZh` 才非空。
 
 ## 3. 重试机制
 
@@ -107,4 +110,12 @@ API 处理器本身也是 fire-and-forget：`triggerProcess`/`triggerBatchProces
 2. **重试仅作用于 translate 阶段**，配置默认 `maxRetries=3, baseDelay=5000, multiplier=2, maxDelay=60000`（可环境变量覆盖）。
 3. `article_translations` 是按 `article_id` 的**真 upsert**；流水线只落 `summary_zh`+`source_lang`（`title_zh` 恒 null）。
 4. 相关刷新有两条路径：实时 `incrementalRefreshRelated(topN:10, minScore:0.5)` 与每日 cron（`0 2 * * *`，batch 100，stale 7d，硬编码 `userId=1`）。
-5. `scraper.ts`（Playwright+Defuddle）与 `export.ts` **存在但未被流水线接线**。
+5. `scraper.ts`（Playwright+Defuddle）与 `export.ts` **存在但未被流水线接线**（已加 `@deprecated` 注释标明死代码）。
+
+## 11. 近期重构差异（2026-07-14，基于代码审查实施计划）
+
+- **`runPipeline` 拆分**：4 阶段内联逻辑拆为 `runStageMarkdown` / `runStageTranslate` / `runStageVector` / `runStageRelated`，`runPipeline` 仅编排（见 §1）。语义不变。
+- **`getArticleIdsByStatus` 统一**：`getPendingArticleIds` / `getFailedArticleIds` 合并为参数化 `getArticleIdsByStatus(status, userId, limit)`，旧函数保留为 `@deprecated` 别名（见 §1）。
+- **`sleep()` 统一**：提取到 `src/utils/sleep.ts`，各调度器 / pipeline 复用（见 §1）。
+- **`agent.ts` 语言检测阈值命名**：`MIN_ALPHA_COUNT=10` / `MIN_ALPHA_RATIO=0.6` 常量化（见 §2）。
+- **`titleZh` 修复**：`TranslationResult.titleZh` 正式声明，流水线 `runStageTranslate` 落 `title_zh` 不再恒为 `null`（见 §2）。

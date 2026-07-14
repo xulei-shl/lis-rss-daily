@@ -7,6 +7,8 @@
 
 四个源各有一个**单例调度器**，均在 `src/index.ts` 启动：`initRSSScheduler()`(L74)、`initJournalScheduler()`(L97)、`initKeywordScheduler()`(L108)、`initGmailScheduler()`(L137)。全部 node-cron 且 `timezone: 'Asia/Shanghai'`。
 
+> **近期重构（2026-07-14）**：上述 4 个源调度器（连同每日总结 / 洞察 / 相关文章 / 拒绝清理共 8 个调度器）已全部继承 `src/utils/base-scheduler.ts` 的 `BaseScheduler` 抽象类，统一了 `start()` / `stop()` / cron 表达式校验 / `timezone`（默认 `Asia/Shanghai`）/ `pollWhile()` 在途任务等待逻辑。子类只需实现 `schedulerName` / `cronSchedule` / `isEnabled()` / `run()`，并可选重写 `waitForCompletion()`。单例工厂函数（`initXxxScheduler`）仍保留在各子类中（见 §9 差异）。
+
 共同点：
 
 - 都写入**同一张 `articles` 表**，用不同 `source_origin` 区分：`'rss'`、`'journal'`、`'keyword'`、`'email'`。
@@ -57,14 +59,14 @@
 - `crawlKeyword(keywordId)`（`api/keywords.ts:287`）：`googleScholarSpider.search({keyword,yearStart,yearEnd,numResults})`（`:320`）→ `saveArticles`（`:407`）→ `updateKeywordCrawlStatus`（`:335`）→ `createKeywordCrawlLog`（`:339`）。
 - `saveArticles`（`:407`）：**先按 URL 去重**（`articles.url`），再查 `title_normalized`；`source_origin='keyword'`、`markdown_content=abstract`、`content=null`；随后 `triggerArticleProcessing(articleId)`（`:498`）。
 - `triggerArticleProcessing`：LEFT JOIN `keyword_subscriptions` 取 `domain_id`，`FilterInput` 带 `sourceDomainId`，但**未设置 `sourceType`**（与其他源不同，接手时留意过滤器需能自行解析来源类型）。
-- Google Scholar 爬虫（`src/spiders/google-scholar-spider.ts`）：`search()`（`:65`）`spawn('python3', ['scripts/cli.py', ...], {cwd:'/opt/lis-rss-daily/src/spiders/google_scholar'})`（**硬编码路径**）。输出不是内联 JSON，而是从 stdout 抽取 `/tmp/*.json` 文件路径再读取。
+- Google Scholar 爬虫（`src/spiders/google-scholar-spider.ts`）：`search()`（`:65`）`spawn('python3', ['scripts/cli.py', ...], {cwd: scriptsDir})`，其中 `scriptsDir = path.join(__dirname, 'google_scholar')`（**2026-07-14 修复**：原硬编码 `/opt/lis-rss-daily/src/spiders/google_scholar`，见 §9 差异）。输出不是内联 JSON，而是从 stdout 抽取 `/tmp/*.json` 文件路径再读取。
 - ⚠️ `spider_type='cnki'` 会入库校验通过，但代码始终走 Google Scholar，CNKI 关键词路径未实现。
 - API：`api/routes/keywords.routes.ts` — CRUD、`POST /:id/crawl`、status/logs；关键词文本创建后不可改。
 
 ## 5. Gmail 源（`src/gmail-scheduler.ts` + `src/gmail/`）
 
 - 类 `GmailScheduler`（`:10`），**无独立 config 对象**，直接读 `config.gmailFetchEnabled`、`config.gmailFetchSchedule||'0 4 * * *'`。`start()` 会**立即先跑一次**再排程（`:55`）。
-- `runScheduledFetch`（`:73`）选 `email_sources WHERE status='active'`，映射为 `EmailSourceConfig`（含 `domainId`），逐源串行 `processEmailSource`。
+- `runScheduledFetch`（`:73`）选 `email_sources WHERE status='active'`，映射为 `EmailSourceConfig`（含 `domainId`），逐源串行 `processEmailSource`。行→对象的映射已提取为 `rowToEmailSourceConfig(row)`（`gmail-scheduler.ts`），两处调用点（批量列表 / 单源）共用，消除重复映射代码（见 §9 差异）。
 - `processEmailSource(source)`（`gmail/email-processor.ts:114`）：`fetchEmails(...)` → 每封邮件 `parseEmailContent`（LLM 拆分） → 每篇文章 `title_normalized` 去重 → 插入（`source_origin='email'`、`email_source_id`、`published_at=email.date`） → `process.nextTick` 触发 `filterArticle`（`sourceType:'email'`、`sourceDomainId:source.domainId`、`description:summary||content`） → 处理完的 UID `markAndDelete` → 更新 `email_sources.last_fetched_at/last_error` + 写 `email_fetch_logs`。
 - `parseEmailContent(email, userId)`（`:52`）：`getUserLLMProvider(userId,'email_parse')` + `email_parse` 系统提示词，JSON 模式抽取 `{articles:[{title,summary,content,url,author}]}`；**失败/无提示词时回退为「用邮件主题当单篇文章」**（`:72`,`:106`）。一封通讯可拆成多篇。
 - IMAP（`gmail/imap-client.ts`）：`fetchEmails(...)`（`:75`）用 `ImapFlow` 连 `imap.gmail.com:993` TLS，`buildSearchQuery` 按 `targetSenders` 过滤；`withRetry`（`MAX_RETRIES=2`，延迟 60–180s）+ `withProxyFallback`（代理 TLS 出错则直连重试）。
@@ -97,3 +99,11 @@
 3. **关键词源固定走 Google Scholar**，`cnki` 未实现；Google Scholar 爬虫路径硬编码、输出经 `/tmp` 文件中转（与期刊 stdout 方式不同）。
 4. RSS 调度实际用 `config.rssFetchSchedule`（`0 2 * * *`），DB `settings.rss_fetch_schedule`（`0 9 * * *`）未被消费。
 5. 类型名为 `CrawledArticle`（既有拼写），四本期刊来源类型现含 `wanfang`。
+
+## 10. 近期重构差异（2026-07-14，基于代码审查实施计划）
+
+- **调度器基类化**：RSS / 期刊 / 关键词 / Gmail（及每日总结 / 洞察 / 相关文章 / 拒绝清理）8 个调度器全部继承 `src/utils/base-scheduler.ts` 的 `BaseScheduler`，统一生命周期与 cron 校验（见 §1）。
+- **Google Scholar 爬虫路径**：`cwd` 由硬编码 `/opt/lis-rss-daily/src/spiders/google_scholar` 改为 `path.join(__dirname, 'google_scholar')`（见 §4）。⚠️ `python-spider-runner.ts:55` 的解释器候选路径 `/home/xulei/.pyenvs/...` 仍硬编码，未纳入本次修复。
+- **EmailSourceConfig 映射**：提取 `rowToEmailSourceConfig(row)`，两处调用共用（见 §5）。
+- **期刊 `triggerAutoFilter` 多租户修复**：原硬编码 `userId=1`，现从该期刊下 pending 文章查询中读取真实 `journals.user_id`，并补充 `content: markdown_content || content` 回退链、`rejectedCount` 日志（见 `journal-scheduler.ts`）。
+- **RSS N+1 优化**：`filterSourcesByFetchInterval` / 强制模式原先在循环内逐源 `SELECT last_fetched_at`，现改为 `getLastFetchedMap(ids)` 一次 `WHERE id IN (...)` 批量查询（见 `rss-scheduler.ts`）。
