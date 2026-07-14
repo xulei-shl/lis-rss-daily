@@ -153,12 +153,7 @@ export class RSSScheduler extends BaseScheduler {
    * Wait for active fetch tasks to finish (up to 30s)
    */
   protected async waitForCompletion(): Promise<void> {
-    const maxWaitTime = 30000;
-    const startTime = Date.now();
-    while (this.activeTasks.size > 0 && Date.now() - startTime < maxWaitTime) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-    if (this.activeTasks.size > 0) {
+    if (!(await this.pollWhile(() => this.activeTasks.size > 0, 30000))) {
       log.warn({ activeTasks: this.activeTasks.size }, 'Forced shutdown with active tasks');
     }
   }
@@ -197,12 +192,20 @@ export class RSSScheduler extends BaseScheduler {
       let sourcesToFetch: Array<{ id: number; user_id: number; url: string; name: string; isFirstFetch: boolean }>;
       if (this.config.forceOnSchedule) {
         runLog.info('Force mode enabled: fetching all active sources');
-        sourcesToFetch = sources.map((source) => ({
-          id: source.id,
-          user_id: source.user_id,
-          url: source.url,
-          name: source.name,
-          isFirstFetch: source.isFirstFetch,
+        const db = getDb();
+        sourcesToFetch = await Promise.all(sources.map(async (source) => {
+          const sourceData = await db
+            .selectFrom('rss_sources')
+            .where('id', '=', source.id)
+            .select('last_fetched_at')
+            .executeTakeFirst();
+          return {
+            id: source.id,
+            user_id: source.user_id,
+            url: source.url,
+            name: source.name,
+            isFirstFetch: !sourceData?.last_fetched_at,
+          };
         }));
       } else {
         sourcesToFetch = await this.filterSourcesByFetchInterval(sources);
@@ -294,7 +297,8 @@ export class RSSScheduler extends BaseScheduler {
 
       if (isFirstFetch) {
         // Never fetched, need to fetch
-        sourcesToFetch.push({ ...source, isFirstFetch });
+        const { id, user_id, url, name } = source;
+        sourcesToFetch.push({ id, user_id, url, name, isFirstFetch });
         continue;
       }
 
@@ -303,7 +307,8 @@ export class RSSScheduler extends BaseScheduler {
       const intervalMs = source.fetch_interval * 1000;
 
       if (elapsed >= intervalMs) {
-        sourcesToFetch.push({ ...source, isFirstFetch });
+        const { id, user_id, url, name } = source;
+        sourcesToFetch.push({ id, user_id, url, name, isFirstFetch });
       }
     }
 

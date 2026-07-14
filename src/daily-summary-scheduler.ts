@@ -8,9 +8,9 @@
  * - Graceful shutdown
  */
 
-import cron from 'node-cron';
 import { logger } from './logger.js';
 import { config } from './config.js';
+import { BaseScheduler } from './utils/base-scheduler.js';
 import { generateDailySummary, saveDailySummary, generateJournalAllSummary } from './api/daily-summary.js';
 
 const log = logger.child({ module: 'daily-summary-scheduler' });
@@ -42,12 +42,10 @@ export interface DailySummarySchedulerStatus {
 /**
  * Daily Summary Scheduler class
  */
-export class DailySummaryScheduler {
+export class DailySummaryScheduler extends BaseScheduler {
   private static instance: DailySummaryScheduler | null = null;
 
-  private scheduledTask: cron.ScheduledTask | null = null;
   private config: DailySummarySchedulerConfig;
-  private isRunning: boolean = false;
   private isExecuting: boolean = false;
   private stats = {
     lastRunTime: undefined as Date | undefined,
@@ -55,7 +53,27 @@ export class DailySummaryScheduler {
   };
 
   private constructor(config: DailySummarySchedulerConfig) {
+    super();
     this.config = config;
+  }
+
+  /* ── BaseScheduler overrides ── */
+
+  get schedulerName(): string { return 'Daily summary scheduler'; }
+  get cronSchedule(): string { return this.config.schedule; }
+  get isEnabled(): boolean { return this.config.enabled; }
+
+  protected async run(): Promise<void> {
+    await this.runScheduledPush();
+  }
+
+  /**
+   * Wait for in-flight execution to finish (up to 5 minutes)
+   */
+  protected async waitForCompletion(): Promise<void> {
+    if (!(await this.pollWhile(() => this.isExecuting, 300000))) {
+      log.warn('Forced shutdown while daily summary generation in progress');
+    }
   }
 
   /**
@@ -69,84 +87,6 @@ export class DailySummaryScheduler {
       DailySummaryScheduler.instance = new DailySummaryScheduler(config);
     }
     return DailySummaryScheduler.instance;
-  }
-
-  /**
-   * Start the scheduler
-   */
-  start(): void {
-    if (this.isRunning) {
-      log.warn('Daily summary scheduler already running');
-      return;
-    }
-
-    if (!this.config.enabled) {
-      log.info('Daily summary scheduler disabled in config');
-      return;
-    }
-
-    try {
-      if (!cron.validate(this.config.schedule)) {
-        throw new Error(`Invalid cron expression: ${this.config.schedule}`);
-      }
-
-      this.scheduledTask = cron.schedule(
-        this.config.schedule,
-        () => {
-          this.runScheduledPush().catch((err) => {
-            log.error({ err }, 'Scheduled daily summary push error');
-          });
-        },
-        {
-          scheduled: false,
-          timezone: 'Asia/Shanghai',
-        }
-      );
-
-      this.scheduledTask.start();
-      this.isRunning = true;
-
-      log.info(
-        {
-          schedule: this.config.schedule,
-          types: this.config.types,
-        },
-        'Daily summary scheduler started'
-      );
-    } catch (error) {
-      log.error({ error }, 'Failed to start daily summary scheduler');
-      throw error;
-    }
-  }
-
-  /**
-   * Stop the scheduler
-   */
-  async stop(): Promise<void> {
-    if (!this.isRunning) {
-      return;
-    }
-
-    log.info('Stopping daily summary scheduler...');
-
-    if (this.scheduledTask) {
-      this.scheduledTask.stop();
-      this.scheduledTask = null;
-    }
-
-    const maxWaitTime = 300000;
-    const startTime = Date.now();
-    while (this.isExecuting && Date.now() - startTime < maxWaitTime) {
-      log.debug('Waiting for current execution to complete');
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-
-    if (this.isExecuting) {
-      log.warn('Forced shutdown while execution in progress');
-    }
-
-    this.isRunning = false;
-    log.info('Daily summary scheduler stopped');
   }
 
   /**

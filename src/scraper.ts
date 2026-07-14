@@ -7,6 +7,7 @@
  *   Keep the file but do not import without re-activating it.
  */
 
+// @ts-ignore — playwright not installed; this file is dead code (@deprecated)
 import playwright from 'playwright';
 import { Defuddle } from 'defuddle/node';
 import { toSimpleMarkdown } from './utils/markdown.js';

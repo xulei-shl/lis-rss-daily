@@ -34,6 +34,11 @@ export abstract class BaseScheduler {
     return true;
   }
 
+  /** Timezone for cron scheduling (default: Asia/Shanghai) */
+  get timezone(): string {
+    return 'Asia/Shanghai';
+  }
+
   /** The actual work each scheduler performs when cron fires */
   protected abstract run(): Promise<void>;
 
@@ -68,7 +73,7 @@ export abstract class BaseScheduler {
         },
         {
           scheduled: false,
-          timezone: 'Asia/Shanghai',
+          timezone: this.timezone,
         }
       );
 
@@ -114,6 +119,25 @@ export abstract class BaseScheduler {
    */
   protected waitForCompletion(): Promise<void> {
     return Promise.resolve();
+  }
+
+  /**
+   * Poll while a predicate holds true, sleeping 1 second between checks.
+   * Returns after the predicate becomes false or `timeoutMs` elapses.
+   *
+   * Subclasses with in-flight work should call this from an overridden
+   * `waitForCompletion()` and optionally add a context-rich log on timeout.
+   *
+   * @param predicate - Function that returns true while work is in-flight
+   * @param timeoutMs - Maximum time to wait in milliseconds
+   * @returns `true` if the condition cleared, `false` if timed out
+   */
+  protected async pollWhile(predicate: () => boolean, timeoutMs: number): Promise<boolean> {
+    const startTime = Date.now();
+    while (predicate() && Date.now() - startTime < timeoutMs) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    return !predicate();
   }
 
   // NOTE: updateConfig() is NOT defined here because each scheduler has a

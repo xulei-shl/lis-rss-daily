@@ -77,7 +77,7 @@ export async function getEmailFetchLogs(query: EmailFetchLogQuery): Promise<Emai
 
   const normalizedLogs = (logs as EmailFetchLogRecord[]).map(log =>
     normalizeDateFields(log as Record<string, any>, ['created_at'])
-  );
+  ) as EmailFetchLogRecord[];
 
   return {
     logs: normalizedLogs,

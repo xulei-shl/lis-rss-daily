@@ -91,12 +91,7 @@ export class JournalScheduler extends BaseScheduler {
    * Wait for active crawls to finish (up to 60s)
    */
   protected async waitForCompletion(): Promise<void> {
-    const maxWaitTime = 60000;
-    const startTime = Date.now();
-    while (this.activeCrawls > 0 && Date.now() - startTime < maxWaitTime) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-    if (this.activeCrawls > 0) {
+    if (!(await this.pollWhile(() => this.activeCrawls > 0, 60000))) {
       log.warn({ activeCrawls: this.activeCrawls }, 'Forced shutdown with active crawls');
     }
   }

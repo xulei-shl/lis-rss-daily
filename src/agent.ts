@@ -77,7 +77,6 @@ export async function translateArticleIfNeeded(
   } catch (error) {
     log.warn({ error: error instanceof Error ? error.message : String(error) }, 'Translation LLM failed');
     return {
-      titleZh: undefined,
       summaryZh: undefined,
       sourceLang: 'en',
       usedFallback: true,

@@ -25,7 +25,7 @@ export async function checkJournalExists(
     .selectFrom('journals')
     .where('user_id', '=', userId)
     .where('name', '=', name)
-    .where('source_type', '=', sourceType);
+    .where('source_type', '=', sourceType as any);
 
   if (excludeId !== undefined) {
     query = query.where('id', '!=', excludeId);
@@ -217,7 +217,7 @@ export async function createJournal(params: CreateJournalParams): Promise<Journa
       publication_cycle: params.publicationCycle,
       issues_per_year: params.issuesPerYear,
       volume_offset: params.volumeOffset || 1956,
-      domain_id: domainId,
+      domain_id: domainId ?? (null as any),
       auto_cleanup_rejected: params.autoCleanupRejected ? 1 : 0,
       status: 'active',
       updated_at: now,
@@ -464,7 +464,7 @@ export async function getCrawlLogs(
   // 标准化时间字段为 UTC
   const normalizedLogs = logs.map(log =>
     normalizeDateFields(log as Record<string, any>, ['created_at'])
-  );
+  ) as Array<JournalCrawlLogsSelection & { journal_name: string }>;
 
   return {
     logs: normalizedLogs,

@@ -187,7 +187,7 @@ export async function createKeyword(params: CreateKeywordParams): Promise<Keywor
       keyword: keyword.trim(),
       year_start: yearStart || null,
       year_end: yearEnd || null,
-      domain_id: resolvedDomainId,
+      domain_id: resolvedDomainId ?? (null as any),
       auto_cleanup_rejected: params.autoCleanupRejected ? 1 : 0,
       spider_type: spiderType,
       num_results: numResults,

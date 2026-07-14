@@ -5,8 +5,8 @@
  * 默认每天检查一次，满足间隔天数后再执行。
  */
 
-import cron from 'node-cron';
 import { logger } from './logger.js';
+import { BaseScheduler } from './utils/base-scheduler.js';
 import { generateInsightsSummary } from './api/daily-summary.js';
 import { config as appConfig } from './config.js';
 import { getUserSetting, setUserSetting } from './api/settings.js';
@@ -118,12 +118,10 @@ export interface InsightsSchedulerStatus {
 /**
  * Insights Scheduler class
  */
-export class InsightsScheduler {
+export class InsightsScheduler extends BaseScheduler {
   private static instance: InsightsScheduler | null = null;
 
-  private scheduledTask: cron.ScheduledTask | null = null;
   private config: InsightsSchedulerConfig;
-  private isRunning: boolean = false;
   private isExecuting: boolean = false;
   private lastSuccessfulScheduledRunAt?: Date;
   private stats = {
@@ -132,7 +130,28 @@ export class InsightsScheduler {
   };
 
   private constructor(config: InsightsSchedulerConfig) {
+    super();
     this.config = config;
+  }
+
+  /* ── BaseScheduler overrides ── */
+
+  get schedulerName(): string { return 'Insights scheduler'; }
+  get cronSchedule(): string { return this.config.schedule; }
+  get isEnabled(): boolean { return this.config.enabled; }
+  get timezone(): string { return SCHEDULER_TIMEZONE; }
+
+  protected async run(): Promise<void> {
+    await this.runScheduledInsightsReport();
+  }
+
+  /**
+   * Wait for in-flight execution to finish (up to 5 minutes)
+   */
+  protected async waitForCompletion(): Promise<void> {
+    if (!(await this.pollWhile(() => this.isExecuting, 300000))) {
+      log.warn('Forced shutdown while insights report generation in progress');
+    }
   }
 
   /**
@@ -146,85 +165,6 @@ export class InsightsScheduler {
       InsightsScheduler.instance = new InsightsScheduler(config);
     }
     return InsightsScheduler.instance;
-  }
-
-  /**
-   * Start the scheduler
-   */
-  start(): void {
-    if (this.isRunning) {
-      log.warn('Insights scheduler already running');
-      return;
-    }
-
-    if (!this.config.enabled) {
-      log.info('Insights scheduler disabled in config');
-      return;
-    }
-
-    try {
-      if (!cron.validate(this.config.schedule)) {
-        throw new Error(`Invalid cron expression: ${this.config.schedule}`);
-      }
-
-      this.scheduledTask = cron.schedule(
-        this.config.schedule,
-        () => {
-          this.runScheduledInsightsReport().catch((err) => {
-            log.error({ err }, 'Scheduled insights report error');
-          });
-        },
-        {
-          scheduled: false,
-          timezone: SCHEDULER_TIMEZONE,
-        }
-      );
-
-      this.scheduledTask.start();
-      this.isRunning = true;
-
-      log.info(
-        {
-          schedule: this.config.schedule,
-          intervalDays: this.config.intervalDays,
-          days: this.config.days,
-        },
-        'Insights scheduler started'
-      );
-    } catch (error) {
-      log.error({ error }, 'Failed to start insights scheduler');
-      throw error;
-    }
-  }
-
-  /**
-   * Stop the scheduler
-   */
-  async stop(): Promise<void> {
-    if (!this.isRunning) {
-      return;
-    }
-
-    log.info('Stopping insights scheduler...');
-
-    if (this.scheduledTask) {
-      this.scheduledTask.stop();
-      this.scheduledTask = null;
-    }
-
-    const maxWaitTime = 300000;
-    const startTime = Date.now();
-    while (this.isExecuting && Date.now() - startTime < maxWaitTime) {
-      log.debug('Waiting for current execution to complete');
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-
-    if (this.isExecuting) {
-      log.warn('Forced shutdown while execution in progress');
-    }
-
-    this.isRunning = false;
-    log.info('Insights scheduler stopped');
   }
 
   /**

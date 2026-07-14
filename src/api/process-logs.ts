@@ -141,7 +141,7 @@ export async function getProcessLogs(query: ProcessLogQuery): Promise<ProcessLog
   // 标准化时间字段为 UTC
   const normalizedLogs = (logs as ProcessLogRecord[]).map(log =>
     normalizeDateFields(log as Record<string, any>, ['created_at'])
-  );
+  ) as ProcessLogRecord[];
 
   return {
     logs: normalizedLogs,

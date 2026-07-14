@@ -122,7 +122,7 @@ export async function getRssFetchLogs(query: RssFetchLogQuery): Promise<RssFetch
   // 标准化时间字段为 UTC
   const normalizedLogs = (logs as RssFetchLogRecord[]).map(log =>
     normalizeDateFields(log as Record<string, any>, ['created_at'])
-  );
+  ) as RssFetchLogRecord[];
 
   return {
     logs: normalizedLogs,

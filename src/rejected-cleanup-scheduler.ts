@@ -10,10 +10,10 @@
  */
 
 import { sql } from 'kysely';
-import cron from 'node-cron';
 import { getDb } from './db.js';
 import { logger } from './logger.js';
 import { config } from './config.js';
+import { BaseScheduler } from './utils/base-scheduler.js';
 
 const log = logger.child({ module: 'rejected-cleanup-scheduler' });
 
@@ -48,79 +48,24 @@ interface SourceInfo {
 
 /* ── Scheduler ── */
 
-export class RejectedCleanupScheduler {
+export class RejectedCleanupScheduler extends BaseScheduler {
   private static instance: RejectedCleanupScheduler | null = null;
 
-  private scheduledTask: cron.ScheduledTask | null = null;
-  private isRunning = false;
+  /* ── BaseScheduler overrides ── */
+
+  get schedulerName(): string { return 'Rejected cleanup scheduler'; }
+  get cronSchedule(): string { return config.rejectedCleanupSchedule; }
+  get isEnabled(): boolean { return config.rejectedCleanupEnabled; }
+
+  protected async run(): Promise<void> {
+    await this.cleanupNow();
+  }
 
   static getInstance(): RejectedCleanupScheduler {
     if (!RejectedCleanupScheduler.instance) {
       RejectedCleanupScheduler.instance = new RejectedCleanupScheduler();
     }
     return RejectedCleanupScheduler.instance;
-  }
-
-  /**
-   * Start the scheduler
-   */
-  start(): void {
-    if (this.isRunning) {
-      log.warn('Rejected cleanup scheduler already running');
-      return;
-    }
-
-    if (!config.rejectedCleanupEnabled) {
-      log.info('Rejected cleanup scheduler disabled in config');
-      return;
-    }
-
-    try {
-      if (!cron.validate(config.rejectedCleanupSchedule)) {
-        throw new Error(`Invalid cron expression: ${config.rejectedCleanupSchedule}`);
-      }
-
-      this.scheduledTask = cron.schedule(
-        config.rejectedCleanupSchedule,
-        () => {
-          this.cleanupNow().catch((err) => {
-            log.error({ err }, 'Scheduled rejected cleanup error');
-          });
-        },
-        {
-          scheduled: false,
-          timezone: 'Asia/Shanghai',
-        }
-      );
-
-      this.scheduledTask.start();
-      this.isRunning = true;
-
-      log.info(
-        { schedule: config.rejectedCleanupSchedule },
-        '🗑️ Rejected article cleanup scheduler started'
-      );
-    } catch (error) {
-      log.error({ error }, 'Failed to start rejected cleanup scheduler');
-      throw error;
-    }
-  }
-
-  /**
-   * Stop the scheduler
-   */
-  async stop(): Promise<void> {
-    if (!this.isRunning) return;
-
-    log.info('Stopping rejected cleanup scheduler...');
-
-    if (this.scheduledTask) {
-      this.scheduledTask.stop();
-      this.scheduledTask = null;
-    }
-
-    this.isRunning = false;
-    log.info('Rejected cleanup scheduler stopped');
   }
 
   /**

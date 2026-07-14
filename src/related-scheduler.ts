@@ -12,8 +12,8 @@
  * - Manual trigger support
  */
 
-import cron from 'node-cron';
 import { logger } from './logger.js';
+import { BaseScheduler } from './utils/base-scheduler.js';
 import {
   batchRefreshRelated,
   getArticlesNeedingRefresh,
@@ -58,17 +58,26 @@ export interface RelatedSchedulerStatus {
  *
  * Manages periodic refresh of related articles cache.
  */
-export class RelatedArticlesScheduler {
+export class RelatedArticlesScheduler extends BaseScheduler {
   private static instance: RelatedArticlesScheduler | null = null;
 
-  private scheduledTask: cron.ScheduledTask | null = null;
-  private isRunning: boolean = false;
   private config: RelatedSchedulerConfig;
   private lastRunTime: Date | undefined;
   private lastRunStats: { total: number; success: number; failed: number } | undefined;
 
   private constructor(config: RelatedSchedulerConfig) {
+    super();
     this.config = config;
+  }
+
+  /* ── BaseScheduler overrides ── */
+
+  get schedulerName(): string { return 'Related articles scheduler'; }
+  get cronSchedule(): string { return this.config.schedule; }
+  get isEnabled(): boolean { return this.config.enabled; }
+
+  protected async run(): Promise<void> {
+    await this.runScheduledRefresh();
   }
 
   /**
@@ -82,77 +91,6 @@ export class RelatedArticlesScheduler {
       RelatedArticlesScheduler.instance = new RelatedArticlesScheduler(config);
     }
     return RelatedArticlesScheduler.instance;
-  }
-
-  /**
-   * Start the scheduler
-   */
-  start(): void {
-    if (this.isRunning) {
-      log.warn('Related articles scheduler already running');
-      return;
-    }
-
-    if (!this.config.enabled) {
-      log.info('Related articles scheduler disabled in config');
-      return;
-    }
-
-    try {
-      // Validate cron expression
-      if (!cron.validate(this.config.schedule)) {
-        throw new Error(`Invalid cron expression: ${this.config.schedule}`);
-      }
-
-      // Create scheduled task
-      this.scheduledTask = cron.schedule(
-        this.config.schedule,
-        () => {
-          this.runScheduledRefresh().catch((err) => {
-            log.error({ err }, 'Scheduled refresh error');
-          });
-        },
-        {
-          scheduled: false,
-          timezone: 'Asia/Shanghai',
-        }
-      );
-
-      this.scheduledTask.start();
-      this.isRunning = true;
-
-      log.info(
-        {
-          schedule: this.config.schedule,
-          batchSize: this.config.batchSize,
-          staleDays: this.config.staleDays,
-        },
-        'Related articles scheduler started'
-      );
-    } catch (error) {
-      log.error({ error }, 'Failed to start related articles scheduler');
-      throw error;
-    }
-  }
-
-  /**
-   * Stop the scheduler
-   */
-  async stop(): Promise<void> {
-    if (!this.isRunning) {
-      return;
-    }
-
-    log.info('Stopping related articles scheduler...');
-
-    // Stop scheduled task
-    if (this.scheduledTask) {
-      this.scheduledTask.stop();
-      this.scheduledTask = null;
-    }
-
-    this.isRunning = false;
-    log.info('Related articles scheduler stopped');
   }
 
   /**
