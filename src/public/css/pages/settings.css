@@ -496,6 +496,79 @@
 }
 
 /* ============================================
+   MAINTENANCE BAR — Rejected Article Cleanup
+   ============================================ */
+
+.maintenance-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-4);
+    background: linear-gradient(135deg, var(--bg-surface) 0%, color-mix(in srgb, var(--accent-primary) 3%, var(--bg-surface)) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4) var(--space-5);
+    margin-bottom: var(--space-6);
+    transition: border-color 0.2s ease;
+}
+
+.maintenance-bar:hover {
+    border-color: color-mix(in srgb, var(--accent-primary) 30%, var(--border));
+}
+
+.maintenance-bar-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+}
+
+.maintenance-bar-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.maintenance-bar-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.maintenance-bar-text strong {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.maintenance-bar-text span {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.maintenance-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-shrink: 0;
+}
+
+.maintenance-bar-schedule {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+}
+
+.maintenance-bar-actions .btn {
+    white-space: nowrap;
+}
+
+/* ============================================
    CLEANUP RESULT MODAL
    ============================================ */
 
