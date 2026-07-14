@@ -33,7 +33,7 @@
   <!-- Keywords Panel -->
   <div class="topics-panel">
     <div class="section-header">
-      <h2>关键词</h2>
+      <h2 id="keywordsPanelTitle">关键词</h2>
       <button class="btn btn-primary" onclick="showKeywordModal()">+ 添加关键词</button>
     </div>
 
@@ -153,6 +153,8 @@
       total: 0,
       totalPages: 0
     };
+    let selectedDomainId = null;
+    let selectedDomainName = '';
 
     // Load domains and keywords on page load
     loadDomains();
@@ -164,6 +166,11 @@
         domains = await res.json() || [];
         renderDomains();
         updateDomainSelect();
+        // Preserve selection if selected domain still exists, otherwise clear
+        if (selectedDomainId && !domains.some(d => d.id === selectedDomainId)) {
+          selectedDomainId = null;
+          selectedDomainName = '';
+        }
       } catch (err) {
         console.error('Failed to load domains:', err);
       }
@@ -171,14 +178,28 @@
 
     async function loadKeywords(page = 1) {
       try {
-        const res = await fetch('/api/topic-keywords/all?page=' + page + '&limit=' + keywordsPagination.limit);
+        const domainId = selectedDomainId;
+        let url;
+        if (domainId) {
+          url = '/api/topic-domains/' + domainId + '/keywords?page=' + page + '&limit=' + keywordsPagination.limit;
+        } else {
+          url = '/api/topic-keywords/all?page=' + page + '&limit=' + keywordsPagination.limit;
+        }
+        const res = await fetch(url);
         const data = await res.json();
         keywords = data.keywords || [];
+        // When domain-filtered, the endpoint doesn't return domain_name, so fill it in
+        if (domainId && keywords.length > 0) {
+          for (const k of keywords) {
+            if (!k.domain_name) k.domain_name = selectedDomainName;
+          }
+        }
         keywordsPagination.page = data.page || 1;
         keywordsPagination.total = data.total || 0;
         keywordsPagination.totalPages = data.totalPages || 0;
         renderKeywords();
         renderKeywordsPagination();
+        updateKeywordHeader();
       } catch (err) {
         console.error('Failed to load keywords:', err);
       }
@@ -199,7 +220,7 @@
       emptyState.style.display = 'none';
 
       tbody.innerHTML = domains.map(domain => \`
-    <tr class="domain-row">
+    <tr class="domain-row\${selectedDomainId === domain.id ? ' active' : ''}" onclick="selectDomain(\${domain.id})">
       <td>
         <div style="font-weight: 500;">\${escapeHtml(domain.name)}</div>
         \${domain.description ? \`<div class="domain-description">\${escapeHtml(domain.description)}</div>\` : ''}
@@ -214,12 +235,30 @@
       </td>
       <td>
         <div class="action-buttons">
-          <button class="btn-icon" onclick="editDomain(\${domain.id})">编辑</button>
-          <button class="btn-icon" onclick="deleteDomain(\${domain.id})">删除</button>
+          <button class="btn-icon" onclick="event.stopPropagation(); editDomain(\${domain.id})">编辑</button>
+          <button class="btn-icon" onclick="event.stopPropagation(); deleteDomain(\${domain.id})">删除</button>
         </div>
       </td>
     </tr>
   \`).join('');
+}
+
+function selectDomain(domainId) {
+  const same = selectedDomainId === domainId;
+  selectedDomainId = same ? null : domainId;
+  const domain = domains.find(d => d.id === domainId);
+  selectedDomainName = same ? '' : (domain ? domain.name : '');
+  renderDomains();
+  loadKeywords(1);
+}
+
+function updateKeywordHeader() {
+  const title = document.getElementById('keywordsPanelTitle');
+  if (selectedDomainId) {
+    title.innerHTML = '关键词 <span class="filter-badge">' + escapeHtml(selectedDomainName) + '</span><a href="#" class="filter-clear-link" onclick="selectDomain(' + selectedDomainId + '); return false;">× 清除筛选</a>';
+  } else {
+    title.textContent = '关键词';
+  }
 }
 
 function renderKeywords() {
@@ -317,7 +356,7 @@ function showKeywordModal() {
 
   document.getElementById('keywordModalTitle').textContent = '添加关键词';
   document.getElementById('keywordId').value = '';
-  document.getElementById('keywordDomainId').value = '';
+  document.getElementById('keywordDomainId').value = selectedDomainId || '';
   document.getElementById('keywordName').value = '';
   document.getElementById('keywordDescription').value = '';
   document.getElementById('keywordWeight').value = '1.0';
