@@ -37,7 +37,6 @@ async function ensureStateDir() {
   }
 }
 
-import { serializeError } from './utils.js';
 
 export class TelegramBot {
   private client: TelegramClient;
