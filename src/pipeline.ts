@@ -382,48 +382,17 @@ async function runPipeline(
   userId: number,
   options: ProcessArticleOptions
 ): Promise<Omit<ProcessResult, 'articleId' | 'title' | 'url' | 'duration'>> {
-  const db = getDb();
-
   // 获取当前步骤状态
   const stages = parseProcessStages(article.process_stages || null);
   log.debug({ articleId, stages }, '[pipeline] Current process stages');
 
   // ── Stage 1: Prepare markdown_content ──
-  if (stages.markdown !== 'completed') {
-    const markdownStart = Date.now();
-    await updateProcessStage(articleId, userId, 'markdown', 'processing');
-
-    if (!article.markdown_content) {
-      if (article.content) {
-        const markdown = toSimpleMarkdown(article.content);
-        await db
-          .updateTable('articles')
-          .set({
-            markdown_content: markdown || null,
-            updated_at: new Date().toISOString(),
-          })
-          .where('id', '=', articleId)
-          .execute();
-        log.debug({ articleId }, '[stage1] Markdown generated from content');
-      } else {
-        const errMsg = 'No content available for analysis';
-        await updateProcessStage(articleId, userId, 'markdown', 'failed', {
-          durationMs: Date.now() - markdownStart,
-          errorMessage: errMsg,
-        });
-        await updateArticleProcessStatus(articleId, 'failed', errMsg);
-        return { status: 'failed', stage: 'prepare', error: errMsg };
-      }
-    }
-
-    await updateProcessStage(articleId, userId, 'markdown', 'completed', {
-      durationMs: Date.now() - markdownStart,
-    });
-  } else {
-    log.debug({ articleId }, '[stage1] Markdown already completed, skipping');
+  const markdownResult = await runStageMarkdown(articleId, article, userId, stages);
+  if (!markdownResult.success) {
+    return { status: 'failed', stage: 'prepare', error: markdownResult.error };
   }
 
-  // Re-fetch article to get latest data
+  // Re-fetch article to get latest data (markdown may have been generated in stage 1)
   const updatedArticle = await getArticleById(articleId, userId);
   if (!updatedArticle) {
     const errMsg = 'Failed to load article';
@@ -432,119 +401,18 @@ async function runPipeline(
   }
 
   // ── Stage 2: Translate (LLM) ──
-  let translationChanged = false;
-  let translationSucceeded = false;
-
-  if (stages.translate !== 'completed') {
-    const translateStart = Date.now();
-    await updateProcessStage(articleId, userId, 'translate', 'processing');
-
-    try {
-      log.debug({ articleId }, '[stage2] Starting LLM translation');
-
-      const translationResult = await executeWithRetry(
-        () =>
-          translateArticleIfNeeded(
-            updatedArticle.title,
-            updatedArticle.markdown_content ?? updatedArticle.content ?? undefined,
-            userId
-          ),
-        DEFAULT_RETRY_CONFIG,
-        { articleId, stage: 'translate' }
-      );
-
-      if (translationResult && translationResult.summaryZh) {
-        await upsertArticleTranslation(articleId, userId, {
-          title_zh: null,
-          summary_zh: translationResult.summaryZh ?? null,
-          source_lang: translationResult.sourceLang ?? null,
-        });
-        translationChanged = true;
-        translationSucceeded = true;
-      }
-
-      await updateProcessStage(articleId, userId, 'translate', 'completed', {
-        durationMs: Date.now() - translateStart,
-        details: translationResult
-          ? { usedFallback: Boolean(translationResult.usedFallback) }
-          : undefined,
-      });
-
-      log.info(
-        { articleId, translated: Boolean(translationResult), usedFallback: translationResult?.usedFallback },
-        '[stage2] Translate OK'
-      );
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      log.error({ articleId, error: errMsg }, '[stage2] Translate failed');
-
-      await updateProcessStage(articleId, userId, 'translate', 'failed', {
-        durationMs: Date.now() - translateStart,
-        errorMessage: errMsg,
-      });
-      await updateArticleProcessStatus(articleId, 'failed', `[translate] ${errMsg}`);
-
-      return { status: 'failed', stage: 'translate', error: errMsg };
-    }
-  } else {
-    translationSucceeded = true;
-    log.debug({ articleId }, '[stage2] Translate already completed, skipping');
+  const translateResult = await runStageTranslate(articleId, updatedArticle, userId, stages);
+  if (!translateResult.success) {
+    await updateArticleProcessStatus(articleId, 'failed', `[translate] ${translateResult.error}`);
+    return { status: 'failed', stage: 'translate', error: translateResult.error };
   }
 
   // ── Stage 3: Vector Index ──
-  // 如果翻译刚刚成功或之前已完成，需要重新向量化
-  const needReindex = translationChanged && translationSucceeded;
-  if (stages.vector !== 'completed' || needReindex) {
-    const vectorStart = Date.now();
-    await updateProcessStage(articleId, userId, 'vector', 'processing');
-
-    log.debug({ articleId, needReindex }, '[stage3] Starting vector index');
-
-    // 使用 Promise 等待向量化完成
-    await new Promise<void>((resolve) => {
-      indexArticle(articleId, userId, async (result: IndexResult) => {
-        if (!result.success) {
-          log.warn({ articleId, error: result.error }, '[stage3] 向量索引失败');
-          await updateProcessStage(articleId, userId, 'vector', 'failed', {
-            durationMs: Date.now() - vectorStart,
-            errorMessage: result.error,
-          });
-          // 向量化失败是非致命的，继续处理
-        } else {
-          log.debug({ articleId }, '[stage3] 向量索引成功');
-          await updateProcessStage(articleId, userId, 'vector', 'completed', {
-            durationMs: Date.now() - vectorStart,
-          });
-        }
-        resolve();
-      });
-    });
-  } else {
-    log.debug({ articleId }, '[stage3] Vector already completed, skipping');
-  }
+  // 如果翻译刚刚成功，需要重新向量化
+  await runStageVector(articleId, userId, stages, translateResult.translationChanged);
 
   // ── Stage 4: Related Articles (缓存计算，非致命) ──
-  if (stages.related !== 'completed') {
-    const relatedStart = Date.now();
-    await updateProcessStage(articleId, userId, 'related', 'processing');
-
-    try {
-      await refreshRelatedArticles(articleId, userId, 5);
-      await updateProcessStage(articleId, userId, 'related', 'completed', {
-        durationMs: Date.now() - relatedStart,
-      });
-      log.debug({ articleId }, '[stage4] Related articles updated');
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      log.warn({ articleId, error: errMsg }, '[stage4] Related articles update failed (non-fatal)');
-      await updateProcessStage(articleId, userId, 'related', 'failed', {
-        durationMs: Date.now() - relatedStart,
-        errorMessage: errMsg,
-      });
-    }
-  } else {
-    log.debug({ articleId }, '[stage4] Related articles already completed, skipping');
-  }
+  await runStageRelated(articleId, userId, stages);
 
   // ── Complete ──
   await updateArticleProcessStatus(articleId, 'completed');
@@ -581,6 +449,195 @@ async function runPipeline(
     });
 
   return { status: 'completed' };
+}
+
+/**
+ * Stage 1: Generate markdown_content from article content if not already done.
+ */
+async function runStageMarkdown(
+  articleId: number,
+  article: ArticleWithSource,
+  userId: number,
+  stages: ProcessStages
+): Promise<{ success: boolean; error?: string }> {
+  if (stages.markdown === 'completed') {
+    log.debug({ articleId }, '[stage1] Markdown already completed, skipping');
+    return { success: true };
+  }
+
+  const db = getDb();
+  const markdownStart = Date.now();
+  await updateProcessStage(articleId, userId, 'markdown', 'processing');
+
+  if (!article.markdown_content) {
+    if (article.content) {
+      const markdown = toSimpleMarkdown(article.content);
+      await db
+        .updateTable('articles')
+        .set({
+          markdown_content: markdown || null,
+          updated_at: new Date().toISOString(),
+        })
+        .where('id', '=', articleId)
+        .execute();
+      log.debug({ articleId }, '[stage1] Markdown generated from content');
+    } else {
+      const errMsg = 'No content available for analysis';
+      await updateProcessStage(articleId, userId, 'markdown', 'failed', {
+        durationMs: Date.now() - markdownStart,
+        errorMessage: errMsg,
+      });
+      await updateArticleProcessStatus(articleId, 'failed', errMsg);
+      return { success: false, error: errMsg };
+    }
+  }
+
+  await updateProcessStage(articleId, userId, 'markdown', 'completed', {
+    durationMs: Date.now() - markdownStart,
+  });
+
+  return { success: true };
+}
+
+/**
+ * Stage 2: Translate article content via LLM if needed.
+ * Returns whether the translation actually changed content (for downstream re-indexing).
+ */
+async function runStageTranslate(
+  articleId: number,
+  article: ArticleWithSource,
+  userId: number,
+  stages: ProcessStages
+): Promise<{ success: boolean; translationChanged: boolean; error?: string }> {
+  if (stages.translate === 'completed') {
+    log.debug({ articleId }, '[stage2] Translate already completed, skipping');
+    return { success: true, translationChanged: false };
+  }
+
+  const translateStart = Date.now();
+  await updateProcessStage(articleId, userId, 'translate', 'processing');
+
+  try {
+    log.debug({ articleId }, '[stage2] Starting LLM translation');
+
+    const translationResult = await executeWithRetry(
+      () =>
+        translateArticleIfNeeded(
+          article.title,
+          article.markdown_content ?? article.content ?? undefined,
+          userId
+        ),
+      DEFAULT_RETRY_CONFIG,
+      { articleId, stage: 'translate' }
+    );
+
+    let translationChanged = false;
+    if (translationResult && translationResult.summaryZh) {
+      await upsertArticleTranslation(articleId, userId, {
+        title_zh: null,
+        summary_zh: translationResult.summaryZh ?? null,
+        source_lang: translationResult.sourceLang ?? null,
+      });
+      translationChanged = true;
+    }
+
+    await updateProcessStage(articleId, userId, 'translate', 'completed', {
+      durationMs: Date.now() - translateStart,
+      details: translationResult
+        ? { usedFallback: Boolean(translationResult.usedFallback) }
+        : undefined,
+    });
+
+    log.info(
+      { articleId, translated: Boolean(translationResult), usedFallback: translationResult?.usedFallback },
+      '[stage2] Translate OK'
+    );
+
+    return { success: true, translationChanged };
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    log.error({ articleId, error: errMsg }, '[stage2] Translate failed');
+
+    await updateProcessStage(articleId, userId, 'translate', 'failed', {
+      durationMs: Date.now() - translateStart,
+      errorMessage: errMsg,
+    });
+
+    return { success: false, translationChanged: false, error: errMsg };
+  }
+}
+
+/**
+ * Stage 3: Vector index the article (non-fatal failure).
+ * If translation changed, always re-index even if previously completed.
+ */
+async function runStageVector(
+  articleId: number,
+  userId: number,
+  stages: ProcessStages,
+  needReindex: boolean
+): Promise<void> {
+  if (stages.vector === 'completed' && !needReindex) {
+    log.debug({ articleId }, '[stage3] Vector already completed, skipping');
+    return;
+  }
+
+  const vectorStart = Date.now();
+  await updateProcessStage(articleId, userId, 'vector', 'processing');
+
+  log.debug({ articleId, needReindex }, '[stage3] Starting vector index');
+
+  // 使用 Promise 等待向量化完成
+  await new Promise<void>((resolve) => {
+    indexArticle(articleId, userId, async (result: IndexResult) => {
+      if (!result.success) {
+        log.warn({ articleId, error: result.error }, '[stage3] 向量索引失败');
+        await updateProcessStage(articleId, userId, 'vector', 'failed', {
+          durationMs: Date.now() - vectorStart,
+          errorMessage: result.error,
+        });
+        // 向量化失败是非致命的，继续处理
+      } else {
+        log.debug({ articleId }, '[stage3] 向量索引成功');
+        await updateProcessStage(articleId, userId, 'vector', 'completed', {
+          durationMs: Date.now() - vectorStart,
+        });
+      }
+      resolve();
+    });
+  });
+}
+
+/**
+ * Stage 4: Update related articles cache (non-fatal failure).
+ */
+async function runStageRelated(
+  articleId: number,
+  userId: number,
+  stages: ProcessStages
+): Promise<void> {
+  if (stages.related === 'completed') {
+    log.debug({ articleId }, '[stage4] Related articles already completed, skipping');
+    return;
+  }
+
+  const relatedStart = Date.now();
+  await updateProcessStage(articleId, userId, 'related', 'processing');
+
+  try {
+    await refreshRelatedArticles(articleId, userId, 5);
+    await updateProcessStage(articleId, userId, 'related', 'completed', {
+      durationMs: Date.now() - relatedStart,
+    });
+    log.debug({ articleId }, '[stage4] Related articles updated');
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    log.warn({ articleId, error: errMsg }, '[stage4] Related articles update failed (non-fatal)');
+    await updateProcessStage(articleId, userId, 'related', 'failed', {
+      durationMs: Date.now() - relatedStart,
+      errorMessage: errMsg,
+    });
+  }
 }
 
 /* ── Retry Mechanism ── */

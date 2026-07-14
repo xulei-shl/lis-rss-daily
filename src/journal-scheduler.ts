@@ -444,27 +444,46 @@ export class JournalScheduler extends BaseScheduler {
   private async triggerAutoFilter(journalId: number): Promise<void> {
     const db = getDb();
 
-    // 获取该期刊未过滤的文章
+    // 获取该期刊未过滤的文章（含用户 ID 和 markdown 内容）
     const articles = await db
       .selectFrom('articles')
       .innerJoin('journals', 'journals.id', 'articles.journal_id')
       .where('journal_id', '=', journalId)
       .where('filter_status', '=', 'pending')
-      .select(['articles.id', 'articles.title', 'articles.content', 'articles.url', 'journals.domain_id'])
+      .select([
+        'articles.id',
+        'articles.title',
+        'articles.content',
+        'articles.markdown_content',
+        'articles.url',
+        'journals.domain_id',
+        'journals.user_id',
+      ])
       .execute();
 
-    log.info({ journalId, count: articles.length }, 'Starting auto-filter for journal articles');
+    if (articles.length === 0) {
+      log.info({ journalId }, 'No pending articles for auto-filter');
+      return;
+    }
+
+    // 从查询结果中获取该期刊所属用户 ID（替代硬编码 userId: 1）
+    const userId = articles[0].user_id;
+
+    log.info({ journalId, count: articles.length, userId }, 'Starting auto-filter for journal articles');
 
     let passedCount = 0;
+    let rejectedCount = 0;
 
     for (const article of articles) {
       try {
         const input: FilterInput = {
           articleId: article.id,
-          userId: 1, // 单用户系统
+          userId,
           url: article.url,
           title: article.title,
           description: article.content || '',
+          // 补充 content 回退链：优先使用清洗后的 Markdown，回退到原始 content
+          content: article.markdown_content || article.content || undefined,
           sourceType: 'journal',
           sourceDomainId: article.domain_id,
         };
@@ -473,21 +492,27 @@ export class JournalScheduler extends BaseScheduler {
 
         if (result.passed) {
           passedCount++;
-          // 触发后续处理
-          processArticle(article.id, 1)
+          // 触发后续处理（使用正确的用户 ID）
+          processArticle(article.id, userId)
             .then((res) => {
               log.debug({ articleId: article.id, status: res.status }, 'Auto process completed');
             })
             .catch((err) => {
               log.warn({ articleId: article.id, error: err?.message || String(err) }, 'Auto process failed');
             });
+        } else {
+          rejectedCount++;
+          log.debug({ articleId: article.id, reason: result.filterReason }, 'Article rejected by filter');
         }
       } catch (error) {
         log.warn({ articleId: article.id, error }, 'Filter failed for article');
       }
     }
 
-    log.info({ journalId, total: articles.length, passed: passedCount }, 'Auto-filter completed');
+    log.info(
+      { journalId, total: articles.length, passed: passedCount, rejected: rejectedCount },
+      'Auto-filter completed'
+    );
   }
 
   /**

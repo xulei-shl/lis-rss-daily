@@ -192,21 +192,18 @@ export class RSSScheduler extends BaseScheduler {
       let sourcesToFetch: Array<{ id: number; user_id: number; url: string; name: string; isFirstFetch: boolean }>;
       if (this.config.forceOnSchedule) {
         runLog.info('Force mode enabled: fetching all active sources');
-        const db = getDb();
-        sourcesToFetch = await Promise.all(sources.map(async (source) => {
-          const sourceData = await db
-            .selectFrom('rss_sources')
-            .where('id', '=', source.id)
-            .select('last_fetched_at')
-            .executeTakeFirst();
+        // Batch-query last_fetched_at for all sources at once
+        const lastFetchedMap = await this.getLastFetchedMap(sources.map(s => s.id));
+        sourcesToFetch = sources.map((source) => {
+          const lastFetched = lastFetchedMap.get(source.id) ?? null;
           return {
             id: source.id,
             user_id: source.user_id,
             url: source.url,
             name: source.name,
-            isFirstFetch: !sourceData?.last_fetched_at,
+            isFirstFetch: !lastFetched,
           };
-        }));
+        });
       } else {
         sourcesToFetch = await this.filterSourcesByFetchInterval(sources);
         runLog.info(
@@ -263,6 +260,21 @@ export class RSSScheduler extends BaseScheduler {
   }
 
   /**
+   * Batch-fetch last_fetched_at for multiple sources in a single query.
+   * Replaces N individual SELECT queries with 1.
+   */
+  private async getLastFetchedMap(sourceIds: number[]): Promise<Map<number, string | null>> {
+    if (sourceIds.length === 0) return new Map();
+    const db = getDb();
+    const rows = await db
+      .selectFrom('rss_sources')
+      .where('id', 'in', sourceIds)
+      .select(['id', 'last_fetched_at'])
+      .execute();
+    return new Map(rows.map(r => [r.id, r.last_fetched_at]));
+  }
+
+  /**
    * Filter sources by fetch interval
    */
   private async filterSourcesByFetchInterval(
@@ -274,8 +286,11 @@ export class RSSScheduler extends BaseScheduler {
       fetch_interval: number;
     }>
   ): Promise<Array<{ id: number; user_id: number; url: string; name: string; isFirstFetch: boolean }>> {
-    const db = getDb();
     const now = Date.now();
+
+    // Batch-query last_fetched_at for all sources at once (N+1 → 1)
+    const lastFetchedMap = await this.getLastFetchedMap(sources.map(s => s.id));
+
     const sourcesToFetch: Array<{
       id: number;
       user_id: number;
@@ -285,18 +300,10 @@ export class RSSScheduler extends BaseScheduler {
     }> = [];
 
     for (const source of sources) {
-      // Get last_fetched_at
-      const sourceData = await db
-        .selectFrom('rss_sources')
-        .where('id', '=', source.id)
-        .select('last_fetched_at')
-        .executeTakeFirst();
-
-      const lastFetched = sourceData?.last_fetched_at;
+      const lastFetched = lastFetchedMap.get(source.id) ?? null;
       const isFirstFetch = !lastFetched;
 
       if (isFirstFetch) {
-        // Never fetched, need to fetch
         const { id, user_id, url, name } = source;
         sourcesToFetch.push({ id, user_id, url, name, isFirstFetch });
         continue;
@@ -658,32 +665,25 @@ export class RSSScheduler extends BaseScheduler {
     log.info('Manual fetch all triggered');
 
     const sources = await getActiveRSSSourcesForFetch();
-    const db = getDb();
 
-    // Get last_fetched_at for each source
-    const tasks: FetchTask[] = await Promise.all(
-      sources.map(async (source) => {
-        const sourceData = await db
-          .selectFrom('rss_sources')
-          .where('id', '=', source.id)
-          .select('last_fetched_at')
-          .executeTakeFirst();
+    // Batch-query last_fetched_at for all sources at once (N+1 → 1)
+    const lastFetchedMap = await this.getLastFetchedMap(sources.map(s => s.id));
 
-        const isFirstFetch = !sourceData?.last_fetched_at;
+    const tasks: FetchTask[] = sources.map((source) => {
+      const isFirstFetch = !(lastFetchedMap.get(source.id) ?? null);
 
-        return {
-          rssSourceId: source.id,
-          userId: source.user_id,
-          url: source.url,
-          name: source.name,
-          status: TaskStatus.PENDING,
-          retryCount: 0,
-          createdAt: new Date(),
-          isFirstFetch,
-          isManualFetch: true,
-        };
-      })
-    );
+      return {
+        rssSourceId: source.id,
+        userId: source.user_id,
+        url: source.url,
+        name: source.name,
+        status: TaskStatus.PENDING,
+        retryCount: 0,
+        createdAt: new Date(),
+        isFirstFetch,
+        isManualFetch: true,
+      };
+    });
 
     return this.executeFetchTasks(tasks);
   }

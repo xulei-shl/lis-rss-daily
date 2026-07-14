@@ -97,6 +97,29 @@ const MAX_RESULTS = 100;   // Maximum results to fetch from vector DB (optimized
 const DEFAULT_SEMANTIC_WEIGHT = 0.7;
 const DEFAULT_KEYWORD_WEIGHT = 0.3;
 
+/**
+ * Create a base query builder for articles with user source filtering.
+ *
+ * Encapsulates the common JOIN + user_id OR filter pattern that was repeated
+ * across keywordSearchOnly, computeRelated, getRelatedFromCache, and
+ * enrichWithMetadata, eliminating the Shotgun Surgery code smell.
+ */
+function createArticlesQuery(userId: number) {
+  const db = getDb();
+  return db
+    .selectFrom('articles')
+    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
+    .leftJoin('journals', 'journals.id', 'articles.journal_id')
+    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .where((eb) =>
+      eb.or([
+        eb('rss_sources.user_id', '=', userId),
+        eb('journals.user_id', '=', userId),
+        eb('keyword_subscriptions.user_id', '=', userId),
+      ])
+    );
+}
+
 /* ── Main Search Entry ── */
 
 /**
@@ -244,7 +267,6 @@ async function keywordSearchOnly(
   limit: number,
   includeRejected: boolean = true  // 默认包含未通过的文章
 ): Promise<SearchResult[]> {
-  const db = getDb();
   const lowerQuery = query.toLowerCase();
   const terms = query.trim().split(/\s+/).filter((t) => t.length > 0);
 
@@ -260,18 +282,7 @@ async function keywordSearchOnly(
 
   // 支持三种来源：RSS、期刊、关键词订阅
   // 默认包含所有状态的文章（passed + rejected），除非 includeRejected 为 false
-  let queryBuilder = db
-    .selectFrom('articles')
-    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-    .leftJoin('journals', 'journals.id', 'articles.journal_id')
-    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
-    .where((eb) =>
-      eb.or([
-        eb('rss_sources.user_id', '=', userId),
-        eb('journals.user_id', '=', userId),
-        eb('keyword_subscriptions.user_id', '=', userId),
-      ])
-    );
+  let queryBuilder = createArticlesQuery(userId);
 
   // 只有当 includeRejected 为 false 时才过滤只返回 passed 的文章
   if (!includeRejected) {
@@ -467,22 +478,9 @@ async function computeRelated(
   articleId: number,
   limit: number
 ): Promise<SearchResult[]> {
-  const db = getDb();
-
   // Get source article (支持三种来源：RSS、期刊、关键词)
-  const article = await db
-    .selectFrom('articles')
-    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-    .leftJoin('journals', 'journals.id', 'articles.journal_id')
-    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+  const article = await createArticlesQuery(userId)
     .where('articles.id', '=', articleId)
-    .where((eb) =>
-      eb.or([
-        eb('rss_sources.user_id', '=', userId),
-        eb('journals.user_id', '=', userId),
-        eb('keyword_subscriptions.user_id', '=', userId),
-      ])
-    )
     .select([
       'articles.id',
       'articles.title',
@@ -529,18 +527,7 @@ async function computeRelated(
   const topIds = topResults.map((item) => item.articleId);
   if (topIds.length === 0) return [];
 
-  const rows = await db
-    .selectFrom('articles')
-    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-    .leftJoin('journals', 'journals.id', 'articles.journal_id')
-    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
-    .where((eb) =>
-      eb.or([
-        eb('rss_sources.user_id', '=', userId),
-        eb('journals.user_id', '=', userId),
-        eb('keyword_subscriptions.user_id', '=', userId),
-      ])
-    )
+  const rows = await createArticlesQuery(userId)
     .where('articles.filter_status', '=', 'passed')
     .where('articles.process_status', '=', 'completed')
     .where('articles.id', 'in', topIds)
@@ -591,23 +578,10 @@ async function getRelatedFromCache(
   articleId: number,
   limit: number
 ): Promise<SearchResult[]> {
-  const db = getDb();
-
   // 支持三种来源：RSS、期刊、关键词订阅
-  const rows = await db
-    .selectFrom('article_related as ar')
-    .innerJoin('articles', 'articles.id', 'ar.related_article_id')
-    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-    .leftJoin('journals', 'journals.id', 'articles.journal_id')
-    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+  const rows = await createArticlesQuery(userId)
+    .innerJoin('article_related as ar', 'articles.id', 'ar.related_article_id')
     .where('ar.article_id', '=', articleId)
-    .where((eb) =>
-      eb.or([
-        eb('rss_sources.user_id', '=', userId),
-        eb('journals.user_id', '=', userId),
-        eb('keyword_subscriptions.user_id', '=', userId),
-      ])
-    )
     .where('articles.filter_status', '=', 'passed')
     .where('articles.process_status', '=', 'completed')
     .select([
@@ -675,21 +649,9 @@ async function enrichWithMetadata(
   if (results.length === 0) return [];
 
   const ids = results.map((r) => r.articleId);
-  const db = getDb();
 
   // 支持三种来源：RSS、期刊、关键词订阅
-  const articles = await db
-    .selectFrom('articles')
-    .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-    .leftJoin('journals', 'journals.id', 'articles.journal_id')
-    .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
-    .where((eb) =>
-      eb.or([
-        eb('rss_sources.user_id', '=', userId),
-        eb('journals.user_id', '=', userId),
-        eb('keyword_subscriptions.user_id', '=', userId),
-      ])
-    )
+  const articles = await createArticlesQuery(userId)
     .where('articles.filter_status', '=', 'passed')
     .where('articles.id', 'in', ids)
     .select([
