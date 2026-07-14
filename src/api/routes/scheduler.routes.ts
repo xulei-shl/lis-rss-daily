@@ -2,6 +2,7 @@ import express from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { initRSSScheduler } from '../../rss-scheduler.js';
+import { initRejectedCleanupScheduler } from '../../rejected-cleanup-scheduler.js';
 import { logger } from '../../logger.js';
 
 const log = logger.child({ module: 'api-routes/scheduler' });
@@ -43,6 +44,37 @@ router.post('/rss-sources/fetch-all', requireAuth, async (req: AuthRequest, res)
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to fetch all RSS sources');
     res.status(500).json({ error: 'Failed to fetch RSS sources' });
+  }
+});
+
+/**
+ * POST /api/scheduler/rejected-cleanup/trigger
+ * Trigger immediate cleanup of rejected articles for all sources with auto_cleanup_rejected=1
+ */
+router.post('/scheduler/rejected-cleanup/trigger', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const scheduler = initRejectedCleanupScheduler();
+    const result = await scheduler.cleanupNow();
+
+    res.json({
+      success: true,
+      totalSources: result.totalSources,
+      totalArticlesMoved: result.totalArticlesMoved,
+      successCount: result.successCount,
+      failedCount: result.failedCount,
+      durationMs: result.durationMs,
+      results: result.sourceResults.map((r) => ({
+        sourceType: r.sourceType,
+        sourceId: r.sourceId,
+        sourceName: r.sourceName,
+        articlesMoved: r.articlesMoved,
+        success: r.success,
+        error: r.error,
+      })),
+    });
+  } catch (error) {
+    log.error({ error, userId: req.userId }, 'Failed to trigger rejected cleanup');
+    res.status(500).json({ error: 'Failed to trigger rejected article cleanup' });
   }
 });
 

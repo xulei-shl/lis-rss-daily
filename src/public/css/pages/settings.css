@@ -495,6 +495,163 @@
     letter-spacing: 1px;
 }
 
+/* ============================================
+   MAINTENANCE BAR — Rejected Article Cleanup
+   ============================================ */
+
+.maintenance-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-4);
+    background: linear-gradient(135deg, var(--bg-surface) 0%, color-mix(in srgb, var(--accent-primary) 3%, var(--bg-surface)) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4) var(--space-5);
+    margin-bottom: var(--space-6);
+    transition: border-color 0.2s ease;
+}
+
+.maintenance-bar:hover {
+    border-color: color-mix(in srgb, var(--accent-primary) 30%, var(--border));
+}
+
+.maintenance-bar-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+}
+
+.maintenance-bar-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.maintenance-bar-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.maintenance-bar-text strong {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.maintenance-bar-text span {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.maintenance-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-shrink: 0;
+}
+
+.maintenance-bar-schedule {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+}
+
+.maintenance-bar-actions .btn {
+    white-space: nowrap;
+}
+
+/* ============================================
+   CLEANUP RESULT MODAL
+   ============================================ */
+
+#cleanupResultModal .modal-body {
+    padding: var(--space-4);
+}
+
+.cleanup-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.cleanup-stat {
+    text-align: center;
+    padding: var(--space-4) var(--space-2);
+    background: var(--bg-subtle);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+}
+
+.cleanup-stat-value {
+    display: block;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+    margin-bottom: var(--space-1);
+}
+
+.cleanup-stat-primary .cleanup-stat-value {
+    color: var(--accent-primary);
+}
+
+.cleanup-stat-success .cleanup-stat-value {
+    color: #10a37f;
+}
+
+.cleanup-stat-error .cleanup-stat-value {
+    color: var(--red);
+}
+
+.cleanup-stat-label {
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    font-weight: 500;
+}
+
+.cleanup-duration {
+    text-align: center;
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-3);
+    font-family: var(--font-mono);
+}
+
+.cleanup-failures {
+    background: rgba(220, 38, 38, 0.05);
+    border: 1px solid rgba(220, 38, 38, 0.15);
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+}
+
+.cleanup-failures strong {
+    color: var(--red);
+    display: block;
+    margin-bottom: var(--space-2);
+}
+
+.cleanup-failures ul {
+    margin: 0;
+    padding-left: var(--space-4);
+}
+
+.cleanup-failures li {
+    margin-bottom: var(--space-1);
+    line-height: 1.5;
+}
+
 /* Chroma Specific */
 .chroma-form {
     display: grid;
@@ -606,6 +763,21 @@
 
     .telegram-config-fields {
         grid-template-columns: 1fr;
+    }
+
+    .maintenance-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-3);
+    }
+
+    .maintenance-bar-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .cleanup-summary {
+        grid-template-columns: repeat(2, 1fr);
     }
 }
 

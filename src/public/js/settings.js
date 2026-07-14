@@ -573,6 +573,7 @@ document.addEventListener('keydown', function (e) {
     closeModal();
     closeLLMModal();
     closePromptModal();
+    closeCleanupResultModal();
   }
 });
 
@@ -2469,3 +2470,105 @@ if (keywordsTabBtn) {
 if (document.querySelector('.settings-tab.active')?.dataset.tab === 'keywords') {
   loadKeywords();
 }
+
+// ============================================
+// 拒绝文章手动清理
+// ============================================
+
+/**
+ * 手动触发拒绝文章清理
+ */
+async function triggerRejectedCleanup(btn) {
+  btn.disabled = true;
+  btn.textContent = '清理中...';
+
+  try {
+    const res = await fetch('/api/scheduler/rejected-cleanup/trigger', { method: 'POST' });
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      showCleanupResult(data);
+    } else {
+      await showConfirm(data.error || '清理失败', {
+        title: '错误',
+        okText: '知道了',
+        okButtonType: 'btn-secondary'
+      });
+    }
+  } catch (err) {
+    await showConfirm('操作失败: ' + (err.message || '网络错误'), {
+      title: '错误',
+      okText: '知道了',
+      okButtonType: 'btn-secondary'
+    });
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '立即清理';
+  }
+}
+
+/**
+ * 展示清理结果弹窗
+ */
+function showCleanupResult(data) {
+  const body = document.getElementById('cleanupResultBody');
+  if (!body) return;
+
+  const duration = (data.durationMs / 1000).toFixed(1);
+
+  let html = `<div class="cleanup-summary">
+    <div class="cleanup-stat">
+      <span class="cleanup-stat-value">${data.totalSources}</span>
+      <span class="cleanup-stat-label">已处理源</span>
+    </div>
+    <div class="cleanup-stat">
+      <span class="cleanup-stat-value cleanup-stat-primary">${data.totalArticlesMoved}</span>
+      <span class="cleanup-stat-label">已迁移文章</span>
+    </div>
+    <div class="cleanup-stat">
+      <span class="cleanup-stat-value cleanup-stat-success">${data.successCount}</span>
+      <span class="cleanup-stat-label">成功</span>
+    </div>
+    <div class="cleanup-stat ${data.failedCount > 0 ? 'cleanup-stat-error' : ''}">
+      <span class="cleanup-stat-value">${data.failedCount}</span>
+      <span class="cleanup-stat-label">失败</span>
+    </div>
+  </div>`;
+
+  html += `<div class="cleanup-duration">耗时: ${duration} 秒</div>`;
+
+  // 如果有失败项，展示详细信息
+  if (data.failedCount > 0 && data.results) {
+    html += '<div class="cleanup-failures"><strong>失败详情:</strong><ul>';
+    data.results.filter(r => !r.success).forEach(r => {
+      html += `<li>${r.sourceType}/${r.sourceName}: ${r.error || '未知错误'}</li>`;
+    });
+    html += '</ul></div>';
+  }
+
+  body.innerHTML = html;
+
+  const modal = document.getElementById('cleanupResultModal');
+  if (modal) modal.classList.add('active');
+}
+
+/**
+ * 关闭清理结果弹窗
+ */
+function closeCleanupResultModal() {
+  const modal = document.getElementById('cleanupResultModal');
+  if (modal) modal.classList.remove('active');
+}
+
+// 点击遮罩层关闭
+if (document.getElementById('cleanupResultModal')) {
+  document.getElementById('cleanupResultModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+      closeCleanupResultModal();
+    }
+  });
+}
+
+// 暴露到全局
+window.triggerRejectedCleanup = triggerRejectedCleanup;
+window.closeCleanupResultModal = closeCleanupResultModal;
