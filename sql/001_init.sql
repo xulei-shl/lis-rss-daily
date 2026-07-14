@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS rss_sources (
   domain_id INTEGER NOT NULL REFERENCES topic_domains(id),
   last_fetched_at DATETIME,
   fetch_interval INTEGER DEFAULT 3600,
+  auto_cleanup_rejected INTEGER NOT NULL DEFAULT 0,
   status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -61,6 +62,7 @@ CREATE TABLE IF NOT EXISTS email_sources (
   imap_password_encrypted TEXT NOT NULL,
   target_senders TEXT NOT NULL DEFAULT '[]',
   domain_id INTEGER NOT NULL REFERENCES topic_domains(id),
+  auto_cleanup_rejected INTEGER NOT NULL DEFAULT 0,
   status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
   last_fetched_at DATETIME,
   last_error TEXT,
@@ -393,6 +395,7 @@ CREATE TABLE IF NOT EXISTS journals (
   last_issue INTEGER,                    -- 上次爬取期号
   last_volume INTEGER,                   -- 上次爬取卷号（LIS期刊使用）
   domain_id INTEGER NOT NULL REFERENCES topic_domains(id),
+  auto_cleanup_rejected INTEGER NOT NULL DEFAULT 0,
   status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -437,6 +440,7 @@ CREATE TABLE IF NOT EXISTS keyword_subscriptions (
   year_start INTEGER,
   year_end INTEGER,
   domain_id INTEGER NOT NULL REFERENCES topic_domains(id),
+  auto_cleanup_rejected INTEGER NOT NULL DEFAULT 0,
   is_active INTEGER DEFAULT 1,
   spider_type TEXT DEFAULT 'google_scholar' CHECK(spider_type IN ('google_scholar', 'cnki')),
   num_results INTEGER DEFAULT 20,
@@ -537,6 +541,59 @@ CREATE TABLE IF NOT EXISTS deepsearch_tasks (
 CREATE INDEX IF NOT EXISTS idx_deepsearch_tasks_user_id ON deepsearch_tasks(user_id);
 CREATE INDEX IF NOT EXISTS idx_deepsearch_tasks_status ON deepsearch_tasks(status);
 CREATE INDEX IF NOT EXISTS idx_deepsearch_tasks_created_at ON deepsearch_tasks(created_at);
+
+-- ===========================================
+-- 21. Rejected Articles Archive Table (被过滤拒绝的文章归档)
+-- ===========================================
+-- 当源的 auto_cleanup_rejected=1 时，定时清理任务将 filter_status='rejected' 的文章
+-- 从 articles 表移动到本表，并打包关联数据（过滤日志、翻译、处理日志、相关文章）为 JSON
+-- 目的是保持 articles 表轻量，同时保留被拒数据以备查验
+CREATE TABLE IF NOT EXISTS rejected_articles (
+  -- articles 表全部字段（一一对应）
+  id INTEGER PRIMARY KEY,
+  rss_source_id INTEGER,
+  journal_id INTEGER,
+  keyword_id INTEGER,
+  email_source_id INTEGER,
+  title TEXT NOT NULL,
+  title_normalized TEXT,
+  url TEXT NOT NULL,
+  summary TEXT,
+  content TEXT,
+  markdown_content TEXT,
+  filter_status TEXT,
+  filter_score REAL,
+  filtered_at TEXT,
+  process_status TEXT,
+  process_stages TEXT,
+  processed_at TEXT,
+  published_at TEXT,
+  published_year INTEGER,
+  published_issue INTEGER,
+  published_volume INTEGER,
+  error_message TEXT,
+  is_read INTEGER,
+  source_origin TEXT,
+  rating INTEGER,
+  ai_summary TEXT,
+  created_at TEXT,
+  updated_at TEXT,
+  -- 关联数据归档（JSON 格式）
+  filter_logs_data TEXT,        -- article_filter_logs 关联行 JSON 数组
+  translation_data TEXT,        -- article_translations 关联行 JSON 对象
+  process_logs_data TEXT,       -- article_process_logs 关联行 JSON 数组
+  related_data TEXT,            -- article_related 关联行 JSON 数组
+  -- 来源标识
+  source_name TEXT,             -- 来源名称（如 RSS 源名称/期刊名/关键词）
+  moved_at TEXT DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_rejected_articles_source_origin ON rejected_articles(source_origin);
+CREATE INDEX IF NOT EXISTS idx_rejected_articles_moved_at ON rejected_articles(moved_at);
+CREATE INDEX IF NOT EXISTS idx_rejected_articles_rss_source_id ON rejected_articles(rss_source_id);
+CREATE INDEX IF NOT EXISTS idx_rejected_articles_journal_id ON rejected_articles(journal_id);
+CREATE INDEX IF NOT EXISTS idx_rejected_articles_keyword_id ON rejected_articles(keyword_id);
+CREATE INDEX IF NOT EXISTS idx_rejected_articles_email_source_id ON rejected_articles(email_source_id);
 
 -- ===========================================
 -- 19. Schema Metadata Table

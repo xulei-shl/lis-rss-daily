@@ -48,6 +48,7 @@
 | 05 | [LLM 抽象层与工具库](./05-llm-abstraction.md) | LLMProvider、故障转移、限流、加密、JSON 解析、config、任务类型 | `llm.ts` `llm-logger.ts` `api/llm-configs.ts` `utils/*.ts` `config.ts` |
 | 06 | [通知与调度子系统](./06-notifications-scheduling.md) | Telegram Bot、企业微信、每日总结、洞察报告、调度器状态 | `telegram/*.ts` `wechat/*.ts` `daily-summary-scheduler.ts` `insights-scheduler.ts` `api/daily-summary.ts` |
 | 07 | [Web/API、认证、数据库与前端](./07-web-api-auth-db-frontend.md) | Express 装配、路由表、JWT/角色、Kysely+SQLite 表结构、DeepSearch、EJS 前端 | `api/web.ts` `api/routes.ts` `middleware/auth.ts` `db.ts` `sql/001_init.sql` `views/` `public/` |
+| 08 | [自动清理拒绝文章（规划文档）](./08-rejected-cleanup.md) | 归档表设计、调度器、源字段控制、迁移计划（尚未实现） | `rejected-cleanup-scheduler.ts` `sql/038_add_auto_cleanup_rejected.sql` `rejected_articles` 表 |
 
 ## 全局约定与要点（各模块通用）
 
@@ -69,3 +70,4 @@
 5. Google Scholar 爬虫路径 `google-scholar-spider.ts` **硬编码** `/opt/lis-rss-daily/src/spiders/google_scholar`。
 6. `config.ts` 中**不含** chroma host/port 与检索权重字段；embedding/rerank 配置全部走 DB `llm_configs`，chroma host/port 走 `settings` 表。
 7. `build-css.js` 输出 `main.bundle.css`，而 `layout.ejs` 开发态引用 `/css/main.css`，命名需核对。
+8. **已规划未实现**：自动清理拒绝文章（`rejected-cleanup-scheduler.ts`）— 见文档 08。`sql/001_init.sql` 和 `sql/038_add_auto_cleanup_rejected.sql` 的 DDL 已就绪，调度器代码和 API 层待实现。
