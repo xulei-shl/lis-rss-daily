@@ -7,9 +7,9 @@
  * - 多关键词错峰运行，避免触发反爬
  */
 
-import cron from 'node-cron';
 import { getActiveKeywords, crawlKeyword, type KeywordInfo } from './api/keywords.js';
 import { logger } from './logger.js';
+import { BaseScheduler } from './utils/base-scheduler.js';
 
 const log = logger.child({ module: 'keyword-scheduler' });
 
@@ -40,13 +40,12 @@ export interface KeywordSchedulerStatus {
 /**
  * 关键词调度器类
  */
-export class KeywordScheduler {
+export class KeywordScheduler extends BaseScheduler {
   private static instance: KeywordScheduler | null = null;
 
-  private scheduledTask: cron.ScheduledTask | null = null;
   private config: KeywordSchedulerConfig;
-  private isRunning: boolean = false;
-  private isScheduled: boolean = false;
+  /** 单次爬取是否正在执行中（与 BaseScheduler.isRunning 区分） */
+  private isExecuting = false;
   private activeCrawls: number = 0;
   private stats = {
     completedCrawls: 0,
@@ -56,7 +55,28 @@ export class KeywordScheduler {
   };
 
   private constructor(config: KeywordSchedulerConfig) {
+    super();
     this.config = config;
+  }
+
+  /* ── BaseScheduler overrides ── */
+
+  get schedulerName(): string { return 'Keyword scheduler'; }
+  get cronSchedule(): string { return this.config.schedule; }
+  get isEnabled(): boolean { return this.config.enabled; }
+
+  /**
+   * Wait for active crawls to finish (up to 60s)
+   */
+  protected async waitForCompletion(): Promise<void> {
+    const maxWaitTime = 60000;
+    const startTime = Date.now();
+    while (this.activeCrawls > 0 && Date.now() - startTime < maxWaitTime) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    if (this.activeCrawls > 0) {
+      log.warn({ activeCrawls: this.activeCrawls }, 'Some crawls did not complete in time');
+    }
   }
 
   /**
@@ -73,100 +93,15 @@ export class KeywordScheduler {
   }
 
   /**
-   * 启动调度器
+   * BaseScheduler.run() — 定时爬取入口
    */
-  start(): void {
-    if (this.isScheduled) {
-      log.warn('Keyword scheduler already started');
-      return;
-    }
-
-    if (!this.config.enabled) {
-      log.info('Keyword scheduler disabled in config');
-      return;
-    }
-
-    try {
-      // 验证 cron 表达式
-      if (!cron.validate(this.config.schedule)) {
-        throw new Error(`Invalid cron expression: ${this.config.schedule}`);
-      }
-
-      // 创建定时任务
-      this.scheduledTask = cron.schedule(
-        this.config.schedule,
-        () => {
-          this.runScheduledCrawl().catch((err) => {
-            log.error({ err }, 'Scheduled crawl error');
-          });
-        },
-        {
-          scheduled: false,
-          timezone: 'Asia/Shanghai',
-        }
-      );
-
-      this.scheduledTask.start();
-      this.isScheduled = true;
-
-      log.info(
-        {
-          schedule: this.config.schedule,
-          interval: this.config.keywordInterval,
-        },
-        'Keyword scheduler started'
-      );
-    } catch (error) {
-      log.error({ error }, 'Failed to start keyword scheduler');
-      throw error;
-    }
-  }
-
-  /**
-   * 停止调度器
-   */
-  async stop(): Promise<void> {
-    if (!this.isScheduled) {
-      return;
-    }
-
-    log.info('Stopping keyword scheduler...');
-
-    // 停止定时任务
-    if (this.scheduledTask) {
-      this.scheduledTask.stop();
-      this.scheduledTask = null;
-    }
-
-    this.isScheduled = false;
-
-    // 等待活跃爬取完成
-    const maxWaitTime = 60000; // 60 秒
-    const startTime = Date.now();
-
-    while (this.activeCrawls > 0 && Date.now() - startTime < maxWaitTime) {
-      log.debug({ activeCrawls: this.activeCrawls }, 'Waiting for active crawls to complete');
-      await sleep(1000);
-    }
-
-    if (this.activeCrawls > 0) {
-      log.warn({ activeCrawls: this.activeCrawls }, 'Some crawls did not complete in time');
-    }
-
-    this.isRunning = false;
-    log.info('Keyword scheduler stopped');
-  }
-
-  /**
-   * 定时爬取入口
-   */
-  private async runScheduledCrawl(): Promise<void> {
-    if (this.isRunning) {
+  protected async run(): Promise<void> {
+    if (this.isExecuting) {
       log.warn('Scheduled crawl already in progress, skipping');
       return;
     }
 
-    this.isRunning = true;
+    this.isExecuting = true;
     this.stats.lastRunTime = new Date();
 
     try {
@@ -207,7 +142,7 @@ export class KeywordScheduler {
     } catch (error) {
       log.error({ error }, 'Scheduled crawl failed');
     } finally {
-      this.isRunning = false;
+      this.isExecuting = false;
     }
   }
 
@@ -291,7 +226,7 @@ export class KeywordScheduler {
   getStatus(): KeywordSchedulerStatus {
     return {
       isRunning: this.isRunning,
-      isScheduled: this.isScheduled,
+      isScheduled: true,  // Backward compat: cron is active when start() has been called
       activeCrawls: this.activeCrawls,
       completedCrawls: this.stats.completedCrawls,
       failedCrawls: this.stats.failedCrawls,
@@ -317,9 +252,7 @@ export class KeywordScheduler {
 /**
  * 延迟函数
  */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { sleep } from './utils/sleep.js';
 
 /**
  * 初始化关键词调度器

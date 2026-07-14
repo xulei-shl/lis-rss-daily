@@ -7,9 +7,9 @@
  * - 与 RSS 调度器互斥运行
  */
 
-import cron from 'node-cron';
 import { getDb } from './db.js';
 import { logger } from './logger.js';
+import { BaseScheduler } from './utils/base-scheduler.js';
 import { pythonSpiderRunner } from './spiders/index.js';
 import {
   getActiveJournals,
@@ -51,12 +51,10 @@ export interface JournalSchedulerStatus {
 /**
  * 期刊调度器类
  */
-export class JournalScheduler {
+export class JournalScheduler extends BaseScheduler {
   private static instance: JournalScheduler | null = null;
 
-  private scheduledTask: cron.ScheduledTask | null = null;
   private config: JournalSchedulerConfig;
-  private isRunning: boolean = false;
   private activeCrawls: number = 0;
   private stats = {
     completedCrawls: 0,
@@ -66,6 +64,7 @@ export class JournalScheduler {
   };
 
   private constructor(config: JournalSchedulerConfig) {
+    super();
     this.config = config;
   }
 
@@ -82,86 +81,24 @@ export class JournalScheduler {
     return JournalScheduler.instance;
   }
 
-  /**
-   * 启动调度器
-   */
-  start(): void {
-    if (this.isRunning) {
-      log.warn('Journal scheduler already running');
-      return;
-    }
+  /* ── BaseScheduler overrides ── */
 
-    if (!this.config.enabled) {
-      log.info('Journal scheduler disabled in config');
-      return;
-    }
-
-    try {
-      // 验证 cron 表达式
-      if (!cron.validate(this.config.schedule)) {
-        throw new Error(`Invalid cron expression: ${this.config.schedule}`);
-      }
-
-      // 创建定时任务
-      this.scheduledTask = cron.schedule(
-        this.config.schedule,
-        () => {
-          this.runScheduledCrawl().catch((err) => {
-            log.error({ err }, 'Scheduled crawl error');
-          });
-        },
-        {
-          scheduled: false,
-          timezone: 'Asia/Shanghai',
-        }
-      );
-
-      this.scheduledTask.start();
-      this.isRunning = true;
-
-      log.info(
-        {
-          schedule: this.config.schedule,
-        },
-        'Journal scheduler started'
-      );
-    } catch (error) {
-      log.error({ error }, 'Failed to start journal scheduler');
-      throw error;
-    }
-  }
+  get schedulerName(): string { return 'Journal scheduler'; }
+  get cronSchedule(): string { return this.config.schedule; }
+  get isEnabled(): boolean { return this.config.enabled; }
 
   /**
-   * 停止调度器
+   * Wait for active crawls to finish (up to 60s)
    */
-  async stop(): Promise<void> {
-    if (!this.isRunning) {
-      return;
-    }
-
-    log.info('Stopping journal scheduler...');
-
-    // 停止定时任务
-    if (this.scheduledTask) {
-      this.scheduledTask.stop();
-      this.scheduledTask = null;
-    }
-
-    // 等待活跃爬取完成
-    const maxWaitTime = 60000; // 60 秒
+  protected async waitForCompletion(): Promise<void> {
+    const maxWaitTime = 60000;
     const startTime = Date.now();
-
     while (this.activeCrawls > 0 && Date.now() - startTime < maxWaitTime) {
-      log.debug({ activeCrawls: this.activeCrawls }, 'Waiting for active crawls to complete');
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-
     if (this.activeCrawls > 0) {
       log.warn({ activeCrawls: this.activeCrawls }, 'Forced shutdown with active crawls');
     }
-
-    this.isRunning = false;
-    log.info('Journal scheduler stopped');
   }
 
   /**
@@ -169,24 +106,16 @@ export class JournalScheduler {
    */
   updateConfig(newConfig: Partial<JournalSchedulerConfig>): void {
     const wasRunning = this.isRunning;
-
-    if (wasRunning) {
-      this.stop();
-    }
-
+    if (wasRunning) this.stop();
     this.config = { ...this.config, ...newConfig };
-
-    if (wasRunning && this.config.enabled) {
-      this.start();
-    }
-
+    if (wasRunning && this.config.enabled) this.start();
     log.info({ config: this.config }, 'Journal scheduler config updated');
   }
 
   /**
-   * 定时爬取入口
+   * BaseScheduler.run() — 定时爬取入口
    */
-  private async runScheduledCrawl(): Promise<void> {
+  protected async run(): Promise<void> {
     const runId = `run-${Date.now()}`;
     const runLog = log.child({ runId });
 

@@ -636,24 +636,28 @@ async function executeWithRetry<T>(
   throw lastError;
 }
 
-/**
- * Sleep for a specified duration.
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { sleep } from './utils/sleep.js';
 
 /* ── Utility Functions ── */
 
 /**
- * Get pending articles for processing.
- *
- * @param userId - User ID
- * @param limit - Maximum number of articles to return
- * @returns Array of pending article IDs
+ * Process status type used for article ID queries
  */
-export async function getPendingArticleIds(userId: number, limit: number = 50): Promise<number[]> {
+export type ProcessStatusFilter = 'pending' | 'failed';
+
+/**
+ * Get article IDs by process status.
+ *
+ * Unified query that replaces getPendingArticleIds and getFailedArticleIds.
+ *
+ * @param status - Process status filter ('pending' or 'failed')
+ * @param userId - User ID
+ * @param limit - Maximum number of articles to return (default: 50)
+ * @returns Array of article IDs
+ */
+export async function getArticleIdsByStatus(status: ProcessStatusFilter, userId: number, limit: number = 50): Promise<number[]> {
   const db = getDb();
+  const sortField = status === 'failed' ? 'articles.updated_at' : 'articles.created_at';
 
   // 获取 RSS 文章
   const rssArticles = await db
@@ -661,8 +665,8 @@ export async function getPendingArticleIds(userId: number, limit: number = 50): 
     .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .where('rss_sources.user_id', '=', userId)
     .where('articles.filter_status', '=', 'passed')
-    .where('articles.process_status', '=', 'pending')
-    .select(['articles.id', 'articles.created_at'])
+    .where('articles.process_status', '=', status)
+    .select(['articles.id', sortField as 'articles.created_at'])
     .execute();
 
   // 获取关键词文章
@@ -671,8 +675,8 @@ export async function getPendingArticleIds(userId: number, limit: number = 50): 
     .innerJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
     .where('keyword_subscriptions.user_id', '=', userId)
     .where('articles.filter_status', '=', 'passed')
-    .where('articles.process_status', '=', 'pending')
-    .select(['articles.id', 'articles.created_at'])
+    .where('articles.process_status', '=', status)
+    .select(['articles.id', sortField as 'articles.created_at'])
     .execute();
 
   // 获取期刊文章
@@ -681,62 +685,34 @@ export async function getPendingArticleIds(userId: number, limit: number = 50): 
     .innerJoin('journals', 'journals.id', 'articles.journal_id')
     .where('journals.user_id', '=', userId)
     .where('articles.filter_status', '=', 'passed')
-    .where('articles.process_status', '=', 'pending')
-    .select(['articles.id', 'articles.created_at'])
+    .where('articles.process_status', '=', status)
+    .select(['articles.id', sortField as 'articles.created_at'])
+    .execute();
+
+  // 获取邮件文章
+  const emailArticles = await db
+    .selectFrom('articles')
+    .innerJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+    .where('email_sources.user_id', '=', userId)
+    .where('articles.filter_status', '=', 'passed')
+    .where('articles.process_status', '=', status)
+    .select(['articles.id', sortField as 'articles.created_at'])
     .execute();
 
   // 合并并按时间排序
-  const allArticles = [...rssArticles, ...keywordArticles, ...journalArticles]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  const allArticles = [...rssArticles, ...keywordArticles, ...journalArticles, ...emailArticles]
+    .sort((a, b) => new Date((b as any)[sortField.split('.')[1]]).getTime() - new Date((a as any)[sortField.split('.')[1]]).getTime())
     .slice(0, limit);
 
   return allArticles.map((a) => a.id);
 }
 
-/**
- * Get failed articles for retry.
- *
- * @param userId - User ID
- * @param limit - Maximum number of articles to return
- * @returns Array of failed article IDs
- */
+/** @deprecated Use getArticleIdsByStatus('pending', userId, limit) instead */
+export async function getPendingArticleIds(userId: number, limit: number = 50): Promise<number[]> {
+  return getArticleIdsByStatus('pending', userId, limit);
+}
+
+/** @deprecated Use getArticleIdsByStatus('failed', userId, limit) instead */
 export async function getFailedArticleIds(userId: number, limit: number = 50): Promise<number[]> {
-  const db = getDb();
-
-  // 获取 RSS 文章
-  const rssArticles = await db
-    .selectFrom('articles')
-    .innerJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
-    .where('rss_sources.user_id', '=', userId)
-    .where('articles.filter_status', '=', 'passed')
-    .where('articles.process_status', '=', 'failed')
-    .select(['articles.id', 'articles.updated_at'])
-    .execute();
-
-  // 获取关键词文章
-  const keywordArticles = await db
-    .selectFrom('articles')
-    .innerJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
-    .where('keyword_subscriptions.user_id', '=', userId)
-    .where('articles.filter_status', '=', 'passed')
-    .where('articles.process_status', '=', 'failed')
-    .select(['articles.id', 'articles.updated_at'])
-    .execute();
-
-  // 获取期刊文章
-  const journalArticles = await db
-    .selectFrom('articles')
-    .innerJoin('journals', 'journals.id', 'articles.journal_id')
-    .where('journals.user_id', '=', userId)
-    .where('articles.filter_status', '=', 'passed')
-    .where('articles.process_status', '=', 'failed')
-    .select(['articles.id', 'articles.updated_at'])
-    .execute();
-
-  // 合并并按时间排序
-  const allArticles = [...rssArticles, ...keywordArticles, ...journalArticles]
-    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-    .slice(0, limit);
-
-  return allArticles.map((a) => a.id);
+  return getArticleIdsByStatus('failed', userId, limit);
 }

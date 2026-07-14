@@ -10,10 +10,10 @@
  * - Graceful shutdown
  */
 
-import cron from 'node-cron';
 import { getDb } from './db.js';
 import { getRSSParser, type RSSFeedItem } from './rss-parser.js';
 import { logger } from './logger.js';
+import { BaseScheduler } from './utils/base-scheduler.js';
 import { getActiveRSSSourcesForFetch } from './api/rss-sources.js';
 import { saveArticles, checkArticlesExistByTitle } from './api/articles.js';
 import { filterArticle, type FilterInput } from './filter.js';
@@ -28,9 +28,7 @@ const log = logger.child({ module: 'rss-scheduler' });
 /**
  * Sleep for a specified duration (milliseconds)
  */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { sleep } from './utils/sleep.js';
 
 /**
  * Task status enumeration
@@ -106,13 +104,11 @@ export interface SchedulerStatus {
  *
  * Manages scheduled RSS feed fetching with concurrent control and retry mechanism.
  */
-export class RSSScheduler {
+export class RSSScheduler extends BaseScheduler {
   private static instance: RSSScheduler | null = null;
 
-  private scheduledTask: cron.ScheduledTask | null = null;
   private activeTasks: Map<number, FetchTask> = new Map();
   private config: SchedulerConfig;
-  private isRunning: boolean = false;
   private stats = {
     completedTasks: 0,
     failedTasks: 0,
@@ -121,6 +117,7 @@ export class RSSScheduler {
   };
 
   private constructor(config: SchedulerConfig) {
+    super();
     this.config = config;
   }
 
@@ -137,113 +134,50 @@ export class RSSScheduler {
     return RSSScheduler.instance;
   }
 
+  /* ── BaseScheduler overrides ── */
+
+  get schedulerName(): string { return 'RSS scheduler'; }
+  get cronSchedule(): string { return this.config.schedule; }
+  get isEnabled(): boolean { return this.config.enabled; }
+
   /**
-   * Start the scheduler
+   * Start the scheduler (delegates to base class)
    */
   start(): void {
-    if (this.isRunning) {
-      log.warn('Scheduler already running');
-      return;
-    }
-
-    if (!this.config.enabled) {
-      log.info('RSS scheduler disabled in config');
-      return;
-    }
-
-    try {
-      // Validate cron expression
-      if (!cron.validate(this.config.schedule)) {
-        throw new Error(`Invalid cron expression: ${this.config.schedule}`);
-      }
-
-      // Create scheduled task
-      this.scheduledTask = cron.schedule(
-        this.config.schedule,
-        () => {
-          this.runScheduledFetch().catch((err) => {
-            log.error({ err }, 'Scheduled fetch error');
-          });
-        },
-        {
-          scheduled: false,
-          timezone: 'Asia/Shanghai',
-        }
-      );
-
-      this.scheduledTask.start();
-      this.isRunning = true;
-
-      log.info(
-        {
-          schedule: this.config.schedule,
-          maxConcurrent: this.config.maxConcurrent,
-          forceOnSchedule: this.config.forceOnSchedule,
-        },
-        'RSS scheduler started'
-      );
-    } catch (error) {
-      log.error({ error }, 'Failed to start RSS scheduler');
-      throw error;
-    }
+    super.start();
+    // RSS scheduler does NOT need startup-fetch guard because it tracks
+    // last_fetched_at per source and respects fetch_interval.
   }
 
   /**
-   * Stop the scheduler
+   * Wait for active fetch tasks to finish (up to 30s)
    */
-  async stop(): Promise<void> {
-    if (!this.isRunning) {
-      return;
-    }
-
-    log.info('Stopping RSS scheduler...');
-
-    // Stop scheduled task
-    if (this.scheduledTask) {
-      this.scheduledTask.stop();
-      this.scheduledTask = null;
-    }
-
-    // Wait for active tasks to complete
-    const maxWaitTime = 30000; // 30 seconds max
+  protected async waitForCompletion(): Promise<void> {
+    const maxWaitTime = 30000;
     const startTime = Date.now();
-
     while (this.activeTasks.size > 0 && Date.now() - startTime < maxWaitTime) {
-      log.debug({ activeTasks: this.activeTasks.size }, 'Waiting for active tasks to complete');
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-
     if (this.activeTasks.size > 0) {
       log.warn({ activeTasks: this.activeTasks.size }, 'Forced shutdown with active tasks');
     }
-
-    this.isRunning = false;
-    log.info('RSS scheduler stopped');
   }
 
   /**
-   * Update configuration
+   * Update configuration at runtime
    */
   updateConfig(newConfig: Partial<SchedulerConfig>): void {
     const wasRunning = this.isRunning;
-
-    if (wasRunning) {
-      this.stop();
-    }
-
+    if (wasRunning) this.stop();
     this.config = { ...this.config, ...newConfig };
-
-    if (wasRunning && this.config.enabled) {
-      this.start();
-    }
-
+    if (wasRunning && this.config.enabled) this.start();
     log.info({ config: this.config }, 'Scheduler config updated');
   }
 
   /**
-   * Scheduled fetch execution entry point
+   * BaseScheduler.run() — scheduled fetch execution entry point
    */
-  private async runScheduledFetch(): Promise<void> {
+  protected async run(): Promise<void> {
     const runId = `run-${Date.now()}`;
     const runLog = log.child({ runId });
 

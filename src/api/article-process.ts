@@ -6,7 +6,7 @@
  * retrying failed articles, and retrieving processing statistics.
  */
 
-import { processArticle, processBatchArticles, retryFailedArticle, getPendingArticleIds, getFailedArticleIds, type ProcessResult } from '../pipeline.js';
+import { processArticle, processBatchArticles, retryFailedArticle, getArticleIdsByStatus, getPendingArticleIds, type ProcessResult, type ProcessStatusFilter } from '../pipeline.js';
 import { getUserArticles, type ArticleWithSource } from './articles.js';
 import { logger } from '../logger.js';
 import type { Request, Response } from 'express';
@@ -92,10 +92,7 @@ export async function triggerBatchProcess(req: Request, res: Response): Promise<
     log.info({ userId, options }, '[API] Trigger batch process');
 
     // Get article IDs to process
-    const articleIds =
-      status === 'failed'
-        ? await getFailedArticleIds(userId, limit)
-        : await getPendingArticleIds(userId, limit);
+    const articleIds = await getArticleIdsByStatus(status as ProcessStatusFilter, userId, limit);
 
     if (articleIds.length === 0) {
       res.json({

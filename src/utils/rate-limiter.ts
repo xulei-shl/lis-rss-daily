@@ -312,11 +312,4 @@ export function resetGlobalRateLimiter(): void {
   globalRateLimiter = null;
 }
 
-/* ── Utility Functions ── */
-
-/**
- * Sleep for a specified duration
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { sleep } from './sleep.js';

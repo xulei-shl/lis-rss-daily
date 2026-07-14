@@ -1,18 +1,52 @@
-import cron from 'node-cron';
 import { getDb } from './db.js';
 import { logger } from './logger.js';
 import { config } from './config.js';
+import { BaseScheduler } from './utils/base-scheduler.js';
 import { processEmailSource } from './gmail/email-processor.js';
 import type { EmailSourceConfig } from './gmail/types.js';
+/**
+ * Map a database row to EmailSourceConfig
+ */
+function rowToEmailSourceConfig(row: {
+  id: number;
+  user_id: number;
+  name: string;
+  email_address: string;
+  imap_password_encrypted: string;
+  target_senders: string;
+  domain_id: number;
+  status: string;
+  last_fetched_at: string | null;
+  last_error: string | null;
+}): EmailSourceConfig {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    emailAddress: row.email_address,
+    imapPasswordEncrypted: row.imap_password_encrypted,
+    targetSenders: JSON.parse(row.target_senders || '[]'),
+    domainId: row.domain_id,
+    status: row.status as 'active' | 'inactive',
+    lastFetchedAt: row.last_fetched_at,
+    lastError: row.last_error,
+  };
+}
 
 const log = logger.child({ module: 'gmail-scheduler' });
 
-export class GmailScheduler {
+export class GmailScheduler extends BaseScheduler {
   private static instance: GmailScheduler | null = null;
-  private scheduledTask: cron.ScheduledTask | null = null;
-  private isRunning = false;
 
-  private constructor() {}
+  /* ── BaseScheduler overrides ── */
+
+  get schedulerName(): string { return 'Gmail scheduler'; }
+  get cronSchedule(): string { return config.gmailFetchSchedule; }
+  get isEnabled(): boolean { return config.gmailFetchEnabled; }
+
+  private constructor() {
+    super();
+  }
 
   static getInstance(): GmailScheduler {
     if (!GmailScheduler.instance) {
@@ -21,54 +55,17 @@ export class GmailScheduler {
     return GmailScheduler.instance;
   }
 
+  /**
+   * Start the scheduler (adds startup fetch check on top of base)
+   */
   start(): void {
+    super.start();
     if (this.isRunning) {
-      log.warn('Gmail scheduler already running');
-      return;
-    }
-
-    if (!config.gmailFetchEnabled) {
-      log.info('Gmail scheduler disabled in config');
-      return;
-    }
-
-    try {
-      if (!cron.validate(config.gmailFetchSchedule)) {
-        throw new Error(`Invalid cron expression: ${config.gmailFetchSchedule}`);
-      }
-
-      this.scheduledTask = cron.schedule(
-        config.gmailFetchSchedule,
-        () => {
-          this.runScheduledFetch().catch((err) => {
-            log.error({ err }, 'Gmail scheduled fetch error');
-          });
-        },
-        { scheduled: false, timezone: 'Asia/Shanghai' }
-      );
-
-      this.scheduledTask.start();
-      this.isRunning = true;
-      log.info(`Gmail scheduler started (schedule: ${config.gmailFetchSchedule})`);
-
       // 启动时检查：如果今天已经通过 cron 执行过抓取，则跳过启动抓取
-      // 防止进程重启导致同一天抓取两次
       this.runStartupFetchIfNeeded().catch((err) => {
         log.error({ err }, 'Gmail startup fetch check error');
       });
-    } catch (err) {
-      log.error({ err }, 'Failed to start Gmail scheduler');
     }
-  }
-
-  stop(): Promise<void> {
-    if (this.scheduledTask) {
-      this.scheduledTask.stop();
-      this.scheduledTask = null;
-    }
-    this.isRunning = false;
-    log.info('Gmail scheduler stopped');
-    return Promise.resolve();
   }
 
   /** 获取 Asia/Shanghai 时区的今日日期字符串 YYYY-MM-DD */
@@ -100,10 +97,11 @@ export class GmailScheduler {
     }
 
     log.info({ today }, 'Running startup fetch (cron has not run today)');
-    await this.runScheduledFetch();
+    await this.run();
   }
 
-  private async runScheduledFetch(): Promise<void> {
+  /** BaseScheduler.run() */
+  protected async run(): Promise<void> {
     const db = getDb();
 
     const rows = await db
@@ -117,18 +115,7 @@ export class GmailScheduler {
       return;
     }
 
-    const sources: EmailSourceConfig[] = rows.map((row) => ({
-      id: row.id,
-      userId: row.user_id,
-      name: row.name,
-      emailAddress: row.email_address,
-      imapPasswordEncrypted: row.imap_password_encrypted,
-      targetSenders: JSON.parse(row.target_senders || '[]'),
-      domainId: row.domain_id,
-      status: row.status as 'active' | 'inactive',
-      lastFetchedAt: row.last_fetched_at,
-      lastError: row.last_error,
-    }));
+    const sources: EmailSourceConfig[] = rows.map((row) => rowToEmailSourceConfig(row));
 
     for (const source of sources) {
       try {
@@ -146,7 +133,7 @@ export class GmailScheduler {
 
   async fetchAllNow(): Promise<void> {
     log.info('Manual Gmail fetch triggered');
-    await this.runScheduledFetch();
+    await this.run();
   }
 
   async fetchOneNow(sourceId: number): Promise<void> {
@@ -162,18 +149,7 @@ export class GmailScheduler {
       return;
     }
 
-    const source: EmailSourceConfig = {
-      id: row.id,
-      userId: row.user_id,
-      name: row.name,
-      emailAddress: row.email_address,
-      imapPasswordEncrypted: row.imap_password_encrypted,
-      targetSenders: JSON.parse(row.target_senders || '[]'),
-      domainId: row.domain_id,
-      status: row.status as 'active' | 'inactive',
-      lastFetchedAt: row.last_fetched_at,
-      lastError: row.last_error,
-    };
+    const source: EmailSourceConfig = rowToEmailSourceConfig(row);
 
     try {
       const result = await processEmailSource(source);
