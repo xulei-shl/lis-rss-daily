@@ -1,7 +1,7 @@
 # 06 · 通知与调度子系统 Handoff
 
 > Telegram Bot（推送 + 交互命令）、企业微信 Webhook 推送，以及每日总结、定期洞察报告调度。
-> 关键源文件：`src/telegram/`（`index.ts` `client.ts` `bot.ts` `bot-manager.ts` `command-parser.ts` `callback-encoder.ts` `formatters.ts`）、`src/api/telegram-chats.ts`、`src/wechat/`（`index.ts` `client.ts` `formatters.ts`）、`src/config/wechat-config.ts`、`src/constants/push-types.ts`、`src/daily-summary-scheduler.ts`、`src/insights-scheduler.ts`、`src/api/daily-summary.ts`，路由 `telegram-chats.routes.ts` `wechat.routes.ts` `daily-summary.routes.ts` `scheduler.routes.ts`。
+> 关键源文件：`src/telegram/`（`index.ts` `client.ts` `bot.ts` `bot-manager.ts` `command-parser.ts` `callback-encoder.ts` `formatters.ts`）、`src/api/telegram-chats.ts`、`src/wechat/`（`index.ts` `client.ts` `formatters.ts`）、`src/config/wechat-config.ts`、`src/constants/push-types.ts`、`src/daily-summary-scheduler.ts`、`src/insights-scheduler.ts`、`src/api/daily-summary.ts`、`src/api/article-clustering.ts`，路由 `telegram-chats.routes.ts` `wechat.routes.ts` `daily-summary.routes.ts` `scheduler.routes.ts`。
 
 ## 1. Telegram 推送器（`src/telegram/index.ts`）
 
@@ -80,7 +80,7 @@
 - **双重触发**：① 间隔闸门——`getScheduledReportIntervalCheck`（`:362`）比较上次成功本地日期与今天，`elapsedDays < intervalDays`（`insightsIntervalDays`）则跳过；首次运行放行。② 调度日——cron `insightsSchedule` 每日触发检查；`nextEligibleLocalDate` 由上次成功 + intervalDays 推算。
 - 持久化：设置键 `insights_last_success_at`，**仅调度运行**写入；手动 `generateNow`（`:409`）不写。
 - ⚠️ **推送逻辑已移出生成函数（2026-07-14）**：`generateInsightsSummary`（`api/daily-summary-generator.ts`）现只生成并 `saveDailySummary`，推送由 `insights-scheduler.ts` 在生成成功后显式调用 `getTelegramNotifier().sendInsightsSummary` + `getWeChatNotifier().sendInsightsSummary`（见 §5 差异）。
-- 报告内容（`generateInsightsSummary`, `api/daily-summary-generator.ts`）：取最近 `days`（默认 **15**）天 `filter_status='passed'`、来源在期刊白名单、含正文（排除 `%<正>%`）的文章（≤60），用 `insights` 系统提示词生成「1500–3000 字中文洞察报告」，按主题分组含研究趋势与选题建议，temp 0.3。生成后由调度器推送并存 `daily_summaries`（`type='insights'`，见 §5 差异）。
+- 报告内容（`generateInsightsSummary`, `api/daily-summary-generator.ts`）：取最近 `days`（默认 **15**）天 `filter_status='passed'`、来源在期刊白名单、含正文（排除 `%<正>%`）的文章（≤60）→ **文章预聚类**（`src/api/article-clustering.ts`）：对 60 篇文章标题两两计算 Jaccard 相似度（阈值 0.18），Union-Find 连通分量形成话题簇，对每个簇计算评分（coverage、diversity，及窗口前后半密度比 → trendLabel）→ 构建含评分元数据的结构化文本（话题簇含文章列表 + 单篇文章）→ 用 `insights` 系统提示词生成「1500–3000 字中文洞察报告」，temp 0.3。生成后由调度器推送并存 `daily_summaries`（`type='insights'`，见 §5 差异）。
 - `getStatus()`（`:389`）返回 `{isRunning, lastRunTime, nextRunTime, lastSuccessAt, nextEligibleLocalDate, schedulerTimezone, lastRunResult}`。
 
 ## 7. `daily_summaries` 表（`src/api/daily-summary.ts`）
@@ -124,3 +124,4 @@
 - **企业微信 `send*` 去重**：五个 `send*` 方法统一委托给 `sendByPushType` + `sendToWebhooks`（见 §4）。
 - **`daily-summary.ts` 职责分离**：拆为 generator（纯生成）/ repository（DB）/ facade（薄封装）三文件，推送副作用移出（见 §5、§6）。
 - **调度器接管推送**：`daily-summary-scheduler.ts`、`insights-scheduler.ts` 显式调用 `getTelegramNotifier()` / `getWeChatNotifier()` 推送（见 §5、§6）。
+- **洞察报告预聚类（2026-07-14）**：`generateInsightsSummary` 新增前置文章聚类步骤（`src/api/article-clustering.ts`）。标题 Jaccard 相似度 0.18 → Union-Find 分组 → 话题评分（coverage/diversity/trendLabel）→ 结构化文本注入 `ARTICLES_LIST`。只影响洞察报告，不影响每日总结等其他类型。LLM prompt 模板、API 调用、推送格式均不变（见 §6）。
