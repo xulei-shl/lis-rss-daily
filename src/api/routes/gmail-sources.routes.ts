@@ -35,7 +35,7 @@ router.get('/email-sources/:id', requireAuth, async (req: AuthRequest, res) => {
 
 router.post('/email-sources', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const { name, emailAddress, imapPassword, targetSenders, status, domainId } = req.body;
+    const { name, emailAddress, imapPassword, targetSenders, status, domainId, autoCleanupRejected } = req.body;
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return res.status(400).json({ error: 'Name is required' });
@@ -56,6 +56,7 @@ router.post('/email-sources', requireAuth, requireAdmin, async (req: AuthRequest
       targetSenders: senders,
       status,
       domainId: domainId ? parseInt(domainId) : undefined,
+      autoCleanupRejected: autoCleanupRejected !== undefined ? Boolean(autoCleanupRejected) : undefined,
     });
 
     res.status(201).json(result);
@@ -70,7 +71,7 @@ router.put('/email-sources/:id', requireAuth, requireAdmin, async (req: AuthRequ
     const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(400).json({ error: 'Invalid email source ID' });
 
-    const { name, emailAddress, imapPassword, targetSenders, status, domainId } = req.body;
+    const { name, emailAddress, imapPassword, targetSenders, status, domainId, autoCleanupRejected } = req.body;
     const updateData: any = {};
 
     if (name !== undefined) {
@@ -105,6 +106,10 @@ router.put('/email-sources/:id', requireAuth, requireAdmin, async (req: AuthRequ
       if (!isNaN(parsed)) {
         updateData.domainId = parsed;
       }
+    }
+
+    if (autoCleanupRejected !== undefined) {
+      updateData.autoCleanupRejected = Boolean(autoCleanupRejected);
     }
 
     await gmailSourceService.updateEmailSource(id, req.userId!, updateData);

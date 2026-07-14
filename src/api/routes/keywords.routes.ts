@@ -79,7 +79,7 @@ router.get('/keywords/:id', requireAuth, async (req: AuthRequest, res) => {
  */
 router.post('/keywords', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const { keyword, yearStart, yearEnd, spiderType, numResults, isActive, domainId } = req.body;
+    const { keyword, yearStart, yearEnd, spiderType, numResults, isActive, domainId, autoCleanupRejected } = req.body;
 
     // 验证必填字段
     if (!keyword || typeof keyword !== 'string' || keyword.trim().length === 0) {
@@ -103,6 +103,7 @@ router.post('/keywords', requireAuth, requireAdmin, async (req: AuthRequest, res
       numResults,
       isActive,
       domainId: domainId ? parseInt(domainId) : undefined,
+      autoCleanupRejected: autoCleanupRejected !== undefined ? Boolean(autoCleanupRejected) : undefined,
     });
 
     res.status(201).json(result);
@@ -128,7 +129,7 @@ router.put('/keywords/:id', requireAuth, requireAdmin, async (req: AuthRequest, 
       return res.status(400).json({ error: 'Invalid keyword ID' });
     }
 
-    const { keyword, yearStart, yearEnd, spiderType, numResults, isActive, domainId } = req.body;
+    const { keyword, yearStart, yearEnd, spiderType, numResults, isActive, domainId, autoCleanupRejected } = req.body;
 
     // 关键词文本创建后不可修改
     if (keyword !== undefined) {
@@ -174,6 +175,10 @@ router.put('/keywords/:id', requireAuth, requireAdmin, async (req: AuthRequest, 
       if (!isNaN(parsed)) {
         updateData.domainId = parsed;
       }
+    }
+
+    if (autoCleanupRejected !== undefined) {
+      updateData.autoCleanupRejected = Boolean(autoCleanupRejected);
     }
 
     const result = await keywordsService.updateKeyword(req.userId!, id, updateData);

@@ -51,6 +51,7 @@ export interface CreateJournalParams {
   issuesPerYear: number;
   volumeOffset?: number;
   domainId?: number;
+  autoCleanupRejected?: boolean;
 }
 
 /**
@@ -65,6 +66,7 @@ export interface UpdateJournalParams {
   volumeOffset?: number;
   status?: 'active' | 'inactive';
   domainId?: number;
+  autoCleanupRejected?: boolean;
 }
 
 /**
@@ -216,6 +218,7 @@ export async function createJournal(params: CreateJournalParams): Promise<Journa
       issues_per_year: params.issuesPerYear,
       volume_offset: params.volumeOffset || 1956,
       domain_id: domainId,
+      auto_cleanup_rejected: params.autoCleanupRejected ? 1 : 0,
       status: 'active',
       updated_at: now,
     })
@@ -273,6 +276,9 @@ export async function updateJournal(
   }
   if (params.domainId !== undefined) {
     updateData.domain_id = params.domainId;
+  }
+  if (params.autoCleanupRejected !== undefined) {
+    updateData.auto_cleanup_rejected = params.autoCleanupRejected ? 1 : 0;
   }
 
   const result = await db

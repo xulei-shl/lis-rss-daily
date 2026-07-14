@@ -100,6 +100,10 @@ export interface Config {
   gmailFetchSchedule: string;
   gmailMaxEmails: number;
 
+  // Rejected Article Cleanup
+  rejectedCleanupEnabled: boolean;
+  rejectedCleanupSchedule: string;
+
   // DeepSearch
   deepSearchApiUrl: string;
 }
@@ -209,6 +213,10 @@ function getConfig(): Config {
     gmailFetchSchedule: process.env.GMAIL_FETCH_SCHEDULE || '0 4 * * *',
     gmailMaxEmails: parseInt(process.env.GMAIL_MAX_EMAILS || '20', 10),
 
+
+    // Rejected Article Cleanup
+    rejectedCleanupEnabled: process.env.REJECTED_CLEANUP_ENABLED !== 'false',
+    rejectedCleanupSchedule: process.env.REJECTED_CLEANUP_SCHEDULE || '0 5 * * *',
 
     // DeepSearch
     deepSearchApiUrl: process.env.DEEPSEARCH_API_URL || 'http://localhost:8082',

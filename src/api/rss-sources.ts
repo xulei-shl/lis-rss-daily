@@ -27,6 +27,7 @@ export interface CreateRSSSourceInput {
   fetchInterval?: number;
   status?: 'active' | 'inactive';
   domainId?: number;
+  autoCleanupRejected?: boolean;
 }
 
 /**
@@ -39,6 +40,7 @@ export interface UpdateRSSSourceInput {
   fetchInterval?: number;
   status?: 'active' | 'inactive';
   domainId?: number;
+  autoCleanupRejected?: boolean;
 }
 
 /**
@@ -105,6 +107,7 @@ export async function createRSSSource(
       source_type: data.sourceType ?? DEFAULT_SOURCE_TYPE,
       domain_id: domainId,
       fetch_interval: data.fetchInterval ?? 3600,
+      auto_cleanup_rejected: data.autoCleanupRejected ? 1 : 0,
       status: data.status ?? 'active',
       updated_at: new Date().toISOString(),
     } as any)
@@ -224,6 +227,7 @@ export async function updateRSSSource(
       ...(data.fetchInterval !== undefined && { fetch_interval: data.fetchInterval }),
       ...(data.status !== undefined && { status: data.status }),
       ...(data.domainId !== undefined && { domain_id: data.domainId }),
+      ...(data.autoCleanupRejected !== undefined && { auto_cleanup_rejected: data.autoCleanupRejected ? 1 : 0 }),
       updated_at: new Date().toISOString(),
     })
     .where('id', '=', id)

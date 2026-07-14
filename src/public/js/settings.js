@@ -256,6 +256,7 @@ function showAddModal() {
   document.getElementById('sourceType').value = getDefaultSourceType();
   document.getElementById('fetchInterval').value = '3600';
   document.getElementById('sourceStatus').checked = true;
+  document.getElementById('sourceAutoCleanup').checked = false;
   document.getElementById('validationResult').className = 'validation-result';
   document.getElementById('validationResult').textContent = '';
   renderDomainSelect('sourceDomainId', '');
@@ -277,6 +278,7 @@ function editSource(id) {
   document.getElementById('sourceType').value = source.source_type || 'blog';
   document.getElementById('fetchInterval').value = source.fetch_interval.toString();
   document.getElementById('sourceStatus').checked = source.status === 'active';
+  document.getElementById('sourceAutoCleanup').checked = source.auto_cleanup_rejected === 1 || source.auto_cleanup_rejected === true;
   renderDomainSelect('sourceDomainId', source.domain_id);
   document.getElementById('validationResult').className = 'validation-result';
   document.getElementById('validationResult').textContent = '';
@@ -340,7 +342,8 @@ document.getElementById('sourceForm').addEventListener('submit', async function 
     sourceType: document.getElementById('sourceType').value,
     fetchInterval: parseInt(document.getElementById('fetchInterval').value),
     status: document.getElementById('sourceStatus').checked ? 'active' : 'inactive',
-    domainId: parseInt(document.getElementById('sourceDomainId').value) || undefined
+    domainId: parseInt(document.getElementById('sourceDomainId').value) || undefined,
+    autoCleanupRejected: document.getElementById('sourceAutoCleanup').checked
   };
 
   // Debug logging
@@ -1449,6 +1452,7 @@ function showJournalAddModal() {
   document.getElementById('journalPublicationCycle').value = 'monthly';
   document.getElementById('journalIssuesPerYear').value = '12';
   document.getElementById('journalStatus').checked = true;
+  document.getElementById('journalAutoCleanup').checked = false;
   renderDomainSelect('journalDomainId', '');
   updateJournalSourceUI();
   document.getElementById('journalModal').classList.add('active');
@@ -1468,6 +1472,7 @@ function editJournal(id) {
   document.getElementById('journalPublicationCycle').value = journal.publication_cycle;
   document.getElementById('journalIssuesPerYear').value = journal.issues_per_year;
   document.getElementById('journalStatus').checked = journal.status === 'active';
+  document.getElementById('journalAutoCleanup').checked = journal.auto_cleanup_rejected === 1 || journal.auto_cleanup_rejected === true;
   renderDomainSelect('journalDomainId', journal.domain_id);
   updateJournalSourceUI();
   document.getElementById('journalModal').classList.add('active');
@@ -1535,7 +1540,8 @@ document.getElementById('journalForm')?.addEventListener('submit', async functio
     publicationCycle: document.getElementById('journalPublicationCycle').value,
     issuesPerYear: parseInt(document.getElementById('journalIssuesPerYear').value),
     status: document.getElementById('journalStatus').checked ? 'active' : 'inactive',
-    domainId: parseInt(document.getElementById('journalDomainId').value) || undefined
+    domainId: parseInt(document.getElementById('journalDomainId').value) || undefined,
+    autoCleanupRejected: document.getElementById('journalAutoCleanup').checked
   };
 
   try {
@@ -2301,6 +2307,7 @@ function showKeywordAddModal() {
   document.getElementById('spiderType').value = 'google_scholar';
   document.getElementById('numResults').value = '20';
   document.getElementById('keywordActive').checked = true;
+  document.getElementById('keywordAutoCleanup').checked = false;
   renderDomainSelect('keywordDomainId', '');
   document.getElementById('keywordModal').classList.add('active');
 }
@@ -2319,6 +2326,7 @@ async function showKeywordEditModal(id) {
   document.getElementById('spiderType').value = keyword.spider_type;
   document.getElementById('numResults').value = keyword.num_results;
   document.getElementById('keywordActive').checked = keyword.is_active === 1;
+  document.getElementById('keywordAutoCleanup').checked = keyword.auto_cleanup_rejected === 1 || keyword.auto_cleanup_rejected === true;
   renderDomainSelect('keywordDomainId', keyword.domain_id);
   document.getElementById('keywordModal').classList.add('active');
 }
@@ -2356,7 +2364,8 @@ async function saveKeyword() {
     spiderType,
     numResults,
     isActive,
-    domainId: parseInt(document.getElementById('keywordDomainId').value) || undefined
+    domainId: parseInt(document.getElementById('keywordDomainId').value) || undefined,
+    autoCleanupRejected: document.getElementById('keywordAutoCleanup').checked
   };
 
   // 新建时才发送 keyword 字段

@@ -49,6 +49,7 @@ export interface DatabaseTable {
   deepsearch_tasks: DeepSearchTasksTable;
   email_sources: EmailSourcesTable;
   email_fetch_logs: EmailFetchLogsTable;
+  rejected_articles: RejectedArticlesTable;
 }
 
 export interface UsersTable {
@@ -68,6 +69,7 @@ export interface RssSourcesTable {
   domain_id: number;
   last_fetched_at: string | null;
   fetch_interval: number;
+  auto_cleanup_rejected: number;
   status: 'active' | 'inactive';
   created_at: string;
   updated_at: string;
@@ -231,6 +233,7 @@ export interface JournalsTable {
   last_issue: number | null;
   last_volume: number | null;
   domain_id: number;
+  auto_cleanup_rejected: number;
   status: 'active' | 'inactive';
   created_at: Generated<string>;
   updated_at: string;
@@ -270,6 +273,7 @@ export interface KeywordSubscriptionsTable {
   year_start: number | null;
   year_end: number | null;
   domain_id: number;
+  auto_cleanup_rejected: number;
   is_active: number;
   spider_type: 'google_scholar' | 'cnki';
   num_results: number;
@@ -320,11 +324,49 @@ export interface EmailSourcesTable {
   imap_password_encrypted: string;
   target_senders: string;
   domain_id: number;
+  auto_cleanup_rejected: number;
   status: 'active' | 'inactive';
   last_fetched_at: string | null;
   last_error: string | null;
   created_at: Generated<string>;
   updated_at: string;
+}
+
+export interface RejectedArticlesTable {
+  id: number;
+  rss_source_id: number | null;
+  journal_id: number | null;
+  keyword_id: number | null;
+  email_source_id: number | null;
+  title: string;
+  title_normalized: string | null;
+  url: string;
+  summary: string | null;
+  content: string | null;
+  markdown_content: string | null;
+  filter_status: string | null;
+  filter_score: number | null;
+  filtered_at: string | null;
+  process_status: string | null;
+  process_stages: string | null;
+  processed_at: string | null;
+  published_at: string | null;
+  published_year: number | null;
+  published_issue: number | null;
+  published_volume: number | null;
+  error_message: string | null;
+  is_read: number | null;
+  source_origin: string | null;
+  rating: number | null;
+  ai_summary: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  filter_logs_data: string | null;
+  translation_data: string | null;
+  process_logs_data: string | null;
+  related_data: string | null;
+  source_name: string | null;
+  moved_at: string | null;
 }
 
 export interface EmailFetchLogsTable {
@@ -383,6 +425,7 @@ export type KeywordCrawlLogsSelection = SelectionType<KeywordCrawlLogsTable>;
 export type TelegramChatsSelection = SelectionType<TelegramChatsTable>;
 export type DeepSearchTasksSelection = SelectionType<DeepSearchTasksTable>;
 export type EmailFetchLogsSelection = SelectionType<EmailFetchLogsTable>;
+export type RejectedArticlesSelection = SelectionType<RejectedArticlesTable>;
 
 let _db: DB | null = null;
 

@@ -13,6 +13,7 @@ export interface CreateEmailSourceInput {
   targetSenders: string[];
   status?: 'active' | 'inactive';
   domainId?: number;
+  autoCleanupRejected?: boolean;
 }
 
 export interface UpdateEmailSourceInput {
@@ -22,6 +23,7 @@ export interface UpdateEmailSourceInput {
   targetSenders?: string[];
   status?: 'active' | 'inactive';
   domainId?: number;
+  autoCleanupRejected?: boolean;
 }
 
 function encryptPassword(password: string): string {
@@ -74,6 +76,7 @@ export async function createEmailSource(userId: number, input: CreateEmailSource
       imap_password_encrypted: encrypted,
       target_senders: JSON.stringify(input.targetSenders),
       domain_id: domainId,
+      auto_cleanup_rejected: input.autoCleanupRejected ? 1 : 0,
       status: input.status || 'active',
       updated_at: new Date().toISOString(),
     } as any)
@@ -94,6 +97,7 @@ export async function updateEmailSource(id: number, userId: number, input: Updat
   if (input.targetSenders !== undefined) updateData.target_senders = JSON.stringify(input.targetSenders);
   if (input.status !== undefined) updateData.status = input.status;
   if (input.domainId !== undefined) updateData.domain_id = input.domainId;
+  if (input.autoCleanupRejected !== undefined) updateData.auto_cleanup_rejected = input.autoCleanupRejected ? 1 : 0;
 
   const result = await db
     .updateTable('email_sources')

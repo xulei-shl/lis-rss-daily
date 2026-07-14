@@ -82,7 +82,7 @@ router.get('/journals/:id', requireAuth, async (req: AuthRequest, res) => {
  */
 router.post('/journals', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const { name, sourceType, sourceUrl, journalCode, publicationCycle, issuesPerYear, volumeOffset, domainId } = req.body;
+    const { name, sourceType, sourceUrl, journalCode, publicationCycle, issuesPerYear, volumeOffset, domainId, autoCleanupRejected } = req.body;
 
     // 验证必填字段
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -132,6 +132,7 @@ router.post('/journals', requireAuth, requireAdmin, async (req: AuthRequest, res
       issuesPerYear,
       volumeOffset,
       domainId: domainId ? parseInt(domainId) : undefined,
+      autoCleanupRejected: autoCleanupRejected !== undefined ? Boolean(autoCleanupRejected) : undefined,
     });
 
     res.status(201).json(journal);
@@ -157,7 +158,7 @@ router.put('/journals/:id', requireAuth, requireAdmin, async (req: AuthRequest, 
       return res.status(400).json({ error: 'Invalid journal ID' });
     }
 
-    const { name, sourceUrl, journalCode, publicationCycle, issuesPerYear, volumeOffset, status, domainId } = req.body;
+    const { name, sourceUrl, journalCode, publicationCycle, issuesPerYear, volumeOffset, status, domainId, autoCleanupRejected } = req.body;
 
     const updateData: journalsService.UpdateJournalParams = {};
 
@@ -216,6 +217,10 @@ router.put('/journals/:id', requireAuth, requireAdmin, async (req: AuthRequest, 
       if (!isNaN(parsed)) {
         updateData.domainId = parsed;
       }
+    }
+
+    if (autoCleanupRejected !== undefined) {
+      updateData.autoCleanupRejected = Boolean(autoCleanupRejected);
     }
 
     const journal = await journalsService.updateJournal(req.userId!, id, updateData);

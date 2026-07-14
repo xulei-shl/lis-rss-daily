@@ -24,6 +24,7 @@ export interface CreateKeywordParams {
   numResults?: number;
   isActive?: boolean;
   domainId?: number;
+  autoCleanupRejected?: boolean;
 }
 
 /**
@@ -37,6 +38,7 @@ export interface UpdateKeywordParams {
   numResults?: number;
   isActive?: boolean;
   domainId?: number;
+  autoCleanupRejected?: boolean;
 }
 
 /**
@@ -186,6 +188,7 @@ export async function createKeyword(params: CreateKeywordParams): Promise<Keywor
       year_start: yearStart || null,
       year_end: yearEnd || null,
       domain_id: resolvedDomainId,
+      auto_cleanup_rejected: params.autoCleanupRejected ? 1 : 0,
       spider_type: spiderType,
       num_results: numResults,
       is_active: isActive ? 1 : 0,
@@ -244,6 +247,10 @@ export async function updateKeyword(userId: number, keywordId: number, params: U
 
   if (params.domainId !== undefined) {
     updateData.domain_id = params.domainId;
+  }
+
+  if (params.autoCleanupRejected !== undefined) {
+    updateData.auto_cleanup_rejected = params.autoCleanupRejected ? 1 : 0;
   }
 
   // 执行更新

@@ -17,6 +17,7 @@ import { initDailySummaryScheduler } from './daily-summary-scheduler.js';
 import { initInsightsScheduler } from './insights-scheduler.js';
 import { initTelegramBotManager } from './telegram/bot-manager.js';
 import { initGmailScheduler } from './gmail-scheduler.js';
+import { initRejectedCleanupScheduler } from './rejected-cleanup-scheduler.js';
 import { config } from './config.js';
 import { createApp, startServer } from './api/web.js';
 import path from 'path';
@@ -48,6 +49,8 @@ async function main() {
     insightsIntervalDays: config.insightsIntervalDays,
     gmailFetchEnabled: config.gmailFetchEnabled,
     gmailFetchSchedule: config.gmailFetchSchedule,
+    rejectedCleanupEnabled: config.rejectedCleanupEnabled,
+    rejectedCleanupSchedule: config.rejectedCleanupSchedule,
   }, 'Configuration loaded');
 
   // Initialize database
@@ -133,6 +136,15 @@ async function main() {
     log.info('💡 Insights scheduler disabled');
   }
 
+  // Initialize and start Rejected Article Cleanup Scheduler
+  const rejectedCleanupScheduler = initRejectedCleanupScheduler();
+  if (config.rejectedCleanupEnabled) {
+    rejectedCleanupScheduler.start();
+    log.info(`🗑️ Rejected article cleanup scheduler started (schedule: ${config.rejectedCleanupSchedule})`);
+  } else {
+    log.info('🗑️ Rejected article cleanup scheduler disabled');
+  }
+
   // Initialize and start Gmail Email Scheduler
   const gmailScheduler = initGmailScheduler();
   if (config.gmailFetchEnabled) {
@@ -180,6 +192,10 @@ async function main() {
     // Stop insights scheduler
     await insightsScheduler.stop();
     log.info('💡 Insights scheduler stopped');
+
+    // Stop rejected cleanup scheduler
+    await rejectedCleanupScheduler.stop();
+    log.info('🗑️ Rejected article cleanup scheduler stopped');
 
     // Stop Gmail scheduler
     await gmailScheduler.stop();

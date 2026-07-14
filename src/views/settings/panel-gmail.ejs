@@ -77,6 +77,13 @@
         <option value="">加载中...</option>
       </select>
     </div>
+    <div class="form-group">
+      <label>
+        <input type="checkbox" id="gmailAutoCleanup" />
+        <span>自动清理拒绝文章</span>
+      </label>
+      <small style="color:#666; display: block; margin-top: 4px; margin-left: 24px;">开启后，调度器会将此邮件源下被 LLM 过滤拒绝的文章自动迁移到归档表。</small>
+    </div>
     <div class="form-actions">
       <button class="btn btn-secondary" onclick="testGmailConnection()">🔌 测试连接</button>
       <button class="btn btn-primary" onclick="saveGmailSource()">保存</button>
@@ -142,6 +149,7 @@ function showGmailAddModal() {
   document.getElementById('gmailPassword').value = '';
   document.getElementById('gmailSenders').value = '';
   document.getElementById('gmailStatus').value = 'active';
+  document.getElementById('gmailAutoCleanup').checked = false;
   document.getElementById('gmailTestResult').innerHTML = '';
   renderDomainSelect('gmailDomainId', '');
   document.getElementById('gmailModal').classList.add('active');
@@ -163,13 +171,14 @@ async function editGmailSource(id) {
     document.getElementById('gmailEmail').value = source.email_address || '';
     document.getElementById('gmailPassword').value = '';
     document.getElementById('gmailSenders').value = (JSON.parse(source.target_senders || '[]')).join('\n');
-    document.getElementById('gmailStatus').value = source.status || 'active';
-    document.getElementById('gmailTestResult').innerHTML = '';
-    renderDomainSelect('gmailDomainId', source.domain_id);
-    document.getElementById('gmailModal').classList.add('active');
-  } catch (err) {
-    alert('加载邮件源失败');
-  }
+  document.getElementById('gmailStatus').value = source.status || 'active';
+  document.getElementById('gmailAutoCleanup').checked = source.auto_cleanup_rejected === 1 || source.auto_cleanup_rejected === true;
+  document.getElementById('gmailTestResult').innerHTML = '';
+  renderDomainSelect('gmailDomainId', source.domain_id);
+  document.getElementById('gmailModal').classList.add('active');
+} catch (err) {
+  alert('加载邮件源失败');
+}
 }
 
 function getSendersArray() {
@@ -221,7 +230,11 @@ async function saveGmailSource() {
     return;
   }
 
-  const body = { name, emailAddress: email, targetSenders: senders, status, domainId: parseInt(document.getElementById('gmailDomainId').value) || undefined };
+  const body = {
+    name, emailAddress: email, targetSenders: senders, status,
+    domainId: parseInt(document.getElementById('gmailDomainId').value) || undefined,
+    autoCleanupRejected: document.getElementById('gmailAutoCleanup').checked
+  };
 
   if (password) {
     body.imapPassword = password;

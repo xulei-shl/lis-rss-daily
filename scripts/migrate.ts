@@ -846,6 +846,22 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
         continue;
       }
 
+      // ============================================================
+      // 038: 添加自动清理拒绝文章的字段和归档表
+      // ============================================================
+      if (file === '038_add_auto_cleanup_rejected.sql') {
+        const hasAutoCleanup = hasColumn(db, 'rss_sources', 'auto_cleanup_rejected');
+        if (!hasAutoCleanup) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log('      → Added auto_cleanup_rejected to rss_sources, journals, keyword_subscriptions, email_sources');
+          console.log('      → Created rejected_articles archive table');
+        } else {
+          console.log('      → Skipped (auto_cleanup_rejected already exists)');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }
