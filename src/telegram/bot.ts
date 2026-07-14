@@ -714,10 +714,8 @@ export class TelegramBot {
    */
   private async handleGetArticlesByDate(command: GetArticlesDateCommand, chatId: string): Promise<void> {
     const { year, month, day, includeAll } = command;
-    // Format date string (YYYY-MM-DD)
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
-    // Query articles for the specific date
     const result = await getUserArticles(this.userId, {
       createdAfter: dateStr,
       createdBefore: dateStr,
@@ -728,24 +726,103 @@ export class TelegramBot {
       randomOrder: true,
     });
 
-    const articles = result.articles;
+    const statusText = includeAll ? '所有' : '未读';
+    await this.sendArticleBatch(result.articles, chatId, {
+      summaryMessage: `📚 找到 ${result.articles.length} 篇${year}年${month}月${day}日的${statusText}文章：`,
+      emptyMessage: `📭 ${year}年${month}月${day}日没有符合条件的${statusText}文章`,
+      logLabel: '/getarticles command',
+      logContext: { year, month, day },
+    });
+  }
 
-    if (articles.length === 0) {
-      const statusText = includeAll ? '所有' : '未读';
-      await this.client.sendMessage(chatId,
-        `📭 ${year}年${month}月${day}日没有符合条件的${statusText}文章`);
+  /**
+   * Handle /getarticles command by source name
+   */
+  private async handleGetArticlesBySource(command: GetArticlesSourceCommand, chatId: string): Promise<void> {
+    const { name, includeAll } = command;
+    const sources = await this.getSources();
+    const matchedSource = this.matchSourceName(name, sources);
+
+    // Fallback: if no source matched, treat as keyword search
+    if (!matchedSource) {
+      await this.handleGetArticlesBySearch(name, chatId, includeAll);
       return;
     }
 
-    // Send summary
+    // Build query parameters
+    const queryParams: any = {
+      isRead: includeAll ? undefined : false,
+      filterStatus: 'passed',
+      limit: 5,
+      page: 1,
+      randomOrder: true,
+    };
+
+    if (matchedSource.rssIds) queryParams.rssSourceIds = matchedSource.rssIds;
+    if (matchedSource.journalIds) queryParams.journalIds = matchedSource.journalIds;
+    if (matchedSource.keywordIds) queryParams.keywordIds = matchedSource.keywordIds;
+
+    const result = await getUserArticles(this.userId, queryParams);
+
     const statusText = includeAll ? '所有' : '未读';
-    await this.client.sendMessage(chatId,
-      `📚 找到 ${articles.length} 篇${year}年${month}月${day}日的${statusText}文章：`);
+    await this.sendArticleBatch(result.articles, chatId, {
+      summaryMessage: `📚 找到 ${result.articles.length} 篇来自 "${this.escapeHtml(matchedSource.name)}" 的${statusText}文章：`,
+      emptyMessage: `📭 来源 "${this.escapeHtml(matchedSource.name)}" 没有符合条件的${statusText}文章`,
+      logLabel: '/getarticles command by source',
+      logContext: { sourceName: matchedSource.name },
+    });
+  }
+
+/**
+ * Handle /getarticles command by keyword search
+ * (fallback when source name is not found)
+ */
+private async handleGetArticlesBySearch(keyword: string, chatId: string, includeAll?: boolean): Promise<void> {
+  const queryParams: any = {
+    search: keyword,
+    isRead: includeAll ? undefined : false,
+    filterStatus: 'passed',
+    limit: 5,
+    page: 1,
+    randomOrder: true,
+    skipDaysFilterForSearch: true,  // Skip time filter for full-text search
+  };
+
+  const result = await getUserArticles(this.userId, queryParams);
+
+  const statusText = includeAll ? '所有' : '未读';
+  await this.sendArticleBatch(result.articles, chatId, {
+    summaryMessage: `🔍 关键词 "${this.escapeHtml(keyword)}" 找到 ${result.articles.length} 篇${statusText}文章：`,
+    emptyMessage: `📭 关键词 "${this.escapeHtml(keyword)}" 没有找到符合条件的${statusText}文章`,
+    logLabel: '/getarticles command by keyword search',
+    logContext: { keyword },
+  });
+}
+
+  /**
+   * Send a batch of articles to a chat.
+   * Extracted to deduplicate code across handleGetArticlesByDate/Source/Search.
+   */
+  private async sendArticleBatch(
+    articles: any[],
+    chatId: string,
+    options: {
+      summaryMessage: string;
+      emptyMessage: string;
+      logLabel: string;
+      logContext?: Record<string, any>;
+    }
+  ): Promise<void> {
+    if (articles.length === 0) {
+      await this.client.sendMessage(chatId, options.emptyMessage);
+      return;
+    }
+
+    await this.client.sendMessage(chatId, options.summaryMessage);
 
     let sentCount = 0;
     let failedCount = 0;
 
-    // Send articles with delay to avoid rate limits
     for (const article of articles) {
       let formattedMessage = '';
 
@@ -793,218 +870,20 @@ export class TelegramBot {
           chatId,
           parseMode: 'HTML',
           messageLength: formattedMessage.length,
-        }, 'Failed to send article via /getarticles');
+          ...options.logContext,
+        }, `Failed to send article via ${options.logLabel}`);
         // Continue with next article instead of stopping
       }
     }
 
     // Log result
-    log.info({ userId: this.userId, year, month, day, sentCount, failedCount, chatId },
-      'Sent articles via /getarticles command');
-
-    // Notify user if some articles failed to send
-    if (failedCount > 0) {
-      await this.client.sendMessage(chatId,
-        `⚠️ ${failedCount} 篇文章发送失败，请查看日志了解详情`);
-    }
-  }
-
-  /**
-   * Handle /getarticles command by source name
-   */
-  private async handleGetArticlesBySource(command: GetArticlesSourceCommand, chatId: string): Promise<void> {
-    const { name, includeAll } = command;
-    const sources = await this.getSources();
-    const matchedSource = this.matchSourceName(name, sources);
-
-    // Fallback: if no source matched, treat as keyword search
-    if (!matchedSource) {
-      await this.handleGetArticlesBySearch(name, chatId, includeAll);
-      return;
-    }
-
-    // Build query parameters
-    const queryParams: any = {
-      isRead: includeAll ? undefined : false,
-      filterStatus: 'passed',
-      limit: 5,
-      page: 1,
-      randomOrder: true,
-    };
-
-    if (matchedSource.rssIds) queryParams.rssSourceIds = matchedSource.rssIds;
-    if (matchedSource.journalIds) queryParams.journalIds = matchedSource.journalIds;
-    if (matchedSource.keywordIds) queryParams.keywordIds = matchedSource.keywordIds;
-
-    const result = await getUserArticles(this.userId, queryParams);
-
-    if (result.articles.length === 0) {
-      const statusText = includeAll ? '所有' : '未读';
-      await this.client.sendMessage(chatId,
-        `📭 来源 "${this.escapeHtml(matchedSource.name)}" 没有符合条件的${statusText}文章`);
-      return;
-    }
-
-    const statusText = includeAll ? '所有' : '未读';
-    await this.client.sendMessage(chatId,
-      `📚 找到 ${result.articles.length} 篇来自 "${this.escapeHtml(matchedSource.name)}" 的${statusText}文章：`);
-
-    let sentCount = 0;
-    let failedCount = 0;
-
-    // Send articles with delay to avoid rate limits
-    for (const article of result.articles) {
-      let formattedMessage = '';
-
-      try {
-        // Use translated summary if available, otherwise use original summary or content
-        // Priority: summary_zh > summary > markdown_content > content
-        let summary = article.summary_zh || article.summary || undefined;
-        if (!summary && (article.markdown_content || article.content)) {
-          summary = article.markdown_content || article.content || undefined;
-          // Truncate content if too long (max 500 chars for preview)
-          if (summary && summary.length > 500) {
-            summary = summary.substring(0, 500) + '...';
-          }
-        }
-
-        formattedMessage = formatNewArticle({
-          id: article.id,
-          title: article.title,
-          url: article.url,
-          sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
-          sourceType: article.source_origin === 'journal' ? '期刊文章' :
-                      article.source_origin === 'keyword' ? '关键词订阅' :
-                      article.source_origin === 'email' ? '邮件订阅' : 'RSS订阅',
-          summary,
-          aiSummary: this.getTelegramAiSummary(article.ai_summary),
-        });
-
-        const keyboard = createArticleKeyboard(
-          article.id,
-          article.is_read === 1,
-          article.rating
-        );
-
-        await this.client.sendMessageWithKeyboard(chatId, formattedMessage, keyboard, 'HTML');
-        sentCount++;
-
-        // Rate limiting: 1 second between messages
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } catch (error) {
-        failedCount++;
-        log.error({
-          error: serializeError(error),
-          articleId: article.id,
-          title: article.title,
-          chatId,
-          parseMode: 'HTML',
-          messageLength: formattedMessage.length,
-          sourceName: matchedSource.name,
-        }, 'Failed to send article via /getarticles by source');
-        // Continue with next article instead of stopping
-      }
-    }
-
-    // Log result
-    log.info({ userId: this.userId, sourceName: matchedSource.name, sentCount, failedCount, chatId },
-      'Sent articles via /getarticles command by source');
-
-    // Notify user if some articles failed to send
-    if (failedCount > 0) {
-      await this.client.sendMessage(chatId,
-        `⚠️ ${failedCount} 篇文章发送失败，请查看日志了解详情`);
-    }
-  }
-
-/**
- * Handle /getarticles command by keyword search
- * (fallback when source name is not found)
- */
-private async handleGetArticlesBySearch(keyword: string, chatId: string, includeAll?: boolean): Promise<void> {
-  const queryParams: any = {
-    search: keyword,
-    isRead: includeAll ? undefined : false,
-    filterStatus: 'passed',
-    limit: 5,
-    page: 1,
-    randomOrder: true,
-    skipDaysFilterForSearch: true,  // Skip time filter for full-text search
-  };
-
-  const result = await getUserArticles(this.userId, queryParams);
-
-  if (result.articles.length === 0) {
-    const statusText = includeAll ? '所有' : '未读';
-    await this.client.sendMessage(chatId,
-      `📭 关键词 "${this.escapeHtml(keyword)}" 没有找到符合条件的${statusText}文章`);
-    return;
-  }
-
-  const statusText = includeAll ? '所有' : '未读';
-  await this.client.sendMessage(chatId,
-    `🔍 关键词 "${this.escapeHtml(keyword)}" 找到 ${result.articles.length} 篇${statusText}文章：`);
-
-    let sentCount = 0;
-    let failedCount = 0;
-
-    // Send articles with delay to avoid rate limits
-    for (const article of result.articles) {
-      let formattedMessage = '';
-
-      try {
-        // Use translated summary if available, otherwise use original summary or content
-        // Priority: summary_zh > summary > markdown_content > content
-        let summary = article.summary_zh || article.summary || undefined;
-        if (!summary && (article.markdown_content || article.content)) {
-          summary = article.markdown_content || article.content || undefined;
-          // Truncate content if too long (max 500 chars for preview)
-          if (summary && summary.length > 500) {
-            summary = summary.substring(0, 500) + '...';
-          }
-        }
-
-        formattedMessage = formatNewArticle({
-          id: article.id,
-          title: article.title,
-          url: article.url,
-          sourceName: article.source_name || article.rss_source_name || article.journal_name || 'Unknown',
-          sourceType: article.source_origin === 'journal' ? '期刊文章' :
-                      article.source_origin === 'keyword' ? '关键词订阅' :
-                      article.source_origin === 'email' ? '邮件订阅' : 'RSS订阅',
-          summary,
-          aiSummary: this.getTelegramAiSummary(article.ai_summary),
-        });
-
-        const keyboard = createArticleKeyboard(
-          article.id,
-          article.is_read === 1,
-          article.rating
-        );
-
-        await this.client.sendMessageWithKeyboard(chatId, formattedMessage, keyboard, 'HTML');
-        sentCount++;
-
-        // Rate limiting: 1 second between messages
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } catch (error) {
-        failedCount++;
-        log.error({
-          error: serializeError(error),
-          articleId: article.id,
-          title: article.title,
-          chatId,
-          parseMode: 'HTML',
-          messageLength: formattedMessage.length,
-          keyword,
-        }, 'Failed to send article via /getarticles by search');
-        // Continue with next article instead of stopping
-      }
-    }
-
-    // Log result
-    log.info({ userId: this.userId, keyword, sentCount, failedCount, chatId },
-      'Sent articles via /getarticles command by keyword search');
+    log.info({
+      userId: this.userId,
+      sentCount,
+      failedCount,
+      chatId,
+      ...options.logContext,
+    }, `Sent articles via ${options.logLabel}`);
 
     // Notify user if some articles failed to send
     if (failedCount > 0) {

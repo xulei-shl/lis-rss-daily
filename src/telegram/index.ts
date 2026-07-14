@@ -9,7 +9,7 @@
 import { logger } from '../logger.js';
 import { TelegramClient } from './client.js';
 import { formatDailySummary, formatNewArticle, formatPdfSummary, createArticleKeyboard } from './formatters.js';
-import type { TelegramConfig, DailySummaryData, PdfSummaryNotificationData } from './types.js';
+import type { TelegramConfig, DailySummaryData, PdfSummaryNotificationData, TelegramMessageResponse, InlineKeyboardMarkup } from './types.js';
 import { getUserSettings } from '../api/settings.js';
 import type { ArticleWithSource } from '../api/articles.js';
 import {
@@ -123,60 +123,17 @@ class TelegramNotifier {
     }
 
     const config = await loadTelegramConfig(userId);
+    if (!config) return false;
 
-    if (!config) {
-      log.debug({ userId }, 'Telegram not configured, skipping daily summary');
-      return false;
-    }
-
-    // Get all chats that should receive daily summary
     const chats = await this.getDailySummaryChatsByType(userId, data.type);
+    if (chats.length === 0) return false;
 
-    if (chats.length === 0) {
-      log.debug({ userId }, 'No chats configured for daily summary');
-      return false;
-    }
-
-    const client = new TelegramClient(config.botToken);
     const message = formatDailySummary(data);
-
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const chat of chats) {
-      try {
-        const result = await client.sendMessage(chat.chatId, message, 'HTML');
-
-        if (result.ok) {
-          successCount++;
-          log.info({
-            userId,
-            chatId: chat.chatId,
-            chatName: chat.chatName,
-            date: data.date,
-            type: data.type,
-            articleCount: data.totalArticles,
-            messageId: result.result?.message_id,
-          }, 'Daily summary sent to Telegram');
-        } else {
-          failCount++;
-          log.warn({
-            userId,
-            chatId: chat.chatId,
-            error: result.description,
-          }, 'Failed to send daily summary to Telegram');
-        }
-      } catch (error) {
-        failCount++;
-        log.error({
-          userId,
-          chatId: chat.chatId,
-          error: error instanceof Error ? error.message : String(error),
-        }, 'Failed to send daily summary to Telegram');
-      }
-    }
-
-    return successCount > 0;
+    return this.sendToChats(userId, config, chats, message, {
+      parseMode: 'HTML',
+      logLabel: 'Daily summary',
+      logContext: { date: data.date, type: data.type, articleCount: data.totalArticles },
+    });
   }
 
   /**
@@ -190,21 +147,11 @@ class TelegramNotifier {
     }
 
     const config = await loadTelegramConfig(userId);
+    if (!config) return false;
 
-    if (!config) {
-      log.debug({ userId }, 'Telegram not configured, skipping journal all summary');
-      return false;
-    }
-
-    // Get all chats that should receive journal all summary
     const chats = await getJournalAllChats(userId);
+    if (chats.length === 0) return false;
 
-    if (chats.length === 0) {
-      log.debug({ userId }, 'No chats configured for journal all summary');
-      return false;
-    }
-
-    const client = new TelegramClient(config.botToken);
     const message = formatDailySummary({
       date: data.date,
       type: 'journal_all',
@@ -213,42 +160,11 @@ class TelegramNotifier {
       articlesByType: data.articlesByType,
     });
 
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const chat of chats) {
-      try {
-        const result = await client.sendMessage(chat.chatId, message, 'HTML');
-
-        if (result.ok) {
-          successCount++;
-          log.info({
-            userId,
-            chatId: chat.chatId,
-            chatName: chat.chatName,
-            date: data.date,
-            articleCount: data.totalArticles,
-            messageId: result.result?.message_id,
-          }, 'Journal all summary sent to Telegram');
-        } else {
-          failCount++;
-          log.warn({
-            userId,
-            chatId: chat.chatId,
-            error: result.description,
-          }, 'Failed to send journal all summary to Telegram');
-        }
-      } catch (error) {
-        failCount++;
-        log.error({
-          userId,
-          chatId: chat.chatId,
-          error: error instanceof Error ? error.message : String(error),
-        }, 'Failed to send journal all summary to Telegram');
-      }
-    }
-
-    return successCount > 0;
+    return this.sendToChats(userId, config, chats, message, {
+      parseMode: 'HTML',
+      logLabel: 'Journal all summary',
+      logContext: { date: data.date, articleCount: data.totalArticles },
+    });
   }
 
   /**
@@ -262,20 +178,11 @@ class TelegramNotifier {
     }
 
     const config = await loadTelegramConfig(userId);
-
-    if (!config) {
-      log.debug({ userId }, 'Telegram not configured, skipping insights summary');
-      return false;
-    }
+    if (!config) return false;
 
     const chats = await getInsightsChats(userId);
+    if (chats.length === 0) return false;
 
-    if (chats.length === 0) {
-      log.debug({ userId }, 'No chats configured for insights summary');
-      return false;
-    }
-
-    const client = new TelegramClient(config.botToken);
     const message = formatDailySummary({
       date: data.date,
       type: 'insights',
@@ -284,42 +191,11 @@ class TelegramNotifier {
       articlesByType: data.articlesByType,
     });
 
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const chat of chats) {
-      try {
-        const result = await client.sendMessage(chat.chatId, message, 'HTML');
-
-        if (result.ok) {
-          successCount++;
-          log.info({
-            userId,
-            chatId: chat.chatId,
-            chatName: chat.chatName,
-            date: data.date,
-            articleCount: data.totalArticles,
-            messageId: result.result?.message_id,
-          }, 'Insights summary sent to Telegram');
-        } else {
-          failCount++;
-          log.warn({
-            userId,
-            chatId: chat.chatId,
-            error: result.description,
-          }, 'Failed to send insights summary to Telegram');
-        }
-      } catch (error) {
-        failCount++;
-        log.error({
-          userId,
-          chatId: chat.chatId,
-          error: error instanceof Error ? error.message : String(error),
-        }, 'Failed to send insights summary to Telegram');
-      }
-    }
-
-    return successCount > 0;
+    return this.sendToChats(userId, config, chats, message, {
+      parseMode: 'HTML',
+      logLabel: 'Insights summary',
+      logContext: { date: data.date, articleCount: data.totalArticles },
+    });
   }
 
   /**
@@ -400,28 +276,15 @@ class TelegramNotifier {
    */
   async sendNewArticle(userId: number, article: ArticleWithSource): Promise<boolean> {
     const config = await loadTelegramConfig(userId);
+    if (!config) return false;
 
-    if (!config) {
-      log.debug({ userId }, 'Telegram not configured, skipping new article notification');
-      return false;
-    }
-
-    // Get all chats that should receive new articles
     const chats = await getNewArticlesChats(userId);
+    if (chats.length === 0) return false;
 
-    if (chats.length === 0) {
-      log.debug({ userId }, 'No chats configured for new articles');
-      return false;
-    }
-
-    const client = new TelegramClient(config.botToken);
-
-    // Use translated summary if available, otherwise use original summary or content
-    // Priority: summary_zh > summary > markdown_content > content
+    // Build summary from article
     let summary = article.summary_zh || article.summary || undefined;
     if (!summary && (article.markdown_content || article.content)) {
       summary = article.markdown_content || article.content || undefined;
-      // Truncate content if too long (max 500 chars for preview)
       if (summary && summary.length > 500) {
         summary = summary.substring(0, 500) + '...';
       }
@@ -438,51 +301,14 @@ class TelegramNotifier {
       summary,
     });
 
-    // Create inline keyboard for article actions
-    const keyboard = createArticleKeyboard(
-      article.id,
-      article.is_read === 1,
-      article.rating
-    );
+    const keyboard = createArticleKeyboard(article.id, article.is_read === 1, article.rating);
 
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const chat of chats) {
-      try {
-        const result = await client.sendMessageWithKeyboard(chat.chatId, message, keyboard, 'HTML');
-
-        if (result.ok) {
-          successCount++;
-          log.info({
-            userId,
-            chatId: chat.chatId,
-            chatName: chat.chatName,
-            articleId: article.id,
-            title: article.title,
-            messageId: result.result?.message_id,
-          }, 'New article sent to Telegram');
-        } else {
-          failCount++;
-          log.warn({
-            userId,
-            chatId: chat.chatId,
-            articleId: article.id,
-            error: result.description,
-          }, 'Failed to send new article to Telegram');
-        }
-      } catch (error) {
-        failCount++;
-        log.error({
-          userId,
-          chatId: chat.chatId,
-          articleId: article.id,
-          error: error instanceof Error ? error.message : String(error),
-        }, 'Failed to send new article to Telegram');
-      }
-    }
-
-    return successCount > 0;
+    return this.sendToChats(userId, config, chats, message, {
+      parseMode: 'HTML',
+      keyboard,
+      logLabel: 'New article',
+      logContext: { articleId: article.id, title: article.title },
+    });
   }
 
   /**
@@ -490,27 +316,46 @@ class TelegramNotifier {
    */
   async sendPdfSummary(userId: number, data: PdfSummaryNotificationData): Promise<boolean> {
     const config = await loadTelegramConfig(userId);
-
-    if (!config) {
-      log.debug({ userId }, 'Telegram not configured, skipping PDF summary notification');
-      return false;
-    }
+    if (!config) return false;
 
     const chats = await getPdfSummaryChats(userId);
+    if (chats.length === 0) return false;
 
-    if (chats.length === 0) {
-      log.debug({ userId }, 'No chats configured for PDF summary');
-      return false;
-    }
-
-    const client = new TelegramClient(config.botToken);
     const message = formatPdfSummary(data);
+    return this.sendToChats(userId, config, chats, message, {
+      logLabel: 'PDF summary',
+      logContext: { articleId: data.articleId, title: data.title },
+    });
+  }
 
+  /**
+   * Send a formatted message to multiple Telegram chats.
+   * Extracted to deduplicate the send-loop pattern across all send* methods.
+   */
+  private async sendToChats(
+    userId: number,
+    config: TelegramConfig,
+    chats: TelegramChatConfig[],
+    message: string,
+    options?: {
+      keyboard?: InlineKeyboardMarkup;
+      parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2';
+      logLabel?: string;
+      logContext?: Record<string, any>;
+    }
+  ): Promise<boolean> {
+    const client = new TelegramClient(config.botToken);
     let successCount = 0;
+    let failCount = 0;
 
     for (const chat of chats) {
       try {
-        const result = await client.sendMessage(chat.chatId, message);
+        let result: TelegramMessageResponse;
+        if (options?.keyboard) {
+          result = await client.sendMessageWithKeyboard(chat.chatId, message, options.keyboard, options.parseMode as 'HTML' | undefined);
+        } else {
+          result = await client.sendMessage(chat.chatId, message, options?.parseMode);
+        }
 
         if (result.ok) {
           successCount++;
@@ -518,25 +363,26 @@ class TelegramNotifier {
             userId,
             chatId: chat.chatId,
             chatName: chat.chatName,
-            articleId: data.articleId,
-            title: data.title,
+            ...options?.logContext,
             messageId: result.result?.message_id,
-          }, 'PDF summary sent to Telegram');
+          }, `${options?.logLabel || 'Message'} sent to Telegram`);
         } else {
+          failCount++;
           log.warn({
             userId,
             chatId: chat.chatId,
-            articleId: data.articleId,
             error: result.description,
-          }, 'Failed to send PDF summary to Telegram');
+            ...options?.logContext,
+          }, `Failed to send ${options?.logLabel || 'message'} to Telegram`);
         }
       } catch (error) {
+        failCount++;
         log.error({
           userId,
           chatId: chat.chatId,
-          articleId: data.articleId,
           error: error instanceof Error ? error.message : String(error),
-        }, 'Failed to send PDF summary to Telegram');
+          ...options?.logContext,
+        }, `Failed to send ${options?.logLabel || 'message'} to Telegram`);
       }
     }
 

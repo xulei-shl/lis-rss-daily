@@ -72,57 +72,15 @@ class WeChatNotifier {
       log.debug({ userId, type: data.type }, 'Unsupported daily summary type for WeChat push');
       return false;
     }
-    const webhooks = getWebhooksForDailySummaryType(data.type);
 
-    if (webhooks.length === 0) {
-      log.debug({ userId }, 'No WeChat webhooks configured for daily summary');
-      return false;
-    }
+    const webhooks = getWebhooksForDailySummaryType(data.type);
+    if (webhooks.length === 0) return false;
 
     const message = formatDailySummary(data);
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const webhook of webhooks) {
-      try {
-        const client = new WeChatClient(webhook.url);
-        const success = await client.sendMarkdown(message);
-
-        if (success) {
-          successCount++;
-          log.info(
-            {
-              userId,
-              webhookId: webhook.id,
-              webhookName: webhook.name,
-              date: data.date,
-              type: data.type,
-              articleCount: data.totalArticles,
-            },
-            'Daily summary sent to WeChat'
-          );
-        } else {
-          failCount++;
-          log.warn(
-            { userId, webhookId: webhook.id, webhookName: webhook.name },
-            'Failed to send daily summary to WeChat'
-          );
-        }
-      } catch (error) {
-        failCount++;
-        log.error(
-          {
-            userId,
-            webhookId: webhook.id,
-            webhookName: webhook.name,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          'Failed to send daily summary to WeChat'
-        );
-      }
-    }
-
-    return successCount > 0;
+    return this.sendToWebhooks(webhooks, message, {
+      logLabel: 'Daily summary',
+      logContext: { userId, date: data.date, type: data.type, articleCount: data.totalArticles },
+    });
   }
 
   /**
@@ -144,55 +102,13 @@ class WeChatNotifier {
     }
 
     const webhooks = getWebhooksForPushType('journal_all');
-
-    if (webhooks.length === 0) {
-      log.debug({ userId }, 'No WeChat webhooks configured for journal all summary');
-      return false;
-    }
+    if (webhooks.length === 0) return false;
 
     const message = formatJournalAllSummary(data);
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const webhook of webhooks) {
-      try {
-        const client = new WeChatClient(webhook.url);
-        const success = await client.sendMarkdown(message);
-
-        if (success) {
-          successCount++;
-          log.info(
-            {
-              userId,
-              webhookId: webhook.id,
-              webhookName: webhook.name,
-              date: data.date,
-              articleCount: data.totalArticles,
-            },
-            'Journal all summary sent to WeChat'
-          );
-        } else {
-          failCount++;
-          log.warn(
-            { userId, webhookId: webhook.id, webhookName: webhook.name },
-            'Failed to send journal all summary to WeChat'
-          );
-        }
-      } catch (error) {
-        failCount++;
-        log.error(
-          {
-            userId,
-            webhookId: webhook.id,
-            webhookName: webhook.name,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          'Failed to send journal all summary to WeChat'
-        );
-      }
-    }
-
-    return successCount > 0;
+    return this.sendToWebhooks(webhooks, message, {
+      logLabel: 'Journal all summary',
+      logContext: { userId, date: data.date, articleCount: data.totalArticles },
+    });
   }
 
   /**
@@ -215,56 +131,13 @@ class WeChatNotifier {
     }
 
     const webhooks = getWebhooksForPushType('insights');
-
-    if (webhooks.length === 0) {
-      log.debug({ userId }, 'No WeChat webhooks configured for insights summary');
-      return false;
-    }
+    if (webhooks.length === 0) return false;
 
     const message = formatDailySummary(data);
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const webhook of webhooks) {
-      try {
-        const client = new WeChatClient(webhook.url);
-        const success = await client.sendMarkdown(message);
-
-        if (success) {
-          successCount++;
-          log.info(
-            {
-              userId,
-              webhookId: webhook.id,
-              webhookName: webhook.name,
-              date: data.date,
-              type: data.type,
-              articleCount: data.totalArticles,
-            },
-            'Insights summary sent to WeChat'
-          );
-        } else {
-          failCount++;
-          log.warn(
-            { userId, webhookId: webhook.id, webhookName: webhook.name },
-            'Failed to send insights summary to WeChat'
-          );
-        }
-      } catch (error) {
-        failCount++;
-        log.error(
-          {
-            userId,
-            webhookId: webhook.id,
-            webhookName: webhook.name,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          'Failed to send insights summary to WeChat'
-        );
-      }
-    }
-
-    return successCount > 0;
+    return this.sendToWebhooks(webhooks, message, {
+      logLabel: 'Insights summary',
+      logContext: { userId, date: data.date, type: data.type, articleCount: data.totalArticles },
+    });
   }
 
   /**
@@ -275,13 +148,41 @@ class WeChatNotifier {
     article: NewArticleData
   ): Promise<boolean> {
     const webhooks = getWebhooksForPushType('new_articles');
-
-    if (webhooks.length === 0) {
-      log.debug({ userId }, 'No WeChat webhooks configured for new articles');
-      return false;
-    }
+    if (webhooks.length === 0) return false;
 
     const message = formatNewArticle(article);
+    return this.sendToWebhooks(webhooks, message, {
+      logLabel: 'New article',
+      logContext: { userId, articleId: article.id, title: article.title },
+    });
+  }
+
+  /**
+   * 发送 PDF 全文总结通知到所有配置了该类型的 webhook
+   */
+  async sendPdfSummary(userId: number, data: PdfSummaryData): Promise<boolean> {
+    const webhooks = getWebhooksForPushType('pdf_summary');
+    if (webhooks.length === 0) return false;
+
+    const message = formatPdfSummary(data);
+    return this.sendToWebhooks(webhooks, message, {
+      logLabel: 'PDF summary',
+      logContext: { userId, articleId: data.articleId, title: data.title },
+    });
+  }
+
+  /**
+   * 发送格式化的 Markdown 消息到多个 webhook。
+   * 提取自 send* 方法的公共发送循环模式。
+   */
+  private async sendToWebhooks(
+    webhooks: WeChatWebhook[],
+    message: string,
+    options?: {
+      logLabel?: string;
+      logContext?: Record<string, any>;
+    }
+  ): Promise<boolean> {
     let successCount = 0;
     let failCount = 0;
 
@@ -292,89 +193,27 @@ class WeChatNotifier {
 
         if (success) {
           successCount++;
-          log.info(
-            {
-              userId,
-              webhookId: webhook.id,
-              webhookName: webhook.name,
-              articleId: article.id,
-              title: article.title,
-            },
-            'New article sent to WeChat'
-          );
+          log.info({
+            webhookId: webhook.id,
+            webhookName: webhook.name,
+            ...options?.logContext,
+          }, `${options?.logLabel || 'Message'} sent to WeChat`);
         } else {
           failCount++;
-          log.warn(
-            { userId, webhookId: webhook.id, webhookName: webhook.name, articleId: article.id },
-            'Failed to send new article to WeChat'
-          );
+          log.warn({
+            webhookId: webhook.id,
+            webhookName: webhook.name,
+            ...options?.logContext,
+          }, `Failed to send ${options?.logLabel || 'message'} to WeChat`);
         }
       } catch (error) {
         failCount++;
-        log.error(
-          {
-            userId,
-            webhookId: webhook.id,
-            webhookName: webhook.name,
-            articleId: article.id,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          'Failed to send new article to WeChat'
-        );
-      }
-    }
-
-    return successCount > 0;
-  }
-
-  /**
-   * 发送 PDF 全文总结通知到所有配置了该类型的 webhook
-   */
-  async sendPdfSummary(userId: number, data: PdfSummaryData): Promise<boolean> {
-    const webhooks = getWebhooksForPushType('pdf_summary');
-
-    if (webhooks.length === 0) {
-      log.debug({ userId }, 'No WeChat webhooks configured for PDF summary');
-      return false;
-    }
-
-    const message = formatPdfSummary(data);
-    let successCount = 0;
-
-    for (const webhook of webhooks) {
-      try {
-        const client = new WeChatClient(webhook.url);
-        const success = await client.sendMarkdown(message);
-
-        if (success) {
-          successCount++;
-          log.info(
-            {
-              userId,
-              webhookId: webhook.id,
-              webhookName: webhook.name,
-              articleId: data.articleId,
-              title: data.title,
-            },
-            'PDF summary sent to WeChat'
-          );
-        } else {
-          log.warn(
-            { userId, webhookId: webhook.id, webhookName: webhook.name, articleId: data.articleId },
-            'Failed to send PDF summary to WeChat'
-          );
-        }
-      } catch (error) {
-        log.error(
-          {
-            userId,
-            webhookId: webhook.id,
-            webhookName: webhook.name,
-            articleId: data.articleId,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          'Failed to send PDF summary to WeChat'
-        );
+        log.error({
+          webhookId: webhook.id,
+          webhookName: webhook.name,
+          error: error instanceof Error ? error.message : String(error),
+          ...options?.logContext,
+        }, `Failed to send ${options?.logLabel || 'message'} to WeChat`);
       }
     }
 
