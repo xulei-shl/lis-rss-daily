@@ -1,0 +1,34 @@
+<!-- Maintenance Section -->
+<section class="settings-panel" data-tab="maintenance">
+  <div class="section-header">
+    <h2>维护管理</h2>
+  </div>
+
+  <div class="maintenance-card">
+    <div class="maintenance-card-info">
+      <div class="maintenance-card-icon">🗑️</div>
+      <div class="maintenance-card-text">
+        <strong>拒绝文章清理</strong>
+        <p>将已开启「自动清理拒绝文章」的源中被 LLM 拒绝的文章迁移到归档表，保持主表轻量。系统默认每天 08:00 自动执行，也可点击下方按钮手动触发。</p>
+      </div>
+    </div>
+    <div class="maintenance-card-actions">
+      <span class="maintenance-card-schedule">定时: 每天 08:00</span>
+      <button class="btn btn-primary" onclick="triggerRejectedCleanup(this)" id="rejectedCleanupBtn">
+        立即清理
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- 清理结果弹窗 -->
+<div id="cleanupResultModal" class="modal-overlay">
+  <div class="modal" style="max-width: 500px;">
+    <div class="modal-header">
+      <h3 id="cleanupResultTitle">清理完成</h3>
+      <button class="modal-close" onclick="closeCleanupResultModal()">&times;</button>
+    </div>
+    <div id="cleanupResultBody" class="modal-body" style="padding: var(--space-4);">
+    </div>
+  </div>
+</div>

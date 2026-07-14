@@ -9,36 +9,7 @@
   <button class="settings-tab" data-tab="telegram">Telegram 通知</button>
   <button class="settings-tab" data-tab="wechat">企业微信推送</button>
   <button class="settings-tab" data-tab="chroma">Chroma 设置</button>
-</div>
-
-<!-- 全局维护操作栏 -->
-<div class="maintenance-bar">
-  <div class="maintenance-bar-info">
-    <span class="maintenance-bar-icon">🗑️</span>
-    <div class="maintenance-bar-text">
-      <strong>拒绝文章清理</strong>
-      <span>将已开启「自动清理拒绝文章」的源中被 LLM 拒绝的文章迁移到归档表</span>
-    </div>
-  </div>
-  <div class="maintenance-bar-actions">
-    <span class="maintenance-bar-schedule">定时: 每天 08:00</span>
-    <button class="btn btn-primary" onclick="triggerRejectedCleanup(this)" id="rejectedCleanupBtn">
-      立即清理
-    </button>
-  </div>
-</div>
-
-<!-- 清理结果弹窗 -->
-<div id="cleanupResultModal" class="modal-overlay">
-  <div class="modal" style="max-width: 500px;">
-    <div class="modal-header">
-      <h3 id="cleanupResultTitle">清理完成</h3>
-      <button class="modal-close" onclick="closeCleanupResultModal()">&times;</button>
-    </div>
-    <div id="cleanupResultBody" class="modal-body" style="padding: var(--space-4);">
-      <!-- 动态填充 -->
-    </div>
-  </div>
+  <button class="settings-tab" data-tab="maintenance">维护管理</button>
 </div>
 
 <%- include('panel-rss') %>
@@ -51,6 +22,7 @@
 <%- include('panel-telegram') %>
 <%- include('panel-wechat') %>
 <%- include('panel-chroma') %>
+<%- include('panel-maintenance') %>
 <%- include('modals') %>
 
 <script src="/js/settings.js"></script>

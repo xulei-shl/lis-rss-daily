@@ -569,6 +569,78 @@
 }
 
 /* ============================================
+   MAINTENANCE CARD — within settings panel
+   ============================================ */
+
+.maintenance-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-4);
+    background: linear-gradient(135deg, var(--bg-surface) 0%, color-mix(in srgb, var(--accent-primary) 3%, var(--bg-surface)) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4) var(--space-5);
+    margin-top: var(--space-5);
+    transition: border-color 0.2s ease;
+}
+
+.maintenance-card:hover {
+    border-color: color-mix(in srgb, var(--accent-primary) 30%, var(--border));
+}
+
+.maintenance-card-info {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    min-width: 0;
+}
+
+.maintenance-card-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.maintenance-card-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.maintenance-card-text strong {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.maintenance-card-text p {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    line-height: 1.6;
+    margin: 0;
+}
+
+.maintenance-card-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-shrink: 0;
+}
+
+.maintenance-card-schedule {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+}
+
+.maintenance-card-actions .btn {
+    white-space: nowrap;
+}
+
+/* ============================================
    CLEANUP RESULT MODAL
    ============================================ */
 
