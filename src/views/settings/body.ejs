@@ -1,22 +1,50 @@
 <div class="settings-tabs">
-  <span class="settings-tab-group">数据源</span>
-  <button class="settings-tab active" data-tab="rss">RSS 订阅源</button>
-  <button class="settings-tab" data-tab="journals">期刊管理</button>
-  <button class="settings-tab" data-tab="gmail">邮件订阅</button>
-  <button class="settings-tab" data-tab="keywords">关键词订阅</button>
+  <div class="settings-tab-group expanded" data-group="sources">
+    <div class="settings-tab-group-header" data-group="sources">
+      <span class="settings-tab-group-label">数据源</span>
+      <span class="settings-tab-group-arrow">▾</span>
+    </div>
+    <div class="settings-tab-group-body">
+      <button class="settings-tab active" data-tab="rss">RSS 订阅源</button>
+      <button class="settings-tab" data-tab="journals">期刊管理</button>
+      <button class="settings-tab" data-tab="gmail">邮件订阅</button>
+      <button class="settings-tab" data-tab="keywords">关键词订阅</button>
+    </div>
+  </div>
 
-  <span class="settings-tab-group">AI 配置</span>
-  <button class="settings-tab" data-tab="llm">LLM 配置</button>
-  <button class="settings-tab" data-tab="prompts">系统提示词</button>
-  <button class="settings-tab" data-tab="blacklist">黑名单</button>
+  <div class="settings-tab-group" data-group="ai">
+    <div class="settings-tab-group-header" data-group="ai">
+      <span class="settings-tab-group-label">AI 配置</span>
+      <span class="settings-tab-group-arrow">▾</span>
+    </div>
+    <div class="settings-tab-group-body collapsed">
+      <button class="settings-tab" data-tab="llm">LLM 配置</button>
+      <button class="settings-tab" data-tab="prompts">系统提示词</button>
+      <button class="settings-tab" data-tab="blacklist">黑名单</button>
+    </div>
+  </div>
 
-  <span class="settings-tab-group">通知</span>
-  <button class="settings-tab" data-tab="telegram">Telegram 通知</button>
-  <button class="settings-tab" data-tab="wechat">企业微信推送</button>
+  <div class="settings-tab-group" data-group="notify">
+    <div class="settings-tab-group-header" data-group="notify">
+      <span class="settings-tab-group-label">通知</span>
+      <span class="settings-tab-group-arrow">▾</span>
+    </div>
+    <div class="settings-tab-group-body collapsed">
+      <button class="settings-tab" data-tab="telegram">Telegram 通知</button>
+      <button class="settings-tab" data-tab="wechat">企业微信推送</button>
+    </div>
+  </div>
 
-  <span class="settings-tab-group">系统</span>
-  <button class="settings-tab" data-tab="chroma">Chroma 设置</button>
-  <button class="settings-tab" data-tab="maintenance">维护管理</button>
+  <div class="settings-tab-group" data-group="maintenance">
+    <div class="settings-tab-group-header" data-group="maintenance">
+      <span class="settings-tab-group-label">维护</span>
+      <span class="settings-tab-group-arrow">▾</span>
+    </div>
+    <div class="settings-tab-group-body collapsed">
+      <button class="settings-tab" data-tab="chroma">Chroma 设置</button>
+      <button class="settings-tab" data-tab="maintenance">维护管理</button>
+    </div>
+  </div>
 </div>
 
 <%- include('panel-rss') %>
@@ -78,4 +106,24 @@ function getDomainName(domainId) {
 }
 
 document.addEventListener('DOMContentLoaded', loadTopicDomains);
+
+// 二级折叠导航 — 点击组标题切换展开/折叠
+document.querySelectorAll('.settings-tab-group-header').forEach(header => {
+  header.addEventListener('click', () => {
+    const group = header.closest('.settings-tab-group');
+    const wasExpanded = group.classList.contains('expanded');
+
+    // 折叠所有其他组
+    document.querySelectorAll('.settings-tab-group').forEach(g => {
+      g.classList.remove('expanded');
+      g.querySelector('.settings-tab-group-body').classList.add('collapsed');
+    });
+
+    // 展开点击的组
+    if (!wasExpanded) {
+      group.classList.add('expanded');
+      group.querySelector('.settings-tab-group-body').classList.remove('collapsed');
+    }
+  });
+});
 </script>
