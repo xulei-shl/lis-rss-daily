@@ -1,48 +1,35 @@
 <div class="settings-tabs">
-  <div class="settings-tab-group expanded" data-group="sources">
-    <div class="settings-tab-group-header" data-group="sources">
-      <span class="settings-tab-group-label">数据源</span>
-      <span class="settings-tab-group-arrow">▾</span>
-    </div>
-    <div class="settings-tab-group-body">
+  <!-- 第一级：组标题水平栏 -->
+  <div class="settings-tab-bar">
+    <button class="settings-tab-group-header active" data-group="sources">数据源</button>
+    <button class="settings-tab-group-header" data-group="ai">AI 配置</button>
+    <button class="settings-tab-group-header" data-group="notify">通知</button>
+    <button class="settings-tab-group-header" data-group="maintenance">维护</button>
+  </div>
+
+  <!-- 第二级：各组对应的子项（水平栏下方，grid 叠放防抖动） -->
+  <div class="settings-tab-bodies">
+    <div class="settings-tab-group-body expanded no-transition" data-group="sources">
       <button class="settings-tab active" data-tab="rss">RSS 订阅源</button>
       <button class="settings-tab" data-tab="journals">期刊管理</button>
       <button class="settings-tab" data-tab="gmail">邮件订阅</button>
       <button class="settings-tab" data-tab="keywords">关键词订阅</button>
     </div>
-  </div>
 
-  <div class="settings-tab-group" data-group="ai">
-    <div class="settings-tab-group-header" data-group="ai">
-      <span class="settings-tab-group-label">AI 配置</span>
-      <span class="settings-tab-group-arrow">▾</span>
-    </div>
-    <div class="settings-tab-group-body collapsed">
+    <div class="settings-tab-group-body no-transition" data-group="ai">
       <button class="settings-tab" data-tab="llm">LLM 配置</button>
       <button class="settings-tab" data-tab="prompts">系统提示词</button>
       <button class="settings-tab" data-tab="blacklist">黑名单</button>
     </div>
-  </div>
 
-  <div class="settings-tab-group" data-group="notify">
-    <div class="settings-tab-group-header" data-group="notify">
-      <span class="settings-tab-group-label">通知</span>
-      <span class="settings-tab-group-arrow">▾</span>
-    </div>
-    <div class="settings-tab-group-body collapsed">
+    <div class="settings-tab-group-body no-transition" data-group="notify">
       <button class="settings-tab" data-tab="telegram">Telegram 通知</button>
       <button class="settings-tab" data-tab="wechat">企业微信推送</button>
     </div>
-  </div>
 
-  <div class="settings-tab-group" data-group="maintenance">
-    <div class="settings-tab-group-header" data-group="maintenance">
-      <span class="settings-tab-group-label">维护</span>
-      <span class="settings-tab-group-arrow">▾</span>
-    </div>
-    <div class="settings-tab-group-body collapsed">
-      <button class="settings-tab" data-tab="chroma">Chroma 设置</button>
+    <div class="settings-tab-group-body no-transition" data-group="maintenance">
       <button class="settings-tab" data-tab="maintenance">维护管理</button>
+      <button class="settings-tab" data-tab="chroma">Chroma 设置</button>
     </div>
   </div>
 </div>
@@ -107,23 +94,42 @@ function getDomainName(domainId) {
 
 document.addEventListener('DOMContentLoaded', loadTopicDomains);
 
-// 二级折叠导航 — 点击组标题切换展开/折叠
-document.querySelectorAll('.settings-tab-group-header').forEach(header => {
-  header.addEventListener('click', () => {
-    const group = header.closest('.settings-tab-group');
-    const wasExpanded = group.classList.contains('expanded');
+// 二级导航栏 — 第一级水平栏点击切换
+(function() {
+  const headers = document.querySelectorAll('.settings-tab-group-header');
+  const bodies = document.querySelectorAll('.settings-tab-group-body');
 
-    // 折叠所有其他组
-    document.querySelectorAll('.settings-tab-group').forEach(g => {
-      g.classList.remove('expanded');
-      g.querySelector('.settings-tab-group-body').classList.add('collapsed');
+  function activateGroup(groupName) {
+    // 切换组标题激活态
+    headers.forEach(h => {
+      h.classList.toggle('active', h.dataset.group === groupName);
     });
+    // 切换组体可见性，并自动选中第一个子 tab
+    bodies.forEach(b => {
+      const isActive = b.dataset.group === groupName;
+      b.classList.toggle('expanded', isActive);
+      if (isActive) {
+        const firstTab = b.querySelector('.settings-tab');
+        if (firstTab && typeof setActiveTab === 'function') {
+          setActiveTab(firstTab.dataset.tab);
+        }
+      }
+    });
+  }
 
-    // 展开点击的组
-    if (!wasExpanded) {
-      group.classList.add('expanded');
-      group.querySelector('.settings-tab-group-body').classList.remove('collapsed');
-    }
+  headers.forEach(header => {
+    header.addEventListener('click', () => {
+      const group = header.dataset.group;
+      if (!group) return;
+      // 如果点击的是已激活的组，不切换
+      if (header.classList.contains('active')) return;
+      activateGroup(group);
+    });
   });
-});
+
+  // 页面加载完成后，移除 no-transition 类，启用过渡动画
+  requestAnimationFrame(() => {
+    bodies.forEach(b => b.classList.remove('no-transition'));
+  });
+})();
 </script>

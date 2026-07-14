@@ -13,8 +13,69 @@
     margin: var(--space-4) auto var(--space-6);
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: 0;
 }
+
+/* ============================================
+   TAB BAR — 第一级水平组标题栏
+   ============================================ */
+
+.settings-tab-bar {
+    display: flex;
+    flex-direction: row;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0;
+    margin-bottom: var(--space-4);
+}
+
+.settings-tab-group-header {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-family: var(--font-meta);
+    position: relative;
+    transition: color 0.2s ease, background 0.15s ease;
+    user-select: none;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    margin-bottom: -1px;
+}
+
+.settings-tab-group-header:hover {
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+.settings-tab-group-header.active {
+    color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 6%, transparent);
+}
+
+.settings-tab-group-header.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - var(--space-6));
+    max-width: calc(100% - var(--space-6));
+    height: 2px;
+    background: var(--accent-primary);
+    border-radius: 1px 1px 0 0;
+}
+
+/* ============================================
+   TAB BUTTONS — 第二级子项按钮
+   ============================================ */
 
 .settings-tab {
     border: 1px solid var(--border);
@@ -42,68 +103,38 @@
 }
 
 /* ============================================
-   TAB GROUP ACCORDION NAV
+   TAB BODIES WRAPPER — 叠放容器，高度由最高 body 撑起，防抖动
    ============================================ */
 
-.settings-tab-group {
-    width: 100%;
+.settings-tab-bodies {
+    display: grid;
+    /* 所有 body 叠放到同一个 grid cell 中，容器高度取最高者 */
 }
 
-.settings-tab-group-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-2) var(--space-3);
-    cursor: pointer;
-    border-radius: var(--radius-md);
-    transition: background 0.15s ease;
-    user-select: none;
-}
-
-.settings-tab-group-header:hover {
-    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
-}
-
-.settings-tab-group-label {
-    font-size: var(--text-xs);
-    font-weight: 600;
-    color: var(--text-tertiary);
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-}
-
-.settings-tab-group-arrow {
-    font-size: 10px;
-    color: var(--text-tertiary);
-    transition: transform 0.2s ease;
-    line-height: 1;
-}
-
-.settings-tab-group.expanded .settings-tab-group-arrow {
-    transform: rotate(0deg);
-}
-
-.settings-tab-group:not(.expanded) .settings-tab-group-arrow {
-    transform: rotate(-90deg);
-}
+/* ============================================
+   TAB GROUP BODY — 组体区域
+   ============================================ */
 
 .settings-tab-group-body {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-    padding: var(--space-2) 0 0 var(--space-2);
-    overflow: hidden;
-    transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.2s ease;
-    max-height: 200px;
+    padding: 0;
     opacity: 1;
+    visibility: visible;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+    grid-area: 1 / 1 / 2 / 2;
 }
 
-.settings-tab-group-body.collapsed {
-    max-height: 0;
+.settings-tab-group-body:not(.expanded) {
     opacity: 0;
-    padding-top: 0;
-    padding-bottom: 0;
+    visibility: hidden;
     pointer-events: none;
+}
+
+/* 防止页面初始加载时的过渡闪烁 */
+.settings-tab-group-body.no-transition {
+    transition: none !important;
 }
 
 .settings-panel {
