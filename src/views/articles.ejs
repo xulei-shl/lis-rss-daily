@@ -51,7 +51,7 @@ const pageActions = isGuest ? '' : `
       <div class="filter-group">
         <span class="filter-label">状态</span>
         <select id="filterStatus" class="filter-select">
-          <option value="">全部（不含拒绝）</option>
+          <option value="">全部状态</option>
           <option value="passed">通过</option>
           <option value="rejected">拒绝</option>
           <option value="pending">待处理</option>
@@ -531,12 +531,7 @@ const pageActions = isGuest ? '' : `
           params.append('emailSourceIds', rawId);
         }
       }
-      if (filterStatus) {
-        params.append('filterStatus', filterStatus);
-      } else {
-        // 默认不显示拒绝状态的条目，除非用户明确选择了"拒绝"
-        params.append('excludeRejected', 'true');
-      }
+      if (filterStatus) params.append('filterStatus', filterStatus);
       if (processStatus) params.append('processStatus', processStatus);
       if (filterRead === 'read') params.append('isRead', 'true');
       if (filterRead === 'unread') params.append('isRead', 'false');
