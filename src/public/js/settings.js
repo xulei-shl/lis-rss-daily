@@ -371,12 +371,6 @@ document.getElementById('sourceForm').addEventListener('submit', async function 
       closeModal();
       await loadRSSSources(rssPagination.page);
       console.log('Sources reloaded');
-      // Show success message
-      await showConfirm('RSS 源已更新', {
-        title: '成功',
-        okText: '知道了',
-        okButtonType: 'btn-secondary'
-      });
     } else {
       const result = await res.json();
       console.log('Update failed:', result);
@@ -1557,11 +1551,6 @@ document.getElementById('journalForm')?.addEventListener('submit', async functio
     if (res.ok) {
       closeJournalModal();
       await loadJournals(journalsPagination.page);
-      await showConfirm('期刊已保存', {
-        title: '成功',
-        okText: '知道了',
-        okButtonType: 'btn-secondary'
-      });
     } else {
       const result = await res.json();
       await showConfirm(result.error || '保存失败', {
