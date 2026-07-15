@@ -228,6 +228,28 @@ async def upload_to_lis_rss(article_id: int, md_content: str, config: Dict) -> b
         return False
 
 
+# Memos 单条内容最大字符限制
+MEMOS_MAX_CONTENT_LENGTH = 8000
+
+
+def _truncate_content(content: str, max_len: int = MEMOS_MAX_CONTENT_LENGTH) -> str:
+    """截断过长的内容，保留开头和结尾的关键信息"""
+    if len(content) <= max_len:
+        return content
+
+    # 保留前 3/4 和后 1/4 的内容，中间用截断标记连接
+    head_len = max_len * 3 // 4
+    tail_len = max_len - head_len - len("\n\n... (以下内容已截断，完整内容请查看LIS-RSS) ...\n\n")
+    if tail_len < 100:
+        # 如果尾部空间太小，直接截取前 max_len 字符
+        truncated = content[:max_len - len("\n\n...(截断)...")]
+        return f"{truncated}\n\n...(截断)..."
+
+    head = content[:head_len]
+    tail = content[-tail_len:]
+    return f"{head}\n\n... (以下内容已截断，完整内容请查看LIS-RSS) ...\n\n{tail}"
+
+
 async def upload_to_memos(title: str, md_content: str, config: Dict, enabled_override: Optional[bool] = None) -> bool:
     print(f"\n{'='*60}")
     print(f"  [子系统3/3] Memos上传")
@@ -252,10 +274,15 @@ async def upload_to_memos(title: str, md_content: str, config: Dict, enabled_ove
     # 构建内容：标题 + 标签 + 内容
     content = f"#bot #AI速读\n\n**{title}**\n\n---\n\n{md_content}"
 
+    # 截断过长的内容（Memos 单条限制 8192 字符）
+    if len(content) > MEMOS_MAX_CONTENT_LENGTH:
+        print(f"[警告] 内容过长 ({len(content)} 字符)，已截断至 {MEMOS_MAX_CONTENT_LENGTH} 字符")
+        content = _truncate_content(content)
+
     try:
         print(f"[信息] 脚本路径: {script_path}")
         print(f"[信息] 文章标题: {title}")
-        print(f"[信息] 内容长度: {len(content)} 字符")
+        print(f"[信息] 最终内容长度: {len(content)} 字符")
 
         result = subprocess.run(
             [sys.executable, str(script_path), "create", content],

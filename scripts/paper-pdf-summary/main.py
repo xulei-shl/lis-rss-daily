@@ -631,7 +631,7 @@ def main():
     # 获取数据库连接（用于获取来源名称）
     conn = get_connection(db_path)
     
-    # 逐条处理 - 失败不计数，必须全部流程走完才算一条
+    # 逐条处理 - 失败不计数，继续处理下一篇
     print_section("开始处理数据")
     
     success_count = 0
@@ -645,24 +645,21 @@ def main():
             print(f"\n[信息] 已达到最大尝试次数 ({max_attempts})，停止处理")
             break
         
-        # 每次获取一条数据
+        # 每次获取一条数据（自动排除已尝试过的文章）
         articles = fetch_pending_articles(
             db_path=db_path,
             journals=journals,
             limit=1,
-            use_priority=True
+            use_priority=True,
+            exclude_ids=list(processed_article_ids) if processed_article_ids else None
         )
         
         if not articles:
             print("[信息] 没有更多待处理的数据")
             break
         
-        # 跳过已处理的文章
         article = articles[0]
         article_id = article.get('id')
-        if article_id in processed_article_ids:
-            print(f"[跳过] 文章ID {article_id} 已处理过，跳过")
-            continue
         
         # 获取来源名称
         article['source_name'] = get_source_name(article, conn)
@@ -688,13 +685,14 @@ def main():
             print(f"\n[进度] 成功: {success_count}, 失败: {failure_count} (此条成功计入)")
         else:
             failure_count += 1
-            print(f"\n[进度] 成功: {success_count}, 失败: {failure_count} (此条失败不计入，继续处理)")
+            processed_article_ids.add(article_id)  # 加入排除列表，下一篇自动跳过此文章
+            print(f"\n[进度] 成功: {success_count}, 失败: {failure_count} (此条失败已跳过，继续处理下一篇)")
             
-            # 梯次间隔等待
+            # 梯次间隔等待，避免对服务器造成压力
             interval_index = min(failure_count - 1, len(retry_intervals) - 1) if retry_intervals else -1
             if interval_index >= 0:
                 wait_seconds = retry_intervals[interval_index]
-                print(f"[等待] 第 {failure_count} 次失败，等待 {wait_seconds} 秒后重试...")
+                print(f"[等待] 等待 {wait_seconds} 秒后继续处理下一篇...")
                 time.sleep(wait_seconds)
         
         # 检查是否达到每日处理上限

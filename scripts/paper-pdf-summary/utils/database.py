@@ -92,7 +92,8 @@ def fetch_pending_articles(
     db_path: str,
     journals: List[str],
     limit: int,
-    use_priority: bool = True
+    use_priority: bool = True,
+    exclude_ids: Optional[List[int]] = None
 ) -> List[Dict]:
     """
     获取待处理的文章数据
@@ -110,6 +111,7 @@ def fetch_pending_articles(
         journals: 期刊名称白名单
         limit: 获取数量限制
         use_priority: 是否使用优先级排序
+        exclude_ids: 需要排除的文章ID列表（已尝试过但失败的文章）
         
     Returns:
         文章数据列表
@@ -140,7 +142,17 @@ def fetch_pending_articles(
         if source_conditions:
             conditions.append(f"({' OR '.join(source_conditions)})")
         
+        # 排除已尝试过的文章
+        if exclude_ids:
+            placeholders = ','.join(['?' for _ in exclude_ids])
+            conditions.append(f"id NOT IN ({placeholders})")
+        
         base_where = " AND ".join(conditions)
+        
+        # 基础参数列表（来源条件）
+        base_params = rss_source_ids + journal_ids
+        if exclude_ids:
+            base_params = base_params + exclude_ids
         
         # 优先级查询
         if use_priority:
@@ -154,7 +166,7 @@ def fetch_pending_articles(
                 LIMIT ?
             """
             
-            params = rss_source_ids + journal_ids + [limit]
+            params = base_params + [limit]
             cursor = conn.execute(priority_query, params)
             priority_articles = [dict(row) for row in cursor.fetchall()]
             
@@ -165,13 +177,15 @@ def fetch_pending_articles(
             # 优先数据不足，补充其他数据
             remaining = limit - len(priority_articles)
             
-            # 获取已处理的ID列表（排除）
+            # 获取已处理的ID列表（排除已获取的优先数据）
             processed_ids = [a['id'] for a in priority_articles]
             if processed_ids:
-                exclude_ids = ','.join(['?' for _ in processed_ids])
-                other_where = base_where + f" AND id NOT IN ({exclude_ids})"
+                exclude_placeholders = ','.join(['?' for _ in processed_ids])
+                other_where = base_where + f" AND id NOT IN ({exclude_placeholders})"
+                other_params = base_params + processed_ids + [remaining]
             else:
                 other_where = base_where
+                other_params = base_params + [remaining]
             
             # 随机获取其他数据
             other_query = f"""
@@ -182,8 +196,7 @@ def fetch_pending_articles(
                 LIMIT ?
             """
             
-            params = rss_source_ids + journal_ids + processed_ids + [remaining]
-            cursor = conn.execute(other_query, params)
+            cursor = conn.execute(other_query, other_params)
             other_articles = [dict(row) for row in cursor.fetchall()]
             
             # 合并结果
@@ -198,7 +211,7 @@ def fetch_pending_articles(
                 LIMIT ?
             """
             
-            params = rss_source_ids + journal_ids + [limit]
+            params = base_params + [limit]
             cursor = conn.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
     
