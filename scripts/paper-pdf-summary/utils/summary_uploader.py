@@ -20,11 +20,15 @@ from pathlib import Path
 from typing import Dict, Optional, List
 import yaml
 
-# 添加 Blinko 客户端路径
+# 添加 Blinko 和 Memos 客户端路径
 script_dir = Path(__file__).parent.parent
 blinko_client_path = script_dir / "summary-update" / "blinko-api" / "src"
 if str(blinko_client_path) not in sys.path:
     sys.path.insert(0, str(blinko_client_path))
+
+memos_client_path = script_dir / "summary-update" / "memos"
+if str(memos_client_path) not in sys.path:
+    sys.path.insert(0, str(memos_client_path))
 
 # 导入企业微信推送模块
 try:
@@ -228,26 +232,76 @@ async def upload_to_lis_rss(article_id: int, md_content: str, config: Dict) -> b
         return False
 
 
-# Memos 单条内容最大字符限制
-MEMOS_MAX_CONTENT_LENGTH = 8000
+# Memos 单条内容最大限制（按字节计算，Memos 服务端限制通常为 8192 字节）
+MEMOS_MAX_CONTENT_BYTES = 6400
 
 
-def _truncate_content(content: str, max_len: int = MEMOS_MAX_CONTENT_LENGTH) -> str:
-    """截断过长的内容，保留开头和结尾的关键信息"""
-    if len(content) <= max_len:
+def _truncate_content_by_bytes(content: str, max_bytes: int = MEMOS_MAX_CONTENT_BYTES) -> str:
+    """
+    截断过长的内容，保留开头和结尾的关键信息。
+    按字节长度（UTF-8）精确截断，确保最终内容不超过 max_bytes 字节。
+    """
+    if len(content.encode('utf-8')) <= max_bytes:
         return content
 
-    # 保留前 3/4 和后 1/4 的内容，中间用截断标记连接
-    head_len = max_len * 3 // 4
-    tail_len = max_len - head_len - len("\n\n... (以下内容已截断，完整内容请查看LIS-RSS) ...\n\n")
-    if tail_len < 100:
-        # 如果尾部空间太小，直接截取前 max_len 字符
-        truncated = content[:max_len - len("\n\n...(截断)...")]
-        return f"{truncated}\n\n...(截断)..."
+    marker = "\n\n...(截断)..."
+    marker_bytes = marker.encode('utf-8')
+    available_bytes = max_bytes - len(marker_bytes)
 
-    head = content[:head_len]
-    tail = content[-tail_len:]
-    return f"{head}\n\n... (以下内容已截断，完整内容请查看LIS-RSS) ...\n\n{tail}"
+    if available_bytes <= 0:
+        return marker
+
+    # 按字节安全地截取前半部分
+    raw_head = content.encode('utf-8')[:available_bytes * 3 // 4]
+    head = raw_head.decode('utf-8', errors='ignore')
+
+    # 如果头部内容极少，说明内容以 ASCII 为主，直接全用头部
+    remaining = available_bytes - len(head.encode('utf-8'))
+    if remaining < 20:
+        # 不够尾部空间，直接截取到头
+        head = content.encode('utf-8')[:available_bytes].decode('utf-8', errors='ignore')
+        return head + marker
+
+    # 从尾部安全截取
+    tail_bytes_len = remaining
+    raw_tail = content.encode('utf-8')[-tail_bytes_len:]
+    tail = raw_tail.decode('utf-8', errors='ignore')
+
+    # 再次微调：确保组合后不超标（decode 过程中可能因多字节字符边界导致实际长度变化）
+    result = head + marker + tail
+    result_bytes = result.encode('utf-8')
+    if len(result_bytes) <= max_bytes:
+        return result
+
+    # 超标时，从尾部按比例缩减直到达标（二分法减半效率更高）
+    while len(result_bytes) > max_bytes and len(tail) > 0:
+        # 每次减少尾部的一半，快速逼近目标
+        tail = tail[:len(tail) // 2]
+        result = head + marker + tail
+        result_bytes = result.encode('utf-8')
+
+    return result
+
+
+def _strip_diagram_section(content: str) -> str:
+    """
+    去掉内容中 '二、核心逻辑图谱'（含）到 '三、结构与逻辑精简' 之间的文本。
+    仅 Memos 使用此精简逻辑，其他渠道保留完整内容。
+    """
+    start_marker = "二、核心逻辑图谱"
+    end_marker = "三、结构与逻辑精简"
+
+    start_idx = content.find(start_marker)
+    if start_idx == -1:
+        return content  # 未找到起始标记，不做处理
+
+    end_idx = content.find(end_marker, start_idx)
+    if end_idx == -1:
+        # 找到了起始标记但未找到结束标记，只去掉起始标记之后的部分
+        return content[:start_idx].rstrip()
+
+    # 保留起始标记之前的内容 + 结束标记及之后的内容
+    return content[:start_idx].rstrip() + "\n\n" + content[end_idx:]
 
 
 async def upload_to_memos(title: str, md_content: str, config: Dict, enabled_override: Optional[bool] = None) -> bool:
@@ -261,56 +315,46 @@ async def upload_to_memos(title: str, md_content: str, config: Dict, enabled_ove
         print("[跳过] Memos上传已禁用")
         return True
 
-    script = summary_config.get('script', 'summary-update/memos/memos_client.py')
-    script_path = Path(__file__).parent.parent / script
-
-    if not script_path.exists():
-        print(f"[错误] Memos上传脚本不存在: {script_path}")
-        return False
-
     # 读取.env配置
     load_env()
 
-    # 构建内容：标题 + 标签 + 内容
-    content = f"#bot #AI速读\n\n**{title}**\n\n---\n\n{md_content}"
+    base_url = os.getenv("MEMOS_BASE_URL")
+    access_token = os.getenv("MEMOS_ACCESS_TOKEN")
 
-    # 截断过长的内容（Memos 单条限制 8192 字符）
-    if len(content) > MEMOS_MAX_CONTENT_LENGTH:
-        print(f"[警告] 内容过长 ({len(content)} 字符)，已截断至 {MEMOS_MAX_CONTENT_LENGTH} 字符")
-        content = _truncate_content(content)
+    if not base_url or not access_token:
+        print("[错误] MEMOS_BASE_URL 或 MEMOS_ACCESS_TOKEN 未配置")
+        return False
+
+    # Memos 专用精简：去掉"二、核心逻辑图谱"到"三、结构与逻辑精简"之间的文本，节省空间
+    stripped_content = _strip_diagram_section(md_content)
+    if len(stripped_content) != len(md_content):
+        stripped_len = len(md_content) - len(stripped_content)
+        print(f"[信息] 已精简内容（去掉核心逻辑图谱章节），减少 {stripped_len} 字符")
+
+    # 构建内容：标题 + 标签 + 内容（使用精简后的内容）
+    content = f"#bot #AI速读\n\n**{title}**\n\n---\n\n{stripped_content}"
+
+    # 按字节长度检查并截断（Memos 服务端限制为字节数）
+    content_bytes = content.encode('utf-8')
+    if len(content_bytes) > MEMOS_MAX_CONTENT_BYTES:
+        print(f"[警告] 内容过长 ({len(content_bytes)} 字节)，已截断至 {MEMOS_MAX_CONTENT_BYTES} 字节")
+        content = _truncate_content_by_bytes(content)
 
     try:
-        print(f"[信息] 脚本路径: {script_path}")
         print(f"[信息] 文章标题: {title}")
-        print(f"[信息] 最终内容长度: {len(content)} 字符")
+        print(f"[信息] 最终内容: {len(content)} 字符 / {len(content.encode('utf-8'))} 字节")
 
-        result = subprocess.run(
-            [sys.executable, str(script_path), "create", content],
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
+        from memos_client import MemosClient
+        client = MemosClient(base_url, access_token)
+        result = client.create_memo(content)
 
-        output = result.stdout + result.stderr
-        return_code = result.returncode
+        memo_name = result.get('name', 'unknown')
+        print(f"[成功] Memos上传完成")
+        print(f"  Memo名称: {memo_name}")
+        return True
 
-        print(f"[信息] 返回码: {return_code}")
-
-        if output:
-            print(f"[输出] {output[:500]}")
-            if len(output) > 500:
-                print(f"[输出] ... (总计 {len(output)} 字符)")
-
-        # 检查成功标志
-        if re.search(r'created|success|成功', output, re.IGNORECASE):
-            print(f"[成功] Memos上传完成")
-            return True
-        else:
-            print(f"[失败] Memos上传失败")
-            return False
-
-    except subprocess.TimeoutExpired:
-        print(f"[错误] Memos上传超时")
+    except ImportError as e:
+        print(f"[错误] 导入MemosClient失败: {e}")
         return False
     except Exception as e:
         print(f"[错误] Memos上传异常: {e}")
