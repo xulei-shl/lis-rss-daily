@@ -19,7 +19,6 @@ import {
   type DailySummaryInput,
   type DailySummaryResult,
 } from './daily-summary-repository.js';
-import { clusterArticles, buildClusteredArticlesText } from './article-clustering.js';
 
 const log = logger.child({ module: 'daily-summary-generator' });
 
@@ -394,8 +393,7 @@ export async function generateInsightsSummary(
     email: articles.filter(a => a.source_type === 'email'),
   };
 
-  const clusters = clusterArticles(articles, days);
-  const articlesText = buildClusteredArticlesText(clusters, dateStr);
+  const articlesText = buildArticlesListText(articlesByType);
 
   const userPrompt = await resolveSystemPrompt(
     userId,
