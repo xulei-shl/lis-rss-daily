@@ -279,22 +279,26 @@ def _is_all_upload_failed(upload_results: Optional[Dict]) -> bool:
     
     # 获取被跳过的子系统列表
     skipped = upload_results.get('_skipped', [])
-    
+
     # 统计实际执行的任务中成功的数量
     success_count = 0
-    
+
     # HiAgent RAG - 总是执行
     if 'hiagent_rag' not in skipped and upload_results.get('hiagent_rag', False):
         success_count += 1
-    
+
     # LIS-RSS
     if 'lis_rss' not in skipped and upload_results.get('lis_rss', False):
         success_count += 1
-    
+
     # Memos - 总是执行
     if 'memos' not in skipped and upload_results.get('memos', False):
         success_count += 1
-    
+
+    # Blinko - 总是执行
+    if 'blinko' not in skipped and upload_results.get('blinko', False):
+        success_count += 1
+
     # WeChat
     if 'wechat' not in skipped and upload_results.get('wechat', False):
         success_count += 1

@@ -176,15 +176,6 @@ def call_download_script(script_path: str, keyword: str, output_dir: str, max_re
         import traceback
         traceback.print_exc()
         return None
-        
-    except subprocess.TimeoutExpired:
-        print(f"[ERROR] 下载脚本超时")
-        return None
-    except Exception as e:
-        print(f"[ERROR] 调用下载脚本异常: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
 
 
 def extract_pdf_path(output: str) -> Optional[str]:
