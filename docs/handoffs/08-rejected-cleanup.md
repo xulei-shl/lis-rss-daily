@@ -1,6 +1,7 @@
 # 08 · 自动清理拒绝文章子系统 Handoff
 
 > 本文档于 **2026-07-14** 基于实际源代码逐文件阅读编写，所有结论均带 `文件:行号` 引用。
+> **2026-07-16 更新**：新增 30 天过滤条件，仅迁移 `filtered_at < now - 30 天` 的拒绝文章。
 > 始于 `docs/handoffs/08-rejected-cleanup.md` 规划方案，现已完成实现。
 
 ---
@@ -12,8 +13,9 @@
 **目标**（全部完成）：
 1. ✅ 为每个源新增 `auto_cleanup_rejected` 开关字段，默认关闭（opt-in）
 2. ✅ 定时调度器将标记源下的 rejected 文章**从 `articles` 表迁移到 `rejected_articles` 归档表**，附带关联数据（过滤日志、翻译、处理日志、相关文章）
-3. ✅ 保持 `articles` 表轻量，保障查询性能
-4. ✅ 被拒数据不丢失，可后续在归档表中查询
+3. ✅ 仅迁移 **30 天以前** 被拒绝的文章，30 天内拒绝记录暂留主表，避免误操作后无法恢复
+4. ✅ 保持 `articles` 表轻量，保障查询性能
+5. ✅ 被拒数据不丢失，可后续在归档表中查询
 
 ---
 
@@ -23,7 +25,7 @@
 flowchart LR
     A[源表 auto_cleanup_rejected=1] --> B[rejected-cleanup-scheduler]
     B --> C{每天 8:00 cron}
-    C --> D[查询 filter_status=rejected 的文章]
+    C --> D[查询 filter_status=rejected<br>且 filtered_at>30天前 的文章]
     D --> E[收集关联数据]
     E --> F[BEGIN TRANSACTION]
     F --> G[INSERT INTO rejected_articles]
@@ -43,6 +45,7 @@ flowchart LR
     │  1. collectEnabledSources() — 4 类源表 UNION ALL 查询 auto_cleanup_rejected=1
     │  2. 对每个源：
     │     a. SELECT articles WHERE filter_status='rejected' AND 来源外键 = ?
+    │         AND filtered_at < (now - 30天)  ← 仅迁移30天以前的拒绝文章
     │     b. 对每篇文章，收集关联数据：
     │        - article_filter_logs → JSON.stringify
     │        - article_translations → JSON.stringify
@@ -189,7 +192,7 @@ export class RejectedCleanupScheduler extends BaseScheduler {  // 2026-07-14 起
 | 方法 | 可见性 | 功能 | 位置 |
 |------|--------|------|------|
 | `collectEnabledSources()` | private | 收集 4 类源表中 `auto_cleanup_rejected=1` 的活跃源 | L:151-190 |
-| `cleanupSource(source)` | private | 对单个源执行迁移：查询 → 收集关联数据 → 事务迁移（含 `rejected_cleanup_stats` INCREMENT） | L:196-303 |
+| `cleanupSource(source)` | private | 对单个源执行迁移：查询 → 收集关联数据 → 事务迁移（含 `rejected_cleanup_stats` INCREMENT）。查询时加 `filtered_at < 30天前` 条件，保留近期拒绝数据在主表。 | L:196-303 |
 | `getSourceColumn(type)` | private | 源类型 → articles 表中外键列名映射 | L:309-321 |
 
 ### 5.3 手动触发

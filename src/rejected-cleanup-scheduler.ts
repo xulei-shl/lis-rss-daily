@@ -217,11 +217,13 @@ export class RejectedCleanupScheduler extends BaseScheduler {
       };
     }
 
-    // Get rejected articles for this source
+    // Get rejected articles for this source (only rejected more than 30 days ago)
+    const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const rejectedArticles = await db
       .selectFrom('articles')
       .where('filter_status', '=', 'rejected')
       .where(sql.ref(sourceColumn), '=', source.sourceId)
+      .where('filtered_at', '<', cutoffDate)
       .selectAll()
       .execute();
 
