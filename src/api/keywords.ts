@@ -421,7 +421,7 @@ async function saveArticles(
 
   for (const article of articles) {
     try {
-      // 查重：URL 查重
+      // 查重：URL 查重（含 rejected_articles 归档表）
       const existingByUrl = await db
         .selectFrom('articles')
         .where('url', '=', article.url)
@@ -433,7 +433,18 @@ async function saveArticles(
         continue;
       }
 
-      // 查重：title_normalized 查重
+      const rejectedByUrl = await db
+        .selectFrom('rejected_articles')
+        .where('url', '=', article.url)
+        .select('id')
+        .executeTakeFirst();
+
+      if (rejectedByUrl) {
+        log.debug({ url: article.url }, 'Article URL exists in rejected_articles (previously rejected and cleaned up), skipping');
+        continue;
+      }
+
+      // 查重：title_normalized 查重（含 rejected_articles 归档表）
       const titleNormalized = generateNormalizedTitle(article.title);
       const existingByTitle = titleNormalized ? await db
         .selectFrom('articles')
@@ -443,6 +454,17 @@ async function saveArticles(
 
       if (existingByTitle) {
         log.debug({ title: article.title }, 'Article already exists (title)');
+        continue;
+      }
+
+      const rejectedByTitle = titleNormalized ? await db
+        .selectFrom('rejected_articles')
+        .where('title_normalized', '=', titleNormalized)
+        .select('id')
+        .executeTakeFirst() : null;
+
+      if (rejectedByTitle) {
+        log.debug({ title: article.title }, 'Article title exists in rejected_articles (previously rejected and cleaned up), skipping');
         continue;
       }
 

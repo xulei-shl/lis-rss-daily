@@ -184,6 +184,21 @@ export async function saveArticles(
           );
           continue;
         }
+
+        // Also check rejected_articles archive (articles cleaned up by auto-cleanup)
+        const rejectedExists = await db
+          .selectFrom('rejected_articles')
+          .where('title_normalized', '=', titleNormalized)
+          .select('id')
+          .executeTakeFirst();
+
+        if (rejectedExists) {
+          log.debug(
+            { rssSourceId, title: item.title, url: item.link },
+            'Article title exists in rejected_articles (previously rejected and cleaned up), skipping'
+          );
+          continue;
+        }
       }
 
       // Insert new article and return the inserted ID

@@ -48,7 +48,7 @@
 | 05 | [LLM 抽象层与工具库](./05-llm-abstraction.md) | LLMProvider、故障转移、限流、加密、JSON 解析、config、任务类型 | `llm.ts` `llm-logger.ts` `api/llm-configs.ts` `utils/*.ts` `config.ts` |
 | 06 | [通知与调度子系统](./06-notifications-scheduling.md) | Telegram Bot、企业微信、每日总结、洞察报告、调度器状态 | `telegram/*.ts` `wechat/*.ts` `daily-summary-scheduler.ts` `insights-scheduler.ts` `api/daily-summary.ts` |
 | 07 | [Web/API、认证、数据库与前端](./07-web-api-auth-db-frontend.md) | Express 装配、路由表、JWT/角色、Kysely+SQLite 表结构、DeepSearch、EJS 前端 | `api/web.ts` `api/routes.ts` `middleware/auth.ts` `db.ts` `sql/001_init.sql` `views/` `public/` |
-| 08 | [自动清理拒绝文章（规划文档）](./08-rejected-cleanup.md) | 归档表设计、调度器、源字段控制、迁移计划（尚未实现） | `rejected-cleanup-scheduler.ts` `sql/038_add_auto_cleanup_rejected.sql` `rejected_articles` 表 |
+| 08 | [自动清理拒绝文章](./08-rejected-cleanup.md) | 归档表设计、调度器、源字段控制、迁移计划、首页统计补偿、去重漏洞修复 | `rejected-cleanup-scheduler.ts` `sql/038_add_auto_cleanup_rejected.sql` `rejected_articles` 表 `src/api/articles.ts` `src/journal-scheduler.ts` `src/api/keywords.ts` `src/gmail/email-processor.ts` |
 
 ## 全局约定与要点（各模块通用）
 
@@ -72,5 +72,6 @@
 6. `config.ts` **不含** chroma host/port 与检索权重字段。**部分缓解（2026-07-14）**：`config.ts` 现新增 `chromaHost`（`CHROMA_HOST`，默认 `127.0.0.1`）/ `chromaPort`（`CHROMA_PORT`，默认 `8000`），`getChromaSettings` 优先读 `settings` 表、回退到 `config`；检索权重仍在 `search-service.ts` 常量。
 7. ~~`build-css.js` 输出 `main.bundle.css`，而 `layout.ejs` 开发态引用 `/css/main.css`，命名需核对~~ **已修复（2026-07-14）**：`layout.ejs` 现引用 `/css/main.bundle.css`（开发）与 `/css/main.bundle.min.css`（生产），与 `build-css.js` 产物对齐。
 8. **已实现**：自动清理拒绝文章（`rejected-cleanup-scheduler.ts`）— 见文档 08，调度器现已继承 `BaseScheduler`。
+9. **已修复（2026-07-16）**：被清理的拒绝文章再次抓取时去重失效——`saveArticles` 只查 `articles` 表，不查 `rejected_articles` 归档表，导致已拒绝并清理的文章被重新入库。修复方案：四个去重点均追加对 `rejected_articles` 表的查询。见文档 08 §16。
 
 > **近期重构（2026-07-14）**：依据 `docs/code-review-standards.md` 与 `docs/代码审查-实施计划.md` 完成了 5 个阶段重构（phase-0~4 + 收尾）。核心变更：**8 个调度器基类化（`BaseScheduler`）**、`sleep()`/EmailSourceConfig 映射/`serializeError` 统一、Telegram `sendToChats` 与微信 `sendToWebhooks`/`sendByPushType` 通知去重、`daily-summary.ts` 拆分为 generator/repository/facade 且推送逻辑移出生成函数、`bot.ts` 拆分为 callbacks/commands/facade、`runPipeline` 拆为 4 个 stage 方法、N+1 优化、`search-service.ts` 提取 `createArticlesQuery` 消除 Shotgun Surgery、Chroma host/port 配置化、`agent.ts` `titleZh` 修复。各模块 handoff 文档已同步更新「近期重构」差异小节。

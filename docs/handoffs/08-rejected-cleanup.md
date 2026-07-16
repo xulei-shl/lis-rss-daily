@@ -2,6 +2,7 @@
 
 > 本文档于 **2026-07-14** 基于实际源代码逐文件阅读编写，所有结论均带 `文件:行号` 引用。
 > **2026-07-16 更新**：新增 30 天过滤条件，仅迁移 `filtered_at < now - 30 天` 的拒绝文章。
+> **2026-07-16 更新 #2**：修复去重漏洞——在 4 个数据源的 `saveArticles` 去重逻辑中追加对 `rejected_articles` 表的查询，防止被清理的拒绝文章再次被当作新文章入库（见 §16）。
 > 始于 `docs/handoffs/08-rejected-cleanup.md` 规划方案，现已完成实现。
 
 ---
@@ -486,6 +487,10 @@ if (file === '040_add_rejected_cleanup_completed_count.sql') {
 | `src/public/js/settings.js` | ✅ | 四个源类型的添加/编辑/保存流程全部更新 |
 | `src/api/routes/scheduler.routes.ts` | ✅ | 新增 `POST /api/scheduler/rejected-cleanup/trigger` HTTP 端点 |
 | `sql/040_add_rejected_cleanup_completed_count.sql` | ✅ | **新文件**，为 `rejected_cleanup_stats` 增加 `completed_rejected_count` 列 |
+| `src/api/articles.ts` | ✅ 2026-07-16 | RSS saveArticles 追加 rejected_articles 标题去重（见 §16） |
+| `src/journal-scheduler.ts` | ✅ 2026-07-16 | Journal saveArticles 追加 rejected_articles 标题去重（见 §16） |
+| `src/api/keywords.ts` | ✅ 2026-07-16 | Keyword saveArticles 追加 rejected_articles URL+标题双重去重（见 §16） |
+| `src/gmail/email-processor.ts` | ✅ 2026-07-16 | Gmail processEmailSource 追加 rejected_articles 标题去重（见 §16） |
 
 ---
 
@@ -506,3 +511,59 @@ if (file === '040_add_rejected_cleanup_completed_count.sql') {
 ## 15. 近期重构差异（2026-07-14，基于代码审查实施计划）
 
 - **`RejectedCleanupScheduler` 基类化**：改为 `extends BaseScheduler`，与全项目 8 个调度器统一生命周期（见 §5.1）。`start()` / `stop()` / cron 校验不再各自维护。
+
+---
+
+## 16. Bug 修复：被清理文章再次抓取时去重失效（2026-07-16）
+
+### 16.1 问题
+
+自动清理将 `filter_status='rejected'` 的文章从 `articles` 表物理删除到 `rejected_articles` 归档表。但四个来源（RSS / 期刊 / 关键词 / Gmail）的 `saveArticles` 去重逻辑只查询 `articles` 表，**不查 `rejected_articles` 归档表**。
+
+于是出现循环：
+
+```
+1. RSS 抓取 → 文章 A 入库 (articles)
+2. LLM 过滤拒绝 → filter_status='rejected'
+3. 30天后 auto-cleanup → 文章 A 从 articles DELETE，移到 rejected_articles
+4. 下一次 RSS 抓取 → 文章 A 又出现了
+5. 去重检查 title_normalized 只查 articles → 找不到 → 作为新文章重新插入
+6. LLM 再次过滤 → 再次拒绝 → 浪费 LLM API 调用
+7. 30天后又被清理 → 循环往复
+```
+
+### 16.2 修复
+
+在四个来源的 `saveArticles`/`processEmailSource` 中，在原有的 `articles` 去重检查之后，追加对 `rejected_articles` 表的查询。如果 `title_normalized`（或 `url`）在归档表中已存在，则跳过该文章。
+
+| 数据源 | 源文件 | 新增检查 |
+|--------|--------|---------|
+| RSS | `src/api/articles.ts:saveArticles` | `title_normalized` → `rejected_articles` |
+| 期刊 | `src/journal-scheduler.ts:saveArticles` | `title_normalized` → `rejected_articles` |
+| 关键词 | `src/api/keywords.ts:saveArticles` | `url` + `title_normalized` → `rejected_articles` |
+| Gmail | `src/gmail/email-processor.ts:processEmailSource` | `title_normalized` → `rejected_articles` |
+
+### 16.3 关键细节
+
+- **查询模式**：与 `articles` 检查完全一致，使用 `db.selectFrom('rejected_articles').where('title_normalized', '=', ?).select('id').executeTakeFirst()`
+- **日志级别**：`log.debug`，与现有去重日志风格一致
+- **关键词多查了一层 URL**：关键词源现有 URL 预查逻辑，也额外查了 `rejected_articles.url`，比其他源更严格
+- **类型安全**：`RejectedArticlesTable` 接口（`src/db.ts:336-371`）完整包含 `url` 和 `title_normalized` 字段
+- **性能**：每次去重多一次 SQLite 本地查询，字段有索引，开销可忽略
+
+### 16.4 涉及文件
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `src/api/articles.ts` | ✅ 修改 | RSS saveArticles 追加 rejected_articles 标题去重 |
+| `src/journal-scheduler.ts` | ✅ 修改 | Journal saveArticles 追加 rejected_articles 标题去重 |
+| `src/api/keywords.ts` | ✅ 修改 | Keyword saveArticles 追加 rejected_articles URL+标题双重去重 |
+| `src/gmail/email-processor.ts` | ✅ 修改 | Gmail processEmailSource 追加 rejected_articles 标题去重 |
+
+### 16.5 验证要点
+
+| 验证项 | 状态 | 方法 |
+|--------|------|------|
+| 被清理文章重新抓取时被跳过 | ✅ 代码就绪 | 模拟：insert → reject → cleanup → re-fetch → 确认 skip |
+| 类型检查 | ✅ 通过 | `npx tsc --noEmit` 无错误 |
+| 不影响现有未清理文章的入库 | ✅ 逻辑保证 | 仅当 `title_normalized` 在 `articles` 中不存在时才查 `rejected_articles` |

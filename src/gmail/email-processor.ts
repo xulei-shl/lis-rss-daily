@@ -161,6 +161,15 @@ export async function processEmailSource(source: EmailSourceConfig): Promise<Ema
                 .executeTakeFirst();
 
               if (existing) continue;
+
+              // Also check rejected_articles archive (articles cleaned up by auto-cleanup)
+              const rejectedExists = await db
+                .selectFrom('rejected_articles')
+                .where('title_normalized', '=', titleNormalized)
+                .select('id')
+                .executeTakeFirst();
+
+              if (rejectedExists) continue;
             }
 
             const content = article.content || email.html || email.text || '';
