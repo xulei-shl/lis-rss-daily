@@ -316,6 +316,24 @@ function getPublishTimeText(article) {
   return formatTime(article.published_at);
 }
 
+// Refresh button handler
+const refreshBtn = document.getElementById('refreshBtn');
+if (refreshBtn) {
+  refreshBtn.addEventListener('click', () => {
+    // 刷新统计
+    loadStats();
+    // 刷新文章列表
+    const params = new URLSearchParams(window.location.search);
+    const page = parseInt(params.get('page')) || 1;
+    loadArticles(page);
+  });
+}
+
+// 每 60 秒自动刷新统计数据（后台文章处理异步执行中）
+setInterval(() => {
+  loadStats();
+}, 60000);
+
 // Handle browser back/forward
 window.addEventListener('popstate', () => {
   const params = new URLSearchParams(window.location.search);

@@ -5,6 +5,7 @@ import { filterArticle, type FilterInput } from '../filter.js';
 import { processArticle } from '../pipeline.js';
 import { config } from '../config.js';
 import { decryptAPIKey } from '../utils/crypto.js';
+import { parseLLMJSON } from '../utils/llm-json-parser.js';
 import { fetchEmails, markAndDelete } from './imap-client.js';
 import { getUserLLMProvider, type ChatMessage } from '../llm.js';
 import { buildPromptVariables } from '../api/prompt-variable-builder.js';
@@ -93,8 +94,22 @@ async function parseEmailContent(email: ParsedEmail, userId: number): Promise<Pa
       label: 'email-parse',
     });
 
-    const parsed: EmailParseResult = JSON.parse(response);
+    const parseResult = parseLLMJSON<EmailParseResult>(response, {
+      allowPartial: true,
+      maxResponseLength: 8192,
+      errorPrefix: 'Email parse',
+    });
 
+    if (!parseResult.success || !parseResult.data) {
+      log.warn({ emailSubject: email.subject, error: parseResult.error }, 'Failed to parse LLM email response, treating as single article');
+      return [{
+        title: email.subject,
+        content: email.text || email.html || '',
+        url: email.messageId,
+      }];
+    }
+
+    const parsed = parseResult.data;
     if (!parsed.articles || !Array.isArray(parsed.articles)) {
       log.warn({ emailSubject: email.subject }, 'Invalid email parse response format');
       return [];

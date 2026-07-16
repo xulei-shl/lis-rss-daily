@@ -175,30 +175,67 @@ export function parseLLMJSON<T = any>(
  * 处理以下格式：
  * - ```json ... ```
  * - ``` ... ```
- * - 纯JSON文本
+ * - 纯JSON文本（含前后缀文字）
+ * - 含多余反引号或空白
  *
  * @param text - 响应文本
  * @returns 提取的JSON字符串
  */
 function extractJSON(text: string): string {
-  // 尝试匹配markdown代码块
+  // Strategy 1: 匹配 markdown 代码块（```json ... ``` 或 ``` ... ```）
+  // 注意：用非贪婪匹配，且允许 closing fence 前后有空白
   const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)```/;
   const match = text.match(codeBlockRegex);
 
-  if (match && match[1]) {
-    return match[1].trim();
+  if (match && match[1] !== undefined) {
+    const extracted = match[1].trim();
+    if (extracted) {
+      // 提取的内容若以 { 或 [ 开头，可直接返回
+      if (extracted.startsWith('{') || extracted.startsWith('[')) {
+        return extracted;
+      }
+      // 否则可能在文本中有 {…} 或 […] ，尝试从中提取 JSON
+      const innerJson = extractJSONBraces(extracted);
+      if (innerJson) return innerJson;
+      return extracted;
+    }
+    // match[1] 是空字符串，不返回原始文本，尝试后面的兜底策略
   }
 
-  // 如果没有代码块，尝试找到第一个 { 和最后一个 }
+  // Strategy 2: 在整个文本中找 {…} 或 […] 并提取
+  const braceResult = extractJSONBraces(text);
+  if (braceResult) return braceResult;
+
+  // Strategy 3: 最后的兜底——剥离所有反引号，看剩下是否能解析
+  const stripped = text.replace(/`{1,3}/g, '').trim();
+  if (stripped) {
+    return stripped;
+  }
+
+  // 万不得已返回原文本
+  return text;
+}
+
+/**
+ * 从文本中提取第一组花括号/方括号包裹的内容
+ * 优先尝试花括号（JSON 对象），再尝试方括号（JSON 数组）
+ */
+function extractJSONBraces(text: string): string | null {
+  // 尝试 JSON 对象：第一个 { 到最后一个 }
   const firstBrace = text.indexOf('{');
   const lastBrace = text.lastIndexOf('}');
-
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
     return text.substring(firstBrace, lastBrace + 1);
   }
 
-  // 如果都不是，返回原文本
-  return text;
+  // 尝试 JSON 数组：第一个 [ 到最后一个 ]
+  const firstBracket = text.indexOf('[');
+  const lastBracket = text.lastIndexOf(']');
+  if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+    return text.substring(firstBracket, lastBracket + 1);
+  }
+
+  return null;
 }
 
 /**
