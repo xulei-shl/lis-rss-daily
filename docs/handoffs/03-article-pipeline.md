@@ -43,7 +43,7 @@
 - `translateArticleIfNeeded(title?, content?, userId?)`（`:27`）返回 `TranslationResult | null`。
 - `detectLanguage(...)`（`:90`）：空 → `'unknown'`；含 CJK `/[\u4e00-\u9fff]/` → `'zh'`；否则字母数 ≥ `MIN_ALPHA_COUNT`(=10) 且字母占非空白比 > `MIN_ALPHA_RATIO`(=0.6) → `'en'`，否则 `'unknown'`。两个阈值已提取为常量（2026-07-14，原 `#8.1` Magic Number 修复）。
 - **翻译条件**（`:34-39`）：仅当标题或内容为 `'en'` 才翻译；否则返回 `null`（中文文章完全跳过 LLM）。
-- 内容截断常量 `MAX_TRANSLATION_CONTENT=3000`（`:22`）。提示词经 `buildPromptVariables({type:'translation'})` + `resolveSystemPrompt(userId,'translation',...)`；LLM 经 `getUserLLMProvider(userId,'translation')` 或 `getLLM()`。
+- 内容清洗：`stripUrls(content)` 去除 HTTP 链接噪声后传入 LLM（不再截断）。提示词经 `buildPromptVariables({type:'translation'})` + `resolveSystemPrompt(userId,'translation',...)`；LLM 经 `getUserLLMProvider(userId,'translation')` 或 `getLLM()`。
 - LLM 抛错 → 返回 `{summaryZh:undefined, sourceLang:'en', usedFallback:true}`（不抛）。
 - `TranslationResult`（`:14`）：`{ titleZh?, summaryZh?, sourceLang:'zh'|'en'|'unknown', usedFallback }`。`titleZh` 字段**已于 2026-07-14 正式声明**（此前为潜在 bug）。
 - 流水线 `runStageTranslate` 现在会落 `title_zh = translationResult.titleZh ?? null`（不再恒为 `null`），同时落 `summary_zh` + `source_lang`。仅在标题实际被翻译（`shouldTranslateTitle`）时 `titleZh` 才非空。

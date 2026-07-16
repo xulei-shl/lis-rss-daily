@@ -1,7 +1,7 @@
 # 05 · LLM 抽象层与工具库 Handoff
 
 > AI 编排核心：多提供商抽象、优先级链与故障转移、限流、加密、健壮 JSON 解析，以及全局配置与共享工具。
-> 关键源文件：`src/llm.ts`、`src/llm-logger.ts`、`src/api/llm-configs.ts`（+ 路由）、`src/utils/`（`crypto.ts` `llm-json-parser.ts` `rate-limiter.ts` `markdown.ts` `datetime.ts` `title.ts` `message-splitter.ts`）、`src/config.ts`、`src/config/system-prompt-variables.ts`。
+> 关键源文件：`src/llm.ts`、`src/llm-logger.ts`、`src/api/llm-configs.ts`（+ 路由）、`src/utils/`（`crypto.ts` `llm-json-parser.ts` `rate-limiter.ts` `markdown.ts` `datetime.ts` `title.ts` `text-cleaner.ts` `message-splitter.ts`）、`src/config.ts`、`src/config/system-prompt-variables.ts`。
 
 ## 1. `LLMProvider` 抽象（`src/llm.ts`）
 
@@ -84,6 +84,7 @@ export interface LLMProvider {                 // :34
 - `datetime.ts`：`normalizeTimestamp`/`normalizeDateFields`——SQLite `YYYY-MM-DD HH:MM:SS` → ISO8601 UTC(`...Z`)。
 - `title.ts`：`normalizeTitle`/`generateNormalizedTitle`——文章去重规范化（详见文档 01）。
 - `markdown.ts`：`toSimpleMarkdown`——无依赖 HTML→Markdown（清噪声块）。
+- `text-cleaner.ts`：`stripUrls(text)` 去除 HTTP/HTTPS 链接+归一化空白；`truncatePreview(text, maxContentChars)` 去除 URL 后按内容字符（字母/数字/汉字）计数截断（不计标点/空格/符号），在 filter/summary/keywords prompt 变量及每日总结预览中使用。
 - `message-splitter.ts`：`splitMessage(content, maxBytes)`/`smartTruncate`——`DEFAULT_MAX_LENGTH=4096`，字节感知按换行/标点切分（Telegram/微信共用）。
 
 ## 10. `config.ts` 关键字段（`getConfig()`, `:107-216`）

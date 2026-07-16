@@ -6,6 +6,7 @@ import { getUserLLMProvider, getLLM } from './llm.js';
 import { logger } from './logger.js';
 import { resolveSystemPrompt } from './api/system-prompts.js';
 import { buildPromptVariables, type ArticleContext } from './api/prompt-variable-builder.js';
+import { stripUrls } from './utils/text-cleaner.js';
 
 const log = logger.child({ module: 'agent' });
 
@@ -22,10 +23,9 @@ export interface TranslationResult {
 
 /* ── Translation ── */
 
-const MAX_TRANSLATION_CONTENT = 3000;
-
 /**
  * Translate title/content to Chinese when English is detected.
+ * Sends the full content (with URL noise removed) to LLM for complete translation.
  */
 export async function translateArticleIfNeeded(
   title?: string,
@@ -41,7 +41,8 @@ export async function translateArticleIfNeeded(
     return null;
   }
 
-  const trimmedContent = (content || '').slice(0, MAX_TRANSLATION_CONTENT);
+  // Strip URLs to reduce noise, but keep ALL content for full translation
+  const cleanedContent = stripUrls(content || '');
   const fallbackPrompt = `你是专业中英翻译助手。请将英文翻译为中文，保持术语准确，不要添加解释。请输出纯文本译文，不要输出 JSON。
 
 ### 待翻译内容
@@ -57,7 +58,7 @@ export async function translateArticleIfNeeded(
     userId: userId || 0,
     title: title || '无',
     description: '',
-    content: trimmedContent || '无',
+    content: cleanedContent || '无',
   };
   const variables = await buildPromptVariables({ type: 'translation', article: articleContext });
   const userPrompt = await resolveSystemPrompt(userId, 'translation', fallbackPrompt, variables);

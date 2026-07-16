@@ -22,7 +22,7 @@
 - `getArticleSourceDomainId(articleId)`（`api/topic-domains.ts:360-396`）：读 `source_origin` + 对应外键（`rss_source_id`/`journal_id`/`keyword_id`/`email_source_id`），从对应源表查 `domain_id`；查不到则抛错。
 - `getTopicDomainById(domainId, userId)`（`api/topic-domains.ts:203`）取领域，缺失 → 错误 `"领域 ${domainId} 不存在或无权访问"`。
 - `buildPromptVariables({type:'filter', article})`（`api/prompt-variable-builder.ts:211`）生成变量 → `resolveSystemPrompt(userId,'filter','',variables)`（`api/system-prompts.ts:129`）渲染 DB 提示词模板。无非空模板 → 错误（`:149-155`）。
-- 组装 `userPrompt`（系统提示词 + 标题/摘要/内容预览前 2000 字）并调用 LLM：`jsonMode:true, temperature:0.3, label:'article-filter'`（`:172-178`）。
+- 组装 `userPrompt`（系统提示词 + 标题/摘要 + `truncatePreview(content, 2000)` 清洗截取的内容预览——自动去除 HTTP 链接、只计中英文+数字不计符号）并调用 LLM：`jsonMode:true, temperature:0.3, label:'article-filter'`（`:172-178`）。
 
 **单领域**：`buildDomainsInfo(userId, domainId?)`（`api/prompt-variable-builder.ts:79-135`）传入 `domainId` 时只返回**该单个领域**的 `## 领域ID: <id> - <name>` 块及其活跃关键词。原多领域分支仍在但过滤路径不再使用。**过滤器不再遍历所有活跃领域**。
 

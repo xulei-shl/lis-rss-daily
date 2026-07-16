@@ -11,6 +11,7 @@ import { getDb } from '../db.js';
 import { getActiveTopicDomains, getTopicDomainById } from './topic-domains.js';
 import { getActiveKeywordsForDomain } from './topic-keywords.js';
 import { SOURCE_TYPE_PRIORITY, SOURCE_TYPE_LABELS, type SourceType } from '../constants/source-types.js';
+import { truncatePreview } from '../utils/text-cleaner.js';
 
 /**
  * 邮件上下文 - 用于 email_parse 类型
@@ -226,7 +227,7 @@ async function buildFilterVariables(context: VariableBuildContext): Promise<Buil
     TOPIC_DOMAINS: await buildDomainsInfo(article.userId, article.domainId),
     ARTICLE_TITLE: article.title || '无',
     ARTICLE_URL: article.url || '无',
-    ARTICLE_CONTENT: article.content ? article.content.substring(0, 2000) : '',
+    ARTICLE_CONTENT: article.content ? truncatePreview(article.content, 2000) : '',
     SOURCE_TYPE: SOURCE_TYPE_LABELS[sourceType],
     ARTICLE_SOURCE: sourceName || '未知来源',
     ARTICLE_AUTHOR: author || '未知作者',
@@ -248,7 +249,7 @@ async function buildSummaryVariables(context: VariableBuildContext): Promise<Bui
 
   const variables: Record<string, string> = {
     ARTICLE_TITLE: article.title || '无',
-    ARTICLE_CONTENT: article.content ? article.content.substring(0, 3000) : article.description || '',
+    ARTICLE_CONTENT: article.content ? truncatePreview(article.content, 3000) : article.description || '',
   };
 
   return { variables };
@@ -266,7 +267,7 @@ async function buildKeywordsVariables(context: VariableBuildContext): Promise<Bu
 
   const variables: Record<string, string> = {
     ARTICLE_TITLE: article.title || '无',
-    ARTICLE_CONTENT: article.content ? article.content.substring(0, 1200) : '',
+    ARTICLE_CONTENT: article.content ? truncatePreview(article.content, 1200) : '',
     ARTICLE_URL: article.url || '无',
   };
 

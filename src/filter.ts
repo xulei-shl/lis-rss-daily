@@ -12,6 +12,7 @@ import { getUserLLMProvider, type ChatMessage } from './llm.js';
 import { logger } from './logger.js';
 import { resolveSystemPrompt } from './api/system-prompts.js';
 import { parseLLMJSON } from './utils/llm-json-parser.js';
+import { truncatePreview } from './utils/text-cleaner.js';
 import { buildPromptVariables, type ArticleContext } from './api/prompt-variable-builder.js';
 import { type SourceType } from './constants/source-types.js';
 import { checkTitleBlacklist } from './config/blacklist-filter.js';
@@ -161,7 +162,7 @@ async function llmFilter(
 # 文章信息
 题目: ${input.title}
 摘要: ${input.description}
-${input.content ? `内容预览: ${input.content.substring(0, 2000)}...` : ''}
+${input.content ? `内容预览: ${truncatePreview(input.content, 2000)}` : ''}
 
 请严格按照指定的 JSON 格式返回评估结果。`;
 

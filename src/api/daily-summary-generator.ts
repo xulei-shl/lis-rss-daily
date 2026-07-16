@@ -9,6 +9,7 @@ import { logger } from '../logger.js';
 import { getUserLLMProvider } from '../llm.js';
 import { resolveSystemPrompt } from './system-prompts.js';
 import { getUserLocalDate } from './timezone.js';
+import { truncatePreview } from '../utils/text-cleaner.js';
 import {
   getDailyPassedArticles,
   getAllJournalArticles,
@@ -42,7 +43,7 @@ function buildArticlesListText(articlesByType: {
     text += `\n## ${title}\n`;
     articles.forEach((article, index) => {
       const content = article.markdown_content || article.summary || '';
-      const preview = content.length > 300 ? content.substring(0, 300) + '...' : content;
+      const preview = truncatePreview(content, 1000);
       text += `${index + 1}. **${article.title}**\n`;
       text += `   来源：${article.source_name}\n`;
       text += `   预览：${preview}\n\n`;
