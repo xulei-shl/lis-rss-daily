@@ -278,10 +278,9 @@ export async function getFailedArticles(req: Request, res: Response): Promise<vo
 export async function filterAndProcessBatch(req: Request, res: Response): Promise<void> {
   const userId = (req as any).userId;
   const options: BatchOptions = req.body || {};
-  const limit = options.limit || 50;
 
   try {
-    log.info({ userId, limit }, '[API] Filter and process batch started');
+    log.info({ userId }, '[API] Filter and process batch started (no limit)');
 
     const { getDb } = await import('../db.js');
     const { filterArticle } = await import('../filter.js');
@@ -295,7 +294,6 @@ export async function filterAndProcessBatch(req: Request, res: Response): Promis
       .where('articles.process_status', '=', 'pending')
       .where('rss_sources.user_id', '=', userId)
       .select(['articles.id', 'articles.title', 'articles.url', 'articles.content', 'articles.markdown_content', 'rss_sources.source_type'])
-      .limit(limit)
       .execute();
 
     // Step 2: Get pending articles from journals
@@ -306,7 +304,6 @@ export async function filterAndProcessBatch(req: Request, res: Response): Promis
       .where('articles.process_status', '=', 'pending')
       .where('journals.user_id', '=', userId)
       .select(['articles.id', 'articles.title', 'articles.url', 'articles.content', 'articles.markdown_content'])
-      .limit(limit)
       .execute();
 
     // Step 3: Get pending articles from keywords
@@ -317,7 +314,6 @@ export async function filterAndProcessBatch(req: Request, res: Response): Promis
       .where('articles.process_status', '=', 'pending')
       .where('keyword_subscriptions.user_id', '=', userId)
       .select(['articles.id', 'articles.title', 'articles.url', 'articles.content', 'articles.markdown_content'])
-      .limit(limit)
       .execute();
 
     let filteredCount = 0;
@@ -409,7 +405,7 @@ export async function filterAndProcessBatch(req: Request, res: Response): Promis
     }
 
     // Step 7: Get already passed articles that need processing
-    const passedArticlesResult = await getPendingArticleIds(userId, limit);
+    const passedArticlesResult = await getPendingArticleIds(userId, 100000);
     const allArticleIds = [...passedArticleIds, ...passedArticlesResult];
 
     // Remove duplicates
