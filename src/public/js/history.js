@@ -27,6 +27,7 @@
     journal: '期刊精选',
     blog_news: '博客资讯',
     all: '综合',
+    journal_all: '全部期刊',
     search: '搜索总结',
     insights: '洞察报告'
   };
