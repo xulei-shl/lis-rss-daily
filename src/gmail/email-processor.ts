@@ -172,7 +172,7 @@ export async function processEmailSource(source: EmailSourceConfig): Promise<Ema
               if (rejectedExists) continue;
             }
 
-            const content = article.content || email.html || email.text || '';
+            const content = article.content ?? '';
             const url = article.url || email.messageId;
 
             const articleId = await db
