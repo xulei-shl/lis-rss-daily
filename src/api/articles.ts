@@ -396,6 +396,7 @@ export async function getArticleById(
       'articles.filter_score',
       'articles.filtered_at',
       'articles.process_status',
+      'articles.process_stages',
       'articles.processed_at',
       'articles.published_at',
       'articles.published_year',
@@ -410,6 +411,7 @@ export async function getArticleById(
       'rss_sources.name as rss_source_name',
       'journals.name as journal_name',
       'keyword_subscriptions.keyword as keyword_name',
+      'email_sources.name as email_source_name',
     ])
     .executeTakeFirst();
 
@@ -418,7 +420,7 @@ export async function getArticleById(
   // 合并来源名称
   const merged = {
     ...article,
-    source_name: (article as any).journal_name || (article as any).rss_source_name || (article as any).keyword_name || 'Unknown',
+    source_name: (article as any).journal_name || (article as any).rss_source_name || (article as any).keyword_name || (article as any).email_source_name || 'Unknown',
   } as ArticleWithSource;
 
   normalizeArticleDates(merged);
@@ -816,6 +818,7 @@ export async function getUserArticles(
     'articles.filter_score',
     'articles.filtered_at',
     'articles.process_status',
+    'articles.process_stages',
     'articles.processed_at',
     'articles.published_at',
     'articles.published_year',
