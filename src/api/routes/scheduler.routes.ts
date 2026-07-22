@@ -54,7 +54,7 @@ router.post('/rss-sources/fetch-all', requireAuth, async (req: AuthRequest, res)
 router.post('/scheduler/rejected-cleanup/trigger', requireAuth, async (req: AuthRequest, res) => {
   try {
     const scheduler = initRejectedCleanupScheduler();
-    const result = await scheduler.cleanupNow();
+    const result = await scheduler.cleanupNow(false);
 
     res.json({
       success: true,

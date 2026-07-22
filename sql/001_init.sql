@@ -664,6 +664,28 @@ CREATE TABLE IF NOT EXISTS rejected_cleanup_stats (
 );
 
 -- ===========================================
+-- 23. Rejected Cleanup Logs (拒绝文章清理执行日志)
+-- ===========================================
+-- 记录每次 rejected-cleanup-scheduler 运行的汇总信息，
+-- 供 /filter-logs 页面查看清理流程的执行记录。
+CREATE TABLE IF NOT EXISTS rejected_cleanup_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  total_sources INTEGER NOT NULL DEFAULT 0,
+  total_articles_moved INTEGER NOT NULL DEFAULT 0,
+  success_count INTEGER NOT NULL DEFAULT 0,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  is_scheduled INTEGER NOT NULL DEFAULT 1,
+  details_json TEXT,
+  error_message TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rejected_cleanup_logs_user_id ON rejected_cleanup_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_rejected_cleanup_logs_created_at ON rejected_cleanup_logs(created_at);
+
+-- ===========================================
 -- 19. Schema Metadata Table
 -- ===========================================
 -- 用于跟踪数据库 schema 版本和配置版本

@@ -53,6 +53,7 @@ export interface DatabaseTable {
   web_fetch_logs: WebFetchLogsTable;
   rejected_articles: RejectedArticlesTable;
   rejected_cleanup_stats: RejectedCleanupStatsTable;
+  rejected_cleanup_logs: RejectedCleanupLogsTable;
 }
 
 export interface UsersTable {
@@ -378,6 +379,20 @@ export interface RejectedCleanupStatsTable {
   article_date: string;
   rejected_count: number;
   completed_rejected_count: number;
+}
+
+export interface RejectedCleanupLogsTable {
+  id: Generated<number>;
+  user_id: number;
+  total_sources: number;
+  total_articles_moved: number;
+  success_count: number;
+  failed_count: number;
+  duration_ms: number;
+  is_scheduled: number;
+  details_json: string | null;
+  error_message: string | null;
+  created_at: Generated<string>;
 }
 
 export interface EmailFetchLogsTable {

@@ -14,6 +14,7 @@ import { getDb } from './db.js';
 import { logger } from './logger.js';
 import { config } from './config.js';
 import { BaseScheduler } from './utils/base-scheduler.js';
+import { createRejectedCleanupLog } from './api/rejected-cleanup-logs.js';
 
 const log = logger.child({ module: 'rejected-cleanup-scheduler' });
 
@@ -58,7 +59,7 @@ export class RejectedCleanupScheduler extends BaseScheduler {
   get isEnabled(): boolean { return config.rejectedCleanupEnabled; }
 
   protected async run(): Promise<void> {
-    await this.cleanupNow();
+    await this.cleanupNow(true);
   }
 
   static getInstance(): RejectedCleanupScheduler {
@@ -71,7 +72,7 @@ export class RejectedCleanupScheduler extends BaseScheduler {
   /**
    * Manual trigger — cleanup all sources with auto_cleanup_rejected=1
    */
-  async cleanupNow(): Promise<CleanupResult> {
+  async cleanupNow(isScheduled: boolean = true): Promise<CleanupResult> {
     const startTime = Date.now();
     const runLog = log.child({ runId: `cleanup-${Date.now()}` });
 
@@ -132,6 +133,33 @@ export class RejectedCleanupScheduler extends BaseScheduler {
       { totalSources: sources.length, totalArticlesMoved, successCount, failedCount, durationMs },
       'Rejected article cleanup completed'
     );
+
+    // Persist log to database
+    try {
+      // Only log for user_id=1 (single-user system)
+      const detailsJson = JSON.stringify(
+        sourceResults.map((r) => ({
+          sourceType: r.sourceType,
+          sourceId: r.sourceId,
+          sourceName: r.sourceName,
+          articlesMoved: r.articlesMoved,
+          success: r.success,
+          error: r.error,
+        }))
+      );
+      await createRejectedCleanupLog({
+        userId: 1,
+        totalSources: sources.length,
+        totalArticlesMoved,
+        successCount,
+        failedCount,
+        durationMs,
+        isScheduled,
+        detailsJson,
+      });
+    } catch (logError) {
+      runLog.error({ error: logError }, 'Failed to persist rejected cleanup log');
+    }
 
     return {
       totalSources: sources.length,

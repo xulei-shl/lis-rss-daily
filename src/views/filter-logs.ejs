@@ -13,6 +13,7 @@
     <button class="logs-tab" data-tab="process">后处理</button>
     <button class="logs-tab" data-tab="email">邮件订阅</button>
     <button class="logs-tab" data-tab="web">网站爬虫</button>
+    <button class="logs-tab" data-tab="rejected-cleanup">拒绝清理</button>
   </div>
 
   <div class="logs-tab-panel active" data-panel="all">
@@ -318,6 +319,31 @@
     </div>
     <div class="pagination" id="processPagination"></div>
   </div>
+
+  <div class="logs-tab-panel" data-panel="rejected-cleanup">
+    <table class="logs-table" id="rejectedCleanupTable">
+      <thead>
+        <tr>
+          <th class="expand-cell"></th>
+          <th>执行方式</th>
+          <th>清理源数</th>
+          <th>迁移文章</th>
+          <th>结果</th>
+          <th>耗时</th>
+          <th>时间</th>
+        </tr>
+      </thead>
+      <tbody id="rejectedCleanupBody"></tbody>
+    </table>
+    <div class="empty-state" id="rejectedCleanupEmpty">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <p>暂无拒绝清理日志</p>
+    </div>
+    <div class="pagination" id="rejectedCleanupPagination"></div>
+  </div>
   </div>
 
   <script>
@@ -334,6 +360,7 @@
           process: { page: 1, totalPages: 1 },
           email: { page: 1, totalPages: 1 },
           web: { page: 1, totalPages: 1 },
+          rejectedCleanup: { page: 1, totalPages: 1 },
         },
         filters: {
           domainId: '',
@@ -347,6 +374,7 @@
           processStatus: '',
           emailStatus: '',
           webStatus: '',
+          rejectedCleanupTrigger: '',
         },
       };
 
@@ -476,6 +504,7 @@
         loadProcessLogs(1);
         loadEmailLogs(1);
         loadWebLogs(1);
+        loadRejectedCleanupLogs(1);
       }
 
       async function loadDomains() {
@@ -612,6 +641,21 @@
           console.error(err);
           toast.error('加载邮件订阅日志失败：' + (err.message || '网络错误'));
           showEmptyState('emailTable', 'emailEmpty');
+        }
+      }
+
+      async function loadRejectedCleanupLogs(page = 1) {
+        try {
+          const params = buildParams(page);
+          const data = await fetchJson('/api/logs/rejected-cleanup', params);
+          state.tabs.rejectedCleanup.page = data.page || 1;
+          state.tabs.rejectedCleanup.totalPages = data.totalPages || 1;
+          renderRejectedCleanupLogs(data.logs || []);
+          renderPagination('rejectedCleanupPagination', state.tabs.rejectedCleanup.page, state.tabs.rejectedCleanup.totalPages, 'rejectedCleanup');
+        } catch (err) {
+          console.error(err);
+          toast.error('加载拒绝清理日志失败：' + (err.message || '网络错误'));
+          showEmptyState('rejectedCleanupTable', 'rejectedCleanupEmpty');
         }
       }
 
@@ -807,6 +851,81 @@
     }).join('');
 
     bindExpandEvents('#emailBody');
+  }
+
+  function renderRejectedCleanupLogs(logs) {
+    const table = document.getElementById('rejectedCleanupTable');
+    const tbody = document.getElementById('rejectedCleanupBody');
+    const empty = document.getElementById('rejectedCleanupEmpty');
+
+    if (!tbody || !table || !empty) return;
+
+    if (!logs.length) {
+      table.style.display = 'none';
+      empty.style.display = 'block';
+      tbody.innerHTML = '';
+      return;
+    }
+
+    table.style.display = 'table';
+    empty.style.display = 'none';
+
+    tbody.innerHTML = logs.map((log) => {
+      const detailId = 'rejected-cleanup-detail-' + log.id;
+      const schedule = log.is_scheduled ? '定时' : '手动';
+      const successStatus = log.failed_count > 0 && log.success_count === 0 ? 'failed' :
+                            log.failed_count > 0 ? 'partial' : 'success';
+      return \`
+        <tr class="expand-row" data-detail-id="\${detailId}">
+          <td class="expand-cell"><span class="expand-icon">▶</span></td>
+          <td>\${schedule}</td>
+          <td>\${log.total_sources}</td>
+          <td>\${log.total_articles_moved}</td>
+          <td>\${renderStatusBadge(successStatus)}</td>
+          <td>\${formatDuration(log.duration_ms)}</td>
+          <td>\${formatDate(log.created_at)}</td>
+        </tr>
+        <tr class="detail-row" id="\${detailId}">
+          <td colspan="7" class="detail-cell">
+            <div class="detail-content">
+              <h4>清理详情</h4>
+              <p>执行方式：\${schedule}</p>
+              <p>来源数量：\${log.total_sources}</p>
+              <p>成功来源：\${log.success_count}</p>
+              <p>失败来源：\${log.failed_count}</p>
+              <p>迁移文章：\${log.total_articles_moved}</p>
+              <p>耗时：\${formatDuration(log.duration_ms)}</p>
+              \${log.error_message ? \`<p>错误信息：\${escapeHtml(log.error_message)}</p>\` : ''}
+              \${log.details_json ? buildRejectedCleanupDetails(log.details_json) : ''}
+            </div>
+          </td>
+        </tr>
+      \`;
+    }).join('');
+
+    bindExpandEvents('#rejectedCleanupBody');
+  }
+
+  function buildRejectedCleanupDetails(detailsJson) {
+    try {
+      const details = JSON.parse(detailsJson);
+      if (!details || !details.length) return '';
+      let html = '<h4 style="margin-top: 12px;">来源明细</h4><div class="detail-list">';
+      details.forEach((item) => {
+        const statusIcon = item.success ? '✅' : '❌';
+        html += \`
+          <div class="detail-list-item">
+            <span>\${statusIcon} \${escapeHtml(item.sourceName || '未知')} (\${item.sourceType})</span>
+            <span>迁移: \${item.articlesMoved} 篇</span>
+            \${item.error ? \`<span class="error-text">错误: \${escapeHtml(item.error)}</span>\` : ''}
+          </div>
+        \`;
+      });
+      html += '</div>';
+      return html;
+    } catch (e) {
+      return '';
+    }
   }
 
   function renderWebLogs(logs) {
@@ -1146,6 +1265,9 @@
       case 'web':
         loadWebLogs(page);
         break;
+      case 'rejectedCleanup':
+        loadRejectedCleanupLogs(page);
+        break;
     }
     return false;
   };
@@ -1189,6 +1311,8 @@
         return '过滤';
       case 'process':
         return '后处理';
+      case 'rejected_cleanup':
+        return '拒绝清理';
       default:
         return '流程';
     }
@@ -1208,6 +1332,8 @@
         return \`\${log.data?.keyword || '-'} · \${getSpiderTypeLabel(log.data?.spider_type)}\`;
       case 'process':
         return \`\${log.data?.article_title || '未命名文章'} · \${getStageLabel(log.data?.stage)}\`;
+      case 'rejected_cleanup':
+        return \`清理 \${log.data?.total_sources ?? 0} 个源 · 迁移 \${log.data?.total_articles_moved ?? 0} 篇\`;
       case 'filter':
       default:
         return log.data?.article_title || '未命名文章';
@@ -1228,6 +1354,8 @@
         return buildKeywordDetail(log.data);
       case 'process':
         return buildProcessDetail(log.data);
+      case 'rejected_cleanup':
+        return buildRejectedCleanupDetail(log.data);
       case 'filter':
       default:
         return buildFilterDetail(log.data);
@@ -1269,6 +1397,24 @@
       <p>耗时：\${formatDuration(data?.duration_ms)}</p>
       \${data?.error_message ? \`<p>错误信息：\${escapeHtml(data.error_message)}</p>\` : ''}
     \`;
+  }
+
+  function buildRejectedCleanupDetail(data) {
+    const schedule = data?.is_scheduled ? '定时' : '手动';
+    let detailHtml = \`
+      <h4>拒绝文章清理</h4>
+      <p>执行方式：\${schedule}</p>
+      <p>来源数量：\${data?.total_sources ?? 0}</p>
+      <p>成功来源：\${data?.success_count ?? 0}</p>
+      <p>失败来源：\${data?.failed_count ?? 0}</p>
+      <p>迁移文章：\${data?.total_articles_moved ?? 0}</p>
+      <p>耗时：\${formatDuration(data?.duration_ms)}</p>
+      \${data?.error_message ? \`<p>错误信息：\${escapeHtml(data.error_message)}</p>\` : ''}
+    \`;
+    if (data?.details_json) {
+      detailHtml += buildRejectedCleanupDetails(data.details_json);
+    }
+    return detailHtml;
   }
 
   function buildWebDetail(data) {

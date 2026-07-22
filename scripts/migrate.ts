@@ -893,6 +893,21 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
       }
 
       // ============================================================
+      // 042: 添加拒绝文章清理日志表
+      // ============================================================
+      if (file === '042_add_rejected_cleanup_logs.sql') {
+        const hasRejectedCleanupLogs = hasTable(db, 'rejected_cleanup_logs');
+        if (!hasRejectedCleanupLogs) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log('      → Created rejected_cleanup_logs table');
+        } else {
+          console.log('      → Skipped (rejected_cleanup_logs already exists)');
+        }
+        continue;
+      }
+
+      // ============================================================
       // 041: 添加 Web 爬虫来源支持（web_sources + web_fetch_logs + articles/web_source_id）
       // ============================================================
       if (file === '041_add_web_sources.sql') {

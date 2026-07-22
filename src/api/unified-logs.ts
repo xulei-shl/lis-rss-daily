@@ -5,13 +5,14 @@ import { getEmailFetchLogs } from './email-fetch-logs.js';
 import { getWebFetchLogs } from './web-fetch-logs.js';
 import { getProcessLogs } from './process-logs.js';
 import { getKeywordCrawlLogs } from './keywords.js';
+import { getRejectedCleanupLogs } from './rejected-cleanup-logs.js';
 import type { FilterLogRecord } from './filter-logs.js';
 import type { RssFetchLogRecord } from './rss-fetch-logs.js';
 import type { EmailFetchLogRecord } from './email-fetch-logs.js';
 import type { WebFetchLogRecord } from './web-fetch-logs.js';
 import type { ProcessLogRecord } from './process-logs.js';
 
-export type UnifiedLogType = 'filter' | 'rss_fetch' | 'email_fetch' | 'journal_crawl' | 'process' | 'keyword_crawl' | 'web_fetch';
+export type UnifiedLogType = 'filter' | 'rss_fetch' | 'email_fetch' | 'journal_crawl' | 'process' | 'keyword_crawl' | 'web_fetch' | 'rejected_cleanup';
 
 export interface UnifiedLogsQuery {
   userId: number;
@@ -39,7 +40,7 @@ export interface UnifiedLogsResult {
   totalsByType: Record<UnifiedLogType, number>;
 }
 
-const ALL_TYPES: UnifiedLogType[] = ['filter', 'rss_fetch', 'email_fetch', 'journal_crawl', 'process', 'keyword_crawl', 'web_fetch'];
+const ALL_TYPES: UnifiedLogType[] = ['filter', 'rss_fetch', 'email_fetch', 'journal_crawl', 'process', 'keyword_crawl', 'web_fetch', 'rejected_cleanup'];
 
 export async function getUnifiedLogs(params: UnifiedLogsQuery): Promise<UnifiedLogsResult> {
   const page = params.page ?? 1;
@@ -146,6 +147,20 @@ export async function getUnifiedLogs(params: UnifiedLogsQuery): Promise<UnifiedL
     };
   }
 
+  if (types.includes('rejected_cleanup')) {
+    const cleanupResult = await getRejectedCleanupLogs({
+      userId: params.userId,
+      page: 1,
+      limit: fetchLimitPerType,
+      fromDate: params.fromDate,
+      toDate: params.toDate,
+    });
+    resultsByType.rejected_cleanup = {
+      entries: cleanupResult.logs.map(mapRejectedCleanupLog),
+      total: cleanupResult.total,
+    };
+  }
+
   const combinedEntries: UnifiedLogEntry[] = Object.values(resultsByType)
     .flatMap((result) => result?.entries ?? [])
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -160,6 +175,7 @@ export async function getUnifiedLogs(params: UnifiedLogsQuery): Promise<UnifiedL
     process: resultsByType.process?.total ?? 0,
     keyword_crawl: resultsByType.keyword_crawl?.total ?? 0,
     web_fetch: resultsByType.web_fetch?.total ?? 0,
+    rejected_cleanup: resultsByType.rejected_cleanup?.total ?? 0,
   };
 
   const total = types.reduce((sum, type) => sum + (totalsByType[type] ?? 0), 0);
@@ -293,6 +309,28 @@ function mapWebFetchLog(log: WebFetchLogRecord): UnifiedLogEntry {
       new_articles_count: log.new_articles_count,
       duration_ms: log.duration_ms,
       is_scheduled: Boolean(log.is_scheduled),
+      error_message: log.error_message,
+      created_at: log.created_at,
+    },
+  };
+}
+
+function mapRejectedCleanupLog(log: Record<string, any>): UnifiedLogEntry {
+  return {
+    id: `rejected_cleanup:${log.id}`,
+    type: 'rejected_cleanup',
+    created_at: log.created_at,
+    status: log.failed_count > 0 && log.success_count === 0 ? 'failed' :
+            log.failed_count > 0 ? 'partial' : 'success',
+    data: {
+      id: log.id,
+      total_sources: log.total_sources,
+      total_articles_moved: log.total_articles_moved,
+      success_count: log.success_count,
+      failed_count: log.failed_count,
+      duration_ms: log.duration_ms,
+      is_scheduled: Boolean(log.is_scheduled),
+      details_json: log.details_json,
       error_message: log.error_message,
       created_at: log.created_at,
     },

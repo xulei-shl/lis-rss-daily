@@ -22,6 +22,7 @@ import {
   getKeywordCrawlLogs,
   type KeywordCrawlLogQueryOptions,
 } from '../keywords.js';
+import { getRejectedCleanupLogs } from '../rejected-cleanup-logs.js';
 import { logger } from '../../logger.js';
 
 const log = logger.child({ module: 'api-routes/logs' });
@@ -314,6 +315,31 @@ router.get('/logs/keywords/:id', requireAuth, async (req: AuthRequest, res) => {
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to get keyword crawl logs for keyword');
     res.status(500).json({ error: 'Failed to get keyword crawl logs' });
+  }
+});
+
+/**
+ * GET /api/logs/rejected-cleanup
+ * 拒绝文章清理日志
+ */
+router.get('/logs/rejected-cleanup', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const { fromDate, toDate } = getDateRangeFromQuery(req, DEFAULT_RANGE_DAYS);
+
+    const result = await getRejectedCleanupLogs({
+      userId: req.effectiveUserId!,
+      page,
+      limit,
+      fromDate,
+      toDate,
+    });
+
+    res.json(result);
+  } catch (error) {
+    log.error({ error, userId: req.userId }, 'Failed to get rejected cleanup logs');
+    res.status(500).json({ error: 'Failed to get rejected cleanup logs' });
   }
 });
 
