@@ -1,0 +1,384 @@
+<section class="settings-panel" data-tab="web-sources">
+<div class="settings-container">
+  <div class="section-header">
+    <h2>网络爬虫源</h2>
+    <div class="section-header-actions">
+      <button class="btn btn-primary" onclick="showWebSourceAddModal()">+ 添加爬虫源</button>
+    </div>
+  </div>
+
+  <div class="warning-banner">
+    <strong>使用说明：</strong>
+    系统通过 Playwright CDP 连接浏览器进程，运行爬虫脚本抓取指定网站的文章。
+    需确保浏览器进程（如 lightpanda / Chrome CDP）已启动，<code>BROWSER_ADDRESS</code> 环境变量配置正确。
+    可通过 <strong>来源类型</strong> 选择 journal/blog/news，用于每日总结分类。
+    可通过 <strong>爬虫脚本</strong> 选择不同网站的抓取逻辑（如：中图学会）。
+  </div>
+
+  <table class="web-sources-table" id="webSourcesTable">
+    <thead>
+      <tr>
+        <th>名称</th>
+        <th>目标 URL</th>
+        <th>来源类型</th>
+        <th>爬虫脚本</th>
+        <th>领域</th>
+        <th>状态</th>
+        <th>上次抓取</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="webSourcesBody">
+    </tbody>
+  </table>
+
+  <div id="webSourcesEmptyState" class="empty-state" style="display: none;">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="48" height="48">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+    </svg>
+    <p>暂无网络爬虫源</p>
+    <p style="font-size: 0.9rem; margin-top: 8px;">点击上方按钮添加您的第一个网络爬虫源</p>
+  </div>
+</div>
+
+<!-- 添加/编辑弹窗 -->
+<div id="webSourceModal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="webSourceModalTitle">添加爬虫源</h3>
+      <button class="modal-close" onclick="closeWebSourceModal()">&times;</button>
+    </div>
+    <input type="hidden" id="editWebSourceId">
+    <div class="form-group">
+      <label>名称 *</label>
+      <input type="text" id="webSourceName" class="form-control" placeholder="例如：中图学会公告" required>
+    </div>
+    <div class="form-group">
+      <label>目标 URL *</label>
+      <input type="url" id="webSourceUrl" class="form-control" placeholder="https://www.lsc.org.cn/cns/" required>
+    </div>
+    <div class="form-group">
+      <label>来源类型</label>
+      <select id="webSourceType" class="form-control">
+        <option value="blog">博客</option>
+        <option value="journal">期刊</option>
+        <option value="news">资讯</option>
+      </select>
+      <small style="color:#666;">用于每日总结分类</small>
+    </div>
+    <div class="form-group">
+      <label>爬虫脚本 *</label>
+      <select id="webSourceScraperType" class="form-control" required>
+        <option value="">加载中...</option>
+      </select>
+      <small style="color:#666;">选择对应目标网站的爬虫脚本</small>
+    </div>
+    <div class="form-group">
+      <label>抓取间隔</label>
+      <select id="webSourceFetchInterval" class="fetch-interval-select">
+        <option value="3600">1 小时</option>
+        <option value="7200">2 小时</option>
+        <option value="14400">4 小时</option>
+        <option value="21600">6 小时</option>
+        <option value="43200">12 小时</option>
+        <option value="86400">24 小时</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>状态</label>
+      <select id="webSourceStatus" class="form-control">
+        <option value="active">启用</option>
+        <option value="inactive">停用</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>主题领域</label>
+      <select id="webSourceDomainId" class="form-control" onfocus="renderDomainSelect('webSourceDomainId', this.value)">
+        <option value="">加载中...</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>
+        <input type="checkbox" id="webSourceAutoCleanup" />
+        <span>自动清理拒绝文章</span>
+      </label>
+      <small style="color:#666; display: block; margin-top: 4px; margin-left: 24px;">开启后，调度器会将此爬虫源下被 LLM 过滤拒绝的文章自动迁移到归档表。</small>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeWebSourceModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveWebSource()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================
+// Web Sources (网络爬虫源) Management
+// ============================================
+
+let webSourcesData = [];
+let webScraperTypes = [];
+
+// 加载爬虫脚本类型列表
+async function loadWebScraperTypes(selectedType) {
+  try {
+    const res = await fetch('/api/web-sources/scraper-types', { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to load scraper types');
+    const data = await res.json();
+    webScraperTypes = data.scraperTypes || [];
+    populateWebScraperTypeSelect();
+    // 如果有预选值，在 populate 后设置
+    if (selectedType) {
+      const select = document.getElementById('webSourceScraperType');
+      if (select) select.value = selectedType;
+    }
+  } catch (err) {
+    console.error('加载爬虫类型失败:', err);
+  }
+}
+
+function populateWebScraperTypeSelect() {
+  const select = document.getElementById('webSourceScraperType');
+  if (!select) return;
+  select.innerHTML = '';
+  if (webScraperTypes.length === 0) {
+    select.innerHTML = '<option value="">无可用的爬虫脚本</option>';
+    return;
+  }
+  webScraperTypes.forEach(function(t) {
+    const opt = document.createElement('option');
+    opt.value = t.code;
+    opt.textContent = t.label + (t.scriptType === 'python' ? ' (Python)' : ' (JS)');
+    select.appendChild(opt);
+  });
+}
+
+function getScraperTypeLabel(code) {
+  const t = webScraperTypes.find(function(t) { return t.code === code; });
+  return t ? t.label : code;
+}
+
+// 加载 Web 爬虫源列表
+async function loadWebSources() {
+  try {
+    const res = await fetch('/api/web-sources', { cache: 'no-store' });
+    if (!res.ok) throw new Error('加载失败');
+    const data = await res.json();
+    webSourcesData = data.sources || [];
+    renderWebSourcesTable();
+  } catch (err) {
+    console.error('Failed to load web sources:', err);
+  }
+}
+
+function renderWebSourcesTable() {
+  const tbody = document.getElementById('webSourcesBody');
+  const emptyState = document.getElementById('webSourcesEmptyState');
+  const table = document.getElementById('webSourcesTable');
+
+  if (webSourcesData.length === 0) {
+    table.style.display = 'none';
+    emptyState.style.display = 'block';
+    return;
+  }
+
+  table.style.display = 'table';
+  emptyState.style.display = 'none';
+
+  tbody.innerHTML = webSourcesData.map(function(source) {
+    const typeLabels = { 'journal': '期刊', 'blog': '博客', 'news': '资讯' };
+    return '<tr>' +
+      '<td class="rss-name">' + esc(source.name) + '</td>' +
+      '<td class="rss-url">' +
+        '<a href="' + esc(source.url) + '" target="_blank" title="' + esc(source.url) + '">' +
+          truncateText(esc(source.url), 35) +
+        '</a>' +
+      '</td>' +
+      '<td><span class="type-badge">' + (typeLabels[source.source_type] || source.source_type) + '</span></td>' +
+      '<td>' + getScraperTypeLabel(source.scraper_type) + '</td>' +
+      '<td>' + getDomainName(source.domain_id) + '</td>' +
+      '<td><span class="badge badge-' + (source.status === 'active' ? 'success' : 'secondary') + '">' +
+        (source.status === 'active' ? '已启用' : '已停用') +
+      '</span></td>' +
+      '<td>' + formatDate(source.last_fetched_at) + '</td>' +
+      '<td>' +
+        '<button class="btn btn-sm btn-secondary" onclick="fetchWebSourceNow(' + source.id + ', this)">抓取</button>' +
+        '<button class="btn btn-sm btn-secondary" onclick="editWebSource(' + source.id + ')">编辑</button>' +
+        '<button class="btn btn-sm btn-danger" onclick="deleteWebSource(' + source.id + ')">删除</button>' +
+      '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function showWebSourceAddModal() {
+  document.getElementById('webSourceModalTitle').textContent = '添加爬虫源';
+  document.getElementById('editWebSourceId').value = '';
+  document.getElementById('webSourceName').value = '';
+  document.getElementById('webSourceUrl').value = '';
+  document.getElementById('webSourceType').value = 'blog';
+  document.getElementById('webSourceFetchInterval').value = '3600';
+  document.getElementById('webSourceStatus').value = 'active';
+  document.getElementById('webSourceAutoCleanup').checked = false;
+  renderDomainSelect('webSourceDomainId', '');
+  loadWebScraperTypes(); // 加载脚本类型列表
+  document.getElementById('webSourceModal').classList.add('active');
+  document.getElementById('webSourceName').focus();
+}
+
+function closeWebSourceModal() {
+  document.getElementById('webSourceModal').classList.remove('active');
+}
+
+async function editWebSource(id) {
+  try {
+    const res = await fetch('/api/web-sources/' + id, { cache: 'no-store' });
+    if (!res.ok) throw new Error('加载失败');
+    const data = await res.json();
+    const source = data.source;
+    if (!source) return;
+
+    document.getElementById('webSourceModalTitle').textContent = '编辑爬虫源';
+    document.getElementById('editWebSourceId').value = source.id;
+    document.getElementById('webSourceName').value = source.name || '';
+    document.getElementById('webSourceUrl').value = source.url || '';
+    document.getElementById('webSourceType').value = source.source_type || 'blog';
+    document.getElementById('webSourceScraperType').value = source.scraper_type || '';
+    document.getElementById('webSourceFetchInterval').value = String(source.fetch_interval || 3600);
+    document.getElementById('webSourceStatus').value = source.status || 'active';
+    document.getElementById('webSourceAutoCleanup').checked = source.auto_cleanup_rejected === 1 || source.auto_cleanup_rejected === true;
+    renderDomainSelect('webSourceDomainId', source.domain_id);
+    // 先 await 加载脚本类型列表（异步），再打开弹窗；传入预选值避免竞态
+    await loadWebScraperTypes(source.scraper_type);
+    document.getElementById('webSourceModal').classList.add('active');
+  } catch (err) {
+    console.error('加载爬虫源失败:', err);
+    alert('加载爬虫源失败');
+  }
+}
+
+async function saveWebSource() {
+  const id = document.getElementById('editWebSourceId').value;
+  const name = document.getElementById('webSourceName').value.trim();
+  const url = document.getElementById('webSourceUrl').value.trim();
+  const sourceType = document.getElementById('webSourceType').value;
+  const scraperType = document.getElementById('webSourceScraperType').value;
+  const fetchInterval = parseInt(document.getElementById('webSourceFetchInterval').value);
+  const status = document.getElementById('webSourceStatus').value;
+  const autoCleanupRejected = document.getElementById('webSourceAutoCleanup').checked;
+
+  if (!name || !url) {
+    alert('请填写名称和目标 URL');
+    return;
+  }
+  if (!scraperType) {
+    alert('请选择爬虫脚本类型');
+    return;
+  }
+
+  const body = {
+    name: name,
+    url: url,
+    sourceType: sourceType,
+    scraperType: scraperType,
+    fetchInterval: fetchInterval,
+    status: status,
+    domainId: parseInt(document.getElementById('webSourceDomainId').value) || undefined,
+    autoCleanupRejected: autoCleanupRejected
+  };
+
+  try {
+    const apiUrl = id ? '/api/web-sources/' + id : '/api/web-sources';
+    const method = id ? 'PUT' : 'POST';
+
+    const res = await fetch(apiUrl, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      closeWebSourceModal();
+      loadWebSources();
+    } else {
+      alert('保存失败: ' + (data.error || '未知错误'));
+    }
+  } catch (err) {
+    alert('保存失败: ' + err.message);
+  }
+}
+
+async function deleteWebSource(id) {
+  if (!confirm('确定要删除此网络爬虫源？相关文章不会被删除。')) return;
+  try {
+    const res = await fetch('/api/web-sources/' + id, { method: 'DELETE' });
+    if (res.ok) {
+      loadWebSources();
+    } else {
+      const data = await res.json();
+      alert('删除失败: ' + (data.error || '未知错误'));
+    }
+  } catch (err) {
+    alert('删除失败: ' + err.message);
+  }
+}
+
+async function fetchWebSourceNow(id, btn) {
+  btn.disabled = true;
+  btn.textContent = '抓取中...';
+  try {
+    const res = await fetch('/api/web-sources/' + id + '/fetch', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      btn.textContent = '已触发';
+      setTimeout(function() {
+        btn.textContent = '抓取';
+        btn.disabled = false;
+        loadWebSources();
+      }, 3000);
+    } else {
+      alert('抓取失败: ' + (data.error || '未知错误'));
+      btn.textContent = '抓取';
+      btn.disabled = false;
+    }
+  } catch (err) {
+    alert('抓取失败: ' + err.message);
+    btn.textContent = '抓取';
+    btn.disabled = false;
+  }
+}
+
+// 工具函数
+function esc(str) {
+  if (!str) return '';
+  var div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function truncateText(str, len) {
+  if (!str) return '';
+  if (str.length <= len) return str;
+  return str.substring(0, Math.max(0, len - 3)) + '...';
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '从未';
+  if (window.timeUtils && typeof window.timeUtils.formatRelativeTime === 'function') {
+    return window.timeUtils.formatRelativeTime(dateStr);
+  }
+  var date = new Date(dateStr);
+  var now = new Date();
+  var diff = now - date;
+  if (diff < 60000) return '刚刚';
+  if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
+  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// 页面加载时自动加载
+document.addEventListener('DOMContentLoaded', function() {
+  loadWebSources();
+});
+</script>
+</section>

@@ -17,6 +17,7 @@ import { initDailySummaryScheduler } from './daily-summary-scheduler.js';
 import { initInsightsScheduler } from './insights-scheduler.js';
 import { initTelegramBotManager } from './telegram/bot-manager.js';
 import { initGmailScheduler } from './gmail-scheduler.js';
+import { initWebScheduler } from './web-scheduler.js';
 import { initRejectedCleanupScheduler } from './rejected-cleanup-scheduler.js';
 import { config } from './config.js';
 import { createApp, startServer } from './api/web.js';
@@ -145,6 +146,15 @@ async function main() {
     log.info('🗑️ Rejected article cleanup scheduler disabled');
   }
 
+  // Initialize and start Web Scraper Scheduler
+  const webScheduler = initWebScheduler();
+  if (config.webFetchEnabled) {
+    webScheduler.start();
+    log.info(`🕷️ Web scraper scheduler started (schedule: ${config.webFetchSchedule})`);
+  } else {
+    log.info('🕷️ Web scraper scheduler disabled');
+  }
+
   // Initialize and start Gmail Email Scheduler
   const gmailScheduler = initGmailScheduler();
   if (config.gmailFetchEnabled) {
@@ -196,6 +206,10 @@ async function main() {
     // Stop rejected cleanup scheduler
     await rejectedCleanupScheduler.stop();
     log.info('🗑️ Rejected article cleanup scheduler stopped');
+
+    // Stop web scraper scheduler
+    await webScheduler.stop();
+    log.info('🕷️ Web scraper scheduler stopped');
 
     // Stop Gmail scheduler
     await gmailScheduler.stop();

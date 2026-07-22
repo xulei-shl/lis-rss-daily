@@ -76,6 +76,36 @@ CREATE INDEX IF NOT EXISTS idx_email_sources_status ON email_sources(status);
 CREATE INDEX IF NOT EXISTS idx_email_sources_domain_id ON email_sources(domain_id);
 
 -- ===========================================
+-- 2c. Web Sources Table (网络爬虫来源)
+-- ===========================================
+-- 通用网络爬虫来源表，用于管理定期爬取网站的配置
+-- scraper_type: 爬虫脚本类型（如 'lsc' 中图学会）
+-- source_type: 来源类型（journal/blog/news），用于每日总结分类
+CREATE TABLE IF NOT EXISTS web_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL,
+  source_type TEXT DEFAULT 'blog' CHECK(source_type IN ('journal', 'blog', 'news')),
+  scraper_type TEXT NOT NULL DEFAULT 'lsc',
+  domain_id INTEGER NOT NULL REFERENCES topic_domains(id),
+  last_fetched_at DATETIME,
+  fetch_interval INTEGER DEFAULT 3600,
+  auto_cleanup_rejected INTEGER NOT NULL DEFAULT 0,
+  status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(user_id, url)
+);
+
+CREATE INDEX IF NOT EXISTS idx_web_sources_user_id ON web_sources(user_id);
+CREATE INDEX IF NOT EXISTS idx_web_sources_status ON web_sources(status);
+CREATE INDEX IF NOT EXISTS idx_web_sources_scraper_type ON web_sources(scraper_type);
+CREATE INDEX IF NOT EXISTS idx_web_sources_source_type ON web_sources(source_type);
+CREATE INDEX IF NOT EXISTS idx_web_sources_domain_id ON web_sources(domain_id);
+
+-- ===========================================
 -- 3. Articles Table
 -- ===========================================
 CREATE TABLE IF NOT EXISTS articles (
@@ -84,6 +114,7 @@ CREATE TABLE IF NOT EXISTS articles (
   journal_id INTEGER,  -- 期刊ID（RSS文章为 null）
   keyword_id INTEGER,  -- 关键词订阅ID（关键词文章使用）
   email_source_id INTEGER,  -- 邮件订阅源ID（邮件文章使用）
+  web_source_id INTEGER,  -- 网络爬虫来源ID
   title TEXT NOT NULL,
   title_normalized TEXT,  -- 规范化标题用于去重
   url TEXT NOT NULL UNIQUE,
@@ -102,7 +133,7 @@ CREATE TABLE IF NOT EXISTS articles (
   published_volume INTEGER,  -- 卷号（期刊文章使用）
   error_message TEXT,
   is_read INTEGER DEFAULT 0,
-  source_origin TEXT DEFAULT 'rss' CHECK(source_origin IN ('rss', 'journal', 'keyword', 'email')),  -- 文章来源
+  source_origin TEXT DEFAULT 'rss' CHECK(source_origin IN ('rss', 'journal', 'keyword', 'email', 'web')),  -- 文章来源
   rating INTEGER,
   ai_summary TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -110,7 +141,8 @@ CREATE TABLE IF NOT EXISTS articles (
   FOREIGN KEY (rss_source_id) REFERENCES rss_sources(id) ON DELETE CASCADE,
   FOREIGN KEY (journal_id) REFERENCES journals(id) ON DELETE SET NULL,
   FOREIGN KEY (keyword_id) REFERENCES keyword_subscriptions(id) ON DELETE SET NULL,
-  FOREIGN KEY (email_source_id) REFERENCES email_sources(id) ON DELETE CASCADE
+  FOREIGN KEY (email_source_id) REFERENCES email_sources(id) ON DELETE CASCADE,
+  FOREIGN KEY (web_source_id) REFERENCES web_sources(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_articles_rss_source_id ON articles(rss_source_id);
@@ -123,6 +155,7 @@ CREATE INDEX IF NOT EXISTS idx_articles_source_origin ON articles(source_origin)
 CREATE INDEX IF NOT EXISTS idx_articles_journal_id ON articles(journal_id);
 CREATE INDEX IF NOT EXISTS idx_articles_keyword_id ON articles(keyword_id);
 CREATE INDEX IF NOT EXISTS idx_articles_email_source_id ON articles(email_source_id);
+CREATE INDEX IF NOT EXISTS idx_articles_web_source_id ON articles(web_source_id);
 CREATE INDEX IF NOT EXISTS idx_articles_published_year ON articles(published_year);
 CREATE INDEX IF NOT EXISTS idx_articles_published_issue ON articles(published_issue);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_title_normalized ON articles(title_normalized) WHERE title_normalized IS NOT NULL;
@@ -227,6 +260,26 @@ CREATE TABLE IF NOT EXISTS email_fetch_logs (
 
 CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_email_source_id ON email_fetch_logs(email_source_id);
 CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(created_at);
+
+-- ===========================================
+-- 7c. Web Fetch Logs
+-- ===========================================
+CREATE TABLE IF NOT EXISTS web_fetch_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  web_source_id INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('success', 'failed', 'partial')),
+  articles_count INTEGER DEFAULT 0,
+  new_articles_count INTEGER DEFAULT 0,
+  duration_ms INTEGER DEFAULT 0,
+  is_scheduled INTEGER DEFAULT 0,
+  error_message TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (web_source_id) REFERENCES web_sources(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_web_fetch_logs_web_source_id ON web_fetch_logs(web_source_id);
+CREATE INDEX IF NOT EXISTS idx_web_fetch_logs_created_at ON web_fetch_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_web_fetch_logs_status ON web_fetch_logs(status);
 
 -- ===========================================
 -- 8. Article Process Logs
@@ -555,6 +608,7 @@ CREATE TABLE IF NOT EXISTS rejected_articles (
   journal_id INTEGER,
   keyword_id INTEGER,
   email_source_id INTEGER,
+  web_source_id INTEGER,
   title TEXT NOT NULL,
   title_normalized TEXT,
   url TEXT NOT NULL,
@@ -594,6 +648,7 @@ CREATE INDEX IF NOT EXISTS idx_rejected_articles_rss_source_id ON rejected_artic
 CREATE INDEX IF NOT EXISTS idx_rejected_articles_journal_id ON rejected_articles(journal_id);
 CREATE INDEX IF NOT EXISTS idx_rejected_articles_keyword_id ON rejected_articles(keyword_id);
 CREATE INDEX IF NOT EXISTS idx_rejected_articles_email_source_id ON rejected_articles(email_source_id);
+CREATE INDEX IF NOT EXISTS idx_rejected_articles_web_source_id ON rejected_articles(web_source_id);
 
 -- ===========================================
 -- 22. Rejected Cleanup Stats Cache (拒绝清理统计缓存)

@@ -37,6 +37,7 @@
 | pdfSummaryRoutes | pdf 摘要 |
 | deepsearchRoutes | `/api/deepsearch`（显式前缀）|
 | externalSearchRoutes | `/api/external/search` |
+| webSourceRoutes | `/api/web-sources…`（scraper-types、CRUD、fetch）|
 | gmailSourceRoutes | `/api/gmail-sources…`（email）|
 
 ## 3. 认证与 JWT（`auth.routes.ts` + `middleware/auth.ts`）
@@ -56,7 +57,7 @@
 
 ## 5. 统一日志（`api/unified-logs.ts` + `logs.routes.ts`）
 
-- `getUnifiedLogs()` 合并 6 类日志：`UnifiedLogType='filter'|'rss_fetch'|'email_fetch'|'journal_crawl'|'process'|'keyword_crawl'`。映射为 `UnifiedLogEntry{id:'type:id', type, created_at, status, data}`，按时间降序分页，返回 `totalsByType`。
+- `getUnifiedLogs()` 合并 6 类日志：`UnifiedLogType='filter'|'rss_fetch'|'email_fetch'|'journal_crawl'|'process'|'keyword_crawl'`。⚠️ `web_fetch_logs` 未纳入统一日志，Web 爬虫抓取日志需直接查询 `web_fetch_logs` 表。映射为 `UnifiedLogEntry{id:'type:id', type, created_at, status, data}`，按时间降序分页，返回 `totalsByType`。
 - 路由（均 `requireAuth`，用 `effectiveUserId`，默认 30 天窗口）：`GET /api/logs/filter`(别名 `/api/filter/logs`)、`/logs/crawl`、`/logs/journals/:id`、`/logs/rss-fetch`、`/logs/email-fetch`、`/logs/process`、`/logs/keyword-crawl`、`/logs/keywords/:id`、`/logs/unified`。前端类型别名归一：`rss→rss_fetch`、`crawl→journal_crawl`、`keyword→keyword_crawl`。
 
 ## 6. DeepSearch 与外部检索
@@ -68,7 +69,7 @@
 ## 7. 数据库层（`src/db.ts` + `sql/001_init.sql`）
 
 - 引擎：`better-sqlite3` + Kysely `SqliteDialect`；DB 路径 `config.databasePath`。Pragma（`initDb`, `:401`）：`journal_mode=WAL`、`synchronous=NORMAL`、`cache_size=-64000`(64MB)、`foreign_keys=ON`。单例 `initDb/getDb/closeDb`。
-- `DatabaseTable`（`:29-52`）表清单：`users, rss_sources, articles, topic_domains, topic_keywords, article_filter_logs, article_process_logs, article_related, article_translations, llm_configs, settings, system_prompts, daily_summaries, journals, journal_crawl_logs, rss_fetch_logs, keyword_subscriptions, keyword_crawl_logs, telegram_chats, deepsearch_tasks, email_sources, email_fetch_logs`。`Generated<T>` 区分 insert/select 类型。
+- `DatabaseTable`（`:29-52`）表清单：`users, rss_sources, articles, topic_domains, topic_keywords, article_filter_logs, article_process_logs, article_related, article_translations, llm_configs, settings, system_prompts, daily_summaries, journals, journal_crawl_logs, rss_fetch_logs, keyword_subscriptions, keyword_crawl_logs, web_sources, web_fetch_logs, telegram_chats, deepsearch_tasks, email_sources, email_fetch_logs`。`Generated<T>` 区分 insert/select 类型。
 
 ### 关键表要点（`sql/001_init.sql`，已把新列滚入 init）
 
@@ -77,7 +78,7 @@
 | `users` | `role DEFAULT 'admin' CHECK(admin\|guest)` |
 | `rss_sources` | `source_type ∈ journal\|blog\|news`、`domain_id NOT NULL`、`UNIQUE(user_id,url)` |
 | `email_sources` | `email_address`、`imap_password_encrypted`、`target_senders`(JSON)、`domain_id NOT NULL` |
-| `articles` | `url UNIQUE`、`source_origin ∈ rss\|journal\|keyword\|email`、四外键、`title_normalized` 部分唯一索引 |
+| `articles` | `url UNIQUE`、`source_origin ∈ rss\|journal\|keyword\|web\|email`、五外键（含 `web_source_id`）、`title_normalized` 部分唯一索引 |
 | `article_filter_logs` | `domain_id` 可空 FK SET NULL |
 | `article_process_logs` | `stage ∈ markdown\|translate\|vector\|related\|pipeline_complete` |
 | `article_related` / `article_translations` | 相关缓存 / 翻译（按 article_id）|
@@ -105,10 +106,11 @@
 ## 9. 与旧报告（2026-05）的差异
 
 1. **`email` 是一等来源**（articles/源表/email_fetch_logs/gmail 路由/统一日志），约迁移 034 加入。
-2. **四张源表都有 `domain_id`**（NOT NULL），迁移 037 回填。
-3. **DeepSearch** 有持久化 `deepsearch_tasks` 表 + 内存执行器（调 `scripts/deepsearch/deepsearch.js`），支持 zip 下载与 `skip_pdf_summary`。
-4. **统一日志覆盖 6 类**（含 `email_fetch`、`keyword_crawl`）。
-5. 登录在 `web.ts` 的 `POST /login`，`auth.routes.ts` 只有 `/api/logout`。
-6. 密码支持 **bcrypt + SHA256**，种子用户为 SHA256。
-7. Express **5**；`web.ts` 内无显式 view-engine 注册（在 `index.ts` 设置）。
-8. **CSS 命名已对齐（2026-07-14）**：`layout.ejs` 开发/生产分别引用 `/css/main.bundle.css` / `/css/main.bundle.min.css`，与 `build-css.js` 产物一致（旧报告差异第 7 条描述的不一致已消除，见 §8）。
+2. **`web` 是第五类来源**（`source_origin='web'`），迁移 041 加入。`web_sources` 表含 `source_type`、`scraper_type`、`fetch_interval` 等专属字段。
+3. **五张源表都有 `domain_id`**（NOT NULL），迁移 037 回填。
+4. **DeepSearch** 有持久化 `deepsearch_tasks` 表 + 内存执行器（调 `scripts/deepsearch/deepsearch.js`），支持 zip 下载与 `skip_pdf_summary`。
+5. **统一日志覆盖 6 类**（含 `email_fetch`、`keyword_crawl`）。
+6. 登录在 `web.ts` 的 `POST /login`，`auth.routes.ts` 只有 `/api/logout`。
+7. 密码支持 **bcrypt + SHA256**，种子用户为 SHA256。
+8. Express **5**；`web.ts` 内无显式 view-engine 注册（在 `index.ts` 设置）。
+9. **CSS 命名已对齐（2026-07-14）**：`layout.ejs` 开发/生产分别引用 `/css/main.bundle.css` / `/css/main.bundle.min.css`，与 `build-css.js` 产物一致（旧报告差异第 7 条描述的不一致已消除，见 §8）。

@@ -45,9 +45,13 @@ export interface ArticleWithSource {
   rss_source_id: number | null;
   journal_id: number | null;
   keyword_id: number | null;  // 关键词订阅ID
+  email_source_id: number | null;
+  web_source_id: number | null;
   rss_source_name?: string;
   journal_name?: string;
   keyword_name?: string;  // 关键词名称
+  email_source_name?: string;
+  web_source_name?: string;
   source_name?: string;  // 合并后的来源名称
   title: string;
   url: string;
@@ -68,7 +72,7 @@ export interface ArticleWithSource {
   published_volume: number | null;  // 卷号（期刊文章使用）
   error_message: string | null;
   is_read: number;  // 0 = 未读, 1 = 已读
-  source_origin: 'rss' | 'journal' | 'keyword' | 'email';
+  source_origin: 'rss' | 'journal' | 'keyword' | 'email' | 'web';
   rating: number | null;  // 文章评级（1-5星）
   created_at: string;
   updated_at: string;
@@ -117,7 +121,7 @@ export interface RelatedArticle {
   published_year: number | null;
   published_issue: number | null;
   published_volume: number | null;
-  source_origin: 'rss' | 'journal' | 'keyword' | 'email';
+  source_origin: 'rss' | 'journal' | 'keyword' | 'email' | 'web';
   rss_source_name?: string;
   score: number;
 }
@@ -360,6 +364,7 @@ export async function getArticleById(
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
     .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+    .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
     .leftJoin('article_translations', 'article_translations.article_id', 'articles.id')
     .where('articles.id', '=', id)
     .where((eb) => eb.or([
@@ -379,12 +384,18 @@ export async function getArticleById(
         eb('articles.email_source_id', 'is not', null),
         eb('email_sources.user_id', '=', userId),
       ]),
+      eb.and([
+        eb('articles.web_source_id', 'is not', null),
+        eb('web_sources.user_id', '=', userId),
+      ]),
     ]))
     .select([
       'articles.id',
       'articles.rss_source_id',
       'articles.journal_id',
       'articles.keyword_id',
+      'articles.email_source_id',
+      'articles.web_source_id',
       'articles.title',
       'articles.url',
       'articles.summary',
@@ -412,6 +423,7 @@ export async function getArticleById(
       'journals.name as journal_name',
       'keyword_subscriptions.keyword as keyword_name',
       'email_sources.name as email_source_name',
+      'web_sources.name as web_source_name',
     ])
     .executeTakeFirst();
 
@@ -420,7 +432,7 @@ export async function getArticleById(
   // 合并来源名称
   const merged = {
     ...article,
-    source_name: (article as any).journal_name || (article as any).rss_source_name || (article as any).keyword_name || (article as any).email_source_name || 'Unknown',
+    source_name: (article as any).journal_name || (article as any).rss_source_name || (article as any).keyword_name || (article as any).email_source_name || (article as any).web_source_name || 'Unknown',
   } as ArticleWithSource;
 
   normalizeArticleDates(merged);
@@ -444,6 +456,7 @@ export async function getArticleFilterMatches(
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
     .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+    .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
     .leftJoin('topic_domains', 'topic_domains.id', 'article_filter_logs.domain_id')
     .where('article_filter_logs.article_id', '=', articleId)
     .where((eb) => eb.or([
@@ -462,6 +475,10 @@ export async function getArticleFilterMatches(
       eb.and([
         eb('articles.email_source_id', 'is not', null),
         eb('email_sources.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.web_source_id', 'is not', null),
+        eb('web_sources.user_id', '=', userId),
       ]),
     ]))
     .where('article_filter_logs.is_passed', '=', 1)
@@ -610,6 +627,7 @@ export async function getUserArticles(
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
     .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+    .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
     .where((eb) => eb.or([
       eb.and([
         eb('articles.rss_source_id', 'is not', null),
@@ -626,6 +644,10 @@ export async function getUserArticles(
       eb.and([
         eb('articles.email_source_id', 'is not', null),
         eb('email_sources.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.web_source_id', 'is not', null),
+        eb('web_sources.user_id', '=', userId),
       ]),
     ]));
 
@@ -721,6 +743,7 @@ export async function getUserArticles(
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
     .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+    .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
     .leftJoin('article_translations', 'article_translations.article_id', 'articles.id')
     .where((eb) => eb.or([
       eb.and([
@@ -738,6 +761,10 @@ export async function getUserArticles(
       eb.and([
         eb('articles.email_source_id', 'is not', null),
         eb('email_sources.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.web_source_id', 'is not', null),
+        eb('web_sources.user_id', '=', userId),
       ]),
     ]));
 
@@ -808,6 +835,8 @@ export async function getUserArticles(
     'articles.rss_source_id',
     'articles.journal_id',
     'articles.keyword_id',
+    'articles.email_source_id',
+    'articles.web_source_id',
     'articles.title',
     'articles.url',
     'articles.summary',
@@ -834,6 +863,7 @@ export async function getUserArticles(
     'journals.name as journal_name',
     'keyword_subscriptions.keyword as keyword_name',
     'email_sources.name as email_source_name',
+    'web_sources.name as web_source_name',
     'article_translations.summary_zh',
   ]);
 
@@ -851,7 +881,7 @@ export async function getUserArticles(
   // 合并来源名称：关键词订阅文章优先显示关键词名称
   const articlesWithSourceName = articles.map((article: any) => ({
     ...article,
-    source_name: article.keyword_name || article.journal_name || article.rss_source_name || article.email_source_name || 'Unknown',
+    source_name: article.keyword_name || article.journal_name || article.rss_source_name || article.email_source_name || article.web_source_name || 'Unknown',
   }));
 
   const normalizedArticles = articlesWithSourceName.map((article) => normalizeArticleDates(article)!) as ArticleWithSource[];
@@ -959,6 +989,12 @@ export async function deleteArticle(id: number, userId: number): Promise<void> {
         eb('articles.email_source_id', 'is not', null),
         eb('articles.email_source_id', 'in', (eb) =>
           eb.selectFrom('email_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.web_source_id', 'is not', null),
+        eb('articles.web_source_id', 'in', (eb) =>
+          eb.selectFrom('web_sources').select('id').where('user_id', '=', userId)
         ),
       ]),
     ]))
@@ -1075,15 +1111,19 @@ export async function updateArticleReadStatus(
         eb('articles.keyword_id', 'in', (eb) =>
           eb.selectFrom('keyword_subscriptions').select('id').where('user_id', '=', userId)
         ),
-      ]),
-      eb.and([
+      ]),      eb.and([
         eb('articles.email_source_id', 'is not', null),
         eb('articles.email_source_id', 'in', (eb) =>
           eb.selectFrom('email_sources').select('id').where('user_id', '=', userId)
         ),
       ]),
-    ]))
-    .executeTakeFirst();
+      eb.and([
+        eb('articles.web_source_id', 'is not', null),
+        eb('articles.web_source_id', 'in', (eb) =>
+          eb.selectFrom('web_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+    ])).executeTakeFirst();
 
   if (result.numUpdatedRows === 0n) {
     throw new Error('Article not found');
@@ -1144,6 +1184,12 @@ export async function updateArticleFilterStatus(
           eb.selectFrom('email_sources').select('id').where('user_id', '=', userId)
         ),
       ]),
+      eb.and([
+        eb('articles.web_source_id', 'is not', null),
+        eb('articles.web_source_id', 'in', (eb) =>
+          eb.selectFrom('web_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
     ]))
     .executeTakeFirst();
 
@@ -1201,6 +1247,12 @@ export async function batchUpdateArticleReadStatus(
         eb('articles.email_source_id', 'is not', null),
         eb('articles.email_source_id', 'in', (eb) =>
           eb.selectFrom('email_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.web_source_id', 'is not', null),
+        eb('articles.web_source_id', 'in', (eb) =>
+          eb.selectFrom('web_sources').select('id').where('user_id', '=', userId)
         ),
       ]),
     ]))
@@ -1273,6 +1325,12 @@ export async function markAllAsRead(
         eb('articles.email_source_id', 'is not', null),
         eb('articles.email_source_id', 'in', (eb) =>
           eb.selectFrom('email_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.web_source_id', 'is not', null),
+        eb('articles.web_source_id', 'in', (eb) =>
+          eb.selectFrom('web_sources').select('id').where('user_id', '=', userId)
         ),
       ]),
     ]))
@@ -1359,6 +1417,7 @@ export async function getUnreadCount(
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+    .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
     .where((eb) => eb.or([
       eb.and([
         eb('articles.rss_source_id', 'is not', null),
@@ -1371,6 +1430,10 @@ export async function getUnreadCount(
       eb.and([
         eb('articles.email_source_id', 'is not', null),
         eb('email_sources.user_id', '=', userId),
+      ]),
+      eb.and([
+        eb('articles.web_source_id', 'is not', null),
+        eb('web_sources.user_id', '=', userId),
       ]),
     ]))
     .where('articles.is_read', '=', 0);
@@ -1398,11 +1461,12 @@ export async function getUnreadCount(
 export interface MergedSourceOption {
   id: string;           // 格式: "rss:{id}" 或 "journal:{id}" 或 "keyword:{id}" 或 "email:{id}" 或 "mixed:{id}"
   name: string;         // 来源名称
-  type: 'rss' | 'journal' | 'keyword' | 'email' | 'mixed';
-  rssIds?: number[];    // 当 name 相同时，包含多个 RSS ID
-  journalIds?: number[]; // 当 name 相同时，包含多个期刊 ID
-  keywordIds?: number[]; // 关键词订阅 ID
-  emailSourceIds?: number[]; // 邮件订阅源 ID
+  type: 'rss' | 'journal' | 'keyword' | 'email' | 'web' | 'mixed';
+  rssIds?: number[];
+  journalIds?: number[];
+  keywordIds?: number[];
+  emailSourceIds?: number[];
+  webSourceIds?: number[];
 }
 
 /**
@@ -1595,6 +1659,44 @@ export async function getMergedSources(userId: number): Promise<MergedSourceOpti
       name: emailName,
       type: 'email',
       emailSourceIds: [source.id],
+    });
+  }
+
+  // 获取 web 爬取源列表：包括 active 状态的，以及有文章的非 active 状态的
+  const activeWebSources = await db
+    .selectFrom('web_sources')
+    .select(['id', 'name'])
+    .where('user_id', '=', userId)
+    .where('status', '=', 'active')
+    .execute();
+
+  // 获取有文章但状态非 active 的 web 源
+  const webSourcesWithArticles = await db
+    .selectFrom('web_sources')
+    .innerJoin('articles', 'articles.web_source_id', 'web_sources.id')
+    .select(['web_sources.id', 'web_sources.name'])
+    .where('web_sources.user_id', '=', userId)
+    .where('web_sources.status', '!=', 'active')
+    .execute();
+
+  // 合并 web 源列表（去重）
+  const webSourcesMap = new Map<number, { id: number; name: string }>();
+  for (const s of activeWebSources) {
+    webSourcesMap.set(s.id, s);
+  }
+  for (const s of webSourcesWithArticles) {
+    webSourcesMap.set(s.id, s);
+  }
+  const webSources = Array.from(webSourcesMap.values());
+
+  // 添加 web 爬取源
+  for (const source of webSources) {
+    const webName = `Web: ${source.name}`;
+    sourceMap.set(webName, {
+      id: `web:${source.id}`,
+      name: webName,
+      type: 'web',
+      webSourceIds: [source.id],
     });
   }
 

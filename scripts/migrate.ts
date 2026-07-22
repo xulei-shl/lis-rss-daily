@@ -892,6 +892,27 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
         continue;
       }
 
+      // ============================================================
+      // 041: 添加 Web 爬虫来源支持（web_sources + web_fetch_logs + articles/web_source_id）
+      // ============================================================
+      if (file === '041_add_web_sources.sql') {
+        const hasWebSources = hasTable(db, 'web_sources');
+        const hasWebSourceId = hasColumn(db, 'articles', 'web_source_id');
+
+        if (!hasWebSources || !hasWebSourceId) {
+          // web_sources 表不存在或 articles 缺少 web_source_id，执行完整迁移
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log('      → Created web_sources table');
+          console.log('      → Added web_source_id to articles (source_origin now includes: rss, journal, keyword, email, web)');
+          console.log('      → Created web_fetch_logs table');
+          console.log('      → Added web_source_id to rejected_articles');
+        } else {
+          console.log('      → Skipped (web sources already exist)');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

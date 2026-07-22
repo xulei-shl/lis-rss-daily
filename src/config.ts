@@ -95,6 +95,10 @@ export interface Config {
   keywordInterval: number;
   keywordIntervalRandom: number;
 
+  // Web Scraper Source
+  webFetchEnabled: boolean;
+  webFetchSchedule: string;
+
   // Gmail Email Source
   gmailFetchEnabled: boolean;
   gmailFetchSchedule: string;
@@ -211,6 +215,10 @@ function getConfig(): Config {
 
     // Search AI Summary
     searchAiSummaryGuestEnabled: process.env.SEARCH_AI_SUMMARY_GUEST_ENABLED === 'true',
+
+    // Web Scraper Source
+    webFetchEnabled: process.env.WEB_FETCH_ENABLED !== 'false',
+    webFetchSchedule: process.env.WEB_FETCH_SCHEDULE || '0 3 * * *',
 
     // Gmail Email Source
     gmailFetchEnabled: process.env.GMAIL_FETCH_ENABLED !== 'false',

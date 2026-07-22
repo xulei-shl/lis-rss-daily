@@ -756,8 +756,18 @@ export async function getArticleIdsByStatus(status: ProcessStatusFilter, userId:
     .select(['articles.id', sortField as 'articles.created_at'])
     .execute();
 
+  // 获取 web 爬取文章
+  const webArticles = await db
+    .selectFrom('articles')
+    .innerJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
+    .where('web_sources.user_id', '=', userId)
+    .where('articles.filter_status', '=', 'passed')
+    .where('articles.process_status', '=', status)
+    .select(['articles.id', sortField as 'articles.created_at'])
+    .execute();
+
   // 合并并按时间排序
-  const allArticles = [...rssArticles, ...keywordArticles, ...journalArticles, ...emailArticles]
+  const allArticles = [...rssArticles, ...keywordArticles, ...journalArticles, ...emailArticles, ...webArticles]
     .sort((a, b) => new Date((b as any)[sortField.split('.')[1]]).getTime() - new Date((a as any)[sortField.split('.')[1]]).getTime())
     .slice(0, limit);
 

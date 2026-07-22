@@ -362,7 +362,7 @@ export async function getArticleSourceDomainId(articleId: number): Promise<numbe
 
   const article = await db
     .selectFrom('articles')
-    .select(['source_origin', 'rss_source_id', 'journal_id', 'keyword_id', 'email_source_id'])
+    .select(['source_origin', 'rss_source_id', 'journal_id', 'keyword_id', 'email_source_id', 'web_source_id'])
     .where('id', '=', articleId)
     .executeTakeFirst();
 
@@ -370,7 +370,7 @@ export async function getArticleSourceDomainId(articleId: number): Promise<numbe
     throw new Error(`Article ${articleId} not found`);
   }
 
-  const { source_origin, rss_source_id, journal_id, keyword_id, email_source_id } = article;
+  const { source_origin, rss_source_id, journal_id, keyword_id, email_source_id, web_source_id } = article;
 
   let domainId: number | undefined;
 
@@ -385,6 +385,9 @@ export async function getArticleSourceDomainId(articleId: number): Promise<numbe
     domainId = src?.domain_id;
   } else if (source_origin === 'email' && email_source_id) {
     const src = await db.selectFrom('email_sources').select('domain_id').where('id', '=', email_source_id).executeTakeFirst();
+    domainId = src?.domain_id;
+  } else if (source_origin === 'web' && web_source_id) {
+    const src = await db.selectFrom('web_sources').select('domain_id').where('id', '=', web_source_id).executeTakeFirst();
     domainId = src?.domain_id;
   }
 

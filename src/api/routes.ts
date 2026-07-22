@@ -24,6 +24,7 @@ import pdfSummaryRoutes from './routes/pdf-summary.routes.js';
 import deepsearchRoutes from './routes/deepsearch.routes.js';
 import externalSearchRoutes from './routes/external-search.routes.js';
 import gmailSourceRoutes from './routes/gmail-sources.routes.js';
+import webSourceRoutes from './routes/web-sources.routes.js';
 
 const router = express.Router();
 
@@ -52,5 +53,6 @@ router.use(pdfSummaryRoutes);
 router.use('/deepsearch', deepsearchRoutes);
 router.use(externalSearchRoutes);
 router.use(gmailSourceRoutes);
+router.use(webSourceRoutes);
 
 export default router;

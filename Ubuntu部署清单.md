@@ -210,6 +210,15 @@ GMAIL_MAX_EMAILS=20
 # 邮件回看小时数（仅抓取此时间内的邮件）
 GMAIL_FETCH_HOURS_LOOKBACK=48
 
+# ============ Web 网络爬虫源配置 ============
+# 是否启用 Web 网络爬虫抓取
+WEB_FETCH_ENABLED=true
+# 抓取时间（cron 表达式，默认每天凌晨 3 点）
+WEB_FETCH_SCHEDULE=0 3 * * *
+# Playwright CDP 浏览器 WebSocket 地址（默认 ws://127.0.0.1:9222）
+# 需要外部浏览器进程（如 lightpanda / Chrome CDP）已启动
+BROWSER_ADDRESS=ws://127.0.0.1:9222
+
 # ============ 相关文章刷新配置 ============
 # 是否启用相关文章定期刷新
 RELATED_REFRESH_ENABLED=true
@@ -283,6 +292,7 @@ pnpm run db:migrate
 - 必要的数据库表和索引
 - 默认系统设置
 - `email_sources` / `email_fetch_logs` 表（Gmail 邮件订阅源支持）
+- `web_sources` / `web_fetch_logs` 表（Web 网络爬虫源支持，迁移 041）
 
 ### 11. 测试 ChromaDB 连接
 
@@ -1004,8 +1014,11 @@ cd /opt/lis-rss-daily
 git pull origin main
 pnpm install
 pnpm rebuild better-sqlite3
+pnpm run db:migrate          # 应用新迁移（如有新增 sql/*.sql 文件）
 sudo systemctl restart lis-rss
 ```
+
+> **注意**：更新后务必运行 `pnpm run db:migrate`，确保新迁移（如 041 添加 web_sources 表）已应用到现有数据库。
 
 > **注意**：如果 `pnpm rebuild better-sqlite3` 后服务仍然因 `ERR_DLOPEN_FAILED` 启动失败（ABI 版本不匹配），需要从源码强制编译：
 > ```bash
@@ -1024,6 +1037,7 @@ git fetch origin main && git reset --hard origin/main
 # 然后安装依赖并重启
 pnpm install
 pnpm rebuild better-sqlite3
+pnpm run db:migrate          # 应用新迁移
 sudo systemctl restart lis-rss
 ```
 
@@ -1162,9 +1176,10 @@ sudo journalctl -u lis-rss -f
 
 | 场景 | 操作 |
 |------|------|
-| 应用代码更新 | `git pull` + `systemctl restart lis-rss` |
+| 应用代码更新（含新迁移） | `git pull` + `pnpm run db:migrate` + `systemctl restart lis-rss` |
 | 应用配置修改 (.env) | `systemctl restart lis-rss` |
-| 依赖更新 | `pnpm install` + `systemctl restart lis-rss` |
+| Web 爬虫源配置修改 (WEB_FETCH_*, BROWSER_ADDRESS) | `systemctl restart lis-rss` |
+| 依赖更新 | `pnpm install` + `pnpm run db:migrate` + `systemctl restart lis-rss` |
 | 应用服务卡死 | `systemctl restart lis-rss` |
 | Gmail 邮件源配置修改 (GMAIL_*) | `systemctl restart lis-rss` |
 | 拒绝文章清理配置修改 (REJECTED_CLEANUP_*) | `systemctl restart lis-rss` |

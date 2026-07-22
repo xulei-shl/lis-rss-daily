@@ -40,7 +40,7 @@ export interface CleanupResult {
 /* ── Source Info Type ── */
 
 interface SourceInfo {
-  sourceType: 'rss' | 'journal' | 'keyword' | 'email';
+  sourceType: 'rss' | 'journal' | 'keyword' | 'email' | 'web';
   sourceId: number;
   sourceName: string;
   userId: number;
@@ -192,6 +192,17 @@ export class RejectedCleanupScheduler extends BaseScheduler {
       .execute();
     for (const e of emailSources) {
       sources.push({ sourceType: 'email', sourceId: e.id, sourceName: e.name, userId: e.user_id });
+    }
+
+    // Web sources
+    const webSources = await db
+      .selectFrom('web_sources')
+      .where('auto_cleanup_rejected', '=', 1)
+      .where('status', '=', 'active')
+      .select(['id', 'name', 'user_id'])
+      .execute();
+    for (const w of webSources) {
+      sources.push({ sourceType: 'web', sourceId: w.id, sourceName: w.name, userId: w.user_id });
     }
 
     return sources;
@@ -367,6 +378,8 @@ export class RejectedCleanupScheduler extends BaseScheduler {
         return 'keyword_id';
       case 'email':
         return 'email_source_id';
+      case 'web':
+        return 'web_source_id';
       default:
         return null;
     }

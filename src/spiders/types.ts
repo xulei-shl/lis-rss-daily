@@ -9,6 +9,11 @@
 export type JournalSourceType = 'cnki' | 'rdfybk' | 'lis' | 'wanfang';
 
 /**
+ * 通用网络爬虫脚本类型
+ */
+export type WebScraperType = 'lsc';
+
+/**
  * 发行周期
  */
 export type PublicationCycle = 'monthly' | 'bimonthly' | 'semimonthly' | 'quarterly';
@@ -39,6 +44,36 @@ export interface CrawledArticle {
   publishedVolume?: number;
   pages?: string;
   doi?: string;
+}
+
+/**
+ * 通用网络爬虫抓取的文章数据（从脚本返回）
+ * 支持从各种网站爬取的标准化文章格式
+ */
+export interface WebScrapedArticle {
+  title: string;
+  link: string;
+  summary?: string;
+  date?: string;  // 格式: "DD-MM" 或 "YYYY-MM-DD"
+}
+
+/**
+ * 通用网络爬虫运行结果
+ */
+export interface WebScraperResult {
+  success: boolean;
+  articles: WebScrapedArticle[];
+  error?: string;
+}
+
+/**
+ * 网络爬虫配置
+ */
+export interface WebScraperConfig {
+  scraperType: WebScraperType;
+  label: string;
+  script: string;         // 脚本文件名
+  scriptType: 'python' | 'javascript';
 }
 
 /**

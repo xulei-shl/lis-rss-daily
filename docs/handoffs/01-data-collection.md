@@ -1,29 +1,29 @@
 # 01 · 数据采集子系统 Handoff
 
-> 覆盖 RSS / 期刊 / 关键词 / Gmail 四类数据源的采集、Python 爬虫集成、标题去重、`domain_id` 绑定与向过滤阶段的流转。
-> 关键源文件：`src/rss-scheduler.ts`、`src/journal-scheduler.ts`、`src/keyword-scheduler.ts`（+ `src/api/keywords.ts`）、`src/gmail-scheduler.ts`、`src/gmail/`、`src/spiders/`、`src/api/rss-sources.ts` `journals.ts` `keywords.ts` `gmail-sources.ts`、`src/utils/title.ts`、`src/constants/source-types.ts`。
+> 覆盖 RSS / 期刊 / 关键词 / Gmail / Web 爬虫 五类数据源的采集、Python/JS 爬虫集成、标题去重、`domain_id` 绑定与向过滤阶段的流转。
+> 关键源文件：`src/rss-scheduler.ts`、`src/journal-scheduler.ts`、`src/keyword-scheduler.ts`（+ `src/api/keywords.ts`）、`src/gmail-scheduler.ts`、`src/gmail/`、`src/web-scheduler.ts`、`src/spiders/`、`src/spiders/web-scraper-runner.ts`、`src/spiders/web-scrapers/`、`src/api/rss-sources.ts` `journals.ts` `keywords.ts` `gmail-sources.ts` `web-sources.ts`、`src/utils/title.ts`、`src/constants/source-types.ts`。
 
 ## 1. 通用架构
 
-四个源各有一个**单例调度器**，均在 `src/index.ts` 启动：`initRSSScheduler()`(L74)、`initJournalScheduler()`(L97)、`initKeywordScheduler()`(L108)、`initGmailScheduler()`(L137)。全部 node-cron 且 `timezone: 'Asia/Shanghai'`。
+五个源各有一个**单例调度器**，均在 `src/index.ts` 启动：`initRSSScheduler()`(L74)、`initJournalScheduler()`(L97)、`initKeywordScheduler()`(L108)、`initWebScheduler()`(L125)、`initGmailScheduler()`(L137)。全部 node-cron 且 `timezone: 'Asia/Shanghai'`。
 
-> **近期重构（2026-07-14）**：上述 4 个源调度器（连同每日总结 / 洞察 / 相关文章 / 拒绝清理共 8 个调度器）已全部继承 `src/utils/base-scheduler.ts` 的 `BaseScheduler` 抽象类，统一了 `start()` / `stop()` / cron 表达式校验 / `timezone`（默认 `Asia/Shanghai`）/ `pollWhile()` 在途任务等待逻辑。子类只需实现 `schedulerName` / `cronSchedule` / `isEnabled()` / `run()`，并可选重写 `waitForCompletion()`。单例工厂函数（`initXxxScheduler`）仍保留在各子类中（见 §9 差异）。
+> **近期重构（2026-07-14）**：上述 5 个源调度器（连同每日总结 / 洞察 / 相关文章 / 拒绝清理共 9 个调度器）已全部继承 `src/utils/base-scheduler.ts` 的 `BaseScheduler` 抽象类，统一了 `start()` / `stop()` / cron 表达式校验 / `timezone`（默认 `Asia/Shanghai`）/ `pollWhile()` 在途任务等待逻辑。子类只需实现 `schedulerName` / `cronSchedule` / `isEnabled()` / `run()`，并可选重写 `waitForCompletion()`。单例工厂函数（`initXxxScheduler`）仍保留在各子类中（见 §9 差异）。
 
 共同点：
 
-- 都写入**同一张 `articles` 表**，用不同 `source_origin` 区分：`'rss'`、`'journal'`、`'keyword'`、`'email'`。
+- 都写入**同一张 `articles` 表**，用不同 `source_origin` 区分：`'rss'`、`'journal'`、`'keyword'`、`'email'`、`'web'`。
 - 都在保存后调用 `filterArticle(FilterInput)`（`src/filter.ts:26`），过滤通过再调 `processArticle(id, userId)`（`src/pipeline.ts`）。
 - 都用 `generateNormalizedTitle`（`src/utils/title.ts:58`）做标题去重。
 - 每个源都携带 `domain_id`，作为 `FilterInput.sourceDomainId` 传给过滤器（见 §6）。
 
 差异点一览：
 
-| 维度 | RSS | 期刊 Journal | 关键词 Keyword | Gmail |
-|------|-----|-------------|---------------|-------|
-| 默认 cron | `0 2 * * *` | `15 2 * * 6`（周六 02:15） | `15 3 * * 6`（周六 03:15） | `0 4 * * *`（且启动即跑一次） |
-| 并发 | `Promise.race` + 信号量，`maxConcurrent=5` | 单线程串行 + 随机间隔 | 单线程串行 + 随机间隔 | 逐源串行 |
-| 外部进程 | 无（HTTP/XML） | Python 子进程 | Python 子进程 | 无（IMAP + LLM） |
-| 过滤触发 | 随机延迟 0–30 分钟后 | 立即 | 立即 | `process.nextTick` |
+| 维度 | RSS | 期刊 Journal | 关键词 Keyword | Web 爬虫 | Gmail |
+|------|-----|-------------|---------------|----------|-------|
+| 默认 cron | `0 2 * * *` | `15 2 * * 6`（周六 02:15） | `15 3 * * 6`（周六 03:15） | `0 3 * * *` | `0 4 * * *`（且启动即跑一次） |
+| 并发 | `Promise.race` + 信号量，`maxConcurrent=5` | 单线程串行 + 随机间隔 | 单线程串行 + 随机间隔 | 单线程串行 + 随机间隔 | 逐源串行 |
+| 外部进程 | 无（HTTP/XML） | Python 子进程 | Python 子进程 | Python/JS 子进程（Playwright CDP） | 无（IMAP + LLM） |
+| 过滤触发 | 随机延迟 0–30 分钟后 | 立即 | 立即 | 立即（fire-and-forget） | `process.nextTick` |
 
 ## 2. RSS 源（`src/rss-scheduler.ts` + `src/rss-parser.ts`）
 
@@ -63,7 +63,52 @@
 - ⚠️ `spider_type='cnki'` 会入库校验通过，但代码始终走 Google Scholar，CNKI 关键词路径未实现。
 - API：`api/routes/keywords.routes.ts` — CRUD、`POST /:id/crawl`、status/logs；关键词文本创建后不可改。
 
-## 5. Gmail 源（`src/gmail-scheduler.ts` + `src/gmail/`）
+## 5. Web 爬虫源（`src/web-scheduler.ts` + `src/spiders/web-scraper-runner.ts` + `src/spiders/web-scrapers/`）
+
+- 类 `WebScheduler`（`web-scheduler.ts`），单例 `initWebScheduler()`。继承 `BaseScheduler`，读取 `config.webFetchSchedule`（默认 `'0 3 * * *'`，每天 3:00）、`config.webFetchEnabled`。
+- **单线程顺序**爬取，每源间随机延迟 5–15 秒（`:99`）避免对目标网站造成压力。`activeFetches++/--`（try/finally）互斥。
+- 主流程：`run()` → `getActiveWebSources(1)`（`api/web-sources.ts:getActiveWebSources`）→ 逐源 `fetchSource(source)`。
+- `fetchSource(source)`（`:122`）：
+  1. `runWebScraper(source.scraper_type, source.url)` 运行爬虫脚本
+  2. `saveArticles(source, articles)` 保存文章到 `articles` 表（`source_origin='web'`，`web_source_id` 绑定）
+  3. `updateWebSourceLastFetched(source.id)` 更新抓取时间
+  4. `createWebFetchLog(...)` 写抓取日志
+- 去重策略：`title_normalized` 查 `articles` 表 → 查 `rejected_articles` 归档 → `url` 查 `articles` 表 → `SQLITE_CONSTRAINT_UNIQUE` 兜底（`:238-280`）。与期刊/Gmail 同模式。
+- 触发过滤：`triggerAutoFilter(source)`（`:288`）选中该源 `filter_status='pending'` 的文章，逐篇构造 `FilterInput`：`sourceType=source.source_type`（来源于 `source_type` 字段：journal/blog/news）、`sourceDomainId=source.domain_id`、`description=content`、`content=markdown_content||content`。过滤通过后 `processArticle(id, userId)` fire-and-forget。
+- 日志：每次抓取写 `web_fetch_logs`（status=success/failed/partial）。
+- 手动触发：`fetchAllNow()`（`:111`）、`fetchSourceNow(sourceId)`（`:118`）。
+- API：`api/routes/web-sources.routes.ts` — `GET/POST /api/web-sources`、`GET/PUT/DELETE /:id`、`POST /:id/fetch`、`GET /web-sources/scraper-types`；写操作 admin 限制。
+
+### Web 爬虫运行器（`src/spiders/web-scraper-runner.ts`、`types.ts`）
+
+- `runWebScraper(scraperType, targetUrl)`（`:82`）：`spawn(pythonPath|nodePath, [script, ...args], {cwd:scriptDir, env})`。
+- 与期刊 `PythonSpiderRunner` 不同：Web 爬虫运行器是**通用型**，支持 Python 与 JavaScript 两类脚本；期刊运行器仅 Python。
+- **环境变量**：`TARGET_URL`（必选，来源 URL）、`BROWSER_ADDRESS`（Playwright CDP WebSocket 地址，默认 `ws://127.0.0.1:9222`）、`HTTP_PROXY`。
+- 超时：`WEB_SCRAPER_TIMEOUT||120000`（2 分钟），超时后 `proc.kill()`。
+- 输出格式：stdout 输出 **JSON 数组**，每项 `{ title, link, summary?, date? }`。不强制 `abstract_url` 等期刊特有字段。
+  - 脚本也可输出 `{ success: false, error: ... }` 对象表示失败。
+  - `parseScrapedDate(dateStr)`（`:187`）将 `DD-MM`、`YYYY-MM-DD`、`YYYY-MM` 等格式统一为 ISO 日期。
+- 解析失败返回 `{success:false, error}` 而非抛出。
+
+### 爬虫配置（`src/spiders/web-scrapers/config.ts`）
+
+- `SCRAPER_MAP` 映射表，每条记录定义：`scraperType`（类型代码）、`label`（中文名称）、`script`（脚本文件名）、`scriptType`（`'python'` | `'javascript'`）。
+- 当前默认脚本：
+  - `lsc` → `lsc-scraper.py`（Python）—— 中图学会（中国图书馆学会）
+- 导出的函数：`getScraperTypeCodes()`、`getScraperConfig(code)`、`getAllScraperConfigs()`、`getScraperScriptPath(code)`。
+- 新增爬虫脚本只需在映射表中添加条目，并在 `web-scrapers/` 目录下放置脚本文件。
+
+### 默认脚本：中图学会（`src/spiders/web-scrapers/lsc-scraper.py`）
+
+- Playwright `chromium.connect_over_cdp(browser_address)` 连接已运行的浏览器，不自行启动。
+- 抓取目标页的 `.otherLi` 列表，每项取：
+  - `.rightTitle` → `title` + `href`（相对路径拼接为完整 URL）→ `link`
+  - `.rightMsg` → `summary`
+  - `.liDay` + `.liMonth` → `date`（`DD-MM` 格式）
+- 输出 JSON 数组到 stdout。
+- ⚠️ 依赖外部 Playwright 浏览器进程（如 `lightpanda` 或 Chrome CDP），`BROWSER_ADDRESS` 环境变量配置连接地址。
+
+## 6. Gmail 源（`src/gmail-scheduler.ts` + `src/gmail/`）
 
 - 类 `GmailScheduler`（`:10`），**无独立 config 对象**，直接读 `config.gmailFetchEnabled`、`config.gmailFetchSchedule||'0 4 * * *'`。`start()` 会**立即先跑一次**再排程（`:55`）。
 - `runScheduledFetch`（`:73`）选 `email_sources WHERE status='active'`，映射为 `EmailSourceConfig`（含 `domainId`），逐源串行 `processEmailSource`。行→对象的映射已提取为 `rowToEmailSourceConfig(row)`（`gmail-scheduler.ts`），两处调用点（批量列表 / 单源）共用，消除重复映射代码（见 §9 差异）。
@@ -73,37 +118,51 @@
 - 密码：`decryptAPIKey(source.imapPasswordEncrypted, config.llmEncryptionKey)`（`email-processor.ts:48`）— ⚠️ 复用了 LLM 加密密钥。
 - API：`api/routes/gmail-sources.routes.ts` — CRUD、`POST /test`、`POST /:id/fetch`、`POST /fetch-now`。
 
-## 6. `domain_id` 绑定（2026-07-13 变更，核心机制）
+## 7. `domain_id` 绑定（2026-07-13 变更，核心机制）
 
-四张源表均有 `domain_id INTEGER NOT NULL REFERENCES topic_domains(id)`（`sql/001_init.sql:38,63,395,439`）。
+五张源表均有 `domain_id INTEGER NOT NULL REFERENCES topic_domains(id)`（`sql/001_init.sql`）。
 
-- **创建时缺省回填**：未传 `domainId` 时统一取用户「优先级最高的活跃领域」（`topic_domains WHERE is_active=1 ORDER BY priority DESC`）：RSS `api/rss-sources.ts:86`、期刊 `api/journals.ts:194`、关键词 `api/keywords.ts:167`、Gmail `api/gmail-sources.ts:55`。
-- **存量数据迁移**：`sql/037_add_domain_id_to_sources.sql` 为老行回填并建索引。
-- **抓取时读取来源**：RSS/期刊/关键词都在触发过滤时 JOIN 各自源表拿 `domain_id`；Gmail 直接用 `source.domainId`。
-- 过滤器用它做**单领域评估**（详见文档 02）。若过滤时未显式传 `sourceDomainId`，`llmFilter` 会用 `getArticleSourceDomainId(articleId)`（`api/topic-domains.ts:360`）根据 `source_origin`+外键反查。
+- **创建时缺省回填**：未传 `domainId` 时统一取用户「优先级最高的活跃领域」（`topic_domains WHERE is_active=1 ORDER BY priority DESC`）：RSS `api/rss-sources.ts:86`、期刊 `api/journals.ts:194`、关键词 `api/keywords.ts:167`、Web `api/web-sources.ts:createWebSource`、Gmail `api/gmail-sources.ts:55`。
+- **存量数据迁移**：`sql/037_add_domain_id_to_sources.sql` 为老行回填并建索引（仅 rss/journals/keyword/email）；Web 源为新表，建表时即有 `domain_id`。
+- **抓取时读取来源**：RSS/期刊/关键词都在触发过滤时 JOIN 各自源表拿 `domain_id`；Web 直接用 `source.domain_id`（`web-scheduler.ts:triggerAutoFilter`）；Gmail 直接用 `source.domainId`。
+- 过滤器用它做**单领域评估**（详见文档 02）。若过滤时未显式传 `sourceDomainId`，`llmFilter` 会用 `getArticleSourceDomainId(articleId)`（`api/topic-domains.ts:360`）根据 `source_origin`+外键反查（已支持 `'web'` + `web_source_id`）。
 
-## 7. 标题去重（`src/utils/title.ts`）
+## 8. 标题去重（`src/utils/title.ts`）
 
 - `normalizeTitle(title)`（`:18`）：小写 → 去标点/特殊符号（保留 `\w`、空白、CJK `\u4e00-\u9fff`/`\u3400-\u4dbf`）→ 压缩空白 → trim → 空则返回 `null`。
 - `generateNormalizedTitle(title)`（`:58`）：包一层并截断到 **500 字符**，对应 `articles.title_normalized` 的部分唯一索引 `idx_articles_title_normalized WHERE title_normalized IS NOT NULL`。
-- 各源去重策略：RSS = 按源 `title` 预查 + 全局 `title_normalized` + `url` UNIQUE 兜底；期刊/Gmail = `title_normalized` + UNIQUE 兜底；关键词 = `url` 预查 + `title_normalized`。
+- 各源去重策略：
+  - **RSS**：按源 `title` 预查 + 全局 `title_normalized` + `url` UNIQUE 兜底
+  - **期刊/Gmail**：`title_normalized` + UNIQUE 兜底
+  - **关键词**：`url` 预查 + `title_normalized`
+  - **Web 爬虫**：`title_normalized` 预查（`articles` + `rejected_articles` 双表） → `url` 预查 → `SQLITE_CONSTRAINT_UNIQUE` 兜底
 
-## 8. 相关数据库表
+## 9. 相关数据库表
 
-`rss_sources`、`journals`、`keyword_subscriptions`、`email_sources`（各含 `domain_id`、`user_id`、`status/is_active`、`last_*`）；`articles`（`source_origin`、四外键、`title`、`title_normalized`、`url UNIQUE`、`content`、`markdown_content`、`published_at/year/issue/volume`）；日志表 `rss_fetch_logs`、`journal_crawl_logs`、`keyword_crawl_logs`、`email_fetch_logs`。表定义见 `sql/001_init.sql`，TS 类型见 `src/db.ts`。
+`rss_sources`、`journals`、`keyword_subscriptions`、`web_sources`、`email_sources`（各含 `domain_id`、`user_id`、`status/is_active`、`last_*`）；`articles`（`source_origin`、五外键 `rss_source_id`/`journal_id`/`keyword_id`/`web_source_id`/`email_source_id`、`title`、`title_normalized`、`url UNIQUE`、`content`、`markdown_content`、`published_at/year/issue/volume`）；日志表 `rss_fetch_logs`、`journal_crawl_logs`、`keyword_crawl_logs`、`web_fetch_logs`、`email_fetch_logs`。表定义见 `sql/041_add_web_sources.sql`（新版亦已滚入 `001_init.sql`），TS 类型见 `src/db.ts`。
 
-## 9. 与旧报告（2026-05）的差异
+## 10. 与旧报告（2026-05）的差异
 
 1. **新增 Gmail 邮件源**（`source_origin='email'`）——旧报告有提及但作为「新增」，现已是一等来源，含 IMAP + LLM 拆分完整链路。
-2. **四源全部绑定 `domain_id`**（NOT NULL），过滤从「多领域遍历」改为「单领域评估」。
-3. **关键词源固定走 Google Scholar**，`cnki` 未实现；Google Scholar 爬虫路径硬编码、输出经 `/tmp` 文件中转（与期刊 stdout 方式不同）。
-4. RSS 调度实际用 `config.rssFetchSchedule`（`0 2 * * *`），DB `settings.rss_fetch_schedule`（`0 9 * * *`）未被消费。
-5. 类型名为 `CrawledArticle`（既有拼写），四本期刊来源类型现含 `wanfang`。
+2. **新增 Web 爬虫源**（`source_origin='web'`）——通用网络爬虫，支持 Python/JS 脚本，通过 Playwright CDP 抓取，输出 JSON 标准化字段。
+3. **五源全部绑定 `domain_id`**（NOT NULL），过滤从「多领域遍历」改为「单领域评估」。
+4. **关键词源固定走 Google Scholar**，`cnki` 未实现；Google Scholar 爬虫路径硬编码、输出经 `/tmp` 文件中转（与期刊 stdout 方式不同）。
+5. RSS 调度实际用 `config.rssFetchSchedule`（`0 2 * * *`），DB `settings.rss_fetch_schedule`（`0 9 * * *`）未被消费。
+6. 类型名为 `CrawledArticle`（既有拼写），四本期刊来源类型现含 `wanfang`。
 
-## 10. 近期重构差异（2026-07-14，基于代码审查实施计划）
+## 11. 近期重构差异（2026-07-14，基于代码审查实施计划）
 
-- **调度器基类化**：RSS / 期刊 / 关键词 / Gmail（及每日总结 / 洞察 / 相关文章 / 拒绝清理）8 个调度器全部继承 `src/utils/base-scheduler.ts` 的 `BaseScheduler`，统一生命周期与 cron 校验（见 §1）。
+- **调度器基类化**：RSS / 期刊 / 关键词 / Web 爬虫 / Gmail（及每日总结 / 洞察 / 相关文章 / 拒绝清理）9 个调度器全部继承 `src/utils/base-scheduler.ts` 的 `BaseScheduler`，统一生命周期与 cron 校验（见 §1）。
 - **Google Scholar 爬虫路径**：`cwd` 由硬编码 `/opt/lis-rss-daily/src/spiders/google_scholar` 改为 `path.join(__dirname, 'google_scholar')`（见 §4）。⚠️ `python-spider-runner.ts:55` 的解释器候选路径 `/home/xulei/.pyenvs/...` 仍硬编码，未纳入本次修复。
 - **EmailSourceConfig 映射**：提取 `rowToEmailSourceConfig(row)`，两处调用共用（见 §5）。
 - **期刊 `triggerAutoFilter` 多租户修复**：原硬编码 `userId=1`，现从该期刊下 pending 文章查询中读取真实 `journals.user_id`，并补充 `content: markdown_content || content` 回退链、`rejectedCount` 日志（见 `journal-scheduler.ts`）。
 - **RSS N+1 优化**：`filterSourcesByFetchInterval` / 强制模式原先在循环内逐源 `SELECT last_fetched_at`，现改为 `getLastFetchedMap(ids)` 一次 `WHERE id IN (...)` 批量查询（见 `rss-scheduler.ts`）。
+
+### 5.1 数据库变更（迁移 `sql/041_add_web_sources.sql`）
+
+- **新源表 `web_sources`**：`name` / `url`（UNIQUE(user_id,url)）/ `source_type`（journal|blog|news，用于每日总结分类）/ `scraper_type`（映射脚本）/ `domain_id` / `fetch_interval`（默认 3600s）/ `auto_cleanup_rejected` / `status`。
+- **新日志表 `web_fetch_logs`**：与 `rss_fetch_logs` 同模式，status=success|failed|partial。
+- **`articles` 表新增 `web_source_id`**：第 5 个外键，`ON DELETE CASCADE`。`source_origin` CHECK 约束现包含 `'web'`：`'rss' | 'journal' | 'keyword' | 'email' | 'web'`。
+- **`rejected_articles` 表**新增 `web_source_id` 列及索引。
+- **新类型 `WebScraperType`**（`spiders/types.ts`）：`'lsc'`（中图学会）。
+- **配置项**（`config.ts`）：`webFetchEnabled`（`WEB_FETCH_ENABLED`，默认 true）、`webFetchSchedule`（`WEB_FETCH_SCHEDULE`，默认 `'0 3 * * *'`）。

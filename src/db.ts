@@ -49,6 +49,8 @@ export interface DatabaseTable {
   deepsearch_tasks: DeepSearchTasksTable;
   email_sources: EmailSourcesTable;
   email_fetch_logs: EmailFetchLogsTable;
+  web_sources: WebSourcesTable;
+  web_fetch_logs: WebFetchLogsTable;
   rejected_articles: RejectedArticlesTable;
   rejected_cleanup_stats: RejectedCleanupStatsTable;
 }
@@ -82,6 +84,7 @@ export interface ArticlesTable {
   journal_id: number | null;
   keyword_id: number | null;
   email_source_id: number | null;
+  web_source_id: number | null;
   title: string;
   title_normalized: string | null;
   url: string;
@@ -100,7 +103,7 @@ export interface ArticlesTable {
   published_volume: number | null;
   error_message: string | null;
   is_read: number;
-  source_origin: 'rss' | 'journal' | 'keyword' | 'email';
+  source_origin: 'rss' | 'journal' | 'keyword' | 'email' | 'web';
   rating: number | null;
   ai_summary: string | null;
   created_at: Generated<string>;
@@ -388,6 +391,34 @@ export interface EmailFetchLogsTable {
   created_at: Generated<string>;
 }
 
+export interface WebSourcesTable {
+  id: Generated<number>;
+  user_id: number;
+  name: string;
+  url: string;
+  source_type: 'journal' | 'blog' | 'news';
+  scraper_type: string;
+  domain_id: number;
+  last_fetched_at: string | null;
+  fetch_interval: number;
+  auto_cleanup_rejected: number;
+  status: 'active' | 'inactive';
+  created_at: Generated<string>;
+  updated_at: string;
+}
+
+export interface WebFetchLogsTable {
+  id: Generated<number>;
+  web_source_id: number;
+  status: 'success' | 'failed' | 'partial';
+  articles_count: number;
+  new_articles_count: number;
+  duration_ms: number | null;
+  is_scheduled: number;
+  error_message: string | null;
+  created_at: Generated<string>;
+}
+
 export interface DeepSearchTasksTable {
   id: Generated<number>;
   user_id: number;
@@ -433,6 +464,8 @@ export type KeywordCrawlLogsSelection = SelectionType<KeywordCrawlLogsTable>;
 export type TelegramChatsSelection = SelectionType<TelegramChatsTable>;
 export type DeepSearchTasksSelection = SelectionType<DeepSearchTasksTable>;
 export type EmailFetchLogsSelection = SelectionType<EmailFetchLogsTable>;
+export type WebSourcesSelection = SelectionType<WebSourcesTable>;
+export type WebFetchLogsSelection = SelectionType<WebFetchLogsTable>;
 export type RejectedArticlesSelection = SelectionType<RejectedArticlesTable>;
 
 let _db: DB | null = null;

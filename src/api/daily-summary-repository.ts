@@ -110,12 +110,14 @@ export async function getDailyPassedArticles(
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
       .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+      .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
       .where('articles.filter_status', '=', 'passed')
       .where((eb) => eb.or([
         eb('rss_sources.user_id', '=', userId),
         eb('journals.user_id', '=', userId),
         eb('keyword_subscriptions.user_id', '=', userId),
         eb('email_sources.user_id', '=', userId),
+        eb('web_sources.user_id', '=', userId),
       ]))
       .where('articles.created_at', '>=', startDate)
       .where('articles.created_at', '<=', endDate);
@@ -131,7 +133,7 @@ export async function getDailyPassedArticles(
         'articles.markdown_content',
         'articles.published_at',
         'articles.source_origin',
-        eb.fn.coalesce('rss_sources.name', 'journals.name', 'keyword_subscriptions.keyword').as('source_name'),
+        eb.fn.coalesce('rss_sources.name', 'journals.name', 'keyword_subscriptions.keyword', 'email_sources.name', 'web_sources.name').as('source_name'),
         eb.fn.coalesce('rss_sources.source_type', eb.val('journal')).as('source_type'),
       ])
       .orderBy('articles.created_at', 'desc')
@@ -147,6 +149,9 @@ export async function getDailyPassedArticles(
       let sourceType = row.source_type || 'blog';
       if (row.source_origin === 'email') {
         sourceType = 'email';
+        sourceName = row.source_name || sourceName;
+      }
+      if (row.source_origin === 'web') {
         sourceName = row.source_name || sourceName;
       }
 
@@ -183,6 +188,7 @@ export async function getDailyPassedArticles(
         eb('rss_sources.source_type', 'in', ['blog', 'news']),
       ]),
       eb('articles.source_origin', '=', 'email'),
+      eb('articles.source_origin', '=', 'web'),
     ]));
     result = await executeQuery(query, BLOG_NEWS_LIMIT);
 
@@ -208,6 +214,7 @@ export async function getDailyPassedArticles(
           eb('rss_sources.source_type', 'in', ['blog', 'news']),
         ]),
         eb('articles.source_origin', '=', 'email'),
+        eb('articles.source_origin', '=', 'web'),
       ]));
       blogNewsArticles = await executeQuery(blogNewsQuery, remainingCount);
     }
@@ -435,11 +442,13 @@ export async function getInsightsArticles(
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
     .where('articles.filter_status', '=', 'passed')
     .where((eb) => eb.or([
       eb('rss_sources.user_id', '=', userId),
       eb('journals.user_id', '=', userId),
       eb('keyword_subscriptions.user_id', '=', userId),
+      eb('web_sources.user_id', '=', userId),
     ]))
     .where('articles.created_at', '>=', startDate.toISOString())
     .where('articles.created_at', '<', endDate.toISOString())

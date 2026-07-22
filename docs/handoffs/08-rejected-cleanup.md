@@ -2,14 +2,15 @@
 
 > 本文档于 **2026-07-14** 基于实际源代码逐文件阅读编写，所有结论均带 `文件:行号` 引用。
 > **2026-07-16 更新**：新增 30 天过滤条件，仅迁移 `filtered_at < now - 30 天` 的拒绝文章。
-> **2026-07-16 更新 #2**：修复去重漏洞——在 4 个数据源的 `saveArticles` 去重逻辑中追加对 `rejected_articles` 表的查询，防止被清理的拒绝文章再次被当作新文章入库（见 §16）。
+> **2026-07-16 更新 #2**：修复去重漏洞——在 5 个数据源的 `saveArticles` 去重逻辑中追加对 `rejected_articles` 表的查询，防止被清理的拒绝文章再次被当作新文章入库（见 §16）。
+> *2026-07-21 更新 #3**：新增第 5 类 Web 爬虫源（`source_origin='web'`），`rejected-cleanup-scheduler` 已扩展为 5 源支持（见 §12）。
 > 始于 `docs/handoffs/08-rejected-cleanup.md` 规划方案，现已完成实现。
 
 ---
 
 ## 1. 背景与目标
 
-**现状**：系统有 4 类来源（RSS/期刊/关键词/Gmail），大量文章被 LLM 过滤拒绝（`filter_status='rejected'`），但**永久保留在 `articles` 表中**。随着时间推移，`articles` 表膨胀，查询性能下降，而 rejected 文章在前端默认已被排除（`excludeRejected: true`），保留在正式表中仅有数据冗余的负面效果。
+**现状**：系统有 5 类来源（RSS/期刊/关键词/Web 爬虫/Gmail），大量文章被 LLM 过滤拒绝（`filter_status='rejected'`），但**永久保留在 `articles` 表中**。随着时间推移，`articles` 表膨胀，查询性能下降，而 rejected 文章在前端默认已被排除（`excludeRejected: true`），保留在正式表中仅有数据冗余的负面效果。
 
 **目标**（全部完成）：
 1. ✅ 为每个源新增 `auto_cleanup_rejected` 开关字段，默认关闭（opt-in）
@@ -43,7 +44,7 @@ flowchart LR
     ▼
 [rejected-cleanup-scheduler]  ← cron 每天 8:00 (config.rejectedCleanupSchedule)
     │
-    │  1. collectEnabledSources() — 4 类源表 UNION ALL 查询 auto_cleanup_rejected=1
+    │  1. collectEnabledSources() — 5 类源表（含 web_sources）UNION ALL 查询 auto_cleanup_rejected=1
     │  2. 对每个源：
     │     a. SELECT articles WHERE filter_status='rejected' AND 来源外键 = ?
     │         AND filtered_at < (now - 30天)  ← 仅迁移30天以前的拒绝文章
@@ -69,9 +70,9 @@ flowchart LR
 
 ## 3. 数据库结构
 
-### 3.1 四张源表 `auto_cleanup_rejected` 字段
+### 3.1 五张源表 `auto_cleanup_rejected` 字段
 
-已在 `sql/001_init.sql` 和 `sql/038_add_auto_cleanup_rejected.sql` 两处定义，迁移脚本会判断字段已存在时跳过。
+已在 `sql/001_init.sql`、`sql/038_add_auto_cleanup_rejected.sql` 和 `sql/041_add_web_sources.sql` 中定义，迁移脚本会判断字段已存在时跳过。
 
 ```sql
 -- 每张表定义相同
@@ -82,6 +83,7 @@ CREATE INDEX IF NOT EXISTS idx_rss_sources_auto_cleanup ON rss_sources(auto_clea
 CREATE INDEX IF NOT EXISTS idx_journals_auto_cleanup ON journals(auto_cleanup_rejected);
 CREATE INDEX IF NOT EXISTS idx_keyword_subscriptions_auto_cleanup ON keyword_subscriptions(auto_cleanup_rejected);
 CREATE INDEX IF NOT EXISTS idx_email_sources_auto_cleanup ON email_sources(auto_cleanup_rejected);
+CREATE INDEX IF NOT EXISTS idx_web_sources_auto_cleanup ON web_sources(auto_cleanup_rejected);
 ```
 
 ### 3.2 `rejected_articles` 归档表
@@ -94,6 +96,7 @@ CREATE TABLE IF NOT EXISTS rejected_articles (
   journal_id INTEGER,
   keyword_id INTEGER,
   email_source_id INTEGER,
+  web_source_id INTEGER,
   title TEXT NOT NULL,
   title_normalized TEXT,
   url TEXT NOT NULL,
@@ -133,6 +136,7 @@ CREATE INDEX idx_rejected_articles_rss_source_id ON rejected_articles(rss_source
 CREATE INDEX idx_rejected_articles_journal_id ON rejected_articles(journal_id);
 CREATE INDEX idx_rejected_articles_keyword_id ON rejected_articles(keyword_id);
 CREATE INDEX idx_rejected_articles_email_source_id ON rejected_articles(email_source_id);
+CREATE INDEX idx_rejected_articles_web_source_id ON rejected_articles(web_source_id);
 ```
 
 ### 3.3 `rejected_cleanup_stats` 统计缓存表
@@ -186,13 +190,13 @@ export class RejectedCleanupScheduler extends BaseScheduler {  // 2026-07-14 起
 }
 ```
 
-> **近期重构（2026-07-14）**：`RejectedCleanupScheduler` 已改为 `extends BaseScheduler`（`src/utils/base-scheduler.ts`），与 RSS / 期刊 / 关键词 / Gmail / 每日总结 / 洞察 / 相关文章共 8 个调度器统一基类。`scheduledTask` / `isRunning` 字段及 `start()` / `stop()` / cron 校验逻辑由基类提供，子类只需实现 `schedulerName` / `cronSchedule` / `run()`。文件:行号引用（如 L:41-58、L:151-190）为重构前的快照，实际以符号名为准。
+> **近期重构（2026-07-14）**：`RejectedCleanupScheduler` 已改为 `extends BaseScheduler`（`src/utils/base-scheduler.ts`），与 RSS / 期刊 / 关键词 / Web 爬虫 / Gmail / 每日总结 / 洞察 / 相关文章共 9 个调度器统一基类。`scheduledTask` / `isRunning` 字段及 `start()` / `stop()` / cron 校验逻辑由基类提供，子类只需实现 `schedulerName` / `cronSchedule` / `run()`。文件:行号引用（如 L:41-58、L:151-190）为重构前的快照，实际以符号名为准。
 
 ### 5.2 核心方法
 
 | 方法 | 可见性 | 功能 | 位置 |
 |------|--------|------|------|
-| `collectEnabledSources()` | private | 收集 4 类源表中 `auto_cleanup_rejected=1` 的活跃源 | L:151-190 |
+| `collectEnabledSources()` | private | 收集 5 类源表（含 web_sources）中 `auto_cleanup_rejected=1` 的活跃源 | L:151-190 |
 | `cleanupSource(source)` | private | 对单个源执行迁移：查询 → 收集关联数据 → 事务迁移（含 `rejected_cleanup_stats` INCREMENT）。查询时加 `filtered_at < 30天前` 条件，保留近期拒绝数据在主表。 | L:196-303 |
 | `getSourceColumn(type)` | private | 源类型 → articles 表中外键列名映射 | L:309-321 |
 
@@ -217,8 +221,8 @@ console.log(result);
 
 ### 5.4 注册与生命周期 `src/index.ts`
 
-- **启动**（L:125-131）：在 RSS / 期刊 / 关键词 / Gmail 调度器之后，Telegram Bot 之前注册
-- **关闭**（L:155-157）：在 Gmail 调度器之后停止
+- **启动**（L:125-131）：在 RSS / 期刊 / 关键词 / 每日总结 / 洞察 / 拒绝清理调度器之后，**Web 爬虫 / Gmail / Telegram Bot** 之前注册
+- **关闭**（L:155-157）：在 Web 爬虫 / Gmail 调度器之后停止
 - 受 `config.rejectedCleanupEnabled` 全局开关控制
 
 ---
@@ -232,7 +236,7 @@ console.log(result);
 | `RssSourcesTable` | `auto_cleanup_rejected: number` | L:28 |
 | `JournalsTable` | `auto_cleanup_rejected: number` | L:92 |
 | `KeywordSubscriptionsTable` | `auto_cleanup_rejected: number` | L:121 |
-| `EmailSourcesTable` | `auto_cleanup_rejected: number` | L:139 |
+| `WebSourcesTable` | `auto_cleanup_rejected: number` | `src/db.ts:WebSourcesTable` |
 
 ### 6.2 新增 `RejectedArticlesTable` 接口
 
@@ -481,6 +485,7 @@ if (file === '040_add_rejected_cleanup_completed_count.sql') {
 | `src/api/routes/journals.routes.ts` | ✅ | 同上 |
 | `src/api/routes/keywords.routes.ts` | ✅ | 同上 |
 | `src/api/routes/gmail-sources.routes.ts` | ✅ | 同上 |
+| `src/api/routes/web-sources.routes.ts` | ✅ | 同上 |
 | `src/api/routes/articles.routes.ts` | ✅ | 首页统计加上 `rejected_cleanup_stats` 缓存值 |
 | `src/views/settings/modals.ejs` | ✅ | RSS/期刊/关键词模态框加复选框 |
 | `src/views/settings/panel-gmail.ejs` | ✅ | 邮件源模态框加复选框 + 内联 JS |
@@ -491,6 +496,7 @@ if (file === '040_add_rejected_cleanup_completed_count.sql') {
 | `src/journal-scheduler.ts` | ✅ 2026-07-16 | Journal saveArticles 追加 rejected_articles 标题去重（见 §16） |
 | `src/api/keywords.ts` | ✅ 2026-07-16 | Keyword saveArticles 追加 rejected_articles URL+标题双重去重（见 §16） |
 | `src/gmail/email-processor.ts` | ✅ 2026-07-16 | Gmail processEmailSource 追加 rejected_articles 标题去重（见 §16） |
+| `src/web-scheduler.ts` | ✅ 2026-07-21 | Web 爬虫 saveArticles 追加 rejected_articles 标题去重（见 §16） |
 
 ---
 
@@ -510,7 +516,8 @@ if (file === '040_add_rejected_cleanup_completed_count.sql') {
 
 ## 15. 近期重构差异（2026-07-14，基于代码审查实施计划）
 
-- **`RejectedCleanupScheduler` 基类化**：改为 `extends BaseScheduler`，与全项目 8 个调度器统一生命周期（见 §5.1）。`start()` / `stop()` / cron 校验不再各自维护。
+- **`RejectedCleanupScheduler` 基类化**：改为 `extends BaseScheduler`，与全项目 9 个调度器统一生命周期（见 §5.1）。`start()` / `stop()` / cron 校验不再各自维护。
+- **新增 Web 爬虫源支持**（2026-07-21）：`collectEnabledSources()` 增加 `web_sources` 查询，`getSourceColumn()` 增加 `'web' → 'web_source_id'` 分支。
 
 ---
 
@@ -518,7 +525,7 @@ if (file === '040_add_rejected_cleanup_completed_count.sql') {
 
 ### 16.1 问题
 
-自动清理将 `filter_status='rejected'` 的文章从 `articles` 表物理删除到 `rejected_articles` 归档表。但四个来源（RSS / 期刊 / 关键词 / Gmail）的 `saveArticles` 去重逻辑只查询 `articles` 表，**不查 `rejected_articles` 归档表**。
+自动清理将 `filter_status='rejected'` 的文章从 `articles` 表物理删除到 `rejected_articles` 归档表。但五个来源（RSS / 期刊 / 关键词 / Web 爬虫 / Gmail）的 `saveArticles` 去重逻辑只查询 `articles` 表，**不查 `rejected_articles` 归档表**。
 
 于是出现循环：
 
@@ -534,13 +541,14 @@ if (file === '040_add_rejected_cleanup_completed_count.sql') {
 
 ### 16.2 修复
 
-在四个来源的 `saveArticles`/`processEmailSource` 中，在原有的 `articles` 去重检查之后，追加对 `rejected_articles` 表的查询。如果 `title_normalized`（或 `url`）在归档表中已存在，则跳过该文章。
+在五个来源的 `saveArticles`/`processEmailSource` 中，在原有的 `articles` 去重检查之后，追加对 `rejected_articles` 表的查询。如果 `title_normalized`（或 `url`）在归档表中已存在，则跳过该文章。
 
 | 数据源 | 源文件 | 新增检查 |
 |--------|--------|---------|
 | RSS | `src/api/articles.ts:saveArticles` | `title_normalized` → `rejected_articles` |
 | 期刊 | `src/journal-scheduler.ts:saveArticles` | `title_normalized` → `rejected_articles` |
 | 关键词 | `src/api/keywords.ts:saveArticles` | `url` + `title_normalized` → `rejected_articles` |
+| Web 爬虫 | `src/web-scheduler.ts:saveArticles` | `title_normalized` → `rejected_articles` + `url` → articles |
 | Gmail | `src/gmail/email-processor.ts:processEmailSource` | `title_normalized` → `rejected_articles` |
 
 ### 16.3 关键细节
@@ -558,6 +566,7 @@ if (file === '040_add_rejected_cleanup_completed_count.sql') {
 | `src/api/articles.ts` | ✅ 修改 | RSS saveArticles 追加 rejected_articles 标题去重 |
 | `src/journal-scheduler.ts` | ✅ 修改 | Journal saveArticles 追加 rejected_articles 标题去重 |
 | `src/api/keywords.ts` | ✅ 修改 | Keyword saveArticles 追加 rejected_articles URL+标题双重去重 |
+| `src/web-scheduler.ts` | ✅ 2026-07-21 | Web 爬虫 saveArticles 追加 rejected_articles 标题去重 |
 | `src/gmail/email-processor.ts` | ✅ 修改 | Gmail processEmailSource 追加 rejected_articles 标题去重 |
 
 ### 16.5 验证要点
