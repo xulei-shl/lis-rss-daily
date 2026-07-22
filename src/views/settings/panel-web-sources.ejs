@@ -196,9 +196,7 @@ function renderWebSourcesTable() {
       '<td><span class="type-badge">' + (typeLabels[source.source_type] || source.source_type) + '</span></td>' +
       '<td>' + getScraperTypeLabel(source.scraper_type) + '</td>' +
       '<td>' + getDomainName(source.domain_id) + '</td>' +
-      '<td><span class="badge badge-' + (source.status === 'active' ? 'success' : 'secondary') + '">' +
-        (source.status === 'active' ? '已启用' : '已停用') +
-      '</span></td>' +
+      '<td><span class="status-badge ' + source.status + '">' + (source.status === 'active' ? '启用' : '禁用') + '</span></td>' +
       '<td>' + formatDate(source.last_fetched_at) + '</td>' +
       '<td>' +
         '<div class="action-buttons">' +

@@ -118,11 +118,11 @@ async function loadGmailSources() {
         <td>${esc(source.email_address)}</td>
         <td style="font-size:0.85rem;">${esc(senderPreview)}</td>
         <td>${getDomainName(source.domain_id)}</td>
-        <td><span class="badge badge-${source.status === 'active' ? 'success' : 'secondary'}">${source.status === 'active' ? '已启用' : '已停用'}</span></td>
-        <td>${source.last_fetched_at ? new Date(source.last_fetched_at).toLocaleString('zh-CN') : '-'}</td>
+        <td><span class="status-badge ${source.status}">${source.status === 'active' ? '启用' : '禁用'}</span></td>
+        <td>${source.last_fetched_at ? formatDate(source.last_fetched_at) : '从未'}</td>
         <td>
           <div class="action-buttons">
-            <button class="btn-icon" onclick="fetchGmailNow(${source.id}, this)">立即抓取</button>
+            <button class="btn-icon" onclick="fetchGmailNow(${source.id}, this)">抓取</button>
             <button class="btn-icon" onclick="editGmailSource(${source.id})">编辑</button>
             <button class="btn-icon" onclick="deleteGmailSource(${source.id})">删除</button>
           </div>

@@ -239,8 +239,8 @@ function renderTable() {
       '<td>' + formatDate(source.last_fetched_at) + '</td>' +
       '<td>' +
       '<div class="action-buttons">' +
-      '<button class="btn-icon" onclick="editSource(' + source.id + ')">编辑</button>' +
       '<button class="btn-icon" onclick="fetchNow(' + source.id + ')">抓取</button>' +
+      '<button class="btn-icon" onclick="editSource(' + source.id + ')">编辑</button>' +
       '<button class="btn-icon" onclick="deleteSource(' + source.id + ')">删除</button>' +
       '</div>' +
       '</td>' +
@@ -1428,7 +1428,7 @@ function renderJournalsTable() {
       '</td>' +
       '<td>' +
       '<div class="action-buttons">' +
-      '<button class="btn-icon" onclick="showCrawlJournalModal(' + journal.id + ')">爬取</button>' +
+      '<button class="btn-icon" onclick="showCrawlJournalModal(' + journal.id + ')">抓取</button>' +
       '<button class="btn-icon" onclick="editJournal(' + journal.id + ')">编辑</button>' +
       '<button class="btn-icon" onclick="deleteJournal(' + journal.id + ')">删除</button>' +
       '</div>' +
@@ -2230,7 +2230,7 @@ function renderKeywordsTable() {
       <td>${getDomainName(kw.domain_id)}</td>
       <td>${getSpiderTypeLabel(kw.spider_type)}</td>
       <td>${kw.num_results}</td>
-      <td>${kw.last_crawl_time ? formatDate(kw.last_crawl_time) : '<span style="color: #999">未爬取</span>'}</td>
+      <td>${kw.last_crawl_time ? formatDate(kw.last_crawl_time) : '从未'}</td>
       <td>${kw.total_articles || 0}</td>
       <td>${kw.is_active ? '<span class="status-badge active">启用</span>' : '<span class="status-badge inactive">禁用</span>'}</td>
       <td>

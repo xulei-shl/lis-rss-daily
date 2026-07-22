@@ -71,6 +71,9 @@ async function loadTopicDomains() {
     if (typeof loadGmailSources === 'function') {
       loadGmailSources();
     }
+    if (typeof loadWebSources === 'function') {
+      loadWebSources();
+    }
   } catch (err) {
     console.error('加载主题领域失败:', err);
   }
