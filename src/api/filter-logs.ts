@@ -47,11 +47,15 @@ export async function getFilterLogs(params: FilterLogsQuery): Promise<FilterLogs
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
+    .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
     .where((eb) =>
       eb.or([
         eb('rss_sources.user_id', '=', params.userId),
         eb.and([eb('articles.journal_id', 'is not', null), eb('journals.user_id', '=', params.userId)]),
         eb.and([eb('articles.keyword_id', 'is not', null), eb('keyword_subscriptions.user_id', '=', params.userId)]),
+        eb.and([eb('articles.web_source_id', 'is not', null), eb('web_sources.user_id', '=', params.userId)]),
+        eb.and([eb('articles.email_source_id', 'is not', null), eb('email_sources.user_id', '=', params.userId)]),
       ])
     );
 

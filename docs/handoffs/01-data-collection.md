@@ -290,7 +290,65 @@
 
 - [ ] `getArticleSourceDomainId()` — 添加 `source_origin === 'foo'` 的分支反查 `foo_sources.domain_id`
 
-### 12.9 验证清单
+### 12.9 日志查看系统（`/filter-logs` 页面）
+
+> 以下清单基于 Web 爬虫源（`source_origin='web'`）集成过程中发现的日志查看遗漏归纳而来。
+> 新增源时必须同步更新日志查询系统和前端日志面板，否则过滤日志和抓取日志在 `/filter-logs` 页面不可见。
+
+**抓取日志 API（`src/api/<foo>-fetch-logs.ts`，新建）：**
+
+- [ ] 创建 `<foo>-fetch-logs.ts`，导出 `get<Foo>FetchLogs()` 函数（分页查询 `foo_fetch_logs`），参考 `src/api/email-fetch-logs.ts` 或 `src/api/web-fetch-logs.ts`
+  - 查询模板：`selectFrom('foo_fetch_logs').innerJoin('foo_sources', ...)`
+  - 过滤条件：至少支持 `status`、`fooSourceId`、`fromDate`、`toDate`；若表有 `is_scheduled` 列则也支持
+  - 返回类型：`<Foo>FetchLogRecord` （`<Foo>FetchLogsSelection` + `foo_source_name`）
+  - 时间字段用 `normalizeDateFields` 标准化
+
+**路由层 `src/api/routes/logs.routes.ts`：**
+
+- [ ] 导入 `{ get<Foo>FetchLogs, type <Foo>FetchStatus }`
+- [ ] 添加 `GET /logs/<foo>-fetch` 路由处理器，支持 `status`、`fooSourceId`、`isScheduled` 查询参数
+- [ ] 添加 `parse<Foo>FetchStatus` 解析函数
+- [ ] 在 `parseUnifiedTypes` 的 `allowedSet` 中加入 `'<foo>_fetch'`
+- [ ] 在 `parseUnifiedTypes` 的类型别名映射中加入 `if (type === '<foo>') return '<foo>_fetch'`
+
+> ⚠️ 参考模式：`'web_fetch'` — 在 `allowedSet` 中注册，并在 `parseUnifiedTypes` 中同步添加别名映射。两者缺一不可。
+
+**统一日志 `src/api/unified-logs.ts`：**
+
+- [ ] 将 `'<foo>_fetch'` 加入 `UnifiedLogType` 联合类型
+- [ ] 将 `'<foo>_fetch'` 加入 `ALL_TYPES` 数组
+- [ ] 在 `getUnifiedLogs()` 中添加 `<foo>_fetch` 数据获取分支：调 `get<Foo>FetchLogs()` + `.map(map<Foo>FetchLog)`
+- [ ] 添加 `map<Foo>FetchLog` 映射函数
+- [ ] 在 `totalsByType` 中添加 `<foo>_fetch` 计数
+
+**过滤日志 `src/api/filter-logs.ts`：**
+
+- [ ] 在 `getFilterLogs()` 的 `LEFT JOIN` 链中添加 `leftJoin('foo_sources', ...)`
+- [ ] 在权限 `WHERE` 条件中添加：`eb.and([eb('articles.foo_source_id', 'is not', null), eb('foo_sources.user_id', '=', params.userId)])`
+
+> ⚠️ 经验教训：Web 爬虫源集成时，`getFilterLogs()` 遗漏了 `web_sources` 和 `email_sources` 的 `LEFT JOIN` 及对应权限条件，
+> 导致该来源文章的过滤日志在 `/filter-logs` 页面不可见。**新增源时必须同步补充这两处。**
+
+**前端 `src/views/filter-logs.ejs`：**
+
+- [ ] 在 Tab 栏中添加 `<button class="logs-tab" data-tab="foo">Foo 抓取</button>`
+- [ ] 添加 Tab 面板 HTML：筛选栏（`fooStatusFilter` 下拉框） + 表格（`fooTable`/`fooBody`） + 空状态（`fooEmpty`） + 分页（`fooPagination`）
+- [ ] 在 `state.tabs` 中添加 `foo: { page: 1, totalPages: 1 }`
+- [ ] 在 `filters` 中添加 `fooStatus: ''`
+- [ ] 在 `reloadAllTabs()` 中添加 `load<Foo>Logs(1)`
+- [ ] 在 `initFilterControls()` 中添加 `fooStatus` 下拉框变更事件监听
+- [ ] 添加 `async function load<Foo>Logs(page)` — 调 `GET /api/logs/<foo>-fetch`，更新 state，调 `render<Foo>Logs`/`renderPagination`
+- [ ] 添加 `function render<Foo>Logs(logs)` — 渲染表格行（含展开详情）、空状态切换
+- [ ] 在 `window.changeLogPage` 的 `switch` 中添加 `case 'foo': load<Foo>Logs(page); break`
+- [ ] 在 `getFlowLabel(type)` 中添加 `case '<foo>_fetch': return 'Foo 抓取'`
+- [ ] 在 `getUnifiedSummary(log)` 中添加 `case '<foo>_fetch':` 返回来源名 + 新增/总数
+- [ ] 在 `buildUnifiedDetail(log)` 中添加 `case '<foo>_fetch': return build<Foo>Detail(log.data)`
+- [ ] 添加 `function build<Foo>Detail(data)` — 返回统一日志的详情 HTML
+
+> ⚠️ 参考模式：Web 爬虫的 tab 使用 `data-tab="web"`、`data-panel="web"`，API 端点 `/api/logs/web-fetch`，统一日志类型 `web_fetch`。
+> **Tab data 值、panel data 值、API 路径片段、统一日志类型四者要保持一致。**
+
+### 12.10 验证清单
 
 完成上述修改后，执行以下验证：
 
@@ -302,3 +360,7 @@
   - 文章详情页正确显示来源名称
   - 批量处理能处理新来源的待筛选/待处理文章
   - 每日总结正确包含新来源文章
+  - **`/filter-logs` 页面**：
+    - 「过滤日志」Tab 中能否看到新来源文章的过滤记录
+    - 「全部流程」Tab 中能否看到新来源的抓取日志记录
+    - 新来源的独立抓取日志 Tab 是否正常渲染、分页、筛选

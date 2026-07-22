@@ -2,14 +2,16 @@ import { getFilterLogs } from './filter-logs.js';
 import { getCrawlLogs } from './journals.js';
 import { getRssFetchLogs } from './rss-fetch-logs.js';
 import { getEmailFetchLogs } from './email-fetch-logs.js';
+import { getWebFetchLogs } from './web-fetch-logs.js';
 import { getProcessLogs } from './process-logs.js';
 import { getKeywordCrawlLogs } from './keywords.js';
 import type { FilterLogRecord } from './filter-logs.js';
 import type { RssFetchLogRecord } from './rss-fetch-logs.js';
 import type { EmailFetchLogRecord } from './email-fetch-logs.js';
+import type { WebFetchLogRecord } from './web-fetch-logs.js';
 import type { ProcessLogRecord } from './process-logs.js';
 
-export type UnifiedLogType = 'filter' | 'rss_fetch' | 'email_fetch' | 'journal_crawl' | 'process' | 'keyword_crawl';
+export type UnifiedLogType = 'filter' | 'rss_fetch' | 'email_fetch' | 'journal_crawl' | 'process' | 'keyword_crawl' | 'web_fetch';
 
 export interface UnifiedLogsQuery {
   userId: number;
@@ -37,7 +39,7 @@ export interface UnifiedLogsResult {
   totalsByType: Record<UnifiedLogType, number>;
 }
 
-const ALL_TYPES: UnifiedLogType[] = ['filter', 'rss_fetch', 'email_fetch', 'journal_crawl', 'process', 'keyword_crawl'];
+const ALL_TYPES: UnifiedLogType[] = ['filter', 'rss_fetch', 'email_fetch', 'journal_crawl', 'process', 'keyword_crawl', 'web_fetch'];
 
 export async function getUnifiedLogs(params: UnifiedLogsQuery): Promise<UnifiedLogsResult> {
   const page = params.page ?? 1;
@@ -131,6 +133,19 @@ export async function getUnifiedLogs(params: UnifiedLogsQuery): Promise<UnifiedL
     };
   }
 
+  if (types.includes('web_fetch')) {
+    const webResult = await getWebFetchLogs({
+      page: 1,
+      limit: fetchLimitPerType,
+      fromDate: params.fromDate,
+      toDate: params.toDate,
+    });
+    resultsByType.web_fetch = {
+      entries: webResult.logs.map(mapWebFetchLog),
+      total: webResult.total,
+    };
+  }
+
   const combinedEntries: UnifiedLogEntry[] = Object.values(resultsByType)
     .flatMap((result) => result?.entries ?? [])
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -144,6 +159,7 @@ export async function getUnifiedLogs(params: UnifiedLogsQuery): Promise<UnifiedL
     journal_crawl: resultsByType.journal_crawl?.total ?? 0,
     process: resultsByType.process?.total ?? 0,
     keyword_crawl: resultsByType.keyword_crawl?.total ?? 0,
+    web_fetch: resultsByType.web_fetch?.total ?? 0,
   };
 
   const total = types.reduce((sum, type) => sum + (totalsByType[type] ?? 0), 0);
@@ -258,6 +274,26 @@ function mapProcessLog(log: ProcessLogRecord): UnifiedLogEntry {
       error_message: log.error_message,
       details: log.details,
       source_origin: log.source_origin,
+      created_at: log.created_at,
+    },
+  };
+}
+
+function mapWebFetchLog(log: WebFetchLogRecord): UnifiedLogEntry {
+  return {
+    id: `web_fetch:${log.id}`,
+    type: 'web_fetch',
+    created_at: log.created_at,
+    status: log.status,
+    data: {
+      id: log.id,
+      web_source_id: log.web_source_id,
+      web_source_name: log.web_source_name,
+      articles_count: log.articles_count,
+      new_articles_count: log.new_articles_count,
+      duration_ms: log.duration_ms,
+      is_scheduled: Boolean(log.is_scheduled),
+      error_message: log.error_message,
       created_at: log.created_at,
     },
   };

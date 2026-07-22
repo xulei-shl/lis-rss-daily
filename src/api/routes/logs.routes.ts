@@ -16,6 +16,7 @@ import {
   type ProcessStatus,
 } from '../process-logs.js';
 import { getEmailFetchLogs, type EmailFetchStatus } from '../email-fetch-logs.js';
+import { getWebFetchLogs, type WebFetchStatus } from '../web-fetch-logs.js';
 import { getUnifiedLogs, type UnifiedLogType } from '../unified-logs.js';
 import {
   getKeywordCrawlLogs,
@@ -178,6 +179,37 @@ router.get('/logs/email-fetch', requireAuth, async (req: AuthRequest, res) => {
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to get email fetch logs');
     res.status(500).json({ error: 'Failed to get email fetch logs' });
+  }
+});
+
+/**
+ * GET /api/logs/web-fetch
+ * 网站爬虫抓取日志
+ */
+router.get('/logs/web-fetch', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const { fromDate, toDate } = getDateRangeFromQuery(req, DEFAULT_RANGE_DAYS);
+
+    const status = parseWebFetchStatus(req.query.status);
+    const webSourceId = parseOptionalInt(req.query.webSourceId);
+    const isScheduled = parseBooleanParam(req.query.isScheduled);
+
+    const result = await getWebFetchLogs({
+      page,
+      limit,
+      status: status ?? undefined,
+      webSourceId: webSourceId ?? undefined,
+      isScheduled: isScheduled ?? undefined,
+      fromDate,
+      toDate,
+    });
+
+    res.json(result);
+  } catch (error) {
+    log.error({ error, userId: req.userId }, 'Failed to get web fetch logs');
+    res.status(500).json({ error: 'Failed to get web fetch logs' });
   }
 });
 
@@ -351,6 +383,12 @@ function parseProcessStatus(value: unknown): ProcessStatus | undefined {
   return allowed.includes(value as ProcessStatus) ? (value as ProcessStatus) : undefined;
 }
 
+function parseWebFetchStatus(value: unknown): WebFetchStatus | undefined {
+  if (typeof value !== 'string') return undefined;
+  const allowed: WebFetchStatus[] = ['success', 'failed', 'partial'];
+  return allowed.includes(value as WebFetchStatus) ? (value as WebFetchStatus) : undefined;
+}
+
 function parseEmailFetchStatus(value: unknown): EmailFetchStatus | undefined {
   if (typeof value !== 'string') return undefined;
   const allowed: EmailFetchStatus[] = ['success', 'failed'];
@@ -372,12 +410,13 @@ function parseUnifiedTypes(value: unknown): UnifiedLogType[] | undefined {
     .map((item) => item.trim())
     .filter(Boolean);
 
-  const allowedSet = new Set<UnifiedLogType>(['filter', 'rss_fetch', 'email_fetch', 'journal_crawl', 'process', 'keyword_crawl']);
+  const allowedSet = new Set<UnifiedLogType>(['filter', 'rss_fetch', 'email_fetch', 'journal_crawl', 'process', 'keyword_crawl', 'web_fetch']);
   const normalized = requested
     .map((type) => {
       if (type === 'rss') return 'rss_fetch';
       if (type === 'crawl') return 'journal_crawl';
       if (type === 'keyword') return 'keyword_crawl';
+      if (type === 'web') return 'web_fetch';
       return type as UnifiedLogType;
     })
     .filter((type): type is UnifiedLogType => allowedSet.has(type as UnifiedLogType));
