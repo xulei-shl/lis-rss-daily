@@ -201,6 +201,7 @@
 - [ ] `getMergedSources()` — 查询 `foo_sources` + 添加到 `sourceMap`（注意合并逻辑）
 
 > ⚠️ 经验教训：`updateArticleRating` 和 `updateArticleAiSummary` 曾在 Web 爬虫集成时被遗漏，因为它们的权限条件写死在函数体内而非共用 `buildUserArticlePermissionCondition`。
+> ⚠️ **2026-07-22 新增**：`getUserArticles()` 的**数据查询分支**（分页数据查询，`articlesQuery`）在处理 `webSourceIds` 时遗漏了 `web_source_id IN (...)` 条件，导致计数查询正确返回 6 条，但数据查询因 `conditions` 数组为空而生成 `1 = 0`（永远为假），返回 0 行。**筛选条件必须同时在计数查询和数据查询两处添加**，否则会出现分页显示有文章但列表为空的现象。
 
 ### 12.3 路由层 `src/api/routes/articles.routes.ts`
 
@@ -208,6 +209,7 @@
 - [ ] `GET /api/articles/stats` — 所有 7 个 COUNT 查询各添加一个 `leftJoin('foo_sources', ...)`
 
 > ⚠️ 经验教训：统计查询的 LEFT JOIN 和权限条件是**同步的**——只要改了权限条件忘了加 JOIN，查询会因缺少表引用而报错；但加了 JOIN 忘了改权限条件，查询不会报错但会漏数。两者要一起检查。
+> ⚠️ **2026-07-22 新增**：`GET /api/articles` 路由处理器中，`webSourceIds` 既未从 `req.query` 提取（遗漏 `normalizeQueryIds` 调用），也未传递给 `getUserArticles()` 的 options 参数。**两处需同时检查**：`const fooSourceIds = normalizeQueryIds(...)` 提取 + 在 options 对象中添加 `fooSourceIds` 字段。`markAllAsRead` 路由同理。
 
 ### 12.4 流水线 `src/pipeline.ts`
 

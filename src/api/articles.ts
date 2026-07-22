@@ -790,6 +790,9 @@ export async function getUserArticles(
       if (emailSourceIds && emailSourceIds.length > 0) {
         conditions.push(eb('articles.email_source_id', 'in', emailSourceIds));
       }
+      if (webSourceIds && webSourceIds.length > 0) {
+        conditions.push(eb('articles.web_source_id', 'in', webSourceIds));
+      }
       return eb.or(conditions);
     });
   }
