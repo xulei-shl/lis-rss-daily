@@ -579,6 +579,7 @@ export async function getUserArticles(
     keywordId?: number;
     keywordIds?: number[];
     emailSourceIds?: number[];
+    webSourceIds?: number[];
     filterStatus?: 'pending' | 'passed' | 'rejected';
     processStatus?: 'pending' | 'processing' | 'completed' | 'failed';
     search?: string;
@@ -655,11 +656,13 @@ export async function getUserArticles(
   const journalIds = buildIdList(options.journalIds, options.journalId);
   const keywordIds = buildIdList(options.keywordIds, options.keywordId);
   const emailSourceIds = buildIdList(options.emailSourceIds);
+  const webSourceIds = buildIdList(options.webSourceIds);
   const hasSourceFilter = Boolean(
     (rssSourceIds && rssSourceIds.length > 0) ||
     (journalIds && journalIds.length > 0) ||
     (keywordIds && keywordIds.length > 0) ||
-    (emailSourceIds && emailSourceIds.length > 0)
+    (emailSourceIds && emailSourceIds.length > 0) ||
+    (webSourceIds && webSourceIds.length > 0)
   );
 
   // 来源筛选：支持 RSS 源、期刊、关键词或邮件订阅
@@ -677,6 +680,9 @@ export async function getUserArticles(
       }
       if (emailSourceIds && emailSourceIds.length > 0) {
         conditions.push(eb('articles.email_source_id', 'in', emailSourceIds));
+      }
+      if (webSourceIds && webSourceIds.length > 0) {
+        conditions.push(eb('articles.web_source_id', 'in', webSourceIds));
       }
       return eb.or(conditions);
     });
@@ -1280,6 +1286,8 @@ export async function markAllAsRead(
     journalIds?: number[];
     keywordId?: number;
     keywordIds?: number[];
+    emailSourceIds?: number[];
+    webSourceIds?: number[];
     processStatus?: 'pending' | 'processing' | 'completed' | 'failed';
     isRead?: boolean;
     search?: string;
@@ -1294,6 +1302,8 @@ export async function markAllAsRead(
   const rssSourceIds = buildIdList(options.rssSourceIds, options.rssSourceId);
   const journalIds = buildIdList(options.journalIds, options.journalId);
   const keywordIds = buildIdList(options.keywordIds, options.keywordId);
+  const emailSourceIds = buildIdList(options.emailSourceIds);
+  const webSourceIds = buildIdList(options.webSourceIds);
 
   // 使用左连接同时支持 RSS、期刊和关键词文章
   let query = db
@@ -1340,33 +1350,26 @@ export async function markAllAsRead(
     query = query.where('filter_status', '=', options.filterStatus);
   }
 
-  if (rssSourceIds && rssSourceIds.length > 0 && journalIds && journalIds.length > 0 && keywordIds && keywordIds.length > 0) {
-    query = query.where((eb) => eb.or([
-      eb('rss_source_id', 'in', rssSourceIds),
-      eb('journal_id', 'in', journalIds),
-      eb('keyword_id', 'in', keywordIds),
-    ]));
-  } else if (rssSourceIds && rssSourceIds.length > 0 && journalIds && journalIds.length > 0) {
-    query = query.where((eb) => eb.or([
-      eb('rss_source_id', 'in', rssSourceIds),
-      eb('journal_id', 'in', journalIds),
-    ]));
-  } else if (rssSourceIds && rssSourceIds.length > 0 && keywordIds && keywordIds.length > 0) {
-    query = query.where((eb) => eb.or([
-      eb('rss_source_id', 'in', rssSourceIds),
-      eb('keyword_id', 'in', keywordIds),
-    ]));
-  } else if (journalIds && journalIds.length > 0 && keywordIds && keywordIds.length > 0) {
-    query = query.where((eb) => eb.or([
-      eb('journal_id', 'in', journalIds),
-      eb('keyword_id', 'in', keywordIds),
-    ]));
-  } else if (rssSourceIds && rssSourceIds.length > 0) {
-    query = query.where('rss_source_id', 'in', rssSourceIds);
-  } else if (journalIds && journalIds.length > 0) {
-    query = query.where('journal_id', 'in', journalIds);
-  } else if (keywordIds && keywordIds.length > 0) {
-    query = query.where('keyword_id', 'in', keywordIds);
+  if (rssSourceIds && rssSourceIds.length > 0 || journalIds && journalIds.length > 0 || keywordIds && keywordIds.length > 0 || emailSourceIds && emailSourceIds.length > 0 || webSourceIds && webSourceIds.length > 0) {
+    query = query.where((eb) => {
+      const conditions: any[] = [];
+      if (rssSourceIds && rssSourceIds.length > 0) {
+        conditions.push(eb('rss_source_id', 'in', rssSourceIds));
+      }
+      if (journalIds && journalIds.length > 0) {
+        conditions.push(eb('journal_id', 'in', journalIds));
+      }
+      if (keywordIds && keywordIds.length > 0) {
+        conditions.push(eb('keyword_id', 'in', keywordIds));
+      }
+      if (emailSourceIds && emailSourceIds.length > 0) {
+        conditions.push(eb('email_source_id', 'in', emailSourceIds));
+      }
+      if (webSourceIds && webSourceIds.length > 0) {
+        conditions.push(eb('web_source_id', 'in', webSourceIds));
+      }
+      return eb.or(conditions);
+    });
   }
 
   if (options.processStatus !== undefined) {
@@ -1758,6 +1761,12 @@ export async function updateArticleRating(
           eb.selectFrom('email_sources').select('id').where('user_id', '=', userId)
         ),
       ]),
+      eb.and([
+        eb('articles.web_source_id', 'is not', null),
+        eb('articles.web_source_id', 'in', (eb) =>
+          eb.selectFrom('web_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
     ]))
     .executeTakeFirst();
 
@@ -1812,6 +1821,12 @@ export async function updateArticleAiSummary(
         eb('articles.email_source_id', 'is not', null),
         eb('articles.email_source_id', 'in', (eb) =>
           eb.selectFrom('email_sources').select('id').where('user_id', '=', userId)
+        ),
+      ]),
+      eb.and([
+        eb('articles.web_source_id', 'is not', null),
+        eb('articles.web_source_id', 'in', (eb) =>
+          eb.selectFrom('web_sources').select('id').where('user_id', '=', userId)
         ),
       ]),
     ]))

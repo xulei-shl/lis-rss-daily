@@ -259,11 +259,15 @@ export async function generateSearchSummary(
     .leftJoin('rss_sources', 'rss_sources.id', 'articles.rss_source_id')
     .leftJoin('journals', 'journals.id', 'articles.journal_id')
     .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
+    .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+    .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
     .where('articles.id', 'in', articleIds)
     .where((eb) => eb.or([
       eb('rss_sources.user_id', '=', userId),
       eb('journals.user_id', '=', userId),
       eb('keyword_subscriptions.user_id', '=', userId),
+      eb('email_sources.user_id', '=', userId),
+      eb('web_sources.user_id', '=', userId),
     ]))
     .select((eb: any) => [
       'articles.id',
@@ -273,7 +277,7 @@ export async function generateSearchSummary(
       'articles.markdown_content',
       'articles.published_at',
       'articles.source_origin',
-      eb.fn.coalesce('rss_sources.name', 'journals.name', 'keyword_subscriptions.keyword').as('source_name'),
+      eb.fn.coalesce('rss_sources.name', 'journals.name', 'keyword_subscriptions.keyword', 'email_sources.name', 'web_sources.name').as('source_name'),
       eb.fn.coalesce('rss_sources.source_type', eb.val('journal')).as('source_type'),
     ])
     .execute();
@@ -292,8 +296,16 @@ export async function generateSearchSummary(
 
   const summaryArticles: DailySummaryArticle[] = articles.map((row: any) => {
     let sourceName = row.source_name || '未知来源';
+    let sourceType = row.source_type || 'blog';
     if (row.source_origin === 'keyword') {
       sourceName = `关键词: ${row.source_name}`;
+    }
+    if (row.source_origin === 'email') {
+      sourceType = 'email';
+      sourceName = row.source_name || sourceName;
+    }
+    if (row.source_origin === 'web') {
+      sourceName = row.source_name || sourceName;
     }
     return {
       id: row.id,
@@ -302,7 +314,7 @@ export async function generateSearchSummary(
       summary: row.summary,
       markdown_content: row.markdown_content,
       source_name: sourceName,
-      source_type: row.source_type || 'blog',
+      source_type: sourceType,
       published_at: row.published_at,
     };
   });

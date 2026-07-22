@@ -316,11 +316,31 @@ export async function filterAndProcessBatch(req: Request, res: Response): Promis
       .select(['articles.id', 'articles.title', 'articles.url', 'articles.content', 'articles.markdown_content'])
       .execute();
 
+    // Step 4: Get pending articles from email sources
+    const pendingEmailArticles = await db
+      .selectFrom('articles')
+      .innerJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+      .where('articles.filter_status', '=', 'pending')
+      .where('articles.process_status', '=', 'pending')
+      .where('email_sources.user_id', '=', userId)
+      .select(['articles.id', 'articles.title', 'articles.url', 'articles.content', 'articles.markdown_content'])
+      .execute();
+
+    // Step 5: Get pending articles from web sources
+    const pendingWebArticles = await db
+      .selectFrom('articles')
+      .innerJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
+      .where('articles.filter_status', '=', 'pending')
+      .where('articles.process_status', '=', 'pending')
+      .where('web_sources.user_id', '=', userId)
+      .select(['articles.id', 'articles.title', 'articles.url', 'articles.content', 'articles.markdown_content', 'web_sources.source_type'])
+      .execute();
+
     let filteredCount = 0;
     let rejectedCount = 0;
     const passedArticleIds: number[] = [];
 
-    // Step 4: Filter RSS pending articles
+    // Step 6: Filter RSS pending articles
     for (const article of pendingRssArticles) {
       try {
         const input = {
@@ -348,7 +368,7 @@ export async function filterAndProcessBatch(req: Request, res: Response): Promis
       }
     }
 
-    // Step 5: Filter Journal pending articles
+    // Step 7: Filter Journal pending articles
     for (const article of pendingJournalArticles) {
       try {
         const input = {
@@ -376,7 +396,7 @@ export async function filterAndProcessBatch(req: Request, res: Response): Promis
       }
     }
 
-    // Step 6: Filter Keyword pending articles
+    // Step 8: Filter Keyword pending articles
     for (const article of pendingKeywordArticles) {
       try {
         const input = {
@@ -404,7 +424,63 @@ export async function filterAndProcessBatch(req: Request, res: Response): Promis
       }
     }
 
-    // Step 7: Get already passed articles that need processing
+    // Step 9: Filter Email pending articles
+    for (const article of pendingEmailArticles) {
+      try {
+        const input = {
+          articleId: article.id,
+          userId,
+          url: article.url || '',
+          title: article.title,
+          description: article.content || '',
+          content: article.markdown_content || article.content || '',
+          sourceType: 'email' as SourceType,
+        };
+
+        const result = await filterArticle(input);
+
+        if (result.passed) {
+          filteredCount++;
+          passedArticleIds.push(article.id);
+        } else {
+          rejectedCount++;
+          log.debug({ articleId: article.id, reason: result.filterReason }, 'Article rejected by filter');
+        }
+      } catch (error) {
+        log.warn({ articleId: article.id, error }, 'Failed to filter article');
+        rejectedCount++;
+      }
+    }
+
+    // Step 10: Filter Web pending articles
+    for (const article of pendingWebArticles) {
+      try {
+        const input = {
+          articleId: article.id,
+          userId,
+          url: article.url || '',
+          title: article.title,
+          description: article.content || '',
+          content: article.markdown_content || article.content || '',
+          sourceType: (article as any).source_type || 'blog',
+        };
+
+        const result = await filterArticle(input);
+
+        if (result.passed) {
+          filteredCount++;
+          passedArticleIds.push(article.id);
+        } else {
+          rejectedCount++;
+          log.debug({ articleId: article.id, reason: result.filterReason }, 'Article rejected by filter');
+        }
+      } catch (error) {
+        log.warn({ articleId: article.id, error }, 'Failed to filter article');
+        rejectedCount++;
+      }
+    }
+
+    // Step 11: Get already passed articles that need processing
     const passedArticlesResult = await getPendingArticleIds(userId, 100000);
     const allArticleIds = [...passedArticleIds, ...passedArticlesResult];
 
@@ -422,7 +498,7 @@ export async function filterAndProcessBatch(req: Request, res: Response): Promis
       return;
     }
 
-    // Step 8: Process all passed articles
+    // Step 12: Process all passed articles
     processBatchArticles(uniqueArticleIds, userId, {
       maxConcurrent: options.maxConcurrent,
     })

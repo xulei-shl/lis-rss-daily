@@ -166,3 +166,96 @@
 - **`rejected_articles` 表**新增 `web_source_id` 列及索引。
 - **新类型 `WebScraperType`**（`spiders/types.ts`）：`'lsc'`（中图学会）。
 - **配置项**（`config.ts`）：`webFetchEnabled`（`WEB_FETCH_ENABLED`，默认 true）、`webFetchSchedule`（`WEB_FETCH_SCHEDULE`，默认 `'0 3 * * *'`）。
+
+## 12. 新增数据源检查清单（2026-07 经验总结）
+
+> 以下清单基于 Web 爬虫源（`source_origin='web'`）集成过程中发现的遗漏归纳而来。
+> **每次新增数据源类型时，对照此清单逐项检查，否则极易遗漏某处导致数据可见性/统计/筛选/处理等功能不完整。**
+
+假设新增源类型代号 `foo`、外键字段 `foo_source_id`、源表 `foo_sources`、`source_origin='foo'`。
+
+### 12.1 数据模型层
+
+- [ ] **`src/constants/source-types.ts`**：注册新 `source_origin` 值
+- [ ] **SQL 迁移**：建 `foo_sources` 表 + `articles.foo_source_id` 外键 + 更新 `source_origin` CHECK 约束 + `rejected_articles.foo_source_id`
+- [ ] **`src/db.ts`**：TypeScript 表类型定义
+- [ ] **`src/config.ts`**（如需）：新增调度相关配置项
+
+### 12.2 `src/api/articles.ts` 核心服务
+
+**接口定义：**
+- [ ] `ArticleWithSource`：添加 `foo_source_id: number | null` + `foo_source_name?: string` + 更新 `source_origin` 联合类型
+
+**CRUD/查询函数逐一检查：**
+- [ ] `getArticleById()` — LEFT JOIN + 权限条件（`foo_sources.user_id`）+ 选择 `foo_source_name` + 合并到 `source_name`
+- [ ] `getArticleFilterMatches()` — LEFT JOIN + 权限条件
+- [ ] `getUserArticles()` — LEFT JOIN + 权限条件 + 来源筛选参数 + `hasSourceFilter` + 筛选条件（两处：count 查询 + 数据查询）
+- [ ] `deleteArticle()` — 权限条件
+- [ ] `updateArticleReadStatus()` — 权限条件
+- [ ] `updateArticleFilterStatus()` — 权限条件
+- [ ] `batchUpdateArticleReadStatus()` — 权限条件
+- [ ] `updateArticleRating()` — 权限条件
+- [ ] `updateArticleAiSummary()` — 权限条件
+- [ ] `markAllAsRead()` — 选项类型 + 参数构建 + 来源筛选条件
+- [ ] `getUnreadCount()` — LEFT JOIN + 权限条件
+- [ ] `getMergedSources()` — 查询 `foo_sources` + 添加到 `sourceMap`（注意合并逻辑）
+
+> ⚠️ 经验教训：`updateArticleRating` 和 `updateArticleAiSummary` 曾在 Web 爬虫集成时被遗漏，因为它们的权限条件写死在函数体内而非共用 `buildUserArticlePermissionCondition`。
+
+### 12.3 路由层 `src/api/routes/articles.routes.ts`
+
+- [ ] `buildUserArticlePermissionCondition()` — 添加 `foo_source_id` 条件
+- [ ] `GET /api/articles/stats` — 所有 7 个 COUNT 查询各添加一个 `leftJoin('foo_sources', ...)`
+
+> ⚠️ 经验教训：统计查询的 LEFT JOIN 和权限条件是**同步的**——只要改了权限条件忘了加 JOIN，查询会因缺少表引用而报错；但加了 JOIN 忘了改权限条件，查询不会报错但会漏数。两者要一起检查。
+
+### 12.4 流水线 `src/pipeline.ts`
+
+- [ ] `getArticleIdsByStatus()` — 添加 `foo_sources` 的内连接查询 + 合并到 `allArticles` 数组
+
+### 12.5 批量处理 `src/api/article-process.ts`
+
+- [ ] `filterAndProcessBatch()` — 添加获取待筛选文章的查询步骤 + 对应的过滤循环步骤
+
+> ⚠️ 经验教训：该函数硬编码了 3 个来源的查询（RSS/期刊/关键词）和过滤逻辑，新增源需要添加对应的查询和过滤步骤。
+
+### 12.6 每日总结
+
+**`src/api/daily-summary-repository.ts`：**
+- [ ] `getDailyPassedArticles()` — `buildBaseQuery` 中：LEFT JOIN + 权限条件 + `coalesce` 纳入 `foo_sources.name`
+- [ ] `getDailyPassedArticles()` — `executeQuery` 映射中：处理 `source_origin === 'foo'` 时的名称与类型
+- [ ] `getDailyPassedArticles()` — 分类查询（`type === 'blog_news'` / `type === 'all'`）：根据需要将 `foo` 加入 `OR` 条件
+- [ ] `getInsightsArticles()` — LEFT JOIN + 权限条件
+
+**`src/api/daily-summary-generator.ts`：**
+- [ ] `generateSearchSummary()` — LEFT JOIN + 权限条件 + `coalesce` + 映射处理
+- [ ] `buildArticlesListText()` — 如需新增分类，添加对应 `addSection` 调用
+- [ ] `DailySummaryResult.articlesByType` — 如需新增分类，扩展类型定义
+
+> ⚠️ 经验教训：`generateSearchSummary` 在 Web 集成时遗漏了 LEFT JOIN、权限条件和名称回退，导致搜索总结无法包含新来源文章。
+
+### 12.7 前端
+
+**`src/views/articles.ejs`：**
+- [ ] `loadArticles()` — 来源 ID 解析：添加 `hasFooIds` 和 `appendIdList` 调用，添加 `type === 'foo'` 回退处理
+- [ ] `loadArticles()` — URL 参数命名：前端用 `webSourceIds`，后端 `getUserArticles` 接收 `webSourceIds`，需一致
+- [ ] `markAllAsRead()` — 来源 ID 解析：添加 `fooSourceIds` 的获取和参数构建
+
+> ⚠️ 经验教训：Web 源前端 `loadArticles()` 中缺少 `web:{id}` 解析，导致选择了 Web 源后筛选参数未正确传递到后端。
+
+### 12.8 领域反查 `src/api/topic-domains.ts`
+
+- [ ] `getArticleSourceDomainId()` — 添加 `source_origin === 'foo'` 的分支反查 `foo_sources.domain_id`
+
+### 12.9 验证清单
+
+完成上述修改后，执行以下验证：
+
+- [ ] **TypeScript 编译**：`npx tsc --noEmit` 无错误
+- [ ] **单元测试**：相关测试通过
+- [ ] **手动验证**：
+  - 首页统计（今日新增/待处理/已完成/通过率/未读）是否正确计入新来源文章
+  - 文章列表能否按新来源筛选
+  - 文章详情页正确显示来源名称
+  - 批量处理能处理新来源的待筛选/待处理文章
+  - 每日总结正确包含新来源文章

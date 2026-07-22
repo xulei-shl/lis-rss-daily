@@ -50,7 +50,7 @@ function parseOptionalNumber(value: unknown): number | undefined {
 
 /**
  * 生成用户文章权限检查条件
- * 检查文章是否属于指定用户（通过 rss_source、journal 或 keyword_subscriptions）
+ * 检查文章是否属于指定用户（通过 rss_source、journal、keyword_subscriptions、email_source 或 web_source）
  */
 function buildUserArticlePermissionCondition(userId: number) {
   return (eb: any) => eb.or([
@@ -69,6 +69,10 @@ function buildUserArticlePermissionCondition(userId: number) {
     eb.and([
       eb('articles.email_source_id', 'is not', null),
       eb('email_sources.user_id', '=', userId),
+    ]),
+    eb.and([
+      eb('articles.web_source_id', 'is not', null),
+      eb('web_sources.user_id', '=', userId),
     ]),
   ]);
 }
@@ -121,6 +125,7 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
     const journalIds = normalizeQueryIds(req.query.journalIds as string | string[] | undefined);
     const keywordIds = normalizeQueryIds(req.query.keywordIds as string | string[] | undefined);
     const emailSourceIds = normalizeQueryIds(req.query.emailSourceIds as string | string[] | undefined);
+    const webSourceIds = normalizeQueryIds(req.query.webSourceIds as string | string[] | undefined);
     // 评级筛选
     const ratingParam = req.query.rating as string | undefined;
     const rating = ratingParam === 'unrated' ? undefined : parseOptionalNumber(ratingParam);
@@ -138,6 +143,7 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
       keywordId,
       keywordIds,
       emailSourceIds,
+      webSourceIds,
       filterStatus,
       processStatus,
       search: searchQuery,
@@ -181,6 +187,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
       .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+      .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
       .where(buildUserArticlePermissionCondition(userId))
       .where('articles.created_at', '>=', todayStartUtc)
       .select((eb) => eb.fn.count('articles.id').as('count'))
@@ -197,6 +204,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
       .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+      .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
       .where(buildUserArticlePermissionCondition(userId))
       .where('articles.created_at', '>=', todayStartUtc)
       .where('articles.filter_status', '=', 'passed')
@@ -212,6 +220,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
       .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+      .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
       .where(buildUserArticlePermissionCondition(userId))
       .where('articles.filter_status', '=', 'pending')
       .select((eb) => eb.fn.count('articles.id').as('count'))
@@ -226,6 +235,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
       .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+      .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
       .where(buildUserArticlePermissionCondition(userId))
       .where('articles.process_status', '=', 'completed')
       .select((eb) => eb.fn.count('articles.id').as('count'))
@@ -240,6 +250,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
       .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+      .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
       .where(buildUserArticlePermissionCondition(userId))
       .where('articles.filter_status', '!=', 'pending')
       .select((eb) => eb.fn.count('articles.id').as('count'))
@@ -251,6 +262,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
       .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+      .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
       .where(buildUserArticlePermissionCondition(userId))
       .where('articles.filter_status', '=', 'passed')
       .select((eb) => eb.fn.count('articles.id').as('count'))
@@ -290,6 +302,7 @@ router.get('/articles/stats', requireAuth, async (req: AuthRequest, res) => {
       .leftJoin('journals', 'journals.id', 'articles.journal_id')
       .leftJoin('keyword_subscriptions', 'keyword_subscriptions.id', 'articles.keyword_id')
       .leftJoin('email_sources', 'email_sources.id', 'articles.email_source_id')
+      .leftJoin('web_sources', 'web_sources.id', 'articles.web_source_id')
       .where(buildUserArticlePermissionCondition(userId))
       .where('articles.filter_status', '=', 'passed')
       .where('articles.is_read', '=', 0)
