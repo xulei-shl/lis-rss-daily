@@ -278,7 +278,7 @@ export async function generateSearchSummary(
       'articles.published_at',
       'articles.source_origin',
       eb.fn.coalesce('rss_sources.name', 'journals.name', 'keyword_subscriptions.keyword', 'email_sources.name', 'web_sources.name').as('source_name'),
-      eb.fn.coalesce('rss_sources.source_type', eb.val('journal')).as('source_type'),
+      eb.fn.coalesce('rss_sources.source_type', 'web_sources.source_type', eb.val('journal')).as('source_type'),
     ])
     .execute();
 

@@ -227,14 +227,32 @@
 - [ ] `getDailyPassedArticles()` — `buildBaseQuery` 中：LEFT JOIN + 权限条件 + `coalesce` 纳入 `foo_sources.name`
 - [ ] `getDailyPassedArticles()` — `executeQuery` 映射中：处理 `source_origin === 'foo'` 时的名称与类型
 - [ ] `getDailyPassedArticles()` — 分类查询（`type === 'blog_news'` / `type === 'all'`）：根据需要将 `foo` 加入 `OR` 条件
-- [ ] `getInsightsArticles()` — LEFT JOIN + 权限条件
+- [ ] `getInsightsArticles()` — LEFT JOIN + 权限条件 + `coalesce` 纳入 `foo_sources.name`
 
 **`src/api/daily-summary-generator.ts`：**
 - [ ] `generateSearchSummary()` — LEFT JOIN + 权限条件 + `coalesce` + 映射处理
 - [ ] `buildArticlesListText()` — 如需新增分类，添加对应 `addSection` 调用
 - [ ] `DailySummaryResult.articlesByType` — 如需新增分类，扩展类型定义
 
-> ⚠️ 经验教训：`generateSearchSummary` 在 Web 集成时遗漏了 LEFT JOIN、权限条件和名称回退，导致搜索总结无法包含新来源文章。
+> ⚠️ **2026-07-22 新增 — `source_type` COALESCE 漏洞**：`executeQuery()`、`generateSearchSummary()`、`getInsightsArticles()` 三处的
+> `SELECT` 中均使用 `COALESCE(rss_sources.source_type, 'journal') AS source_type` 确定文章的分类类型。
+> 这导致**非 RSS、非期刊/关键词的源（如 `source_origin='web'`）一律被默认归类为 `'journal'`**，
+> 出现在「期刊精选」而非「资讯动态」或「博客推荐」中。
+>
+> **修复方式**：将 `COALESCE` 扩展为 `COALESCE(rss_sources.source_type, foo_sources.source_type, 'journal')`，
+> 让查询层直接从新源的源表 `foo_sources` 获取 `source_type`。如果新源没有 `source_type` 列（如 email 源），
+> 则需要在**JS 映射层**显式覆盖：`if (row.source_origin === 'foo') { sourceType = 'foo'; }`。
+>
+> **所有涉及 `source_type` 的查询和映射都要一同检查**：
+> | 位置 | 函数 | 修复项 |
+> |------|------|--------|
+> | `daily-summary-repository.ts` | `executeQuery()` | COALESCE + JS 映射 |
+> | `daily-summary-repository.ts` | `getInsightsArticles()` | LEFT JOIN + COALESCE + JS 映射（该函数还曾遗漏 `email_sources` 的 LEFT JOIN） |
+> | `daily-summary-generator.ts` | `generateSearchSummary()` | COALESCE + JS 映射 |
+>
+> ⚠️ **`getInsightsArticles` 额外注意**：该函数在 Web 集成时不仅遗漏了 `foo_sources` 的 LEFT JOIN，
+> 也遗漏了已存在的 `email_sources` 的 LEFT JOIN（早在 Web 集成之前就已存在 email 源）。
+> **新增源时需同步检查所有类似函数是否遗漏了已有源的 JOIN——即使不是本次新增的源。**
 
 ### 12.7 前端
 
