@@ -85,17 +85,16 @@
       </select>
     </div>
     <div class="form-group">
-      <label>状态</label>
-      <select id="webSourceStatus" class="form-control">
-        <option value="active">启用</option>
-        <option value="inactive">停用</option>
-      </select>
-    </div>
-    <div class="form-group">
       <label>主题领域</label>
       <select id="webSourceDomainId" class="form-control" onfocus="renderDomainSelect('webSourceDomainId', this.value)">
         <option value="">加载中...</option>
       </select>
+    </div>
+    <div class="form-group">
+      <label>
+        <input type="checkbox" id="webSourceStatus" checked>
+        启用此订阅
+      </label>
     </div>
     <div class="form-group">
       <label>
@@ -202,9 +201,11 @@ function renderWebSourcesTable() {
       '</span></td>' +
       '<td>' + formatDate(source.last_fetched_at) + '</td>' +
       '<td>' +
-        '<button class="btn btn-sm btn-secondary" onclick="fetchWebSourceNow(' + source.id + ', this)">抓取</button>' +
-        '<button class="btn btn-sm btn-secondary" onclick="editWebSource(' + source.id + ')">编辑</button>' +
-        '<button class="btn btn-sm btn-danger" onclick="deleteWebSource(' + source.id + ')">删除</button>' +
+        '<div class="action-buttons">' +
+        '<button class="btn-icon" onclick="fetchWebSourceNow(' + source.id + ', this)">抓取</button>' +
+        '<button class="btn-icon" onclick="editWebSource(' + source.id + ')">编辑</button>' +
+        '<button class="btn-icon" onclick="deleteWebSource(' + source.id + ')">删除</button>' +
+        '</div>' +
       '</td>' +
       '</tr>';
   }).join('');
@@ -217,7 +218,7 @@ function showWebSourceAddModal() {
   document.getElementById('webSourceUrl').value = '';
   document.getElementById('webSourceType').value = 'blog';
   document.getElementById('webSourceFetchInterval').value = '3600';
-  document.getElementById('webSourceStatus').value = 'active';
+  document.getElementById('webSourceStatus').checked = true;
   document.getElementById('webSourceAutoCleanup').checked = false;
   renderDomainSelect('webSourceDomainId', '');
   loadWebScraperTypes(); // 加载脚本类型列表
@@ -244,7 +245,7 @@ async function editWebSource(id) {
     document.getElementById('webSourceType').value = source.source_type || 'blog';
     document.getElementById('webSourceScraperType').value = source.scraper_type || '';
     document.getElementById('webSourceFetchInterval').value = String(source.fetch_interval || 3600);
-    document.getElementById('webSourceStatus').value = source.status || 'active';
+    document.getElementById('webSourceStatus').checked = source.status === 'active';
     document.getElementById('webSourceAutoCleanup').checked = source.auto_cleanup_rejected === 1 || source.auto_cleanup_rejected === true;
     renderDomainSelect('webSourceDomainId', source.domain_id);
     // 先 await 加载脚本类型列表（异步），再打开弹窗；传入预选值避免竞态
@@ -263,7 +264,7 @@ async function saveWebSource() {
   const sourceType = document.getElementById('webSourceType').value;
   const scraperType = document.getElementById('webSourceScraperType').value;
   const fetchInterval = parseInt(document.getElementById('webSourceFetchInterval').value);
-  const status = document.getElementById('webSourceStatus').value;
+  const status = document.getElementById('webSourceStatus').checked ? 'active' : 'inactive';
   const autoCleanupRejected = document.getElementById('webSourceAutoCleanup').checked;
 
   if (!name || !url) {
