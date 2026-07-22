@@ -253,6 +253,29 @@
 > ⚠️ **`getInsightsArticles` 额外注意**：该函数在 Web 集成时不仅遗漏了 `foo_sources` 的 LEFT JOIN，
 > 也遗漏了已存在的 `email_sources` 的 LEFT JOIN（早在 Web 集成之前就已存在 email 源）。
 > **新增源时需同步检查所有类似函数是否遗漏了已有源的 JOIN——即使不是本次新增的源。**
+>
+> **⚠️ `getInsightsArticles` 白名单设计说明（2026-07-22 确认）**：该函数额外使用期刊白名单过滤
+> (`config/journals_list.yaml`，19 本图情学期刊名称)，过滤条件为：
+> ```typescript
+> .where((eb) => eb.or([
+>   eb('rss_sources.name', 'in', whitelist),
+>   eb('journals.name', 'in', whitelist),
+> ]))
+> ```
+> 这意味着只有 `rss_sources.name` 或 `journals.name` 在白名单中的文章才能进入洞察报告。
+> 由于 `source_origin='web'`、`'email'`、`'keyword'` 的文章通过 LEFT JOIN 后对应字段为 `NULL`，
+> 它们**不会通过**白名单过滤，因此无法进入洞察报告。
+>
+> **这是有意为之的设计**——洞察报告聚焦图书情报学核心期刊的研究趋势分析，不包含网站爬虫资讯、
+> 邮件订阅或关键词检索结果。如果后续需要放宽此限制，需按以下方式修改：
+> ```typescript
+> .where((eb) => eb.or([
+>   eb.and([eb('articles.source_origin', '=', 'rss'), eb('rss_sources.name', 'in', whitelist)]),
+>   eb.and([eb('articles.source_origin', '=', 'journal'), eb('journals.name', 'in', whitelist)]),
+>   eb('articles.source_origin', 'in', ['email', 'web']),
+> ]))
+> ```
+> 同时需在 `getInsightsArticles` 的 JS 映射中添加对应 `source_origin` 的 `sourceType` 覆盖。
 
 ### 12.7 前端
 
