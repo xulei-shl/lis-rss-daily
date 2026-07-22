@@ -68,7 +68,7 @@ summary_upload:
 
   # Blinko上传
   blinko:
-    enabled: true
+    enabled: false
 
   # 企业微信推送
   wechat:
