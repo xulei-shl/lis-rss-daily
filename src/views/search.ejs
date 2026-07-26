@@ -271,7 +271,7 @@
 
       // Build full content for copy
       let fullContent = summary + '\\n\\n## 文章列表\\n\\n';
-      ['journal', 'blog', 'news'].forEach(type => {
+      ['journal', 'blog', 'news', 'email'].forEach(type => {
         const articles = articlesByType[type] || [];
         if (articles.length === 0) return;
 

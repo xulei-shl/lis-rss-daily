@@ -442,13 +442,14 @@
     const showSections = summaryType === 'journal'
       ? ['journal']
       : summaryType === 'blog_news'
-      ? ['blog', 'news']
-      : ['journal', 'blog', 'news']; // 'all' and 'search' show all types
+      ? ['blog', 'news', 'email']
+      : ['journal', 'blog', 'news', 'email']; // 'all' and 'search' show all types
 
     const articleTypeLabels = {
       journal: '期刊精选',
       blog: '博客推荐',
-      news: '资讯动态'
+      news: '资讯动态',
+      email: '邮件订阅'
     };
 
     let html = '<div class="summary-articles-section">';
@@ -485,13 +486,14 @@
     const showSections = summaryType === 'journal'
       ? ['journal']
       : summaryType === 'blog_news'
-      ? ['blog', 'news']
-      : ['journal', 'blog', 'news']; // 'all' and 'search' show all types
+      ? ['blog', 'news', 'email']
+      : ['journal', 'blog', 'news', 'email']; // 'all' and 'search' show all types
 
     const articleTypeLabels = {
       journal: '期刊精选',
       blog: '博客推荐',
-      news: '资讯动态'
+      news: '资讯动态',
+      email: '邮件订阅'
     };
 
     let text = '## 文章列表\n\n';
