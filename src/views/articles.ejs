@@ -51,7 +51,7 @@ const pageActions = isGuest ? '' : `
       <div class="filter-group">
         <span class="filter-label">状态</span>
         <select id="filterStatus" class="filter-select">
-          <option value="">全部（不含拒绝）</option>
+          <option value="">全部</option>
           <option value="passed">通过</option>
           <option value="rejected">拒绝</option>
           <option value="pending">待处理</option>
@@ -335,7 +335,7 @@ const pageActions = isGuest ? '' : `
         }
       }
 
-      document.getElementById('filterStatus').value = '';
+      document.getElementById('filterStatus').value = 'passed';
       document.getElementById('filterProcess').value = '';
       document.getElementById('filterRead').value = '';
       document.getElementById('filterRating').value = '';
@@ -371,7 +371,7 @@ const pageActions = isGuest ? '' : `
       const page = parseInt(params.get('page') || '1', 10);
 
       currentPage = Number.isNaN(page) || page < 1 ? 1 : page;
-      document.getElementById('filterStatus').value = params.get('filterStatus') || '';
+      document.getElementById('filterStatus').value = params.get('filterStatus') || 'passed';
       document.getElementById('filterProcess').value = params.get('processStatus') || '';
       document.getElementById('filterRead').value = params.get('filterRead') || '';
       document.getElementById('filterRating').value = params.get('filterRating') || '';
@@ -537,9 +537,6 @@ const pageActions = isGuest ? '' : `
       }
       if (filterStatus) {
         params.append('filterStatus', filterStatus);
-      } else {
-        // 默认不显示拒绝状态的条目，除非用户明确选择了"拒绝"
-        params.append('excludeRejected', 'true');
       }
       if (processStatus) params.append('processStatus', processStatus);
       if (filterRead === 'read') params.append('isRead', 'true');

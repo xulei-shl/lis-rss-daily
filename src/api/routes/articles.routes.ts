@@ -130,8 +130,8 @@ router.get('/articles', requireAuth, async (req: AuthRequest, res) => {
     const ratingParam = req.query.rating as string | undefined;
     const rating = ratingParam === 'unrated' ? undefined : parseOptionalNumber(ratingParam);
     const ratingNull = ratingParam === 'unrated' ? true : undefined;
-    // 默认排除拒绝状态（前端默认传 true，除非用户明确选择了"拒绝"）
-    const excludeRejected = req.query.excludeRejected !== 'false';
+    // 默认不排除拒绝状态（前端默认选择"通过"）
+    const excludeRejected = req.query.excludeRejected === 'true';
 
     const result = await articleService.getUserArticles(req.effectiveUserId!, {
       page,
