@@ -703,10 +703,10 @@ VALUES ('types_config_version', '1.0', CURRENT_TIMESTAMP);
 -- Insert Default Data
 -- ===========================================
 
--- Default admin user (password: admin123 - CHANGE IN PRODUCTION!)
+-- Default admin user (password: yfzjlxy0527 - CHANGE IN PRODUCTION!)
 -- 密码哈希使用 SHA256 格式（兼容 bcryptjs ESM 加载问题）
 INSERT OR IGNORE INTO users (id, username, password_hash, role)
-VALUES (1, 'admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'admin');
+VALUES (1, 'admin', '163beddad7f19c8e18fae17fee42bf8c9a4e2f156d460d2d42e1ecfa40ff81da', 'admin');
 
 -- Default guest user (password: cc@7007 - read-only access)
 INSERT OR IGNORE INTO users (id, username, password_hash, role)

@@ -164,7 +164,7 @@ flowchart TD
 
 ## 4. 密码说明
 
-- **admin**: `admin123`（默认）
+- **admin**: `yfzjlxy0527`（默认）
 - **guest**: `cc@7007`（用户指定）
 
 ### 密码哈希（SHA256 格式）
@@ -173,7 +173,7 @@ flowchart TD
 
 | 用户 | 密码 | SHA256 哈希 |
 |------|------|-------------|
-| admin | admin123 | `240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9` |
+| admin | yfzjlxy0527 | `163beddad7f19c8e18fae17fee42bf8c9a4e2f156d460d2d42e1ecfa40ff81da` |
 | guest | cc@7007 | `369a85abf5be438e8d598ede77a8efabff97669c483efaa2ca0a29f749d83f22` |
 
 ---
@@ -216,7 +216,7 @@ cd d:/GITHUB/lis-rss-daily && npm run db:migrate
 ```
 
 ### 登录测试
-- 管理员账号：`admin` / `admin123`（或你设置的密码）
+- 管理员账号：`admin` / `yfzjlxy0527`（或你设置的密码）
 - 访客账号：`guest` / `cc@7007`
 
 ### 验证
@@ -269,7 +269,7 @@ async function verifyPassword(password: string, storedHash: string): Promise<boo
 
 **数据库密码更新：**
 需要将数据库中的密码哈希更新为 SHA256 格式：
-- admin 密码 `admin123` → `240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9`
+- admin 密码 `yfzjlxy0527` → `163beddad7f19c8e18fae17fee42bf8c9a4e2f156d460d2d42e1ecfa40ff81da`
 - guest 密码 `cc@7007` → `369a85abf5be438e8d598ede77a8efabff97669c483efaa2ca0a29f749d83f22`
 
 ---
@@ -329,8 +329,8 @@ SQL 迁移脚本中的密码哈希字符串过长，可能在复制或执行时�
 如果遇到登录问题，可以运行以下脚本重置密码：
 
 ```bash
-# 重置 admin 密码为 admin123 (SHA256)
-sqlite3 data/rss.db "UPDATE users SET password_hash='240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9' WHERE username='admin';"
+# 重置 admin 密码为 yfzjlxy0527 (SHA256)
+sqlite3 data/rss.db "UPDATE users SET password_hash='163beddad7f19c8e18fae17fee42bf8c9a4e2f156d460d2d42e1ecfa40ff81da' WHERE username='admin';"
 
 # 重置 guest 密码为 cc@7007 (SHA256)
 sqlite3 data/rss.db "UPDATE users SET password_hash='369a85abf5be438e8d598ede77a8efabff97669c483efaa2ca0a29f749d83f22' WHERE username='guest';"
@@ -344,7 +344,7 @@ sqlite3 data/rss.db "UPDATE users SET password_hash='369a85abf5be438e8d598ede77a
 # 测试 admin 登录
 curl -s -X POST http://localhost:8007/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
+  -d '{"username":"admin","password":"yfzjlxy0527"}'
 
 # 测试 guest 登录
 curl -s -X POST http://localhost:8007/login \

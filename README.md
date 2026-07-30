@@ -146,7 +146,7 @@ pnpm run db:migrate
 ```
 
 迁移会自动创建：
-- 默认 admin 用户（密码：admin123）
+- 默认 admin 用户（密码：yfzjlxy0527）
 - 必要的数据库表和索引
 - 默认系统设置
 
@@ -181,7 +181,7 @@ bash scripts/start.sh
 
 默认登录账号:
 - 用户名: `admin`
-- 密码: `admin123`
+- 密码: `yfzjlxy0527`
 
 ---
 
@@ -268,7 +268,7 @@ CHROMA_PATH=./data/vector/chroma
 
 ### 1. 登录与初始化
 
-1. 使用默认账号 `admin` / `admin123` 登录
+1. 使用默认账号 `admin` / `yfzjlxy0527` 登录
 2. **立即修改密码** (设置 → 修改密码)
 
 ### 2. 配置关注领域
@@ -568,7 +568,7 @@ metadata:
 # 获取登录 token
 TOKEN=$(curl -s -X POST http://10.40.92.18:8007/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}' | jq -r '.token')
+  -d '{"username":"admin","password":"yfzjlxy0527"}' | jq -r '.token')
 
 # 更新文章 AI 总结
 curl -X PATCH http://10.40.92.18:8007/api/articles/123/ai-summary \

@@ -57,7 +57,7 @@
 - **多租户现状**：数据层带 `user_id`，但多处调度器（related / daily-summary / insights / telegram bot manager）**硬编码 `userId = 1`**（管理员），多租户尚未完全落地。⚠️ 例外：期刊 `JournalScheduler.triggerAutoFilter` 现已从查询结果取真实 `user_id`（不再硬编码 1）。
 - **调度器基类化（2026-07-14）**：全部 9 个调度器（RSS / 期刊 / 关键词 / Web 爬虫 / Gmail / 每日总结 / 洞察 / 相关文章 / 拒绝清理）均已继承 `src/utils/base-scheduler.ts` 的 `BaseScheduler`，统一了 `start()` / `stop()` / cron 校验 / 时区 / `pollWhile()` 等待逻辑，单例工厂模式保留在各子类。
 - **API Key 加密**：`llm_configs.api_key_encrypted`、Gmail IMAP 密码均用 **AES-256-GCM** 加密，密钥来自 `config.llmEncryptionKey`（`LLM_ENCRYPTION_KEY`）。见文档 05。
-- **默认账号**：`admin/admin123`（管理员，SHA256）、`guest/cc@7007`（只读）。生产必须改 `JWT_SECRET` 与 `LLM_ENCRYPTION_KEY`。
+- **默认账号**：`admin/yfzjlxy0527`（管理员，SHA256）、`guest/cc@7007`（只读）。生产必须改 `JWT_SECRET` 与 `LLM_ENCRYPTION_KEY`。
 - **时区**：默认 `Asia/Shanghai`，所有 node-cron 调度器均显式指定。
 
 ## 已知遗留 / 待办（跨模块汇总）

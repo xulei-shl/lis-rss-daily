@@ -288,7 +288,7 @@ pnpm run db:migrate
 ```
 
 迁移会自动创建：
-- 默认 admin 用户（密码：admin123）
+- 默认 admin 用户（密码：yfzjlxy0527）
 - 必要的数据库表和索引
 - 默认系统设置
 - `email_sources` / `email_fetch_logs` 表（Gmail 邮件订阅源支持）
@@ -349,7 +349,7 @@ pnpm run test:insights-scheduler
 
 访问 `http://your-server-ip:8007`，使用默认账号登录：
 - 用户名：`admin`
-- 密码：`admin123`
+- 密码：`yfzjlxy0527`
 
 **登录后立即修改密码！** 生产环境请使用强密码。
 

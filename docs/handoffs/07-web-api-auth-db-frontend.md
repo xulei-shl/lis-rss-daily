@@ -89,7 +89,7 @@
 | `telegram_chats` | 拆分推送开关列、`UNIQUE(user_id,chat_id)` |
 | `deepsearch_tasks` | `search_stats_json`/`execution_logs_json`（`skip_pdf_summary` 由迁移 032）|
 
-- 种子：admin(id=1, SHA256 `admin123`)、guest(id=2, SHA256 `cc@7007`, role guest)、两用户默认设置、默认 filter/analysis 系统提示词、约 19 本默认期刊。
+- 种子：admin(id=1, SHA256 `yfzjlxy0527`)、guest(id=2, SHA256 `cc@7007`, role guest)、两用户默认设置、默认 filter/analysis 系统提示词、约 19 本默认期刊。
 - 迁移：`scripts/migrate.ts`（`pnpm run db:migrate`）自动备份、按 `sql/*.sql` 数字序应用，含幂等 `hasColumn`/`hasTable` 处理；许多旧迁移已折入 `001_init.sql`。**037** 为存量库补 `domain_id` 并按最高优先级活跃领域回填。迁移 017 需另跑 `db:backfill-title-normalized`。
 
 ## 8. 前端（EJS 多页，非 SPA 框架）
