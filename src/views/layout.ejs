@@ -63,9 +63,9 @@
   <script src="/js/keyboard-shortcuts.js"></script>
 
   <!-- Keyboard Shortcuts Hint -->
-  <div style="position: fixed; bottom: var(--space-4); right: var(--space-4); z-index: 900; display: flex; gap: var(--space-2);">
-    <button onclick="window.shortcuts?.showHelp()" class="btn-icon" style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); font-size: var(--text-xs); color: var(--text-tertiary); cursor: pointer; box-shadow: var(--shadow-sm);" title="快捷键">
-      ⌨️ <span style="margin-left: 4px;">快捷键</span>
+  <div style="position: fixed; bottom: var(--space-4); right: var(--space-4); z-index: 900;">
+    <button onclick="window.shortcuts?.showHelp()" class="btn-icon" style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); font-size: var(--text-base); color: var(--text-secondary); cursor: pointer; box-shadow: var(--shadow-sm); transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); display: inline-flex; align-items: center; justify-content: center; height: auto; min-height: 32px; line-height: 1;" title="快捷键" onmouseenter="this.style.transform='translateY(-1px)';this.style.boxShadow='var(--shadow-md)';this.style.color='var(--text-primary)'" onmouseleave="this.style.transform='translateY(0)';this.style.boxShadow='var(--shadow-sm)';this.style.color='var(--text-secondary)'">
+      ⌨️
     </button>
   </div>
 </body>

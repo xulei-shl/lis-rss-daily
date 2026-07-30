@@ -9,6 +9,7 @@
  *   g a - Go to articles
  *   g s - Go to search
  *   g d - Go to deep search
+ *   g i - Go to history
  *   j  - Move to next article (articles list page)
  *   k  - Move to previous article (articles list page)
  *   r  - Toggle read status on focused article
@@ -25,6 +26,7 @@
     { keys: 'g a', description: '前往文章列表' },
     { keys: 'g s', description: '前往搜索' },
     { keys: 'g d', description: '前往深度检索' },
+    { keys: 'g i', description: '前往历史总结' },
     { keys: 'j', description: '下一篇文章' },
     { keys: 'k', description: '上一篇文章' },
     { keys: 'r', description: '切换已读状态' },
@@ -60,7 +62,7 @@
             </tbody>
           </table>
           <p style="margin-top: 12px; font-size: var(--text-xs); color: var(--text-tertiary);">
-            提示：先按 g，再按 h/a/s/d 可快速导航
+            提示：先按 g，再按 h/a/s/d/i 可快速导航
           </p>
         </div>
       </div>
@@ -170,6 +172,9 @@
       case 'gd':
         window.location.href = '/deepsearch';
         break;
+      case 'gi':
+        window.location.href = '/history';
+        break;
     }
     buffer = '';
   }
@@ -196,7 +201,7 @@
     }
 
     // Always allow ? for help (but not when typing)
-    if (e.key === '?' && !e.shiftKey && !isInput) {
+    if (e.key === '?' && !isInput) {
       e.preventDefault();
       if (shortcutsVisible) {
         hideHelp();
@@ -239,7 +244,7 @@
 
       default:
         // Handle multi-key shortcuts (g + letter)
-        if (buffer === 'g' && /^[hasd]$/.test(e.key)) {
+        if (buffer === 'g' && /^[hasdi]$/.test(e.key)) {
           e.preventDefault();
           buffer += e.key;
           clearTimeout(bufferTimer);
