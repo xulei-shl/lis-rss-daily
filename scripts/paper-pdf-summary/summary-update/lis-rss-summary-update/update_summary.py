@@ -32,7 +32,7 @@ except ImportError:
 
 # 配置文件路径（从根目录加载）
 from pathlib import Path
-ENV_FILE = Path(__file__).parent.parent / ".env"
+ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 
 # 配置项映射: 环境变量名 -> 配置键名
 CONFIG_KEY_MAP = {
