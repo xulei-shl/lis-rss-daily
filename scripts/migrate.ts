@@ -67,17 +67,17 @@ async function runMigrations() {
       // ============================================================
       // 001: 初始化脚本（新数据库时执行）
       // ============================================================
-      // if (file === '001_init.sql') {
-      //   const hasUsers = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
-      //   if (!hasUsers) {
-      //     const sql = fs.readFileSync(fullPath, 'utf-8');
-      //     db.exec(sql);
-      //     console.log('      → Initialized database');
-      //   } else {
-      //     console.log('      → Skipped (already initialized)');
-      //   }
-      //   continue;
-      // }
+      if (file === '001_init.sql') {
+        const hasUsers = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
+        if (!hasUsers) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log('      → Initialized database');
+        } else {
+          console.log('      → Skipped (already initialized)');
+        }
+        continue;
+      }
 
       // ============================================================
       // 009: 添加 summary_type 字段
@@ -924,6 +924,49 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
           console.log('      → Added web_source_id to rejected_articles');
         } else {
           console.log('      → Skipped (web sources already exist)');
+        }
+        continue;
+      }
+
+      // ============================================================
+      // 043: 拆分每日总结提示词类型（daily_summary_journal / daily_summary_blog_news）
+      // 使用 src/config/default-prompts 下的定稿模板（内容源自 docs/提示词/）
+      // ============================================================
+      if (file === '043_split_daily_summary_prompts.sql') {
+        if (hasTable(db, 'system_prompts')) {
+          const newTypes = [
+            { type: 'daily_summary_journal', fileName: 'daily_summary_journal.md', name: '默认期刊类每日总结提示词' },
+            { type: 'daily_summary_blog_news', fileName: 'daily_summary_blog_news.md', name: '默认资讯类每日总结提示词' },
+          ];
+          const defaultPromptsDir = path.join(__dirname, '..', 'src', 'config', 'default-prompts');
+
+          const users = db.prepare('SELECT id FROM users').all() as Array<{ id: number }>;
+          const findExisting = db.prepare('SELECT id FROM system_prompts WHERE user_id = ? AND type = ?');
+          const insertPrompt = db.prepare(
+            `INSERT INTO system_prompts (user_id, type, name, template, variables, is_active, updated_at)
+             VALUES (?, ?, ?, ?, ?, 1, ?)`
+          );
+
+          let created = 0;
+          let skipped = 0;
+
+          for (const user of users) {
+            for (const entry of newTypes) {
+              if (findExisting.get(user.id, entry.type)) {
+                skipped += 1;
+                continue;
+              }
+
+              // 始终使用定稿默认模板（不再复制旧的 daily_summary 模板）
+              const template = fs.readFileSync(path.join(defaultPromptsDir, entry.fileName), 'utf-8');
+              insertPrompt.run(user.id, entry.type, entry.name, template, null, new Date().toISOString());
+              created += 1;
+            }
+          }
+
+          console.log(`      → Created ${created} split daily summary prompts (daily_summary_journal / daily_summary_blog_news), skipped ${skipped}`);
+        } else {
+          console.log('      → Skipped (system_prompts table not found)');
         }
         continue;
       }

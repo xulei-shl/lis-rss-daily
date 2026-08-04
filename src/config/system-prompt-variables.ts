@@ -165,6 +165,48 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
   },
 
   /**
+   * daily_summary_journal 类型变量 - 期刊类每日总结（全部期刊 / 通过期刊）
+   */
+  daily_summary_journal: {
+    ARTICLES_LIST: {
+      description: '文章列表（标题、摘要、来源）',
+      source: '从 articles 表动态构建，按源类型优先级排序',
+      required: true,
+    },
+    DATE_RANGE: {
+      description: '日期范围',
+      source: 'YYYY-MM-DD 格式',
+      required: true,
+    },
+    SUMMARY_LENGTH: {
+      description: '期望的摘要长度',
+      source: '默认 800-1000 字',
+      required: false,
+    },
+  },
+
+  /**
+   * daily_summary_blog_news 类型变量 - 资讯类每日总结
+   */
+  daily_summary_blog_news: {
+    ARTICLES_LIST: {
+      description: '文章列表（标题、摘要、来源）',
+      source: '从 articles 表动态构建，按源类型优先级排序',
+      required: true,
+    },
+    DATE_RANGE: {
+      description: '日期范围',
+      source: 'YYYY-MM-DD 格式',
+      required: true,
+    },
+    SUMMARY_LENGTH: {
+      description: '期望的摘要长度',
+      source: '默认 800-1000 字',
+      required: false,
+    },
+  },
+
+  /**
    * insights 类型变量 - 洞察总结
    */
   insights: {
@@ -262,4 +304,4 @@ export const TASK_TYPES = _taskTypes as readonly string[];
 /**
  * 任务类型（用于 LLM 配置验证）
  */
-export type TaskType = 'filter' | 'summary' | 'keywords' | 'translation' | 'daily_summary' | 'analysis' | 'insights' | 'email_parse';
+export type TaskType = 'filter' | 'summary' | 'keywords' | 'translation' | 'daily_summary' | 'daily_summary_journal' | 'daily_summary_blog_news' | 'analysis' | 'insights' | 'email_parse';

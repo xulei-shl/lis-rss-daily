@@ -58,8 +58,19 @@ function buildArticlesListText(articlesByType: {
   return text;
 }
 
-function getPromptTypeForSummaryType(type: SummaryType): 'daily_summary' | 'insights' {
-  return type === 'insights' ? 'insights' : 'daily_summary';
+function getPromptTypeForSummaryType(type: SummaryType): string {
+  switch (type) {
+    case 'insights':
+      return 'insights';
+    case 'journal':
+    case 'journal_all':
+      return 'daily_summary_journal';
+    case 'blog_news':
+      return 'daily_summary_blog_news';
+    default:
+      // search / all 等历史类型继续使用 daily_summary
+      return 'daily_summary';
+  }
 }
 
 function buildDailySummaryTypeInstruction(type: SummaryType, date: string): string {
@@ -220,7 +231,7 @@ export async function generateJournalAllSummary(
     '800-1000'
   );
 
-  const llm = await getUserLLMProvider(userId, 'daily_summary');
+  const llm = await getUserLLMProvider(userId, getPromptTypeForSummaryType('journal_all'));
   const summary = await llm.chat(
     [
       { role: 'user', content: userPrompt },
@@ -337,7 +348,7 @@ export async function generateSearchSummary(
     '500-800'
   );
 
-  const llm = await getUserLLMProvider(userId, 'daily_summary');
+  const llm = await getUserLLMProvider(userId, getPromptTypeForSummaryType('search'));
   const summary = await llm.chat(
     [
       { role: 'user', content: userPrompt },

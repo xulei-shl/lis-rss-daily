@@ -404,6 +404,8 @@ export async function buildPromptVariables(
       result = await buildTranslationVariables(context);
       break;
     case 'daily_summary':
+    case 'daily_summary_journal':
+    case 'daily_summary_blog_news':
       result = await buildDailySummaryVariables(context);
       break;
     case 'analysis':

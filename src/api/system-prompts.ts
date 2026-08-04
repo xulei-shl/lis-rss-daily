@@ -52,6 +52,8 @@ const DEFAULT_PROMPT_CONFIG: Record<
   keywords: { fileName: 'keywords.md', name: '默认关键词提示词' },
   translation: { fileName: 'translation.md', name: '默认翻译提示词' },
   daily_summary: { fileName: 'daily_summary.md', name: '默认当日总结提示词' },
+  daily_summary_journal: { fileName: 'daily_summary_journal.md', name: '默认期刊类每日总结提示词' },
+  daily_summary_blog_news: { fileName: 'daily_summary_blog_news.md', name: '默认资讯类每日总结提示词' },
   insights: { fileName: 'insights.md', name: '默认洞察报告提示词' },
   email_parse: { fileName: 'email_parse.md', name: '默认邮件文章解析提示词' },
 };

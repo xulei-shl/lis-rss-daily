@@ -45,6 +45,22 @@ task_types:
     priority: 5
     enabled: true
 
+  daily_summary_journal:
+    code: "daily_summary_journal"
+    label: "期刊类每日总结"
+    label_en: "Daily Journal Summary"
+    description: "每日期刊类总结（全部期刊 / 通过期刊）"
+    priority: 9
+    enabled: true
+
+  daily_summary_blog_news:
+    code: "daily_summary_blog_news"
+    label: "资讯类每日总结"
+    label_en: "Daily Blog & News Summary"
+    description: "每日博客与资讯类总结"
+    priority: 10
+    enabled: true
+
   analysis:
     code: "analysis"
     label: "文章分析"

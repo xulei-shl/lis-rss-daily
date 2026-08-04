@@ -339,7 +339,7 @@ CREATE INDEX IF NOT EXISTS idx_article_translations_article_id ON article_transl
 -- ===========================================
 -- 11. LLM Configs Table
 -- ===========================================
--- task_type 取值来自 config/types.yaml: task_types (filter, summary, keywords, translation, daily_summary, analysis, insights)
+-- task_type 取值来自 config/types.yaml: task_types (filter, summary, keywords, translation, daily_summary, daily_summary_journal, daily_summary_blog_news, analysis, insights, email_parse)
 -- 新增类型需更新 YAML 配置并创建新的迁移脚本
 CREATE TABLE IF NOT EXISTS llm_configs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -385,7 +385,7 @@ CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key);
 -- ===========================================
 -- 11. System Prompts Table
 -- ===========================================
--- type 取值来自 config/types.yaml: task_types (filter, summary, keywords, translation, daily_summary, analysis, insights)
+-- type 取值来自 config/types.yaml: task_types (filter, summary, keywords, translation, daily_summary, daily_summary_journal, daily_summary_blog_news, analysis, insights, email_parse)
 CREATE TABLE IF NOT EXISTS system_prompts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,

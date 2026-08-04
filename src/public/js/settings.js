@@ -119,13 +119,15 @@ function populateFallbackTypeOptions() {
     taskTypeSelect.innerHTML = '';
     if (defaultOption) taskTypeSelect.appendChild(defaultOption);
 
-    const taskTypes = ['filter', 'summary', 'keywords', 'translation', 'daily_summary', 'analysis'];
+    const taskTypes = ['filter', 'summary', 'keywords', 'translation', 'daily_summary', 'daily_summary_journal', 'daily_summary_blog_news', 'analysis'];
     const taskLabels = {
       'filter': '文章过滤',
       'summary': '文章摘要',
       'keywords': '关键词提取',
       'translation': '中英翻译',
       'daily_summary': '当日总结',
+      'daily_summary_journal': '期刊类每日总结',
+      'daily_summary_blog_news': '资讯类每日总结',
       'analysis': '文章分析'
     };
     taskTypes.forEach(code => {
@@ -140,7 +142,7 @@ function populateFallbackTypeOptions() {
   const promptTypeSelect = document.getElementById('promptType');
   if (promptTypeSelect) {
     promptTypeSelect.innerHTML = '';
-    ['filter', 'summary', 'keywords', 'translation', 'daily_summary', 'analysis'].forEach(code => {
+    ['filter', 'summary', 'keywords', 'translation', 'daily_summary', 'daily_summary_journal', 'daily_summary_blog_news', 'analysis'].forEach(code => {
       const option = document.createElement('option');
       option.value = code;
       option.textContent = code;
@@ -659,6 +661,8 @@ function renderLLMTable() {
     'keywords': 'keywords',
     'translation': 'translation',
     'daily_summary': 'daily_summary',
+    'daily_summary_journal': 'daily_summary_journal',
+    'daily_summary_blog_news': 'daily_summary_blog_news',
     'analysis': 'analysis'
   };
 
