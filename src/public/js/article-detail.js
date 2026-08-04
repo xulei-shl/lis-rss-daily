@@ -3,6 +3,7 @@
 // ============================================
 
 let articleData = null;
+const md = markdownit({ html: false, linkify: true, typographer: true });
 
 // 将详情页中的返回链接统一指向带筛选参数的列表页
 function updateBackLinks() {
@@ -227,7 +228,7 @@ function renderArticle(article) {
   const aiSummarySection = document.getElementById('aiSummarySection');
   if (article.ai_summary) {
     aiSummarySection.style.display = 'block';
-    document.getElementById('aiSummary').innerHTML = formatMarkdown(preprocessMarkdown(article.ai_summary));
+    document.getElementById('aiSummary').innerHTML = md.render(preprocessMarkdown(article.ai_summary));
   }
 
   // 过滤匹配
@@ -255,7 +256,7 @@ function renderArticle(article) {
   const mainContent = article.markdown_content || article.content;
   if (mainContent) {
     rssSection.style.display = 'block';
-    document.getElementById('rssContent').innerHTML = formatMarkdown(mainContent);
+    document.getElementById('rssContent').innerHTML = md.render(mainContent);
   }
 
 }
@@ -467,7 +468,7 @@ function preprocessMarkdown(text) {
     }
 
     const sectionMatch = trimmed.match(/^([一二三四五六七八九十百]+)[、.，,\s]\s*(.*)$/);
-    if (sectionMatch && !inLogicMap) {
+    if (sectionMatch && !inLogicMap && !line.startsWith(' ') && !line.startsWith('\t')) {
       const num = sectionMatch[1];
       const title = sectionMatch[2];
       processedLines.push('## ' + num + '、' + title);
@@ -485,7 +486,7 @@ function preprocessMarkdown(text) {
 
     if (inLogicMap) {
       const nextSectionMatch = trimmed.match(/^([一二三四五六七八九十百]+)[、.，,\s]\s*(.*)$/);
-      if (nextSectionMatch) {
+      if (nextSectionMatch && !line.startsWith(' ') && !line.startsWith('\t')) {
         const num = nextSectionMatch[1];
         const title = nextSectionMatch[2];
         processedLines.push('```');
@@ -497,7 +498,7 @@ function preprocessMarkdown(text) {
     }
 
     const subSectionMatch = trimmed.match(/^(\d+)[.、]\s*(.*)$/);
-    if (subSectionMatch && !inLogicMap) {
+    if (subSectionMatch && !inLogicMap && !line.startsWith(' ') && !line.startsWith('\t')) {
       const num = subSectionMatch[1];
       const title = subSectionMatch[2];
       processedLines.push('### ' + num + '. ' + title);
@@ -528,310 +529,6 @@ function preprocessMarkdown(text) {
   }
 
   return processedLines.join('\n');
-}
-
-// 简易 Markdown 格式化（支持表格、列表、标题、代码块等）
-function formatMarkdown(text) {
-  if (!text) return '';
-
-  // 首先按行分割
-  const allLines = text.split('\n');
-  const result = [];
-  let i = 0;
-
-  while (i < allLines.length) {
-    const line = allLines[i];
-    const trimmedLine = line.trim();
-
-    // 跳过空行
-    if (!trimmedLine) {
-      i++;
-      continue;
-    }
-
-    // 检测标准 Markdown 标题行（以 # 开头）
-    if (trimmedLine.startsWith('#### ')) {
-      const title = trimmedLine.slice(5);
-      // 检测后续内容
-      const contentLines = [];
-      i++;
-      while (i < allLines.length) {
-        const nextLine = allLines[i].trim();
-        // 遇到下一个标题、空行或分隔行则停止
-        if (nextLine.startsWith('#### ') || nextLine.startsWith('### ') || 
-            nextLine.startsWith('## ') || nextLine.startsWith('# ') ||
-            nextLine.startsWith('---') || nextLine.startsWith('```') || 
-            nextLine.startsWith('- ') || nextLine.match(/^\*\s/) || nextLine === '') {
-          break;
-        }
-        if (nextLine) {
-          contentLines.push(allLines[i]);
-        }
-        i++;
-      }
-      // 将内容按行分割为多个段落
-      if (contentLines.length > 0) {
-        result.push('<h4>' + formatInline(escapeHtml(title)) + '</h4>');
-        for (const contentLine of contentLines) {
-          const trimmedContent = contentLine.trim();
-          if (trimmedContent) {
-            result.push('<p>' + formatInline(escapeHtml(trimmedContent)) + '</p>');
-          }
-        }
-      } else {
-        result.push('<h4>' + formatInline(escapeHtml(title)) + '</h4>');
-      }
-      continue;
-    } else if (trimmedLine.startsWith('### ')) {
-      const title = trimmedLine.slice(4);
-      const contentLines = [];
-      i++;
-      while (i < allLines.length) {
-        const nextLine = allLines[i].trim();
-        if (nextLine.startsWith('#### ') || nextLine.startsWith('### ') || 
-            nextLine.startsWith('## ') || nextLine.startsWith('# ') ||
-            nextLine.startsWith('---') || nextLine.startsWith('```') || 
-            nextLine.startsWith('- ') || nextLine.match(/^\*\s/) || nextLine === '') {
-          break;
-        }
-        if (nextLine) {
-          contentLines.push(allLines[i]);
-        }
-        i++;
-      }
-      if (contentLines.length > 0) {
-        result.push('<h3>' + formatInline(escapeHtml(title)) + '</h3>');
-        for (const contentLine of contentLines) {
-          const trimmedContent = contentLine.trim();
-          if (trimmedContent) {
-            result.push('<p>' + formatInline(escapeHtml(trimmedContent)) + '</p>');
-          }
-        }
-      } else {
-        result.push('<h3>' + formatInline(escapeHtml(title)) + '</h3>');
-      }
-      continue;
-    } else if (trimmedLine.startsWith('## ')) {
-      const title = trimmedLine.slice(3);
-      const contentLines = [];
-      i++;
-      while (i < allLines.length) {
-        const nextLine = allLines[i].trim();
-        if (nextLine.startsWith('#### ') || nextLine.startsWith('### ') || 
-            nextLine.startsWith('## ') || nextLine.startsWith('# ') ||
-            nextLine.startsWith('---') || nextLine.startsWith('```') || 
-            nextLine.startsWith('- ') || nextLine.match(/^\*\s/) || nextLine === '') {
-          break;
-        }
-        if (nextLine) {
-          contentLines.push(allLines[i]);
-        }
-        i++;
-      }
-      if (contentLines.length > 0) {
-        result.push('<h2>' + formatInline(escapeHtml(title)) + '</h2>');
-        for (const contentLine of contentLines) {
-          const trimmedContent = contentLine.trim();
-          if (trimmedContent) {
-            result.push('<p>' + formatInline(escapeHtml(trimmedContent)) + '</p>');
-          }
-        }
-      } else {
-        result.push('<h2>' + formatInline(escapeHtml(title)) + '</h2>');
-      }
-      continue;
-    } else if (trimmedLine.startsWith('# ')) {
-      const title = trimmedLine.slice(2);
-      const contentLines = [];
-      i++;
-      while (i < allLines.length) {
-        const nextLine = allLines[i].trim();
-        if (nextLine.startsWith('#### ') || nextLine.startsWith('### ') || 
-            nextLine.startsWith('## ') || nextLine.startsWith('# ') ||
-            nextLine.startsWith('---') || nextLine.startsWith('```') || 
-            nextLine.startsWith('- ') || nextLine.match(/^\*\s/) || nextLine === '') {
-          break;
-        }
-        if (nextLine) {
-          contentLines.push(allLines[i]);
-        }
-        i++;
-      }
-      if (contentLines.length > 0) {
-        result.push('<h1>' + formatInline(escapeHtml(title)) + '</h1>');
-        for (const contentLine of contentLines) {
-          const trimmedContent = contentLine.trim();
-          if (trimmedContent) {
-            result.push('<p>' + formatInline(escapeHtml(trimmedContent)) + '</p>');
-          }
-        }
-      } else {
-        result.push('<h1>' + formatInline(escapeHtml(title)) + '</h1>');
-      }
-      continue;
-    }
-
-    // 检测分隔线
-    if (trimmedLine === '---') {
-      result.push('<hr>');
-      i++;
-      continue;
-    }
-
-    // 检测代码块（围栏式）
-    if (trimmedLine.startsWith('```')) {
-      const fence = trimmedLine;
-      const codeLines = [];
-      i++;
-      while (i < allLines.length) {
-        const nextLine = allLines[i];
-        if (nextLine.trim() === '```') {
-          i++;
-          break;
-        }
-        codeLines.push(nextLine);
-        i++;
-      }
-      const codeContent = codeLines.join('\n');
-      result.push('<pre><code>' + escapeHtml(codeContent) + '</code></pre>');
-      continue;
-    }
-
-    // 检测表格（多行）
-    if (trimmedLine.includes('|')) {
-      const tableLines = [line];
-      i++;
-      while (i < allLines.length) {
-        const nextLine = allLines[i].trim();
-        if (nextLine.includes('|')) {
-          tableLines.push(allLines[i]);
-          i++;
-        } else {
-          break;
-        }
-      }
-      const tableBlock = tableLines.join('\n');
-      const tableHtml = formatTable(tableBlock);
-      if (tableHtml) {
-        result.push(tableHtml);
-        continue;
-      }
-    }
-
-    // 检测无序列表
-    if (trimmedLine.startsWith('- ') || trimmedLine.match(/^\*\s/)) {
-      const listLines = [line];
-      i++;
-      while (i < allLines.length) {
-        const nextLine = allLines[i].trim();
-        if (nextLine.startsWith('- ') || nextLine.match(/^\*\s/) || nextLine.match(/^\*\*.*\*\*$/)) {
-          listLines.push(allLines[i]);
-          i++;
-        } else {
-          break;
-        }
-      }
-      const listHtml = '<ul>' + listLines.map(l => {
-        const content = l.replace(/^[*-]\s+/, '').trim();
-        return '<li>' + formatInline(escapeHtml(content)) + '</li>';
-      }).join('') + '</ul>';
-      result.push(listHtml);
-      continue;
-    }
-
-    // 检测有序列表
-    if (trimmedLine.match(/^\d+[.、]\s/)) {
-      const listLines = [line];
-      i++;
-      while (i < allLines.length) {
-        const nextLine = allLines[i].trim();
-        if (nextLine.match(/^\d+[.、]\s/)) {
-          listLines.push(allLines[i]);
-          i++;
-        } else {
-          break;
-        }
-      }
-      const listHtml = '<ol>' + listLines.map(l => {
-        const content = l.replace(/^\d+[.、]\s+/, '').trim();
-        return '<li>' + formatInline(escapeHtml(content)) + '</li>';
-      }).join('') + '</ol>';
-      result.push(listHtml);
-      continue;
-    }
-
-    // 普通段落：每一行都作为一个独立的段落
-    // 遇到空行或标题分隔符才停止收集
-    const paragraphLines = [line];
-    i++;
-    while (i < allLines.length) {
-      const nextLine = allLines[i].trim();
-      // 遇到标题、空行或分隔线则停止
-      if (nextLine.startsWith('# ') || nextLine.startsWith('## ') || 
-          nextLine.startsWith('### ') || nextLine.startsWith('#### ') ||
-          nextLine.startsWith('---') || nextLine.startsWith('```') || 
-          nextLine.startsWith('- ') || nextLine.match(/^\*\s/) || nextLine === '') {
-        break;
-      }
-      if (nextLine) {
-        paragraphLines.push(allLines[i]);
-      }
-      i++;
-    }
-    
-    // 将每一行都作为独立段落输出
-    for (const paraLine of paragraphLines) {
-      const trimmedPara = paraLine.trim();
-      if (trimmedPara) {
-        result.push('<p>' + formatInline(escapeHtml(trimmedPara)) + '</p>');
-      }
-    }
-  }
-
-  return result.join('');
-}
-
-// 格式化表格
-function formatTable(block) {
-  const lines = block.trim().split('\n').filter(l => l.trim());
-  if (lines.length < 2) return null;
-
-  // 检查是否是分隔行（Markdown 表格分隔行格式：|---|、|:---|、|---:|、|:---:|）
-  const isSeparator = (line) => /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/.test(line);
-  if (lines.length < 3 || !isSeparator(lines[1])) return null;
-
-  const rows = lines.map(line =>
-    line.split('|').map(cell => cell.trim()).filter(cell => cell)
-  );
-
-  if (rows.length < 2) return null;
-
-  let html = '<table><thead><tr>';
-  // 表头
-  rows[0].forEach(cell => {
-    html += '<th>' + formatInline(escapeHtml(cell)) + '</th>';
-  });
-  html += '</tr></thead><tbody>';
-
-  // 数据行
-  for (let i = 2; i < rows.length; i++) {
-    html += '<tr>';
-    rows[i].forEach(cell => {
-      html += '<td>' + formatInline(escapeHtml(cell)) + '</td>';
-    });
-    html += '</tr>';
-  }
-  html += '</tbody></table>';
-  return html;
-}
-
-// 格式化行内元素（粗体、斜体、链接、代码）
-function formatInline(text) {
-  return text
-    .replace(/[*][*]([^*]+?)[*][*]/g, '<strong>$1</strong>')
-    .replace(/[*]([^*]+?)[*]/g, '<em>$1</em>')
-    .replace(/`([^`]+?)`/g, '<code>$1</code>')
-    .replace(/\[([^\]]+?)\]\(([^\)]+?)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 }
 
 // 工具函数
@@ -1077,7 +774,7 @@ async function saveAiSummary() {
 
     // 恢复显示模式
     if (newContent) {
-      document.getElementById('aiSummary').innerHTML = formatMarkdown(preprocessMarkdown(newContent));
+      document.getElementById('aiSummary').innerHTML = md.render(preprocessMarkdown(newContent));
     } else {
       // 如果内容为空，隐藏整个区域
       document.getElementById('aiSummarySection').style.display = 'none';
@@ -1096,7 +793,7 @@ function cancelEditAiSummary() {
 
   // 恢复显示模式
   if (articleData.ai_summary) {
-    document.getElementById('aiSummary').innerHTML = formatMarkdown(preprocessMarkdown(articleData.ai_summary));
+    document.getElementById('aiSummary').innerHTML = md.render(preprocessMarkdown(articleData.ai_summary));
   } else {
     document.getElementById('aiSummarySection').style.display = 'none';
   }
