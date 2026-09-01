@@ -183,7 +183,10 @@ database:
 
 #### 处理限制
 ```yaml
-daily_process_limit: 1  # 每日最多处理的文章数量
+daily_process_limit: 3  # 每日最多处理的文章数量
+max_runtime_minutes: 60  # 每日最大运行时间（分钟），超过则停止
+max_attempts: 10          # 最大尝试次数（含成功和失败）
+retry_intervals: [10, 20, 30]  # 失败重试间隔（秒）
 ```
 
 #### PDF 下载配置

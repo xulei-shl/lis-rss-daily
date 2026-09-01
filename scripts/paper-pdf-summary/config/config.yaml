@@ -9,13 +9,17 @@ database:
 # 每日处理限制
 daily_process_limit: 3
 
+# 每日最大运行时间（分钟），超过此时间停止处理新文章
+# 防止因重试/验证码等导致脚本运行到深夜
+max_runtime_minutes: 180
+
 # 最大尝试次数（含成功和失败），防止无限重试
 # 达到上限后停止，即使未完成 daily_process_limit
 max_attempts: 10
 
 # 重试间隔（秒），按尝试次数递增使用
-# 例：第1次失败等60s，第2次等180s，第3次等300s，之后始终等300s
-retry_intervals: [60, 180, 300]
+# 例：第1次失败等10s，第2次等20s，第3次等30s，之后始终等30s
+retry_intervals: [10, 20, 30]
 
 # 文件存储配置
 storage:

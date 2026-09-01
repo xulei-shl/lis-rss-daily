@@ -113,6 +113,8 @@ def wait_for_captcha_completion(page, timeout: int = CAPTCHA_WAIT_TIMEOUT) -> bo
     检测到验证码后，等待用户手动完成并按 Y 确认
     同时保留 60 秒超时作为安全机制
     
+    在非 TTY 环境（如 cron 定时任务）下，跳过人工等待，直接返回失败。
+    
     Args:
         page: Playwright page 对象
         timeout: 最大等待时间（秒）
@@ -124,6 +126,11 @@ def wait_for_captcha_completion(page, timeout: int = CAPTCHA_WAIT_TIMEOUT) -> bo
     if not is_captcha_page(page):
         print("   页面无验证码")
         return True
+    
+    # 非 TTY 环境（cron/自动化），跳过人工等待
+    if not sys.stdin.isatty():
+        print(f"\n⚠️  检测到验证码（非交互环境，跳过等待）")
+        return False
     
     print(f"\n⚠️  检测到验证码")
     print(f"   请在浏览器中完成验证")

@@ -574,6 +574,7 @@ def main():
     print(f"  数据库: {config['database']['path']}")
     print(f"  每日处理限制: {config['daily_process_limit']}")
     print(f"  最大尝试次数: {config.get('max_attempts', '无限制')}")
+    print(f"  最大运行时间: {config.get('max_runtime_minutes', '无限制')}分钟")
     print(f"  重试间隔: {config.get('retry_intervals', [])}秒")
 
     # 获取当日日期
@@ -621,7 +622,9 @@ def main():
     db_path = config['database']['path']
     limit = config['daily_process_limit']
     max_attempts = config.get('max_attempts', 0)  # 0 表示无限制
+    max_runtime_minutes = config.get('max_runtime_minutes', 0)  # 0 表示无限制
     retry_intervals = config.get('retry_intervals', [])
+    start_time = time.time()
     
     # 创建当日工作目录
     download_root = config['storage']['download_root']
@@ -640,6 +643,12 @@ def main():
     processed_article_ids = set()
     
     while success_count < limit:
+        # 检查最大运行时间
+        elapsed_minutes = (time.time() - start_time) / 60
+        if max_runtime_minutes > 0 and elapsed_minutes >= max_runtime_minutes:
+            print(f"\n[信息] 已达到最大运行时间 ({max_runtime_minutes}分钟)，停止处理")
+            break
+
         # 检查最大尝试次数
         if max_attempts > 0 and attempt_count >= max_attempts:
             print(f"\n[信息] 已达到最大尝试次数 ({max_attempts})，停止处理")
@@ -702,6 +711,8 @@ def main():
     
     conn.close()
     
+    elapsed_minutes = (time.time() - start_time) / 60
+    
     # 生成最终报告
     print_section("生成每日报告")
     report_path = logger.generate_report()
@@ -713,6 +724,7 @@ def main():
     print(f"  总尝试次数: {attempt_count}")
     print(f"  成功: {success_count}")
     print(f"  失败: {failure_count}")
+    print(f"  运行时间: {elapsed_minutes:.1f} 分钟")
     print(f"  报告: {report_path}")
     print('='*60)
 
