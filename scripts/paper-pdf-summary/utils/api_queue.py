@@ -1,13 +1,11 @@
 import asyncio
 import re
-import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
+from utils.project_root import PROJECT_ROOT
 from utils.database import get_connection
 from utils.pdf_downloader import load_config, create_download_directory, download_pdf
 from utils.pdf_validator import validate_and_cleanup
@@ -17,7 +15,9 @@ from utils.logger import DailyLogger
 import yaml
 
 
-def load_workflow_config(config_path: str = "config/config.yaml") -> Dict:
+def load_workflow_config(config_path: str = None) -> Dict:
+    if config_path is None:
+        config_path = str(PROJECT_ROOT / "config" / "config.yaml")
     config_path = Path(config_path)
     if not config_path.exists():
         raise FileNotFoundError(f"配置文件不存在: {config_path}")
@@ -42,7 +42,7 @@ class QueueManager:
 
     def _ensure_config(self) -> Dict:
         if self._config is None:
-            self._config = load_workflow_config()
+            self._config = load_workflow_config(str(PROJECT_ROOT / "config" / "config.yaml"))
         return self._config
 
     async def enqueue(self, title: str, article_id: Optional[int], push_wechat: bool = False, push_hiagent: Optional[bool] = None, push_memos: Optional[bool] = None, push_blinko: Optional[bool] = None) -> str:

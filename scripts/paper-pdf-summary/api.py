@@ -1,5 +1,4 @@
 import os
-import sys
 import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -10,8 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-sys.path.insert(0, str(Path(__file__).parent))
-
+from utils.project_root import PROJECT_ROOT
 from utils.api_queue import QueueManager
 from utils.summary_uploader import upload_all_from_text, load_config, is_all_upload_failed
 

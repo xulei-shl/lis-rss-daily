@@ -14,9 +14,8 @@ import argparse
 from pathlib import Path
 from typing import Dict, Optional
 
-# 添加项目根目录到Python路径
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
+# 通过 utils.project_root 获取项目根目录（不再依赖 sys.path hack）
+from utils.project_root import PROJECT_ROOT
 
 # 导入工具模块
 from utils.summary_uploader import (

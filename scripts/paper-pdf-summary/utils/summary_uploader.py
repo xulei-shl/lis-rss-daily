@@ -20,13 +20,14 @@ from pathlib import Path
 from typing import Dict, Optional, List
 import yaml
 
+from utils.project_root import PROJECT_ROOT
+
 # 添加 Blinko 和 Memos 客户端路径
-script_dir = Path(__file__).parent.parent
-blinko_client_path = script_dir / "summary-update" / "blinko-api" / "src"
+blinko_client_path = PROJECT_ROOT / "summary-update" / "blinko-api" / "src"
 if str(blinko_client_path) not in sys.path:
     sys.path.insert(0, str(blinko_client_path))
 
-memos_client_path = script_dir / "summary-update" / "memos"
+memos_client_path = PROJECT_ROOT / "summary-update" / "memos"
 if str(memos_client_path) not in sys.path:
     sys.path.insert(0, str(memos_client_path))
 
@@ -39,8 +40,10 @@ except ImportError:
     WECHAT_AVAILABLE = False
 
 
-def load_config(config_path: str = "config/config.yaml") -> Dict:
+def load_config(config_path: str = None) -> Dict:
     """加载配置文件"""
+    if config_path is None:
+        config_path = str(PROJECT_ROOT / "config" / "config.yaml")
     config_path = Path(config_path)
     if not config_path.exists():
         raise FileNotFoundError(f"配置文件不存在: {config_path}")
@@ -53,8 +56,8 @@ def load_env():
     """加载.env环境变量"""
     from dotenv import load_dotenv
     
-    script_env_path = Path(__file__).parent.parent / ".env"
-    project_env_path = Path(__file__).parent.parent.parent / ".env"
+    script_env_path = PROJECT_ROOT / ".env"
+    project_env_path = PROJECT_ROOT.parent / ".env"
 
     if project_env_path.exists():
         load_dotenv(project_env_path, override=False)
@@ -86,7 +89,7 @@ async def upload_to_hiagent_rag(md_path: str, config: Dict, delete_md: bool = Tr
         return True
 
     script = summary_config.get('script', 'summary-update/hiagent-rag-upload/upload_knowledge.py')
-    script_path = Path(__file__).parent.parent / script
+    script_path = PROJECT_ROOT / script
 
     if not script_path.exists():
         print(f"[错误] HiAgent RAG上传脚本不存在: {script_path}")
@@ -167,7 +170,7 @@ async def upload_to_lis_rss(article_id: int, md_content: str, config: Dict) -> b
         return True
 
     script = summary_config.get('script', 'summary-update/lis-rss-summary-update/update_summary.py')
-    script_path = Path(__file__).parent.parent / script
+    script_path = PROJECT_ROOT / script
 
     if not script_path.exists():
         print(f"[错误] LIS-RSS更新脚本不存在: {script_path}")

@@ -24,9 +24,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# 添加项目根目录到Python路径
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
+# 通过 utils.project_root 获取项目根目录（不再依赖 sys.path hack）
+from utils.project_root import PROJECT_ROOT as project_root
 
 # 导入工具模块
 from utils.database import (
@@ -43,16 +42,18 @@ from utils.logger import DailyLogger
 import yaml
 
 
-def load_workflow_config(config_path: str = "config/config.yaml") -> Dict:
+def load_workflow_config(config_path: str = None) -> Dict:
     """
     加载工作流配置
     
     Args:
-        config_path: 配置文件路径
+        config_path: 配置文件路径（默认使用项目根目录下的 config/config.yaml）
         
     Returns:
         配置字典
     """
+    if config_path is None:
+        config_path = str(project_root / "config" / "config.yaml")
     config_path = Path(config_path)
     if not config_path.exists():
         raise FileNotFoundError(f"配置文件不存在: {config_path}")

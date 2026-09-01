@@ -7,13 +7,18 @@ import subprocess
 import sys
 import os
 import json
+import platform
 from pathlib import Path
 from typing import Optional
 import yaml
 
+from utils.project_root import PROJECT_ROOT
 
-def load_config(config_path: str = "config/config.yaml") -> dict:
+
+def load_config(config_path: str = None) -> dict:
     """加载配置文件"""
+    if config_path is None:
+        config_path = str(PROJECT_ROOT / "config" / "config.yaml")
     config_path = Path(config_path)
     if not config_path.exists():
         raise FileNotFoundError(f"配置文件不存在: {config_path}")
@@ -35,13 +40,13 @@ def summarize_pdf(pdf_path: str, config: dict) -> Optional[str]:
     """
     pdf_config = config.get('pdf_summary', {})
     script = pdf_config.get('script', 'pdf-summary/hiagent_upload.py')
-    script_path = Path(__file__).parent.parent / script
+    script_path = PROJECT_ROOT / script
 
     if not script_path.exists():
         print(f"[错误] PDF总结脚本不存在: {script_path}")
         return None
 
-    env_path = Path(__file__).parent.parent / ".env"
+    env_path = PROJECT_ROOT / ".env"
     if env_path.exists():
         from dotenv import load_dotenv
         load_dotenv(env_path)
@@ -54,7 +59,11 @@ def summarize_pdf(pdf_path: str, config: dict) -> Optional[str]:
     print(f"[INFO] PDF总结: {pdf_path} -> {expected_md_path}")
     print(f"[INFO] 删除原PDF: {'是' if delete_pdf else '否'}")
 
-    cmd = ["xvfb-run", "-a", sys.executable, str(script_path), str(pdf_path)]
+    # Windows 下没有 xvfb-run，直接调用 Python
+    if platform.system() == 'Windows':
+        cmd = [sys.executable, str(script_path), str(pdf_path)]
+    else:
+        cmd = ["xvfb-run", "-a", sys.executable, str(script_path), str(pdf_path)]
     if delete_pdf:
         cmd.append("--delete")
     else:

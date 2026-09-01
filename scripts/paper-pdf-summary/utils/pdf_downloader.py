@@ -12,23 +12,27 @@ import subprocess
 import sys
 import os
 import re
+import platform
 from pathlib import Path
 from typing import Optional, List, Dict
 import yaml
 
+from utils.project_root import PROJECT_ROOT
 from utils.pdf_validator import validate_pdf, delete_pdf, check_pdf_integrity
 
 
-def load_config(config_path: str = "config/config.yaml") -> Dict:
+def load_config(config_path: str = None) -> Dict:
     """
     加载配置文件
     
     Args:
-        config_path: 配置文件路径
+        config_path: 配置文件路径（默认使用项目根目录下的 config/config.yaml）
         
     Returns:
         配置字典
     """
+    if config_path is None:
+        config_path = str(PROJECT_ROOT / "config" / "config.yaml")
     config_path = Path(config_path)
     if not config_path.exists():
         raise FileNotFoundError(f"配置文件不存在: {config_path}")
@@ -50,12 +54,9 @@ def get_download_scripts_priority(config: Dict) -> List[str]:
     pdf_config = config.get('pdf_download', {})
     scripts = pdf_config.get('priority_scripts', [])
     
-    # 转换为绝对路径（相对于项目根目录）
-    project_root = Path(__file__).parent.parent
-    
     result = []
     for script in scripts:
-        script_path = project_root / script
+        script_path = PROJECT_ROOT / script
         if script_path.exists():
             result.append(str(script_path))
         else:
@@ -109,8 +110,13 @@ def call_download_script(script_path: str, keyword: str, output_dir: str, max_re
 
     try:
         # 调用脚本（不传递 max_retries，由脚本内部处理重试）
+        # Windows 下没有 xvfb-run，直接调用 Python
+        if platform.system() == 'Windows':
+            cmd = [sys.executable, str(script_path), keyword]
+        else:
+            cmd = ["xvfb-run", "-a", sys.executable, str(script_path), keyword]
         result = subprocess.run(
-            ["xvfb-run", "-a", sys.executable, str(script_path), keyword],
+            cmd,
             capture_output=True,
             text=True,
             timeout=600,  # 10分钟超时（含重试时间）
