@@ -58,12 +58,12 @@ class TelegramClient {
 
   constructor(botToken: string) {
     this.botToken = botToken;
-    const httpProxy = process.env.HTTP_PROXY;
+    const httpProxy = process.env.TELEGRAM_HTTP_PROXY || process.env.HTTP_PROXY;
     if (httpProxy) {
       log.info('Telegram client configured with proxy', { proxy: httpProxy });
       this.httpProxyAgent = new ProxyAgent(httpProxy);
     } else {
-      log.warn('No HTTP proxy configured (HTTP_PROXY not set)');
+      log.info('No HTTP proxy configured, connecting directly');
     }
   }
 
@@ -166,9 +166,11 @@ class PaperTelegramBot {
     this.apiBaseUrl = process.env.TELEGRAM_API_URL || 'http://localhost:8081';
     this.apiTimeout = parseInt(process.env.TELEGRAM_API_TIMEOUT || String(DEFAULT_TIMEOUT), 10);
 
-    const httpProxy = process.env.HTTP_PROXY;
+    const httpProxy = process.env.TELEGRAM_HTTP_PROXY || process.env.HTTP_PROXY;
     if (httpProxy) {
       this.httpProxyAgent = new ProxyAgent(httpProxy);
+    } else {
+      log.info('Telegram bot connecting directly (no proxy)');
     }
 
     this.client = new TelegramClient(this.botToken);

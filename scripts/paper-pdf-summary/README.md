@@ -384,8 +384,9 @@ TELEGRAM_USER_ID=your_telegram_user_id
 TELEGRAM_API_URL=http://localhost:8081
 TELEGRAM_API_TIMEOUT=300
 
-# HTTP 代理（必须，用于访问 Telegram API）
-HTTP_PROXY=http://127.0.0.1:7890
+# HTTP 代理（已废弃，当前网络可直连 Telegram）
+# 如需使用代理，取消注释并设置 TELEGRAM_HTTP_PROXY
+# TELEGRAM_HTTP_PROXY=http://127.0.0.1:7890
 ```
 
 ### 启动方式
