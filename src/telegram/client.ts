@@ -57,7 +57,8 @@ export class TelegramClient {
    */
   private async apiRequest(
     method: string,
-    params: Record<string, any>
+    params: Record<string, any>,
+    timeoutMs?: number
   ): Promise<TelegramMessageResponse> {
     const url = `${TELEGRAM_API_BASE}/bot${this.botToken}/${method}`;
 
@@ -66,14 +67,15 @@ export class TelegramClient {
 
     // Retry logic: retry on 5xx and 429. Avoid retrying aborted sendMessage requests
     // because Telegram may have already accepted the message, which can cause duplicates.
+    const effectiveTimeout = timeoutMs ?? DEFAULT_TIMEOUT;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       this.abortController = new AbortController();
-      const timer = setTimeout(() => this.abortController!.abort(), DEFAULT_TIMEOUT);
+      const timer = setTimeout(() => this.abortController!.abort(), effectiveTimeout);
 
       try {
         log.debug({ method, attempt, params }, 'Telegram API request');
 
-        const response = await fetch(url, {
+        const fetchOptions: any = {
           method: 'POST',
           headers: {
             'Accept': 'application/json',
@@ -81,9 +83,15 @@ export class TelegramClient {
           },
           body,
           signal: this.abortController.signal,
-          // Only use proxy for Telegram requests (not global)
-          dispatcher: this.httpProxyAgent,
-        } as any);
+        };
+
+        // Only attach dispatcher when proxy agent is configured
+        // (dispatcher: null causes undici assertion error)
+        if (this.httpProxyAgent) {
+          fetchOptions.dispatcher = this.httpProxyAgent;
+        }
+
+        const response = await fetch(url, fetchOptions);
 
         const data = await response.json() as TelegramMessageResponse;
 
@@ -364,7 +372,10 @@ export class TelegramClient {
       params.offset = offset;
     }
 
-    return this.apiRequest('getUpdates', params) as unknown as Promise<GetUpdatesResponse>;
+    // Long-polling: Telegram holds connection for up to (timeout + 5) seconds.
+    // Client timeout must exceed that to avoid premature abort.
+    const clientTimeoutMs = (timeout + 10) * 1000;
+    return this.apiRequest('getUpdates', params, clientTimeoutMs) as unknown as Promise<GetUpdatesResponse>;
   }
 
   /**
