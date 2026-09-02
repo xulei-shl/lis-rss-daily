@@ -57,7 +57,7 @@ class MemosClient:
             "relationList": relation_list or []
         }
 
-        response = requests.post(url, headers=self.headers, json=data)
+        response = requests.post(url, headers=self.headers, json=data, timeout=30)
         response.raise_for_status()
         return response.json()
 
@@ -76,14 +76,14 @@ class MemosClient:
         if filter_query:
             params["filter"] = filter_query
 
-        response = requests.get(url, headers=self.headers, params=params)
+        response = requests.get(url, headers=self.headers, params=params, timeout=30)
         response.raise_for_status()
         return response.json()
 
     def get_memo(self, memo_name: str) -> Dict:
         """获取单个备忘录详情"""
         url = f"{self.api_base}/{memo_name}"
-        response = requests.get(url, headers=self.headers)
+        response = requests.get(url, headers=self.headers, timeout=30)
         response.raise_for_status()
         return response.json()
 
@@ -111,7 +111,8 @@ class MemosClient:
             url,
             headers=self.headers,
             params=params,
-            json=data
+            json=data,
+            timeout=30
         )
         response.raise_for_status()
         return response.json()
@@ -119,7 +120,7 @@ class MemosClient:
     def delete_memo(self, memo_name: str) -> Dict:
         """删除备忘录"""
         url = f"{self.api_base}/{memo_name}"
-        response = requests.delete(url, headers=self.headers)
+        response = requests.delete(url, headers=self.headers, timeout=30)
         response.raise_for_status()
         return response.json()
 

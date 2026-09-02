@@ -493,6 +493,36 @@ async def upload_to_wechat(
         return False
 
 
+def _sync_upload_hiagent_rag(md_path: str, config: Dict, delete_md: bool, enabled_override: Optional[bool]) -> bool:
+    """同步包装：HiAgent RAG 上传"""
+    import asyncio as _aio
+    return _aio.run(upload_to_hiagent_rag(md_path, config, delete_md=delete_md, enabled_override=enabled_override))
+
+
+def _sync_upload_lis_rss(article_id: int, md_content: str, config: Dict) -> bool:
+    """同步包装：LIS-RSS 上传"""
+    import asyncio as _aio
+    return _aio.run(upload_to_lis_rss(article_id, md_content, config))
+
+
+def _sync_upload_memos(article_title: str, md_content: str, config: Dict, enabled_override: Optional[bool]) -> bool:
+    """同步包装：Memos 上传"""
+    import asyncio as _aio
+    return _aio.run(upload_to_memos(article_title, md_content, config, enabled_override=enabled_override))
+
+
+def _sync_upload_blinko(article_title: str, md_content: str, config: Dict, enabled_override: Optional[bool]) -> bool:
+    """同步包装：Blinko 上传"""
+    import asyncio as _aio
+    return _aio.run(upload_to_blinko(article_title, md_content, config, enabled_override=enabled_override))
+
+
+def _sync_upload_wechat(md_content: str, article_id: int, article_title: str, source_name: Optional[str], config: Dict) -> bool:
+    """同步包装：企业微信推送"""
+    import asyncio as _aio
+    return _aio.run(upload_to_wechat(md_content, article_id, article_title, source_name, config))
+
+
 async def upload_all(
     md_path: str,
     article_id: int,
@@ -546,35 +576,35 @@ async def upload_all(
         tasks.append(asyncio.sleep(0))
     else:
         print(f"[信息] HiAgent RAG上传已启用")
-        tasks.append(upload_to_hiagent_rag(md_path, config, delete_md=delete_md, enabled_override=push_hiagent))
+        tasks.append(asyncio.to_thread(_sync_upload_hiagent_rag, md_path, config, delete_md, push_hiagent))
 
     if skip_lis_rss:
         print(f"[跳过] LIS-RSS上传已禁用（直接处理模式且未提供文章ID）")
         tasks.append(asyncio.sleep(0))
     else:
         print(f"[信息] LIS-RSS上传已启用")
-        tasks.append(upload_to_lis_rss(article_id, md_content, config))
+        tasks.append(asyncio.to_thread(_sync_upload_lis_rss, article_id, md_content, config))
 
     if skip_memos:
         print(f"[跳过] Memos上传已禁用")
         tasks.append(asyncio.sleep(0))
     else:
         print(f"[信息] Memos上传已启用")
-        tasks.append(upload_to_memos(article_title, md_content, config, enabled_override=push_memos))
+        tasks.append(asyncio.to_thread(_sync_upload_memos, article_title, md_content, config, push_memos))
 
     if skip_blinko:
         print(f"[跳过] Blinko上传已禁用")
         tasks.append(asyncio.sleep(0))
     else:
         print(f"[信息] Blinko上传已启用")
-        tasks.append(upload_to_blinko(article_title, md_content, config, enabled_override=push_blinko))
+        tasks.append(asyncio.to_thread(_sync_upload_blinko, article_title, md_content, config, push_blinko))
 
     if skip_wechat:
         print(f"[跳过] WeChat推送已禁用")
         tasks.append(asyncio.sleep(0))
     else:
         print(f"[信息] WeChat推送已启用")
-        tasks.append(upload_to_wechat(md_content, article_id, article_title, source_name, config))
+        tasks.append(asyncio.to_thread(_sync_upload_wechat, md_content, article_id, article_title, source_name, config))
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -701,31 +731,31 @@ async def upload_all_from_text(
             tasks.append(asyncio.sleep(0))
         else:
             print(f"[信息] HiAgent RAG上传已启用")
-            tasks.append(upload_to_hiagent_rag(tmp_file_path, config, delete_md=False, enabled_override=push_hiagent))
+            tasks.append(asyncio.to_thread(_sync_upload_hiagent_rag, tmp_file_path, config, False, push_hiagent))
 
         if skip_lis_rss:
             tasks.append(asyncio.sleep(0))
         else:
-            tasks.append(upload_to_lis_rss(article_id, md_content, config))
+            tasks.append(asyncio.to_thread(_sync_upload_lis_rss, article_id, md_content, config))
 
         if skip_memos:
             print(f"[跳过] Memos上传已禁用")
             tasks.append(asyncio.sleep(0))
         else:
             print(f"[信息] Memos上传已启用")
-            tasks.append(upload_to_memos(article_title, md_content, config, enabled_override=push_memos))
+            tasks.append(asyncio.to_thread(_sync_upload_memos, article_title, md_content, config, push_memos))
 
         if skip_blinko:
             print(f"[跳过] Blinko上传已禁用")
             tasks.append(asyncio.sleep(0))
         else:
             print(f"[信息] Blinko上传已启用")
-            tasks.append(upload_to_blinko(article_title, md_content, config, enabled_override=push_blinko))
+            tasks.append(asyncio.to_thread(_sync_upload_blinko, article_title, md_content, config, push_blinko))
 
         if skip_wechat:
             tasks.append(asyncio.sleep(0))
         else:
-            tasks.append(upload_to_wechat(md_content, article_id, article_title, source_name, config))
+            tasks.append(asyncio.to_thread(_sync_upload_wechat, md_content, article_id, article_title, source_name, config))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 

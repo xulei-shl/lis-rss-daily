@@ -13,6 +13,8 @@ load_dotenv()
 
 URL = os.getenv("HIAGENT_PDF_URL")
 ERROR_KEYWORDS = ["无法访问", "无法生成", "抱歉，", "出错了", "请求异常，请稍后重试", "请求异常"]
+# 错误消息前缀模式：只匹配以这些词开头的短消息（<200字），避免误杀正常摘要中的用词
+ERROR_PREFIX_PATTERNS = ["无法访问", "无法生成", "抱歉，", "出错了", "请求异常"]
 COPY_ICON_SEL = "svg.hiagent-icon-copy-areality, svg.copy-icon"
 RESULT_SELECTORS = [
     '.message-content',
@@ -173,7 +175,13 @@ async def main(pdf_path: str, md_path: str = None, headless: bool = True, delete
 
             result_length = len(result) if result else 0
 
-            has_error = result and any(keyword in result for keyword in ERROR_KEYWORDS)
+            # 仅当结果较短（<200字）且以错误关键词开头时才判定为错误
+            # 避免正常摘要中包含这些词被误杀
+            has_error = (
+                result
+                and result_length < 200
+                and any(result.startswith(kw) for kw in ERROR_PREFIX_PATTERNS)
+            )
             if has_error:
                 error_msg = "检测到错误内容"
                 await browser.close()
