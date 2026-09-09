@@ -9,7 +9,7 @@ import { config } from 'dotenv';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 config({ path: resolve(dirname(fileURLToPath(import.meta.url)), '..', '.env') });
-import { ProxyAgent } from 'undici';
+import { Agent, ProxyAgent } from 'undici';
 import { log } from './logger.js';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
@@ -54,6 +54,7 @@ interface ProcessApiResponse {
 class TelegramClient {
   private botToken: string;
   private httpProxyAgent: ProxyAgent | null = null;
+  private ipv4Agent: Agent | null = null;
   private abortController: AbortController | null = null;
 
   constructor(botToken: string) {
@@ -63,7 +64,14 @@ class TelegramClient {
       log.info('Telegram client configured with proxy', { proxy: httpProxy });
       this.httpProxyAgent = new ProxyAgent(httpProxy);
     } else {
-      log.info('No HTTP proxy configured, connecting directly');
+      // No proxy configured, use IPv4-only agent to avoid IPv6 connection issues
+      this.ipv4Agent = new Agent({
+        connect: {
+          family: 4,
+          autoSelectFamily: false,
+        },
+      });
+      log.info('Telegram client configured with IPv4-only agent');
     }
   }
 
@@ -86,8 +94,8 @@ class TelegramClient {
         },
         body: JSON.stringify(params),
         signal: this.abortController.signal,
-        dispatcher: this.httpProxyAgent ?? undefined,
-      } as RequestInit & { dispatcher?: ProxyAgent });
+        dispatcher: this.httpProxyAgent ?? this.ipv4Agent ?? undefined,
+      } as RequestInit & { dispatcher?: ProxyAgent | Agent });
 
       const data = await response.json() as TelegramMessageResponse | GetUpdatesResponse;
 

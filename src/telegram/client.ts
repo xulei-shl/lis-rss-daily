@@ -11,7 +11,7 @@ import type {
   InlineKeyboardMarkup,
   GetUpdatesResponse,
 } from './types.js';
-import { ProxyAgent } from 'undici';
+import { Agent, ProxyAgent } from 'undici';
 import { splitMessage, getByteLength, smartTruncate } from '../utils/message-splitter.js';
 
 const log = logger.child({ module: 'telegram-client' });
@@ -39,6 +39,7 @@ export class TelegramClient {
   private botToken: string;
   private abortController: AbortController | null = null;
   private httpProxyAgent: ProxyAgent | null = null;
+  private ipv4Agent: Agent | null = null;
 
   constructor(botToken: string) {
     this.botToken = botToken;
@@ -48,7 +49,15 @@ export class TelegramClient {
       log.info({ proxy: httpProxy }, 'Telegram client configured with proxy');
       this.httpProxyAgent = new ProxyAgent(httpProxy);
     } else {
-      log.warn('No HTTP proxy configured (HTTP_PROXY not set)');
+      // No proxy configured, use IPv4-only agent to avoid IPv6 connection issues
+      // on systems with incomplete IPv6 configuration (e.g., only link-local addresses)
+      this.ipv4Agent = new Agent({
+        connect: {
+          family: 4,
+          autoSelectFamily: false,
+        },
+      });
+      log.info('Telegram client configured with IPv4-only agent (no proxy)');
     }
   }
 
@@ -85,10 +94,11 @@ export class TelegramClient {
           signal: this.abortController.signal,
         };
 
-        // Only attach dispatcher when proxy agent is configured
-        // (dispatcher: null causes undici assertion error)
+        // Attach the appropriate dispatcher: proxy agent if configured, otherwise IPv4-only agent
         if (this.httpProxyAgent) {
           fetchOptions.dispatcher = this.httpProxyAgent;
+        } else if (this.ipv4Agent) {
+          fetchOptions.dispatcher = this.ipv4Agent;
         }
 
         const response = await fetch(url, fetchOptions);
