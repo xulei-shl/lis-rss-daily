@@ -7,7 +7,7 @@ database:
   # path: "F:\\Github\\lis-rss-daily\\data\\rss-tracker.db"
 
 # 每日处理限制
-daily_process_limit: 3
+daily_process_limit: 1
 
 # 每日最大运行时间（分钟），超过此时间停止处理新文章
 # 防止因重试/验证码等导致脚本运行到深夜
