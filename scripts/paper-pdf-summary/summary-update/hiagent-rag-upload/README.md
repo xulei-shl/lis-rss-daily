@@ -4,10 +4,10 @@
 
 ## 功能特性
 
-- 🤖 自动上传 Markdown 文件到知识库
-- 💾 支持登录状态导出/导入，跨平台使用
-- 🔐 交互式登录：打开浏览器手动登录，按 Enter 保存登录态
-- 📦 上传成功后自动导出浏览器登录状态
+- 自动上传 Markdown 文件到知识库
+- 登录状态基于 storage_state (JSON)，天然跨平台，无需 zip 压缩
+- 交互式登录：打开浏览器手动登录，按 Enter 保存登录态
+- 上传成功后可自动刷新登录状态 JSON
 
 ## 环境要求
 
@@ -51,20 +51,12 @@ python upload_knowledge.py <markdown_file.md>
 - `--workspace-type`：工作空间类型
 - `--workspace-id`：工作空间 ID
 - `--knowledge-id`：知识库 ID
-- `--delete`：上传后是否删除本地 md 文件，默认 True（删除），设置 False 保留文件
+- `--delete`：上传后是否删除本地 md 文件，默认 False
 
 示例：
 ```bash
-# 上传文件（默认会删除本地 md 文件）
 python upload_knowledge.py 'test.md'
-
-# 上传文件但保留本地 md 文件
-python upload_knowledge.py 'test.md' --delete=False
-
-# 非无头模式（显示浏览器窗口）
 python upload_knowledge.py 'test.md' --headless=False
-
-# 指定工作空间和知识库
 python upload_knowledge.py 'test.md' --workspace-id=ws_xxx --knowledge-id=kb_xxx
 ```
 
@@ -75,70 +67,39 @@ python upload_knowledge.py 'test.md' --workspace-id=ws_xxx --knowledge-id=kb_xxx
 首次使用或登录过期时，通过交互式登录创建登录态：
 
 ```bash
-# 打开浏览器手动登录，按 Enter 后自动保存
 python session_manager.py login
-
-python scripts\paper-pdf-summary\summary-update\hiagent-rag-upload\session_manager.py login 
-
-# 指定登录页面 URL
-python session_manager.py login -u https://hiagent.library.sh.cn/product/llm/...
-
-# 指定输出路径
-python session_manager.py login -u https://... -o my_session.zip
+python session_manager.py login -u https://hiagent.library.sh.cn
 ```
 
 流程：
 1. 打开非 headless 浏览器，导航到目标页面
 2. 在浏览器中手动完成登录
 3. 回到命令行按 Enter
-4. 自动导出登录态到 `playwright_user_data/` 目录和压缩包
-
-#### 导出登录状态
-
-```bash
-# 导出到自动命名的文件
-python session_manager.py export
-
-# 导出到指定文件
-python session_manager.py export -o my_session.zip
-```
+4. 自动保存登录态到 `playwright_storage_state.json`
 
 #### 导入登录状态
 
 在另一台电脑或另一个平台使用前，先导入登录状态：
 
 ```bash
-# 导入登录状态
-python session_manager.py import playwright_session_latest.zip
+python session_manager.py import playwright_storage_state.json
 ```
 
 导入成功后，直接运行上传脚本即可使用，无需重新登录。
 
-## 工作流程
+## 跨平台使用方法
 
-### 跨平台使用方法
-
-1. **在 A 电脑（登录并导出）：**
+1. **在 A 电脑（登录）：**
    ```bash
-   # 方式一：交互式登录
-   python session_manager.py login -o session.zip
-   
-   # 方式二：首次上传文件，会自动导出登录状态
-   python upload_knowledge.py your_file.md --auto-export=True
-   
-   # 或者手动导出
-   python session_manager.py export -o session.zip
+   python session_manager.py login
    ```
 
 2. **传输到 B 电脑：**
-   - 将 `session.zip` 复制到 B 电脑
+   - 将 `playwright_storage_state.json` 复制到 B 电脑同目录下
 
 3. **在 B 电脑：**
    ```bash
-   # 导入登录状态
-   python session_manager.py import session.zip
-   
-   # 直接上传文件
+   # 直接上传文件（自动读取同目录下的 storage_state）
    python upload_knowledge.py your_file.md
    ```
 
@@ -147,23 +108,21 @@ python session_manager.py import playwright_session_latest.zip
 | 文件 | 说明 |
 |------|------|
 | `upload_knowledge.py` | 主脚本，用于上传 Markdown 文件到知识库 |
-| `session_manager.py` | 登录状态管理脚本，用于导出/导入/交互式登录浏览器状态 |
-| `playwright_user_data/` | 浏览器用户数据目录（包含登录状态） |
-| `playwright_session_latest.zip` | 自动导出的登录状态压缩包 |
+| `session_manager.py` | 登录状态管理脚本，用于导入/交互式登录 |
+| `playwright_storage_state.json` | 登录状态 JSON 文件（cookies + localStorage），跨平台可移植 |
 
 ## 注意事项
 
-1. 导出的登录状态文件包含 Cookie 和会话信息，请妥善保管
+1. `playwright_storage_state.json` 包含登录凭据，请妥善保管
 2. 某些网站可能会检测到浏览器环境变化，可能需要重新登录
-3. 登录状态可能有过期时间，建议定期更新
-4. 压缩包已排除缓存文件以减小体积
+3. 登录状态可能有过期时间，建议定期更新（可通过 `--auto-export` 自动刷新）
 
 ## 故障排除
 
 ### 登录状态导入后无法使用
 
-- 尝试删除 `playwright_user_data` 目录后重新导入
-- 确认浏览器版本一致
+- 确认 JSON 文件格式正确（`python session_manager.py import state.json` 会自动验证）
+- 尝试重新登录
 
 ### 上传失败
 
