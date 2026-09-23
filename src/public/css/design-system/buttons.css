@@ -20,8 +20,9 @@
   text-transform: none;
   /* Removed uppercase for softer look */
   letter-spacing: 0.01em;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease-out;
   white-space: nowrap;
+  user-select: none;
 }
 
 .btn:focus {
@@ -35,16 +36,17 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.btn-primary:hover {
-  background: var(--accent-hover);
-  color: white;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(26, 77, 122, 0.25);
-  /* Colored shadow */
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover {
+    background: var(--accent-hover);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(26, 77, 122, 0.25);
+  }
 }
 
 .btn-primary:active {
-  transform: translateY(0);
+  transform: scale(0.96);
   background: var(--accent-primary);
 }
 
@@ -55,16 +57,18 @@
   box-shadow: var(--shadow-sm);
 }
 
-.btn-secondary:hover {
-  background: var(--bg-subtle);
-  border-color: var(--border-strong);
-  color: var(--text-primary);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+@media (hover: hover) and (pointer: fine) {
+  .btn-secondary:hover {
+    background: var(--bg-subtle);
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
 }
 
 .btn-secondary:active {
-  transform: translateY(0);
+  transform: scale(0.96);
   background: var(--bg-surface);
 }
 
@@ -74,16 +78,23 @@
   border: 1px solid var(--red);
 }
 
-.btn-danger:hover {
+@media (hover: hover) and (pointer: fine) {
+  .btn-danger:hover {
+    background: var(--red);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+  }
+}
+
+.btn-danger:active {
+  transform: scale(0.96);
   background: var(--red);
-  color: white;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
 }
 
 .btn-icon {
   height: 32px;
-  /* Smaller for icons */
+  /* 视觉尺寸精炼，热区用伪元素补齐 */
   padding: 0 var(--space-3);
   background: transparent;
   border: 1px solid transparent;
@@ -93,11 +104,31 @@
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
+  position: relative;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease, transform 0.12s ease-out;
+  user-select: none;
 }
 
-.btn-icon:hover {
-  background: var(--bg-subtle);
-  color: var(--text-primary);
+/* 伪元素扩展至安全触控热区 */
+.btn-icon::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: -2px;
+  right: -2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-icon:hover {
+    background: var(--bg-subtle);
+    color: var(--text-primary);
+  }
+}
+
+.btn-icon:active {
+  transform: scale(0.96);
 }
 
 .btn-large {

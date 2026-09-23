@@ -15,7 +15,10 @@
 .rating-star {
   color: var(--border-strong);
   font-size: 14px;
-  transition: color 0.15s ease;
+  padding: 2px 2px;
+  display: inline-block;
+  transition: color 0.15s ease, transform 0.12s ease-out;
+  line-height: 1;
 }
 
 /* 填充状态（已评级） */
@@ -30,6 +33,11 @@
 
 .rating-input .rating-star:hover {
   color: var(--rating-star);
+  transform: scale(1.2);
+}
+
+.rating-input .rating-star:active {
+  transform: scale(0.92);
 }
 
 .rating-input .rating-star.active {

@@ -17,15 +17,23 @@
   font-family: var(--font-meta);
   font-size: var(--text-sm);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   min-width: 40px;
   text-align: center;
+  user-select: none;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, transform 0.12s ease-out;
 }
 
 .pagination a:hover {
   background: var(--bg-elevated);
   border-color: var(--border-strong);
+}
+
+.pagination a:active {
+  transform: scale(0.95);
 }
 
 .pagination .current {

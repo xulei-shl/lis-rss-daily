@@ -120,6 +120,7 @@
   font-family: var(--font-meta);
   font-size: var(--text-2xs);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   background: var(--accent-subtle);
   color: var(--accent-primary);
   padding: 2px 8px;
@@ -139,36 +140,48 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, transform 0.12s ease-out;
   white-space: nowrap;
+  user-select: none;
 }
 
-.filter-toggle-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-subtle);
+@media (hover: hover) and (pointer: fine) {
+  .filter-toggle-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-subtle);
+  }
+}
+
+.filter-toggle-btn:active {
+  transform: scale(0.96);
 }
 
 .filter-toggle-btn .toggle-arrow {
   display: inline-block;
-  transition: transform 0.2s ease;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .filter-toggle-btn.active .toggle-arrow {
   transform: rotate(180deg);
 }
 
-/* Collapsible filters */
+/* Collapsible filters via CSS Grid for 60fps layout stability */
 .advanced-filters {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.3s ease, opacity 0.25s ease, margin 0.25s ease;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, margin 0.2s ease;
   opacity: 0;
   margin: 0;
 }
 
+.advanced-filters > * {
+  overflow: hidden;
+}
+
 .advanced-filters.expanded {
-  max-height: 300px;
+  grid-template-rows: 1fr;
   opacity: 1;
+  margin-top: var(--space-3);
 }
 
 /* ============================================
@@ -206,9 +219,22 @@
     background: var(--bg-surface);
     border: 1px solid var(--border);
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
     margin-top: 4px;
     z-index: 1000;
+    transform-origin: top center;
+    animation: dropdownFadeIn 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* Custom scrollbar for select dropdown */
@@ -250,3 +276,63 @@
     font-weight: 500;
     color: var(--text-secondary);
 }
+
+/* ============================================
+   SKELETON PLACEHOLDER (Zero CLS on loading)
+   ============================================ */
+
+.skeleton-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  box-shadow: var(--shadow-sm);
+}
+
+.skeleton-line {
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  animation: skeletonPulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-title {
+  height: 22px;
+  width: 68%;
+}
+
+.skeleton-meta {
+  height: 14px;
+  width: 42%;
+}
+
+.skeleton-summary-1 {
+  height: 15px;
+  width: 95%;
+  margin-top: var(--space-1);
+}
+
+.skeleton-summary-2 {
+  height: 15px;
+  width: 78%;
+}
+
+.skeleton-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+}
+
+.skeleton-tag {
+  height: 18px;
+  width: 56px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  animation: skeletonPulse 1.5s ease-in-out infinite;
+}

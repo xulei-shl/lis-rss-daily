@@ -136,4 +136,6 @@
 /* Rating star color */
 :root {
   --rating-star: #fbbf24;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.1);
 }

@@ -91,7 +91,7 @@
   font-family: var(--font-body);
   font-size: var(--text-sm);
   font-weight: 500;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
   box-sizing: border-box;
   appearance: none;
   color-scheme: light dark;
@@ -110,7 +110,7 @@
   font-family: var(--font-body);
   font-size: var(--text-sm);
   font-weight: 500;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
   box-sizing: border-box;
   appearance: none;
   padding: 0 12px 0 42px;
@@ -160,7 +160,7 @@
   background: var(--bg-surface);
   overflow: hidden;
   height: 42px;
-  transition: all 0.2s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 /* Interaction for the whole group */

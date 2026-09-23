@@ -483,10 +483,25 @@ const pageActions = isReadOnly ? '' : `
       }
     }
 
+    // Skeleton cards for zero CLS
+    function renderSkeletonCards(count = 3) {
+      return Array(count).fill(0).map(() => `
+        <div class="skeleton-card">
+          <div class="skeleton-line skeleton-title"></div>
+          <div class="skeleton-line skeleton-meta"></div>
+          <div class="skeleton-line skeleton-summary-1"></div>
+          <div class="skeleton-line skeleton-summary-2"></div>
+          <div class="skeleton-footer">
+            <div class="skeleton-tag"></div>
+          </div>
+        </div>
+      `).join('');
+    }
+
     // Load articles
     async function loadArticles() {
       const container = document.getElementById('articlesContainer');
-      container.innerHTML = '<div class="loading">加载中...</div>';
+      container.innerHTML = renderSkeletonCards(3);
       syncUrlWithFilters();
       updateClearFiltersButton();
 
@@ -611,16 +626,18 @@ function renderArticleCard(article, index) {
   };
 
   // 优先显示翻译摘要，否则显示 RSS 摘要
-const summary = article.summary_zh || article.content || article.markdown_content?.substring(0, 300) || '';
+  const summary = article.summary_zh || article.content || article.markdown_content?.substring(0, 300) || '';
 
   // 已读状态
   const isRead = article.is_read === 1;
   const isRejected = article.filter_status === 'rejected';
   const cardClass = isRead ? 'article-card fade-in-up is-read' : isRejected ? 'article-card fade-in-up is-rejected' : 'article-card fade-in-up';
-  const readIcon = isRead ? '<span class="article-read-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '';
+  const readIcon = isRead ? '<span class="article-read-icon" title="已读"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>' : '';
+  // 动画交错上限收敛至前 6 个卡片，避免尾部漫长等待
+  const animDelay = Math.min(index, 6) * 35;
 
   return \`
-    <div class="\${cardClass}" style="animation-delay: \${index * 30}ms" data-article-id="\${article.id}">
+    <div class="\${cardClass}" style="animation-delay: \${animDelay}ms" data-article-id="\${article.id}">
       <div class="article-card-header">
         <h3 class="article-title">
           \${readIcon}<a href="/articles/\${article.id}\${getArticleListQueryString()}">\${escapeHtml(article.title)}</a>
@@ -660,7 +677,7 @@ const summary = article.summary_zh || article.content || article.markdown_conten
   \`;
 }
 
-// Render results count
+// Render results count with tabular numbers
 function renderResultsCount(total, isLimitedTo30Days) {
   const countEl = document.getElementById('resultsCount');
   const start = (currentPage - 1) * perPage + 1;
@@ -669,9 +686,9 @@ function renderResultsCount(total, isLimitedTo30Days) {
     ? '显示 ' + start + '-' + end + ' / 共 ' + total + ' 篇文章'
     : '暂无文章';
   if (isLimitedTo30Days) {
-    text += ' <span style="color: #888;">(近30天)</span>';
+    text += ' <span style="color: var(--text-tertiary);">(近30天)</span>';
   }
-  countEl.innerHTML = text;
+  countEl.innerHTML = \`<span style="font-variant-numeric: tabular-nums;">\${text}</span>\`;
 }
 
 // Render pagination
@@ -989,22 +1006,27 @@ function getPublishTimeText(article) {
   return formatTime(article.published_at);
 }
 
-// Toggle article read status
+// Toggle article read status with Optimistic UI
 async function toggleReadStatus(articleId, currentIsRead) {
+  const newIsRead = !currentIsRead;
+  // 乐观更新：点击即刻反馈，丝滑响应
+  updateCardReadStatus(articleId, newIsRead);
+
   try {
     const res = await fetch(\`/api/articles/\${articleId}/read\`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_read: !currentIsRead })
+      body: JSON.stringify({ is_read: newIsRead })
     });
 
     if (!res.ok) throw new Error('Failed to update');
-
-    // 只更新当前卡片状态，不刷新整个列表以保持滚动位置
-    updateCardReadStatus(articleId, !currentIsRead);
   } catch (err) {
     console.error('Failed to toggle read status:', err);
-    alert('操作失败，请稍后重试');
+    // 失败时回滚
+    updateCardReadStatus(articleId, currentIsRead);
+    if (window.toast && typeof window.toast.error === 'function') {
+      window.toast.error('标读失败，请稍后重试');
+    }
   }
 }
 

@@ -5,7 +5,7 @@
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -18,10 +18,28 @@
   to { opacity: 1; }
 }
 
+@keyframes skeletonPulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
 .fade-in-up {
-  animation: fadeInUp 0.4s ease-out backwards;
+  animation: fadeInUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
 .fade-in {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 尊重用户的减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .fade-in-up,
+  .fade-in {
+    animation: fadeIn 0.15s ease-out backwards !important;
+    transform: none !important;
+  }
 }
