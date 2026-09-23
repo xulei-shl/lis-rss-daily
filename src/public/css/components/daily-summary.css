@@ -6,9 +6,9 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-elevated);
+  box-shadow: var(--shadow-sm);
   margin-bottom: var(--space-8);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   overflow: hidden;
   /* Ensure rounded corners clip content */
 }
@@ -17,15 +17,17 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24px;
+  padding: 20px 24px;
   cursor: pointer;
   user-select: none;
-  transition: background 0.2s ease;
+  transition: background-color 0.15s ease;
 }
 
 /* Hover effect strictly within the panel's constraints */
-.summary-panel-header:hover {
-  background: var(--bg-subtle);
+@media (hover: hover) and (pointer: fine) {
+  .summary-panel-header:hover {
+    background: var(--bg-subtle);
+  }
 }
 
 .summary-header-left {
@@ -67,7 +69,7 @@
 }
 
 .chevron {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   color: var(--text-tertiary);
 }
 
@@ -76,32 +78,22 @@
   color: var(--text-primary);
 }
 
-.summary-panel-content {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+/* 改造为 CSS Grid 自适应展开，彻底解决 800px 截断与双滚动条问题 */
+.summary-panel-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   background: var(--bg-surface);
-  /* Inner content distinct from header */
 }
 
-.daily-summary-panel.expanded .summary-panel-content {
-  max-height: 800px;
-  overflow-y: auto;
+.daily-summary-panel.expanded .summary-panel-body {
+  grid-template-rows: 1fr;
   border-top: 1px solid var(--border);
 }
 
-/* Scrollbar styling for Webkit */
-.daily-summary-panel.expanded .summary-panel-content::-webkit-scrollbar {
-  width: 6px;
-}
-
-.daily-summary-panel.expanded .summary-panel-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.daily-summary-panel.expanded .summary-panel-content::-webkit-scrollbar-thumb {
-  background-color: var(--border);
-  border-radius: 3px;
+.summary-panel-content {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .summary-empty {
@@ -150,13 +142,20 @@
   font-family: var(--font-meta);
   font-size: var(--text-xs);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease-out;
+  user-select: none;
 }
 
-.summary-meta-action:hover {
-  color: var(--text-primary);
-  border-color: var(--accent-primary);
-  background: var(--accent-subtle);
+@media (hover: hover) and (pointer: fine) {
+  .summary-meta-action:hover {
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
+    background: var(--accent-subtle);
+  }
+}
+
+.summary-meta-action:active {
+  transform: scale(0.96);
 }
 
 .summary-meta-action svg {
@@ -222,12 +221,12 @@
 }
 
 .loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid var(--bg-subtle);
+  width: 36px;
+  height: 36px;
+  border: 2.5px solid var(--bg-subtle);
   border-top-color: var(--accent-primary);
   border-radius: 50%;
-  animation: spin 0.8s cubic-bezier(0.55, 0.055, 0.675, 0.19) infinite;
+  animation: spin 0.8s linear infinite;
   margin-bottom: var(--space-4);
 }
 
@@ -402,17 +401,24 @@
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--text-tertiary);
-  transition: all 0.2s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease-out;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   font-family: var(--font-body);
+  user-select: none;
 }
 
-.summary-tab:hover {
-  color: var(--text-primary);
-  background: var(--bg-subtle);
+@media (hover: hover) and (pointer: fine) {
+  .summary-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-subtle);
+  }
+}
+
+.summary-tab:active {
+  transform: scale(0.98);
 }
 
 .summary-tab.active {

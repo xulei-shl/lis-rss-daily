@@ -45,16 +45,42 @@ async function loadStats() {
   }
 }
 
+// Render skeleton loader
+function renderSkeleton() {
+  return `
+    <div class="skeleton-container">
+      <div class="skeleton-card">
+        <div class="skeleton-line title"></div>
+        <div class="skeleton-line meta"></div>
+        <div class="skeleton-line text"></div>
+        <div class="skeleton-line text-short"></div>
+      </div>
+      <div class="skeleton-card">
+        <div class="skeleton-line title"></div>
+        <div class="skeleton-line meta"></div>
+        <div class="skeleton-line text"></div>
+        <div class="skeleton-line text-short"></div>
+      </div>
+      <div class="skeleton-card">
+        <div class="skeleton-line title"></div>
+        <div class="skeleton-line meta"></div>
+        <div class="skeleton-line text"></div>
+        <div class="skeleton-line text-short"></div>
+      </div>
+    </div>
+  `;
+}
+
 // Load articles
 async function loadArticles(page = 1) {
   const container = document.getElementById('articlesContainer');
-  container.innerHTML = '<div class="loading">加载中...</div>';
+  container.innerHTML = renderSkeleton();
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
 
   const fallbackTimeoutId = setTimeout(() => {
-    if (container.querySelector('.loading')) {
+    if (container.querySelector('.skeleton-container') || container.querySelector('.loading')) {
       container.innerHTML = '<div class="empty-state"><div class="empty-state-title">加载超时</div><div class="empty-state-desc">服务器响应时间过长，请检查网络连接或稍后重试</div></div>';
     }
   }, 10500);
@@ -128,9 +154,11 @@ function renderArticleCard(article, index) {
   const isRead = article.is_read === 1;
   const isRejected = article.filter_status === 'rejected';
   const cardClass = isRead ? 'article-card fade-in-up is-read' : isRejected ? 'article-card fade-in-up is-rejected' : 'article-card fade-in-up';
-  const readIcon = isRead ? '<span class="article-read-icon">✅</span>' : '';
+  const readIcon = isRead ? '<span class="article-read-icon" title="已读"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>' : '';
 
-  let html = '<div class="' + cardClass + '" style="animation-delay: ' + (index * 30) + 'ms" data-article-id="' + article.id + '">';
+  // 限制 Stagger 仅对首屏前几个卡片生效，最大延迟不超过 120ms，避免长等待
+  const staggerDelay = Math.min(index * 20, 120);
+  let html = '<div class="' + cardClass + '" style="animation-delay: ' + staggerDelay + 'ms" data-article-id="' + article.id + '">';
   html += '<div class="article-card-header"><h3 class="article-title">' + readIcon + '<a href="/articles/' + article.id + '">' + escapeHtml(article.title) + '</a></h3>';
   html += '<span class="badge ' + article.filter_status + '">' + (statusLabel[article.filter_status] || '未知') + '</span></div>';
   html += '<div class="article-meta"><span>' + escapeHtml(article.source_name || article.rss_source_name || 'Unknown') + '</span><span>·</span>';
@@ -225,10 +253,16 @@ function toggleSummary(btn) {
   if (fullText.style.display === 'none') {
     shortText.style.display = 'none';
     fullText.style.display = 'inline';
+    fullText.classList.remove('fade-in');
+    void fullText.offsetWidth; // 触发 reflow 重置动画
+    fullText.classList.add('fade-in');
     btn.textContent = '收起';
   } else {
     fullText.style.display = 'none';
     shortText.style.display = 'inline';
+    shortText.classList.remove('fade-in');
+    void shortText.offsetWidth;
+    shortText.classList.add('fade-in');
     btn.textContent = '展开';
   }
 }
@@ -369,22 +403,34 @@ async function toggleReadStatus(articleId, currentIsRead) {
   }
 }
 
-// 淡出并移除卡片
+// 双阶段丝滑淡出并移除卡片（消除文本挤压与瞬跳）
 function fadeOutAndRemoveCard(card) {
-  // 添加淡出动画
-  card.style.transition = 'opacity 0.3s ease, transform 0.3s ease, max-height 0.3s ease, margin 0.3s ease';
+  // 阶段1：锁定实际高度，保持内部排版不动，仅渐隐并向右微移
+  const height = card.offsetHeight;
+  card.style.height = height + 'px';
+  card.style.boxSizing = 'border-box';
+  card.style.transition = 'opacity 0.16s ease-out, transform 0.16s cubic-bezier(0.16, 1, 0.3, 1)';
   card.style.opacity = '0';
-  card.style.transform = 'translateX(20px)';
-  card.style.maxHeight = '0';
-  card.style.margin = '0';
-  card.style.overflow = 'hidden';
+  card.style.transform = 'translateX(16px)';
 
-  // 动画结束后移除DOM
+  // 阶段2：平滑收敛高度与外边距，下方内容自然平缓上推
   setTimeout(() => {
-    card.remove();
-    // 检查是否需要移除日期分组标题
-    checkAndRemoveEmptyDayHeaders();
-  }, 300);
+    card.style.transition = 'height 0.22s cubic-bezier(0.16, 1, 0.3, 1), margin 0.22s ease-out, padding 0.22s ease-out';
+    card.style.height = '0';
+    card.style.paddingTop = '0';
+    card.style.paddingBottom = '0';
+    card.style.marginTop = '0';
+    card.style.marginBottom = '0';
+    card.style.borderTopWidth = '0';
+    card.style.borderBottomWidth = '0';
+    card.style.overflow = 'hidden';
+
+    // 动画平滑结束后彻底从 DOM 移除
+    setTimeout(() => {
+      card.remove();
+      checkAndRemoveEmptyDayHeaders();
+    }, 220);
+  }, 160);
 }
 // 导出为全局函数供 rating.js 调用
 window.fadeOutAndRemoveCard = fadeOutAndRemoveCard;
