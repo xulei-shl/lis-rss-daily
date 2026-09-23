@@ -10,6 +10,7 @@
 import { getActiveKeywords, crawlKeyword, type KeywordInfo } from './api/keywords.js';
 import { logger } from './logger.js';
 import { BaseScheduler } from './utils/base-scheduler.js';
+import { intEnv } from './utils/env.js';
 
 const log = logger.child({ module: 'keyword-scheduler' });
 
@@ -261,9 +262,9 @@ export function initKeywordScheduler(): KeywordScheduler {
   const config: KeywordSchedulerConfig = {
     enabled: process.env.KEYWORD_CRAWL_ENABLED !== 'false',
     schedule: process.env.KEYWORD_CRAWL_SCHEDULE || '15 3 * * 6', // 每周六凌晨 3:15
-    keywordInterval: parseInt(process.env.KEYWORD_INTERVAL || '300000', 10), // 5 分钟
-    keywordIntervalRandom: parseInt(process.env.KEYWORD_INTERVAL_RANDOM || '30000', 10), // 30 秒
-    timeout: parseInt(process.env.SPIDER_TIMEOUT || '430000', 10), // 7 分 10 秒
+    keywordInterval: intEnv(process.env.KEYWORD_INTERVAL, 300000, 1), // 5 分钟
+    keywordIntervalRandom: intEnv(process.env.KEYWORD_INTERVAL_RANDOM, 30000, 0), // 30 秒
+    timeout: intEnv(process.env.SPIDER_TIMEOUT, 430000, 1), // 7 分 10 秒
   };
 
   return KeywordScheduler.getInstance(config);

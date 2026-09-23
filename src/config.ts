@@ -6,6 +6,7 @@
 
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { intEnv } from './utils/env.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -144,7 +145,7 @@ function getConfig(): Config {
   return {
     // Server
     host: process.env.HOST || '0.0.0.0',
-    port: parseInt(process.env.PORT || '3000', 10),
+    port: intEnv(process.env.PORT, 3000, 1),
     baseUrl: process.env.BASE_URL || 'http://localhost:3000',
 
     // Database
@@ -166,31 +167,31 @@ function getConfig(): Config {
     // RSS
     rssFetchSchedule: process.env.RSS_FETCH_SCHEDULE || '0 2 * * *',
     rssFetchEnabled: process.env.RSS_FETCH_ENABLED !== 'false',
-    rssMaxConcurrent: parseInt(process.env.RSS_MAX_CONCURRENT || '5', 10),
-    rssFetchTimeout: parseInt(process.env.RSS_FETCH_TIMEOUT || '30000', 10),
-    rssFirstRunMaxArticles: parseInt(process.env.RSS_FIRST_RUN_MAX_ARTICLES || '50', 10),
+    rssMaxConcurrent: intEnv(process.env.RSS_MAX_CONCURRENT, 5, 1),
+    rssFetchTimeout: intEnv(process.env.RSS_FETCH_TIMEOUT, 30000, 1),
+    rssFirstRunMaxArticles: intEnv(process.env.RSS_FIRST_RUN_MAX_ARTICLES, 50, 0),
 
     // Related Articles Refresh
     relatedRefreshEnabled: process.env.RELATED_REFRESH_ENABLED !== 'false',
     relatedRefreshSchedule: process.env.RELATED_REFRESH_SCHEDULE || '0 2 * * *',
-    relatedRefreshBatchSize: parseInt(process.env.RELATED_REFRESH_BATCH_SIZE || '100', 10),
-    relatedRefreshStaleDays: parseInt(process.env.RELATED_REFRESH_STALE_DAYS || '7', 10),
+    relatedRefreshBatchSize: intEnv(process.env.RELATED_REFRESH_BATCH_SIZE, 100, 1),
+    relatedRefreshStaleDays: intEnv(process.env.RELATED_REFRESH_STALE_DAYS, 7, 0),
 
     // Logging
     logLevel: process.env.LOG_LEVEL || 'info',
     logFile: process.env.LOG_FILE,
     llmLogFile: process.env.LLM_LOG_FILE,
     llmLogFullPrompt: process.env.LLM_LOG_FULL_PROMPT === 'true',
-    llmLogFullSampleRate: parseInt(process.env.LLM_LOG_FULL_SAMPLE_RATE || '20', 10),
+    llmLogFullSampleRate: intEnv(process.env.LLM_LOG_FULL_SAMPLE_RATE, 20, 0),
 
     // LLM Rate Limiting
     llmRateLimitEnabled: process.env.LLM_RATE_LIMIT_ENABLED !== 'false',
-    llmRateLimitRequestsPerMinute: parseInt(process.env.LLM_RATE_LIMIT_REQUESTS_PER_MINUTE || '60', 10),
-    llmRateLimitBurstCapacity: parseInt(process.env.LLM_RATE_LIMIT_BURST_CAPACITY || '10', 10),
-    llmRateLimitQueueTimeout: parseInt(process.env.LLM_RATE_LIMIT_QUEUE_TIMEOUT || '30000', 10),
+    llmRateLimitRequestsPerMinute: intEnv(process.env.LLM_RATE_LIMIT_REQUESTS_PER_MINUTE, 60, 1),
+    llmRateLimitBurstCapacity: intEnv(process.env.LLM_RATE_LIMIT_BURST_CAPACITY, 10, 1),
+    llmRateLimitQueueTimeout: intEnv(process.env.LLM_RATE_LIMIT_QUEUE_TIMEOUT, 30000, 0),
 
     // Staggered Delay (for auto-filter after RSS fetch)
-    staggerDelayMaxMinutes: parseInt(process.env.STAGGER_DELAY_MAX_MINUTES || '30', 10),
+    staggerDelayMaxMinutes: intEnv(process.env.STAGGER_DELAY_MAX_MINUTES, 30, 0),
 
     // Timezone
     defaultTimezone: process.env.DEFAULT_TIMEZONE || 'Asia/Shanghai',
@@ -201,15 +202,15 @@ function getConfig(): Config {
     // Journal Crawler
     journalCrawlEnabled: process.env.JOURNAL_CRAWL_ENABLED !== 'false',
     journalCrawlSchedule: process.env.JOURNAL_CRAWL_SCHEDULE || '15 2 * * 6',
-    journalInterval: parseInt(process.env.JOURNAL_INTERVAL || '480000', 10),
-    journalIntervalRandom: parseInt(process.env.JOURNAL_INTERVAL_RANDOM || '0', 10),
-    spiderTimeout: parseInt(process.env.SPIDER_TIMEOUT || '430000', 10),
+    journalInterval: intEnv(process.env.JOURNAL_INTERVAL, 480000, 1),
+    journalIntervalRandom: intEnv(process.env.JOURNAL_INTERVAL_RANDOM, 0, 0),
+    spiderTimeout: intEnv(process.env.SPIDER_TIMEOUT, 430000, 1),
 
     // Keyword Crawler
     keywordCrawlEnabled: process.env.KEYWORD_CRAWL_ENABLED !== 'false',
     keywordCrawlSchedule: process.env.KEYWORD_CRAWL_SCHEDULE || '15 3 * * 6',
-    keywordInterval: parseInt(process.env.KEYWORD_INTERVAL || '300000', 10),
-    keywordIntervalRandom: parseInt(process.env.KEYWORD_INTERVAL_RANDOM || '30000', 10),
+    keywordInterval: intEnv(process.env.KEYWORD_INTERVAL, 300000, 1),
+    keywordIntervalRandom: intEnv(process.env.KEYWORD_INTERVAL_RANDOM, 30000, 0),
 
     // Daily Summary
     dailySummaryEnabled: process.env.DAILY_SUMMARY_ENABLED !== 'false',
@@ -219,9 +220,9 @@ function getConfig(): Config {
     // Insights
     insightsEnabled: process.env.INSIGHTS_ENABLED !== 'false',
     insightsSchedule: process.env.INSIGHTS_SCHEDULE || '15 7 * * *',
-    insightsIntervalDays: parseInt(process.env.INSIGHTS_INTERVAL_DAYS || '10', 10),
-    insightsDays: parseInt(process.env.INSIGHTS_DAYS || '10', 10),
-    insightsUserId: parseInt(process.env.INSIGHTS_USER_ID || '1', 10),
+    insightsIntervalDays: intEnv(process.env.INSIGHTS_INTERVAL_DAYS, 10, 1),
+    insightsDays: intEnv(process.env.INSIGHTS_DAYS, 10, 1),
+    insightsUserId: intEnv(process.env.INSIGHTS_USER_ID, 1, 1),
 
     // Search AI Summary
     searchAiSummaryGuestEnabled: process.env.SEARCH_AI_SUMMARY_GUEST_ENABLED === 'true',
@@ -233,7 +234,7 @@ function getConfig(): Config {
     // Gmail Email Source
     gmailFetchEnabled: process.env.GMAIL_FETCH_ENABLED !== 'false',
     gmailFetchSchedule: process.env.GMAIL_FETCH_SCHEDULE || '0 4 * * *',
-    gmailMaxEmails: parseInt(process.env.GMAIL_MAX_EMAILS || '20', 10),
+    gmailMaxEmails: intEnv(process.env.GMAIL_MAX_EMAILS, 20, 1),
 
 
     // Rejected Article Cleanup
@@ -242,17 +243,17 @@ function getConfig(): Config {
 
     // Chroma
     chromaHost: process.env.CHROMA_HOST || '127.0.0.1',
-    chromaPort: parseInt(process.env.CHROMA_PORT || '8000', 10),
+    chromaPort: intEnv(process.env.CHROMA_PORT, 8000, 1),
 
     // TypeSafe (JEV)
     typesafeApiKey: process.env.TYPESAFE_API_KEY,
-    jevRequestTimeoutMs: parseInt(process.env.JEV_REQUEST_TIMEOUT_MS || '30000', 10),
-    jevMaxRetries: parseInt(process.env.JEV_MAX_RETRIES || '2', 10),
+    jevRequestTimeoutMs: intEnv(process.env.JEV_REQUEST_TIMEOUT_MS, 30000, 1),
+    jevMaxRetries: intEnv(process.env.JEV_MAX_RETRIES, 2, 0),
 
     // 我的每日评分
     myDailyEnabled: process.env.MY_DAILY_ENABLED !== 'false',
     myDailySchedule: process.env.MY_DAILY_SCHEDULE || '30 7 * * *',
-    myDailyConcurrency: parseInt(process.env.MY_DAILY_CONCURRENCY || '5', 10),
+    myDailyConcurrency: intEnv(process.env.MY_DAILY_CONCURRENCY, 5, 1),
 
     // DeepSearch
     deepSearchApiUrl: process.env.DEEPSEARCH_API_URL || 'http://localhost:8082',

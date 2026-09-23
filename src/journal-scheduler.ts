@@ -21,6 +21,7 @@ import { filterArticle, type FilterInput } from './filter.js';
 import { processArticle } from './pipeline.js';
 import { generateNormalizedTitle } from './utils/title.js';
 import type { JournalInfo, CrawlResult, SpiderResult, CrawledArticle } from './spiders/types.js';
+import { intEnv } from './utils/env.js';
 
 const log = logger.child({ module: 'journal-scheduler' });
 
@@ -648,9 +649,9 @@ export function initJournalScheduler(): JournalScheduler {
   const config: JournalSchedulerConfig = {
     enabled: process.env.JOURNAL_CRAWL_ENABLED !== 'false',
     schedule: process.env.JOURNAL_CRAWL_SCHEDULE || '15 2 * * 6', // 每周六凌晨 2:15
-    journalInterval: parseInt(process.env.JOURNAL_INTERVAL || '180000', 10), // 3 分钟
-    journalIntervalRandom: parseInt(process.env.JOURNAL_INTERVAL_RANDOM || '30000', 10), // 30 秒
-    timeout: parseInt(process.env.SPIDER_TIMEOUT || '300000', 10), // 5 分钟
+    journalInterval: intEnv(process.env.JOURNAL_INTERVAL, 180000, 1), // 3 分钟
+    journalIntervalRandom: intEnv(process.env.JOURNAL_INTERVAL_RANDOM, 30000, 0), // 30 秒
+    timeout: intEnv(process.env.SPIDER_TIMEOUT, 300000, 1), // 5 分钟
   };
 
   return JournalScheduler.getInstance(config);

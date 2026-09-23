@@ -20,6 +20,8 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 import { scoreArticlesBatch, resolveJevConfig, type TopicInfo } from './jev.js';
 import { getUserLocalDate, getUserTimezone, buildUtcRangeFromLocalDate } from './api/timezone.js';
+import { getTopicDomainById } from './api/topic-domains.js';
+import { getActiveKeywordsForDomain } from './api/topic-keywords.js';
 
 const log = logger.child({ module: 'my-daily-scorer' });
 
@@ -229,6 +231,25 @@ export type ScoringProgressEvent =
 
 export type ScoringProgressCallback = (event: ScoringProgressEvent) => Promise<void> | void;
 
+/** 当日文章（含来源外键，用于解析来源绑定的主题领域） */
+interface TodayArticle {
+  id: number;
+  title: string;
+  url: string | null;
+  summary: string | null;
+  source_origin: string | null;
+  filter_status: string | null;
+  published_at: Date | string | null;
+  created_at: Date | string | null;
+  title_zh: string | null;
+  summary_zh: string | null;
+  rss_source_id: number | null;
+  journal_id: number | null;
+  keyword_id: number | null;
+  email_source_id: number | null;
+  web_source_id: number | null;
+}
+
 /**
  * 获取指定自然日新增的文章（包含前台渲染所需全部元数据）
  *
@@ -239,7 +260,7 @@ export type ScoringProgressCallback = (event: ScoringProgressEvent) => Promise<v
  * 注意：这里不按 filter_status 过滤——需求要求 JEV 对当日所有新增文章
  * 评分打标过滤（低分条目灰显），因此已经过关键词预过滤的文章也要参与评分。
  */
-async function getTodayArticles(date: string, userId: number) {
+async function getTodayArticles(date: string, userId: number): Promise<TodayArticle[]> {
   const db = getDb();
 
   const timezone = await getUserTimezone(userId);
@@ -259,12 +280,130 @@ async function getTodayArticles(date: string, userId: number) {
       'a.filter_status',
       'a.published_at',
       'a.created_at',
+      'a.rss_source_id',
+      'a.journal_id',
+      'a.keyword_id',
+      'a.email_source_id',
+      'a.web_source_id',
       't.title_zh',
       't.summary_zh',
     ])
     .execute();
 
   return articles;
+}
+
+/**
+ * 解析每篇文章应使用的主题（复用 LLM 过滤的「源 → 单领域」逻辑）
+ *
+ * 文章 source_origin 指向的源表上都绑定了 domain_id。能解析出领域时，只把该
+ * 领域及其激活关键词交给 JEV：判断更聚焦、prompt 更小，领域归属也直接确定。
+ * 解析不出（源未绑定领域 / 领域已删除 / 不属于该用户）时回退到用户的全部
+ * 激活领域，与改造前的行为一致，避免文章拿不到分。
+ *
+ * 注意：绑定领域不做 is_active 过滤——它是源上显式做出的归档选择；关键词则
+ * 沿用 filter 模块的口径，只取激活关键词。
+ */
+async function resolveArticleTopics(
+  articles: TodayArticle[],
+  userId: number,
+  fallbackTopics: TopicInfo[]
+): Promise<{ topicsByArticle: Map<number, TopicInfo[]>; boundCount: number; fallbackCount: number }> {
+  const db = getDb();
+
+  // 1. 按来源类型批量反查源表上的 domain_id
+  const rssIds = new Set<number>();
+  const journalIds = new Set<number>();
+  const keywordIds = new Set<number>();
+  const emailIds = new Set<number>();
+  const webIds = new Set<number>();
+
+  for (const a of articles) {
+    if (a.source_origin === 'rss' && a.rss_source_id) rssIds.add(a.rss_source_id);
+    else if (a.source_origin === 'journal' && a.journal_id) journalIds.add(a.journal_id);
+    else if (a.source_origin === 'keyword' && a.keyword_id) keywordIds.add(a.keyword_id);
+    else if (a.source_origin === 'email' && a.email_source_id) emailIds.add(a.email_source_id);
+    else if (a.source_origin === 'web' && a.web_source_id) webIds.add(a.web_source_id);
+  }
+
+  const [rssRows, journalRows, keywordRows, emailRows, webRows] = await Promise.all([
+    rssIds.size
+      ? db.selectFrom('rss_sources').select(['id', 'domain_id']).where('id', 'in', [...rssIds]).execute()
+      : Promise.resolve([]),
+    journalIds.size
+      ? db.selectFrom('journals').select(['id', 'domain_id']).where('id', 'in', [...journalIds]).execute()
+      : Promise.resolve([]),
+    keywordIds.size
+      ? db.selectFrom('keyword_subscriptions').select(['id', 'domain_id']).where('id', 'in', [...keywordIds]).execute()
+      : Promise.resolve([]),
+    emailIds.size
+      ? db.selectFrom('email_sources').select(['id', 'domain_id']).where('id', 'in', [...emailIds]).execute()
+      : Promise.resolve([]),
+    webIds.size
+      ? db.selectFrom('web_sources').select(['id', 'domain_id']).where('id', 'in', [...webIds]).execute()
+      : Promise.resolve([]),
+  ]);
+
+  const toMap = (rows: Array<{ id: number; domain_id: number }>) => {
+    const m = new Map<number, number>();
+    for (const r of rows) {
+      if (r.domain_id != null) m.set(r.id, r.domain_id);
+    }
+    return m;
+  };
+  const rssDomain = toMap(rssRows);
+  const journalDomain = toMap(journalRows);
+  const keywordDomain = toMap(keywordRows);
+  const emailDomain = toMap(emailRows);
+  const webDomain = toMap(webRows);
+
+  const domainIdByArticle = new Map<number, number>();
+  for (const a of articles) {
+    let domainId: number | undefined;
+    if (a.source_origin === 'rss' && a.rss_source_id) domainId = rssDomain.get(a.rss_source_id);
+    else if (a.source_origin === 'journal' && a.journal_id) domainId = journalDomain.get(a.journal_id);
+    else if (a.source_origin === 'keyword' && a.keyword_id) domainId = keywordDomain.get(a.keyword_id);
+    else if (a.source_origin === 'email' && a.email_source_id) domainId = emailDomain.get(a.email_source_id);
+    else if (a.source_origin === 'web' && a.web_source_id) domainId = webDomain.get(a.web_source_id);
+
+    if (domainId !== undefined) domainIdByArticle.set(a.id, domainId);
+  }
+
+  // 2. 加载涉及的领域（做所有权校验，不过滤 is_active）及其激活关键词
+  const domainTopicCache = new Map<number, TopicInfo | null>();
+  for (const domainId of new Set(domainIdByArticle.values())) {
+    const domain = await getTopicDomainById(domainId, userId);
+    if (!domain) {
+      domainTopicCache.set(domainId, null);
+      continue;
+    }
+    const keywords = await getActiveKeywordsForDomain(domain.id);
+    domainTopicCache.set(domainId, {
+      name: domain.name,
+      description: domain.description,
+      keywords: keywords.map(k => k.keyword),
+    });
+  }
+
+  // 3. 逐篇确定主题：能解析出绑定领域就用它，否则回退全部激活领域
+  const topicsByArticle = new Map<number, TopicInfo[]>();
+  let boundCount = 0;
+  let fallbackCount = 0;
+
+  for (const a of articles) {
+    const domainId = domainIdByArticle.get(a.id);
+    const bound = domainId !== undefined ? domainTopicCache.get(domainId) : undefined;
+
+    if (bound) {
+      topicsByArticle.set(a.id, [bound]);
+      boundCount++;
+    } else {
+      topicsByArticle.set(a.id, fallbackTopics);
+      fallbackCount++;
+    }
+  }
+
+  return { topicsByArticle, boundCount, fallbackCount };
 }
 
 /**
@@ -323,7 +462,19 @@ async function runScoringForUser(
     return { userId, scored: 0, skipped: false, reason: 'no_articles', total: 0 };
   }
 
-  log.info({ userId, username, articleCount: articles.length }, '开始 JEV 评分');
+  // 解析每篇文章的来源绑定领域；解析不出的回退到全部激活领域
+  const { topicsByArticle, boundCount, fallbackCount } = await resolveArticleTopics(articles, userId, topics);
+
+  log.info(
+    { userId, username, articleCount: articles.length, boundCount, fallbackCount },
+    '开始 JEV 评分'
+  );
+  if (fallbackCount > 0) {
+    log.warn(
+      { userId, date, fallbackCount },
+      '部分文章未能解析来源绑定领域，已回退到全部激活领域评分'
+    );
+  }
 
   // 触发开始事件
   if (onProgress) {
@@ -400,7 +551,7 @@ async function runScoringForUser(
   // 批量并发评分（内部在每篇完成时立即调用 handleSingleScore）
   const results = await scoreArticlesBatch(
     articles,
-    topics,
+    (article) => topicsByArticle.get(article.id) ?? topics,
     config.myDailyConcurrency,
     handleSingleScore
   );

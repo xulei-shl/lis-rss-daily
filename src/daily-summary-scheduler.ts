@@ -16,6 +16,7 @@ import { saveDailySummary } from './api/daily-summary-repository.js';
 import type { DailySummaryResult } from './api/daily-summary-repository.js';
 import { getTelegramNotifier } from './telegram/index.js';
 import { getWeChatNotifier } from './wechat/index.js';
+import { intEnv } from './utils/env.js';
 
 const log = logger.child({ module: 'daily-summary-scheduler' });
 
@@ -361,7 +362,7 @@ export function initDailySummaryScheduler(): DailySummaryScheduler {
     enabled: process.env.DAILY_SUMMARY_ENABLED !== 'false',
     schedule: process.env.DAILY_SUMMARY_SCHEDULE || '0 7 * * *',
     types: (process.env.DAILY_SUMMARY_TYPES || 'journal,blog_news,journal_all').split(','),
-    userId: parseInt(process.env.DAILY_SUMMARY_USER_ID || '1', 10),
+    userId: intEnv(process.env.DAILY_SUMMARY_USER_ID, 1, 1),
   };
 
   return DailySummaryScheduler.getInstance(config);

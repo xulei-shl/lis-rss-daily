@@ -11,6 +11,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../logger.js';
 import { config } from '../config.js';
+import { intEnv } from '../utils/env.js';
 import type { JournalSourceType, SpiderRunParams, SpiderResult, CrawledArticle } from './types.js';
 
 const log = logger.child({ module: 'python-spider-runner' });
@@ -171,7 +172,7 @@ export class PythonSpiderRunner {
       });
 
       // 设置超时
-      const timeout = parseInt(process.env.SPIDER_TIMEOUT || '300000', 10); // 默认 5 分钟
+      const timeout = intEnv(process.env.SPIDER_TIMEOUT, 300000, 1); // 默认 5 分钟
       setTimeout(() => {
         if (!proc.killed) {
           log.warn({ script, timeout }, 'Python spider timeout, killing process');

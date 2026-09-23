@@ -4,15 +4,15 @@
 >
 > 主要代码：`src/jev.ts`（JEV 调用与评分）、`src/my-daily-scorer-scheduler.ts`（调度与并发控制）、`src/api/my-daily.ts`（查询）、`src/api/routes/my-daily.routes.ts`（路由）、`src/public/js/my-daily.js`（前端展示）。
 
-## 1. 问题类型：noul / choice / score 三种全用
+## 1. 问题类型：noul / choice / score 三种按需组合
 
-JEV 支持 `noul`、`choice`、`score` 三种问题模式。本模块对每篇文章的**一次** JEV 调用中按情况组合使用三种模式（`src/jev.ts` `buildJevRequest`）：
+JEV 支持 `noul`、`choice`、`score` 三种问题模式。本模块对每篇文章的**一次** JEV 调用中按情况组合使用三种模式（`src/jev.ts` `buildJevRequest`）；按来源绑定领域时只问 `noul` + `score`，回退到多领域时才追加 `choice`：
 
 | 问题 key | 类型 | 作用 | 触发条件 |
 |---|---|---|---|
-| `is_relevant` | `noul` | 二值判断：文章是否与用户主题相关 | 始终使用 |
+| `is_relevant` | `noul` | 二值判断：文章是否与所给主题相关 | 始终使用 |
 | `relevance_level` | `score` | 细粒度相关程度（0–4 五档） | 始终使用 |
-| `best_domain` | `choice` | 从多个主题领域中选出最匹配的一个 | 仅当用户配置了 ≥2 个主题领域 |
+| `best_domain` | `choice` | 从多个主题领域中选出最匹配的一个 | 仅当该篇回退到多领域评分（用户配置了 ≥2 个激活主题领域）时 |
 
 三种模式的分工：`noul` 提供粗粒度的「相关 / 不相关」概率门控，`score` 提供细粒度的相关程度，`choice` 提供领域归因打标。三者各自独立提问，由前端综合算法汇总为一个分数。
 
@@ -28,7 +28,7 @@ JEV 支持 `noul`、`choice`、`score` 三种问题模式。本模块对每篇�
 ```
 
 - `article`：文章原文标题 + 摘要（中文翻译 `title_zh` / `summary_zh` 不参与评分，仅用于前端展示）。
-- `user_topics`：来自 `/topics` 页面用户配置的**激活**主题领域（`topic_domains.is_active = 1`）及其激活关键词（`topic_keywords.is_active = 1`）。
+- `user_topics`：**该篇文章的来源绑定领域**（优先），解析不出时才回退到用户全部**激活**主题领域（`topic_domains.is_active = 1`）及其激活关键词（`topic_keywords.is_active = 1`）。详见 2.3。
 
 ### 2.2 questions（打分指标与标准）
 
@@ -49,10 +49,19 @@ JEV 支持 `noul`、`choice`、`score` 三种问题模式。本模块对每篇�
 | 3 | 高度相关，直接讨论用户关注的核心主题 |
 | 4 | 完全匹配，深入讨论用户核心主题且包含关键词 |
 
-**`choice` — `best_domain`（最匹配领域，多领域时）**
+**`choice` — `best_domain`（最匹配领域，多领域回退时）**
 
 - 选项为每个领域名，选项描述为该领域的 `description`（无描述则为 `null`）。
 - 提问：`article` 最匹配 `user_topics` 中的哪个主题领域？
+
+### 2.3 主题来源：优先按文章来源绑定领域
+
+复用现有 LLM 过滤的「源 → 单领域」逻辑（`src/filter.ts` `llmFilter`）：
+
+- 文章的 `source_origin` 指向的源表（`rss_sources` / `journals` / `keyword_subscriptions` / `email_sources` / `web_sources`）都绑定了 `domain_id`（见 `sql/037`、`sql/041`）。
+- 评每篇文章时，`resolveArticleTopics`（`src/my-daily-scorer-scheduler.ts`）先按来源类型批量反查该绑定领域，**只把这一个领域及其激活关键词**发给 JEV；判断更聚焦、prompt 更小，领域归属也直接确定（不再需要 `choice`）。
+- **回退**：源未绑定领域、领域已删除或不属于该用户时，回退到用户全部激活领域（改造前的行为），保证文章仍能拿到分数；回退篇数在日志中单独报告。
+- 绑定领域**不做 `is_active` 过滤**——它是源上显式做出的归档选择；关键词沿用 filter 模块口径，只取激活关键词。
 
 ## 3. 综合评分算法（`calculateScore`）
 
@@ -63,7 +72,7 @@ relevanceScore = noul概率 × (score值 / 4)
 - `noul` 概率 ∈ [0, 1] 作为门控；`score` 归一化到 [0, 1] 作为程度。
 - 两者相乘：被判为「不相关」的文章，即使 score 打高分也会被压到接近 0。
 - 结果保留两位小数，范围 0–1；前端展示为百分比（`★ 85%`）。
-- `matched_domain` 直接取 `choice` 答案；单领域用户（无 `best_domain` 问题）为 `null`。
+- `matched_domain`：单领域提问（含来源绑定领域）时直接取该领域名；多领域回退时取 `choice` 答案。
 - JEV 调用失败时写入占位 0 分并标记 `failed: true`，`jev_response` 中记录错误信息——占位 0 分不代表真实相关性。
 
 原始响应完整 JSON 存入 `user_daily_scores.jev_response`，便于事后审计与调参。

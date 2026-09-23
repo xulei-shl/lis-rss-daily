@@ -22,6 +22,7 @@ import fs from 'fs';
 import path from 'path';
 import { config } from './config.js';
 import { logger } from './logger.js';
+import { intEnv } from './utils/env.js';
 
 let _cleanupTimer: NodeJS.Timeout | null = null;
 
@@ -63,7 +64,7 @@ function cleanupOldLogs(logDir: string, logBaseName: string, retentionDays: numb
 function createLLMLogger(): pino.Logger {
   const level = process.env.LOG_LEVEL || 'info';
   const llmLogFile = config.llmLogFile;
-  const retentionDays = parseInt(process.env.LLM_LOG_RETENTION_DAYS || '7', 10);
+  const retentionDays = intEnv(process.env.LLM_LOG_RETENTION_DAYS, 7, 1);
 
   // Pretty stream for stdout
   const prettyStream = pinoPretty({ colorize: true });

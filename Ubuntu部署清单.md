@@ -241,6 +241,23 @@ INSIGHTS_DAYS=10
 # 推送用户 ID
 INSIGHTS_USER_ID=1
 
+# ============ 我的每日 JEV 评分配置 ============
+# 是否启用每日定时 JEV 评分
+# false = 只关闭定时任务；页面上的「Jev 评分」按钮仍可手动触发
+MY_DAILY_ENABLED=false
+# 定时执行时间（cron 表达式，默认每天 07:30，在每日总结之后）
+MY_DAILY_SCHEDULE=30 7 * * *
+# 单用户内并行调用的 JEV 请求数（默认 5；提高可加快出分，但需注意 TypeSafe 限流）
+MY_DAILY_CONCURRENCY=15
+# JEV (TypeSafe) 兜底 API 密钥；优先使用「设置 → LLM 配置」中的 JEV 配置
+# TYPESAFE_API_KEY=
+
+# ============ JEV (TypeSafe) 请求参数 ============
+# 单次 JEV 请求超时（毫秒）
+JEV_REQUEST_TIMEOUT_MS=30000
+# JEV 请求失败后的重试次数（429/529/5xx/408 及网络异常，指数退避并尊重 Retry-After）
+JEV_MAX_RETRIES=2
+
 # ============ 日志配置 ============
 # 日志级别（debug | info | warn | error）
 LOG_LEVEL=info
@@ -887,6 +904,45 @@ pnpm run test:insights-scheduler
 - 如果 `8007` 可访问且 `/api/daily-summary/insights/latest` 返回 `401/404`，通常说明后端路由存在，只是当前请求未登录或当天尚无报告
 - 如果需要确认是否真的执行成功，应结合 `journalctl -u lis-rss` 和数据库中的 `insights_last_success_at` 一起判断
 
+### 我的每日 JEV 评分未按预期触发
+
+**症状**：`/my-daily` 页面当天没有评分结果，或页面上的「Jev 评分」按钮点击后没有反应。
+
+**当前实现说明**：
+- 「我的每日」评分调度运行在 `lis-rss` 主服务内，不是独立服务；修改 `MY_DAILY_*` 后只需重启主服务
+- `MY_DAILY_ENABLED=false` 只关闭**每日定时任务**（主服务启动时不注册 cron）；页面上的「Jev 评分」按钮走 `POST /api/my-daily/refresh`，**不受该开关影响**，仍可手动触发
+- 定时任务会遍历所有 `role='user'` 的用户，按各用户时区的「当天」计算日期
+- 全服务同一时刻只允许一个评分任务执行（定时任务与手动触发共用同一把锁），重叠触发按 FIFO 排队；队列上限 10 个，最长等待 10 分钟
+- JEV 密钥未配置时，定时任务会被整体跳过（不报错）；手动触发会提示前往「设置 → LLM 配置」添加
+- JEV 配置优先级：`llm_configs` 表中启用的 `config_type='jev'`（或 `provider='typesafe'`）> `.env` 的 `TYPESAFE_API_KEY`
+- 评分的主题来源：优先按文章所属信息源绑定的主题领域（只发该领域及其关键词给 JEV）；源未绑定领域、领域已删除或不属于该用户时，回退到该用户的全部激活领域
+- 每个并发单位是**一篇文章一次请求**（`noul` + `score` 多个 question 在同一个请求内并行评估），不是「每问一次请求」
+
+**排查步骤**：
+
+```bash
+# 1. 检查我的每日 / JEV 相关配置
+grep -E "MY_DAILY_|TYPESAFE_API_KEY|JEV_" /opt/lis-rss-daily/.env
+
+# 2. 确认 JEV 密钥（数据库配置优先，.env 兜底）
+sqlite3 /opt/lis-rss-daily/data/rss-tracker.db \
+  "SELECT id, provider, config_type, enabled, is_default FROM llm_configs WHERE enabled = 1;"
+
+# 3. 重启主服务使配置生效
+sudo systemctl restart lis-rss
+
+# 4. 查看评分相关日志（含来源绑定领域/回退篇数统计）
+sudo journalctl -u lis-rss -n 200 --no-pager | grep -i -E "my-daily|jev"
+
+# 5. 确认路由已挂载（未登录应返回 401）
+curl -i http://localhost:8007/api/my-daily/dates
+```
+
+**补充说明**：
+- 数值型环境变量（如 `MY_DAILY_CONCURRENCY`、`JEV_REQUEST_TIMEOUT_MS`）填非法值（非数字 / 0 / 负数）时会在启动时回退到内置默认值，不会导致服务启动失败
+- `MY_DAILY_CONCURRENCY` 提高（如 15）会成倍增加对 TypeSafe 的瞬时并发；遇到 429/529 会自动退避重试，但瞬时失败仍会先记占位 0 分
+- `user_daily_scores` 表由迁移 044 创建，未执行 `pnpm run db:migrate` 时查询会报错
+
 ### Telegram 推送失败
 
 **症状**：每日总结或文章推送时，WeChat 正常但 Telegram 失败，日志中出现 `fetch failed` 或 `assert(dispatcher)` 错误。
@@ -1018,7 +1074,7 @@ pnpm run db:migrate          # 应用新迁移（如有新增 sql/*.sql 文件�
 sudo systemctl restart lis-rss
 ```
 
-> **注意**：更新后务必运行 `pnpm run db:migrate`，确保新迁移（如 041 添加 web_sources 表）已应用到现有数据库。
+> **注意**：更新后务必运行 `pnpm run db:migrate`，确保新迁移已应用到现有数据库（如 041 添加 `web_sources` 表、044 添加 `user_daily_scores` 表与用户角色）。
 
 > **注意**：如果 `pnpm rebuild better-sqlite3` 后服务仍然因 `ERR_DLOPEN_FAILED` 启动失败（ABI 版本不匹配），需要从源码强制编译：
 > ```bash
@@ -1183,6 +1239,7 @@ sudo journalctl -u lis-rss -f
 | 应用服务卡死 | `systemctl restart lis-rss` |
 | Gmail 邮件源配置修改 (GMAIL_*) | `systemctl restart lis-rss` |
 | 拒绝文章清理配置修改 (REJECTED_CLEANUP_*) | `systemctl restart lis-rss` |
+| 我的每日评分配置修改 (MY_DAILY_*) | `systemctl restart lis-rss` |
 | PDF 处理 Python 代码更新 | `systemctl restart paper-pdf-api` |
 | PDF 处理脚本 `.env` / 依赖修改 | `systemctl restart paper-pdf-api` |
 | Telegram Bot 代码更新 | `systemctl restart paper-pdf-summary-telegram` |

@@ -18,6 +18,7 @@ import { fileURLToPath } from 'url';
 import { logger } from '../logger.js';
 import { config } from '../config.js';
 import { getScraperConfig, getScraperScriptPath } from './web-scrapers/config.js';
+import { intEnv } from '../utils/env.js';
 import type { WebScraperResult, WebScrapedArticle } from './types.js';
 
 const log = logger.child({ module: 'web-scraper-runner' });
@@ -209,7 +210,7 @@ export async function runWebScraper(
     });
 
     // Set timeout
-    const timeout = parseInt(process.env.WEB_SCRAPER_TIMEOUT || '120000', 10); // Default 2 minutes
+    const timeout = intEnv(process.env.WEB_SCRAPER_TIMEOUT, 120000, 1); // Default 2 minutes
     setTimeout(() => {
       if (!proc.killed) {
         log.warn({ scraperType, targetUrl, timeout }, 'Web scraper timeout, killing process');

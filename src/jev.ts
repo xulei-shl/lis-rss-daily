@@ -271,8 +271,14 @@ async function callJevApi(requestBody: any, jevConfig: ResolvedJevConfig): Promi
  * - noul 提供粗粒度的相关/不相关判断
  * - score 提供细粒度的相关程度
  * - 两者相乘后，不相关的文章分数会被压到很低
+ *
+ * 领域归属：单领域提问（含按文章来源绑定领域的情形）归属是确定的，直接取该
+ * 领域；只有多领域回退提问时才由 choice 答案决定。
  */
-function calculateScore(answers: any): { score: number; matchedDomain: string | null } {
+function calculateScore(
+  answers: any,
+  topics: TopicInfo[]
+): { score: number; matchedDomain: string | null } {
   const noulProb = answers.is_relevant?.noul ?? 0;
   const scoreValue = answers.relevance_level?.score ?? 0;
   const maxLevel = 4; // score criteria 有 5 个等级 (0-4)
@@ -281,8 +287,8 @@ function calculateScore(answers: any): { score: number; matchedDomain: string | 
   // 综合评分：noul 概率 × 归一化 score
   const relevanceScore = Math.round(noulProb * normalizedScore * 100) / 100;
 
-  // 匹配的领域
-  const matchedDomain = answers.best_domain?.choice ?? null;
+  const matchedDomain =
+    topics.length === 1 ? topics[0].name : answers.best_domain?.choice ?? null;
 
   return { score: relevanceScore, matchedDomain };
 }
@@ -299,7 +305,7 @@ export async function scoreArticle(
     const activeConfig = jevConfig || (await resolveJevConfig());
     const requestBody = buildJevRequest(article, topics, activeConfig.model);
     const result = await callJevApi(requestBody, activeConfig);
-    const { score, matchedDomain } = calculateScore(result.answers);
+    const { score, matchedDomain } = calculateScore(result.answers, topics);
 
     return {
       articleId: article.id,
@@ -328,18 +334,17 @@ export type OnArticleScoredCallback = (
 
 /**
  * 批量并行评分（按并发数分批处理）
+ *
+ * 每篇文章使用的主题由 `getTopics` 决定：通常是该文章来源绑定的单个领域，
+ * 解析不出绑定领域时回退到用户的全部激活领域，因此同一批文章可以带着不同
+ * 的主题交给 JEV。
  */
 export async function scoreArticlesBatch(
   articles: ArticleForScoring[],
-  topics: TopicInfo[],
+  getTopics: (article: ArticleForScoring) => TopicInfo[],
   concurrency = 5,
   onArticleScored?: OnArticleScoredCallback
 ): Promise<JevScoreResult[]> {
-  if (topics.length === 0) {
-    log.warn('用户没有设置主题领域，跳过评分');
-    return [];
-  }
-
   // 解析一次 JEV 配置供本批次共用
   const jevConfig = await resolveJevConfig();
 
@@ -356,7 +361,7 @@ export async function scoreArticlesBatch(
     const batch = articles.slice(i, i + concurrency);
     const batchResults = await Promise.all(
       batch.map(async (article) => {
-        const res = await scoreArticle(article, topics, jevConfig);
+        const res = await scoreArticle(article, getTopics(article), jevConfig);
         completedCount++;
         if (onArticleScored) {
           try {

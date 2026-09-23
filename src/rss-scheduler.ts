@@ -20,6 +20,7 @@ import { filterArticle, type FilterInput } from './filter.js';
 import { processArticle } from './pipeline.js';
 import { config } from './config.js';
 import { createRssFetchLog } from './api/rss-fetch-logs.js';
+import { intEnv } from './utils/env.js';
 
 const log = logger.child({ module: 'rss-scheduler' });
 
@@ -730,8 +731,8 @@ export function initRSSScheduler(): RSSScheduler {
   const config: SchedulerConfig = {
     enabled: process.env.RSS_FETCH_ENABLED !== 'false',
     schedule: process.env.RSS_FETCH_SCHEDULE || '0 2 * * *',
-    maxConcurrent: parseInt(process.env.RSS_MAX_CONCURRENT || '5', 10),
-    fetchTimeout: parseInt(process.env.RSS_FETCH_TIMEOUT || '30000', 10),
+    maxConcurrent: intEnv(process.env.RSS_MAX_CONCURRENT, 5, 1),
+    fetchTimeout: intEnv(process.env.RSS_FETCH_TIMEOUT, 30000, 1),
     maxRetries: 3,
     retryDelay: 5000, // 5 seconds
     retryBackoffMultiplier: 2,

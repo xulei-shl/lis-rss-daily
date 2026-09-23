@@ -23,6 +23,7 @@ import { incrementalRefreshRelated } from './api/articles-refresh.js';
 import { logger } from './logger.js';
 import { toSimpleMarkdown } from './utils/markdown.js';
 import { createProcessLog } from './api/process-logs.js';
+import { intEnv, floatEnv } from './utils/env.js';
 
 const log = logger.child({ module: 'pipeline' });
 
@@ -152,13 +153,13 @@ export interface RetryConfig {
 /* ── Configuration ── */
 
 const DEFAULT_RETRY_CONFIG: RetryConfig = {
-  maxRetries: parseInt(process.env.ARTICLE_RETRY_MAX_RETRIES || '3', 10),
-  baseDelay: parseInt(process.env.ARTICLE_RETRY_BASE_DELAY || '5000', 10),
-  backoffMultiplier: parseFloat(process.env.ARTICLE_RETRY_BACKOFF_MULTIPLIER || '2'),
-  maxDelay: parseInt(process.env.ARTICLE_RETRY_MAX_DELAY || '60000', 10),
+  maxRetries: intEnv(process.env.ARTICLE_RETRY_MAX_RETRIES, 3, 0),
+  baseDelay: intEnv(process.env.ARTICLE_RETRY_BASE_DELAY, 5000, 1),
+  backoffMultiplier: floatEnv(process.env.ARTICLE_RETRY_BACKOFF_MULTIPLIER, 2, 0),
+  maxDelay: intEnv(process.env.ARTICLE_RETRY_MAX_DELAY, 60000, 1),
 };
 
-const MAX_CONCURRENT = parseInt(process.env.ARTICLE_PROCESS_MAX_CONCURRENT || '3', 10);
+const MAX_CONCURRENT = intEnv(process.env.ARTICLE_PROCESS_MAX_CONCURRENT, 3, 1);
 
 /* ── Main Processing Functions ── */
 
