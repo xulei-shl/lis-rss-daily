@@ -9,6 +9,7 @@
   let currentDate = '';
   let todayDate = '';
   let articles = [];
+  let flipCleanupTimer = null;
 
   const dateSelect = document.getElementById('myDailyDateSelect');
   const dateHint = document.getElementById('myDailyDateHint');
@@ -78,10 +79,10 @@
     updateDateHint();
   }
 
-  // 选中「今天」时给出胶囊标记（原生日期控件无法在选项里标注）
+  // 选中「今天」时给出胶囊标记（配合 CSS opacity/scale 平滑过渡）
   function updateDateHint() {
     if (!dateHint) return;
-    dateHint.style.display = currentDate === todayDate ? '' : 'none';
+    dateHint.classList.toggle('is-visible', currentDate === todayDate);
   }
 
   // 加载指定日期的评分文章
@@ -106,8 +107,11 @@
     } catch (err) {
       console.error('加载每日文章失败:', err);
       articlesList.innerHTML = `
-        <div style="text-align:center; padding: 40px; color: var(--danger, #e53e3e);">
-          ❌ 加载失败: ${escapeHtml(err.message)}
+        <div class="my-daily-empty" style="border-color: color-mix(in srgb, var(--red) 30%, transparent);">
+          <div class="my-daily-empty-icon">⚠️</div>
+          <h3 style="color: var(--red);">加载失败</h3>
+          <p>${escapeHtml(err.message)}</p>
+          <button class="btn btn-secondary" onclick="loadArticles(currentDate)">重新加载</button>
         </div>
       `;
     }
@@ -143,10 +147,8 @@
       </div>`;
   }
 
-  // 渲染文章列表及统计
-  function renderArticles() {
-    if (!articlesList) return;
-
+  // 统计计数更新
+  function updateStatsCounters() {
     const total = articles.length;
     const high = articles.filter(a => a.relevance_score >= 0.7).length;
     const mid = articles.filter(a => a.relevance_score >= 0.3 && a.relevance_score < 0.7).length;
@@ -157,74 +159,230 @@
     if (midCountEl) midCountEl.textContent = mid;
     if (lowCountEl) lowCountEl.textContent = low;
 
-    // 三档之和必须等于总数，否则说明分档逻辑有洞
     if (high + mid + low !== total) {
       console.error('评分分档统计不一致:', { total, high, mid, low });
     }
+  }
 
-    if (total === 0) {
+  // 生成单张卡片的 HTML 字符串
+  function renderArticleCardHtml(article, isJustUpdated = false) {
+    const score = article.relevance_score || 0;
+    const isLow = score < 0.3;
+    
+    let scoreClass = 'my-daily-score-low';
+    if (score >= 0.7) {
+      scoreClass = 'my-daily-score-high';
+    } else if (score >= 0.3) {
+      scoreClass = 'my-daily-score-mid';
+    }
+
+    const scorePercent = Math.round(score * 100);
+    const title = article.title;
+    const summary = article.summary_zh || article.summary || '';
+    const domain = article.matched_domain;
+    const originLabels = {
+      rss: 'RSS',
+      journal: '期刊',
+      keyword: '关键词',
+      email: '邮件',
+      web: '网站爬虫',
+    };
+    const originLabel = originLabels[article.source_origin] || article.source_origin || '文章';
+    const timeStr = formatDate(article.published_at || article.created_at);
+
+    return `
+      <article class="article-card ${isLow ? 'is-low-score' : ''} ${isJustUpdated ? 'is-scoring-just-updated' : ''}" data-id="${article.id}">
+        <div class="article-card-header">
+          <h3 class="article-title">
+            <a href="/articles/${article.id}">${escapeHtml(title)}</a>
+          </h3>
+          <span class="badge ${scoreClass} my-daily-score-badge" title="JEV 综合相关性评分">★ ${scorePercent}%</span>
+        </div>
+
+        <div class="article-meta">
+          <span>${escapeHtml(originLabel)}</span>
+          <span>·</span>
+          <span>${escapeHtml(timeStr)}</span>
+          <span>·</span>
+          <a href="${escapeHtml(article.url)}" target="_blank" rel="noopener">原文链接</a>
+        </div>
+
+        ${renderSummary(summary)}
+
+        <div class="article-footer">
+          <div class="article-tags">
+            ${domain ? `<span class="article-tag">🎯 ${escapeHtml(domain)}</span>` : ''}
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  // 渲染整页文章列表及统计
+  function renderArticles() {
+    if (!articlesList) return;
+
+    updateStatsCounters();
+
+    if (articles.length === 0) {
       articlesList.innerHTML = '';
       if (emptyState) emptyState.style.display = 'block';
       return;
     }
 
     if (emptyState) emptyState.style.display = 'none';
+    articlesList.innerHTML = articles.map(article => renderArticleCardHtml(article)).join('');
+  }
 
-    articlesList.innerHTML = articles.map(article => {
-      const score = article.relevance_score || 0;
-      const isLow = score < 0.3;
-      
-      let scoreClass = 'my-daily-score-low';
-      if (score >= 0.7) {
-        scoreClass = 'my-daily-score-high';
-      } else if (score >= 0.3) {
-        scoreClass = 'my-daily-score-mid';
+  /**
+   * FLIP (First-Last-Invert-Play) 动态排位动画调度器
+   * 在 JEV 实时返回单篇出分数据时，无缝插入列表并以阻尼曲线平滑滑向新排名
+   */
+  function applyFlipSort(updatedArticle) {
+    if (!articlesList || !updatedArticle) return;
+
+    // 清除骨架屏占位（锁定当前高度以避免清空时列表骤缩塌陷）
+    const skeletonEl = articlesList.querySelector('[role="status"]');
+    if (skeletonEl) {
+      const currentHeight = articlesList.offsetHeight;
+      if (currentHeight > 0) {
+        articlesList.style.minHeight = `${currentHeight}px`;
+      }
+      articlesList.innerHTML = '';
+    }
+
+    // 取消上一次未结束的样式清理定时器，避免高频流式推送时中途强制截断正在运动的卡片
+    if (flipCleanupTimer) {
+      clearTimeout(flipCleanupTimer);
+      flipCleanupTimer = null;
+    }
+
+    // 1. 合并入本地数据列表
+    const existingIndex = articles.findIndex(a => a.id === updatedArticle.id);
+    if (existingIndex >= 0) {
+      articles[existingIndex] = { ...articles[existingIndex], ...updatedArticle };
+    } else {
+      articles.push(updatedArticle);
+    }
+
+    // 按评分从高到低排序，同分则按 id 降序保证稳定
+    articles.sort((a, b) => {
+      const diff = (b.relevance_score ?? 0) - (a.relevance_score ?? 0);
+      if (diff !== 0) return diff;
+      return (b.id ?? 0) - (a.id ?? 0);
+    });
+
+    if (emptyState) emptyState.style.display = 'none';
+    updateStatsCounters();
+
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // 2. First: 记录重排前各卡片实际视觉位置
+    const firstPositions = new Map();
+    if (!prefersReducedMotion) {
+      articlesList.querySelectorAll('.article-card[data-id]').forEach(el => {
+        firstPositions.set(Number(el.dataset.id), el.getBoundingClientRect().top);
+      });
+    }
+
+    // 3. Update DOM: 调整卡片顺序与分值状态
+    articles.forEach(art => {
+      let cardEl = articlesList.querySelector(`.article-card[data-id="${art.id}"]`);
+      if (!cardEl) {
+        // 新卡片
+        const temp = document.createElement('div');
+        temp.innerHTML = renderArticleCardHtml(art, art.id === updatedArticle.id);
+        cardEl = temp.firstElementChild;
+      } else {
+        // 已有卡片：更新分数徽章与分档状态
+        const score = art.relevance_score || 0;
+        const isLow = score < 0.3;
+        cardEl.classList.toggle('is-low-score', isLow);
+
+        let scoreClass = 'my-daily-score-low';
+        if (score >= 0.7) {
+          scoreClass = 'my-daily-score-high';
+        } else if (score >= 0.3) {
+          scoreClass = 'my-daily-score-mid';
+        }
+
+        const badgeEl = cardEl.querySelector('.my-daily-score-badge, .badge');
+        if (badgeEl) {
+          badgeEl.className = `badge ${scoreClass} my-daily-score-badge`;
+          badgeEl.textContent = `★ ${Math.round(score * 100)}%`;
+        }
+
+        // 刚刚出分的卡片触发微脉冲动效（240ms 轻盈脉冲）
+        if (art.id === updatedArticle.id) {
+          cardEl.classList.remove('is-scoring-just-updated');
+          void cardEl.offsetWidth; // 触发 reflow
+          cardEl.classList.add('is-scoring-just-updated');
+          setTimeout(() => {
+            cardEl.classList.remove('is-scoring-just-updated');
+          }, 300);
+        }
       }
 
-      const scorePercent = Math.round(score * 100);
-      // 标题固定用数据本身的 title：部分外文条目的 title_zh 实际存的是中文摘要，
-      // 用它会和下面的 article-summary 重复。首页卡片同样只渲染 title。
-      const title = article.title;
-      const summary = article.summary_zh || article.summary || '';
-      const domain = article.matched_domain;
-      const originLabels = {
-        rss: 'RSS',
-        journal: '期刊',
-        keyword: '关键词',
-        email: '邮件',
-        web: '网站爬虫',
-      };
-      const originLabel = originLabels[article.source_origin] || article.source_origin || '文章';
-      const timeStr = formatDate(article.published_at || article.created_at);
+      // appendChild 自动将已有元素移动到排序对应的新位置
+      articlesList.appendChild(cardEl);
+    });
 
-      // 卡片结构与类名与「首页」一致（components/articles.css）
-      return `
-        <article class="article-card fade-in-up ${isLow ? 'is-low-score' : ''}">
-          <div class="article-card-header">
-            <h3 class="article-title">
-              <a href="/articles/${article.id}">${escapeHtml(title)}</a>
-            </h3>
-            <span class="badge ${scoreClass}" title="JEV 综合相关性评分">★ ${scorePercent}%</span>
-          </div>
+    if (prefersReducedMotion) return;
 
-          <div class="article-meta">
-            <span>${escapeHtml(originLabel)}</span>
-            <span>·</span>
-            <span>${escapeHtml(timeStr)}</span>
-            <span>·</span>
-            <a href="${escapeHtml(article.url)}" target="_blank" rel="noopener">原文链接</a>
-          </div>
+    // 4. Last & Invert: 测量新位置并反转坐标
+    const movedCards = [];
+    const newCards = [];
 
-          ${renderSummary(summary)}
+    articlesList.querySelectorAll('.article-card[data-id]').forEach(el => {
+      const id = Number(el.dataset.id);
+      const firstTop = firstPositions.get(id);
+      const lastTop = el.getBoundingClientRect().top;
 
-          <div class="article-footer">
-            <div class="article-tags">
-              ${domain ? `<span class="article-tag">🎯 ${escapeHtml(domain)}</span>` : ''}
-            </div>
-          </div>
-        </article>
-      `;
-    }).join('');
+      if (firstTop !== undefined) {
+        const deltaY = firstTop - lastTop;
+        if (Math.abs(deltaY) > 0.5) {
+          el.style.transform = `translateY(${deltaY}px)`;
+          el.style.transition = 'none';
+          movedCards.push(el);
+        }
+      } else {
+        // 新卡片淡入与轻微上浮（由 10px 开始微浮，更加自然平滑）
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(10px)';
+        el.style.transition = 'none';
+        newCards.push(el);
+      }
+    });
+
+    // 强刷 layout 确保瞬移反转生效
+    void articlesList.offsetHeight;
+
+    // 5. Play: 下一帧开启动画平滑滑向新位置 (240ms 高度响应阻尼曲线，符合 Emil Kowalski <300ms 标准)
+    requestAnimationFrame(() => {
+      movedCards.forEach(el => {
+        el.style.transition = 'transform 240ms cubic-bezier(0.16, 1, 0.3, 1)';
+        el.style.transform = '';
+      });
+      newCards.forEach(el => {
+        el.style.transition = 'transform 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms ease-out';
+        el.style.transform = '';
+        el.style.opacity = '1';
+      });
+    });
+
+    // 动画完成后清理 inline 样式
+    flipCleanupTimer = setTimeout(() => {
+      movedCards.forEach(el => {
+        el.style.transition = '';
+        el.style.transform = '';
+      });
+      newCards.forEach(el => {
+        el.style.transition = '';
+        el.style.transform = '';
+        el.style.opacity = '';
+      });
+      flipCleanupTimer = null;
+    }, 260);
   }
 
   function escapeHtml(str) {
@@ -244,7 +402,7 @@
       <div class="article-summary">
         <span class="summary-short">${escapeHtml(truncate(summary, SUMMARY_TRUNCATE_LENGTH))}</span>
         <span class="summary-full" style="display: none;">${escapeHtml(summary)}</span>
-        <button class="summary-toggle" onclick="toggleSummary(this)">展开</button>
+        <button class="summary-toggle" type="button" aria-expanded="false" onclick="toggleSummary(this)">展开</button>
       </div>`;
   }
 
@@ -284,10 +442,12 @@
       shortText.style.display = 'none';
       fullText.style.display = 'inline';
       btn.textContent = '收起';
+      btn.setAttribute('aria-expanded', 'true');
     } else {
       fullText.style.display = 'none';
       shortText.style.display = 'inline';
       btn.textContent = '展开';
+      btn.setAttribute('aria-expanded', 'false');
     }
   };
 
@@ -315,19 +475,17 @@
     window.alert(message);
   }
 
-  // 重新评分处理
+  // 重新评分处理（支持 SSE 流式实时接收与 FLIP 动态重排）
   window.triggerRefreshDaily = async function () {
     const btn = document.getElementById('myDailyRefreshBtn');
     if (!btn || btn.disabled) return;
 
-    // 按钮只置灰、不改文案；进度提示统一显示在按钮下方的状态行
+    // 按钮置灰并显示加载态
     btn.disabled = true;
     btn.classList.add('is-loading');
     btn.setAttribute('aria-busy', 'true');
-    setStatus('正在调用 JEV 评分…');
+    setStatus('⚡ 正在连接 JEV 极速评分引擎…');
 
-    // 服务端是 FIFO 排队：若前面已有任务在执行，本请求会在服务端挂住等待。
-    // 超过 2 秒仍未返回就补充说明正在排队，避免看起来像卡死。
     const queueHintTimer = setTimeout(() => {
       setStatus('正在排队等待（前面有任务在执行）…');
     }, 2000);
@@ -335,36 +493,92 @@
     try {
       const res = await fetch('/api/my-daily/refresh', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+        },
         body: JSON.stringify({ date: currentDate }),
       });
 
-      const data = await res.json();
+      clearTimeout(queueHintTimer);
+
       if (!res.ok) {
-        throw new Error(data.error || '重新评分失败');
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || '重新评分失败');
       }
 
-      const failed = data.failed ?? 0;
-      if (data.reason === 'duplicate') {
-        showToastMessage(data.message || '该日期的评分正在进行中，请稍候', 'info');
-      } else if (data.reason === 'no_articles') {
-        showToastMessage(data.message || '该日期暂无新增文章，无需评分', 'info');
-      } else if (failed > 0) {
-        // 失败的文章会被写成占位 0 分，必须告诉用户，不能谎报全部成功
-        showToastMessage(
-          `评分完成：成功 ${data.scored ?? 0} 篇，失败 ${failed} 篇（JEV 调用失败，可稍后重新评分）`,
-          'error'
-        );
-      } else {
-        showToastMessage(`评分完成！已为 ${data.scored ?? 0} 篇文章完成个性化排序`, 'success');
+      if (!res.body) {
+        throw new Error('当前浏览器环境不支持流式响应');
       }
 
-      // 结果由 toast 提示，状态行只负责"进行中"
-      setStatus('');
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
 
-      // 重新加载文章并同步日期控件的可选范围
+      const handleProgressEvent = (eventType, data) => {
+        if (eventType === 'start') {
+          setStatus(`⚡ JEV 快速速读中… (0 / ${data.total} 篇)`);
+          if (emptyState && data.total > 0) emptyState.style.display = 'none';
+        } else if (eventType === 'item') {
+          setStatus(`⚡ JEV 快速速读中… (${data.current} / ${data.total} 篇)`);
+          applyFlipSort(data.article);
+        } else if (eventType === 'done') {
+          setStatus('');
+          if (articlesList) articlesList.style.minHeight = '';
+          if (data.failed > 0) {
+            showToastMessage(
+              `评分完成：成功 ${data.scored ?? 0} 篇，失败 ${data.failed} 篇（JEV 调用失败，可稍后重试）`,
+              'error'
+            );
+          } else {
+            showToastMessage(
+              `⚡ JEV 评分完成！已为 ${data.scored ?? 0} 篇文章完成极速排序`,
+              'success'
+            );
+          }
+        } else if (eventType === 'info') {
+          setStatus('');
+          if (articlesList) articlesList.style.minHeight = '';
+          showToastMessage(data.message || '评分提示', 'info');
+        } else if (eventType === 'error') {
+          setStatus('');
+          if (articlesList) articlesList.style.minHeight = '';
+          showToastMessage(data.error || '评分失败', 'error');
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split('\n\n');
+        buffer = blocks.pop() || '';
+
+        for (const block of blocks) {
+          if (!block.trim()) continue;
+          let eventType = 'message';
+          let dataStr = '';
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event:')) {
+              eventType = line.slice(6).trim();
+            } else if (line.startsWith('data:')) {
+              dataStr += line.slice(5).trim();
+            }
+          }
+
+          if (!dataStr) continue;
+          try {
+            const data = JSON.parse(dataStr);
+            handleProgressEvent(eventType, data);
+          } catch (e) {
+            console.error('解析 SSE 数据异常:', e, dataStr);
+          }
+        }
+      }
+
+      // 评分完成后同步日期控件的可选范围
       await loadAvailableDates();
-      await loadArticles(currentDate);
     } catch (err) {
       console.error('重新评分失败:', err);
       setStatus('');

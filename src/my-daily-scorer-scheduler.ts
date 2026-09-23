@@ -190,6 +190,55 @@ async function getUserTopics(userId: number): Promise<TopicInfo[]> {
  * 注意：这里不按 filter_status 过滤——需求要求 JEV 对当日所有新增文章
  * 评分打标过滤（低分条目灰显），因此已经过关键词预过滤的文章也要参与评分。
  */
+export interface ScoringProgressStartEvent {
+  type: 'start';
+  total: number;
+}
+
+export interface ScoringProgressItemEvent {
+  type: 'item';
+  current: number;
+  total: number;
+  article: {
+    id: number;
+    title: string;
+    url: string | null;
+    summary: string | null;
+    source_origin: string | null;
+    filter_status: string | null;
+    published_at: Date | string | null;
+    created_at: Date | string | null;
+    title_zh: string | null;
+    summary_zh: string | null;
+    relevance_score: number;
+    matched_domain: string | null;
+  };
+}
+
+export interface ScoringProgressDoneEvent {
+  type: 'done';
+  total: number;
+  scored: number;
+  failed: number;
+}
+
+export type ScoringProgressEvent =
+  | ScoringProgressStartEvent
+  | ScoringProgressItemEvent
+  | ScoringProgressDoneEvent;
+
+export type ScoringProgressCallback = (event: ScoringProgressEvent) => Promise<void> | void;
+
+/**
+ * 获取指定自然日新增的文章（包含前台渲染所需全部元数据）
+ *
+ * 日期口径与「每日期刊 / 每日资讯」总结一致：
+ * date 是用户时区下的本地日期，先换算成对应的 UTC 区间再查询。
+ * 文章通常在凌晨抓取，若直接按 UTC 日期查询会把同一个自然日的文章拆到两天。
+ *
+ * 注意：这里不按 filter_status 过滤——需求要求 JEV 对当日所有新增文章
+ * 评分打标过滤（低分条目灰显），因此已经过关键词预过滤的文章也要参与评分。
+ */
 async function getTodayArticles(date: string, userId: number) {
   const db = getDb();
 
@@ -197,10 +246,22 @@ async function getTodayArticles(date: string, userId: number) {
   const [startUtc, endUtc] = buildUtcRangeFromLocalDate(date, timezone);
 
   const articles = await db
-    .selectFrom('articles')
-    .where('created_at', '>=', startUtc)
-    .where('created_at', '<=', endUtc)
-    .select(['id', 'title', 'summary'])
+    .selectFrom('articles as a')
+    .leftJoin('article_translations as t', 't.article_id', 'a.id')
+    .where('a.created_at', '>=', startUtc)
+    .where('a.created_at', '<=', endUtc)
+    .select([
+      'a.id',
+      'a.title',
+      'a.url',
+      'a.summary',
+      'a.source_origin',
+      'a.filter_status',
+      'a.published_at',
+      'a.created_at',
+      't.title_zh',
+      't.summary_zh',
+    ])
     .execute();
 
   return articles;
@@ -213,7 +274,12 @@ async function getTodayArticles(date: string, userId: number) {
  * 前一个任务结束后名额自动转交给队首，因此调用方只需 await。
  * 同一 (用户, 日期) 已在执行或排队时不会重复入队。
  */
-export async function scoreForUser(userId: number, username: string, date: string) {
+export async function scoreForUser(
+  userId: number,
+  username: string,
+  date: string,
+  onProgress?: ScoringProgressCallback
+) {
   if (isJobActiveOrQueued(userId, date)) {
     log.info({ userId, date }, '该日期的评分已在执行或排队中，跳过重复触发');
     return { userId, scored: 0, skipped: true, reason: 'duplicate' as const };
@@ -222,14 +288,19 @@ export async function scoreForUser(userId: number, username: string, date: strin
   await acquireScoringSlot(userId, date);
 
   try {
-    return await runScoringForUser(userId, username, date);
+    return await runScoringForUser(userId, username, date, onProgress);
   } finally {
     releaseScoringSlot();
   }
 }
 
 /** 单个用户的评分主体（调用方须已持有评分锁） */
-async function runScoringForUser(userId: number, username: string, date: string) {
+async function runScoringForUser(
+  userId: number,
+  username: string,
+  date: string,
+  onProgress?: ScoringProgressCallback
+) {
   try {
     await resolveJevConfig();
   } catch (err) {
@@ -254,20 +325,26 @@ async function runScoringForUser(userId: number, username: string, date: string)
 
   log.info({ userId, username, articleCount: articles.length }, '开始 JEV 评分');
 
-  // 批量评分
-  const results = await scoreArticlesBatch(articles, topics, config.myDailyConcurrency);
-  const failedCount = results.filter(r => r.failed).length;
-  if (failedCount > 0) {
-    log.warn(
-      { userId, date, failed: failedCount, total: results.length },
-      '部分文章的 JEV 评分失败，已写入占位 0 分'
-    );
+  // 触发开始事件
+  if (onProgress) {
+    try {
+      await onProgress({ type: 'start', total: articles.length });
+    } catch (e) {
+      log.error({ error: e }, '推送评分开始事件失败');
+    }
   }
 
-  // 写入数据库
   const db = getDb();
+  const articleMap = new Map(articles.map(a => [a.id, a]));
   let inserted = 0;
-  for (const result of results) {
+  let failedCount = 0;
+
+  // 逐篇出分回调：每评完一篇立即写入数据库并实时推向前端
+  const handleSingleScore = async (result: any, currentIndex: number, totalCount: number) => {
+    if (result.failed) {
+      failedCount++;
+    }
+
     try {
       await db
         .insertInto('user_daily_scores')
@@ -291,11 +368,68 @@ async function runScoringForUser(userId: number, username: string, date: string)
     } catch (error) {
       log.error({ userId, articleId: result.articleId, error }, '写入评分失败');
     }
+
+    const meta = articleMap.get(result.articleId);
+    if (onProgress && meta) {
+      try {
+        await onProgress({
+          type: 'item',
+          current: currentIndex,
+          total: totalCount,
+          article: {
+            id: result.articleId,
+            title: meta.title,
+            url: meta.url,
+            summary: meta.summary,
+            source_origin: meta.source_origin,
+            filter_status: meta.filter_status,
+            published_at: meta.published_at,
+            created_at: meta.created_at,
+            title_zh: meta.title_zh,
+            summary_zh: meta.summary_zh,
+            relevance_score: result.relevanceScore,
+            matched_domain: result.matchedDomain,
+          },
+        });
+      } catch (err) {
+        log.error({ articleId: result.articleId, error: err }, '推送单篇评分进度失败');
+      }
+    }
+  };
+
+  // 批量并发评分（内部在每篇完成时立即调用 handleSingleScore）
+  const results = await scoreArticlesBatch(
+    articles,
+    topics,
+    config.myDailyConcurrency,
+    handleSingleScore
+  );
+
+  if (failedCount > 0) {
+    log.warn(
+      { userId, date, failed: failedCount, total: results.length },
+      '部分文章的 JEV 评分失败，已写入占位 0 分'
+    );
   }
 
+  const successCount = inserted - failedCount;
   log.info({ userId, username, total: articles.length, inserted, failed: failedCount }, '用户评分完成');
+
+  if (onProgress) {
+    try {
+      await onProgress({
+        type: 'done',
+        total: articles.length,
+        scored: successCount,
+        failed: failedCount,
+      });
+    } catch (e) {
+      log.error({ error: e }, '推送评分完成事件失败');
+    }
+  }
+
   // scored 只统计真正拿到 JEV 结果的篇数，失败的那部分单独用 failed 报告
-  return { userId, scored: inserted - failedCount, failed: failedCount, skipped: false };
+  return { userId, scored: successCount, failed: failedCount, skipped: false };
 }
 
 /**

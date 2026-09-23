@@ -27,21 +27,21 @@
         <label for="myDailyDateSelect">日期：</label>
         <!-- 原生日期控件，样式复用设计系统的 .filter-date（与文章列表/深度检索页一致） -->
         <input type="date" id="myDailyDateSelect" class="filter-date my-daily-date-input">
-        <span id="myDailyDateHint" class="my-daily-date-hint" style="display: none;">今天</span>
+        <span id="myDailyDateHint" class="my-daily-date-hint">今天</span>
       </div>
 
       <div class="my-daily-stats">
         <span class="my-daily-stat-item">
           总文章: <span id="myDailyTotalCount" class="my-daily-stat-num">0</span>
         </span>
-        <span class="my-daily-stat-item" style="color: #059669;">
-          高度相关 (≥70%): <span id="myDailyHighCount" class="my-daily-stat-num" style="color: #059669;">0</span>
+        <span class="my-daily-stat-item stat-high">
+          高度相关 (≥70%): <span id="myDailyHighCount" class="my-daily-stat-num">0</span>
         </span>
-        <span class="my-daily-stat-item" style="color: #d97706;">
-          中度相关 (30%-70%): <span id="myDailyMidCount" class="my-daily-stat-num" style="color: #d97706;">0</span>
+        <span class="my-daily-stat-item stat-mid">
+          中度相关 (30%-70%): <span id="myDailyMidCount" class="my-daily-stat-num">0</span>
         </span>
-        <span class="my-daily-stat-item" style="color: #6b7280;">
-          低相关 (&lt;30%): <span id="myDailyLowCount" class="my-daily-stat-num" style="color: #6b7280;">0</span>
+        <span class="my-daily-stat-item stat-low">
+          低相关 (&lt;30%): <span id="myDailyLowCount" class="my-daily-stat-num">0</span>
         </span>
       </div>
     </section>

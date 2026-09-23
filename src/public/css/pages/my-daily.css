@@ -5,7 +5,7 @@
 .my-daily-container {
   max-width: 1100px;
   margin: 0 auto;
-  padding: var(--space-4) var(--space-4) var(--space-8);
+  padding: 0 0 var(--space-8);
 }
 
 .my-daily-header {
@@ -28,12 +28,14 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  text-wrap: balance;
 }
 
 .my-daily-desc {
   color: var(--text-secondary);
   font-size: var(--text-sm);
   margin: 0;
+  text-wrap: pretty;
 }
 
 /* Header 右侧操作区：按钮一行 + 运行状态一行 */
@@ -42,6 +44,7 @@
   flex-direction: column;
   align-items: flex-end;
   gap: var(--space-2);
+  min-height: 42px;
 }
 
 .my-daily-actions-row {
@@ -50,26 +53,34 @@
   gap: var(--space-2);
 }
 
+/* 按钮微交互：按下提供触觉缩放反馈 (scale 0.96) */
+.my-daily-refresh-btn:active {
+  transform: scale(0.96);
+}
+
 /* 按钮进行中：只置灰；进度文案不写进按钮，而是显示在下方状态行 */
 .my-daily-refresh-btn.is-loading {
   opacity: 0.65;
   cursor: progress;
 }
 
-/* 运行/排队状态行（role=status，屏幕阅读器会播报） */
+/* 运行/排队状态行（role=status，平滑淡入展开） */
 .my-daily-status {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   color: var(--text-secondary);
   font-size: var(--text-xs);
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* 必须显式处理 [hidden]：hidden 属性靠 UA 样式表生效，而「作者样式」永远压过
-   UA 样式，所以上面的 display:flex 会把 hidden 顶掉，导致空状态行（只剩转圈）
-   一直可见。这条选择器权重 (0,2,0) 高于上面的 (0,1,0)。 */
+/* 显式处理 [hidden] */
 .my-daily-status[hidden] {
   display: none;
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 /* 转圈用 components/loading.css 里已有的 spin 动画 */
@@ -131,8 +142,10 @@
   opacity: 1;
 }
 
-/* 「今天」标记：原生日期控件无法在选项里标注，改用控件旁的胶囊标签 */
+/* 「今天」标记：原生日期控件旁的胶囊标签（平滑缩放淡入淡出） */
 .my-daily-date-hint {
+  display: inline-flex;
+  align-items: center;
   padding: 2px 8px;
   border-radius: var(--radius-full);
   background: var(--accent-subtle);
@@ -141,6 +154,16 @@
   font-weight: 500;
   line-height: 1.4;
   white-space: nowrap;
+  opacity: 0;
+  transform: scale(0.88);
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.my-daily-date-hint.is-visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
 }
 
 .my-daily-stats {
@@ -160,18 +183,61 @@
 .my-daily-stat-num {
   font-weight: 600;
   color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 统计项分档颜色：严格使用设计系统 token，暗色模式自动适配 */
+.my-daily-stat-item.stat-high,
+.my-daily-stat-item.stat-high .my-daily-stat-num {
+  color: var(--green);
+}
+
+.my-daily-stat-item.stat-mid,
+.my-daily-stat-item.stat-mid .my-daily-stat-num {
+  color: var(--amber);
+}
+
+.my-daily-stat-item.stat-low,
+.my-daily-stat-item.stat-low .my-daily-stat-num {
+  color: var(--text-tertiary);
 }
 
 /* Articles list
-   卡片外观全部来自 components/articles.css（与首页共用同一个组件），
-   间距也由 .article-card 自带的 margin-bottom 提供，所以这里只是普通块级容器 */
+   卡片外观来自 components/articles.css（与首页共用），
+   设置基础 min-height 避免列表在加载/初次出分时产生纵向塌陷抖动 */
 .my-daily-list {
   display: block;
+  position: relative;
+  min-height: 220px;
 }
 
-/* 低分条目：沿用首页 is-read 的「淡出」手法（背景 + 透明度 + 标题降级） */
+/* 刚出分/分值更新的卡片微交互动效：240ms 柔和微光与弹性微脉冲，体现极速出分质感 */
+.article-card.is-scoring-just-updated {
+  position: relative;
+  z-index: 3;
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 1px var(--accent-primary), 0 4px 14px var(--accent-subtle);
+  transition: border-color 0.25s ease-out, box-shadow 0.25s ease-out;
+}
+
+.article-card.is-scoring-just-updated .my-daily-score-badge {
+  animation: jevScorePulse 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes jevScorePulse {
+  0% {
+    transform: scale(0.96);
+  }
+  40% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 低分条目：弱化背景与摘要对比度，保持文字可读性，避免全卡 opacity 导致过曝 */
 .article-card.is-low-score {
-  opacity: 0.7;
   background: var(--bg-primary);
   border-color: transparent;
 }
@@ -181,11 +247,28 @@
   font-weight: 500;
 }
 
-.article-card.is-low-score .badge {
-  opacity: 0.8;
+.article-card.is-low-score .article-summary {
+  color: var(--text-tertiary);
 }
 
-/* 分数徽章：形状/字体沿用设计系统的 .badge，只按分档着色（token 自带暗色适配） */
+.article-card.is-low-score .badge {
+  opacity: 0.75;
+}
+
+/* 分数徽章：胶囊圆角药丸、微弱底色填充与等宽数字 */
+.my-daily-score-badge {
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
+
 .my-daily-score-high {
   color: var(--green);
 }
@@ -198,7 +281,7 @@
   color: var(--text-tertiary);
 }
 
-/* 加载中的骨架屏：外壳复用 .article-card，只需要自己画灰条 */
+/* 加载中的骨架屏：外壳复用 .article-card，GPU 硬件加速扫光 */
 .my-daily-skeleton-lines {
   display: flex;
   flex-direction: column;
@@ -209,24 +292,31 @@
   display: block;
   height: 14px;
   border-radius: var(--radius-sm);
-  /* 微光扫过：颜色全部取自 token，浅色 / 暗色都成立 */
+  background: var(--bg-subtle);
+  position: relative;
+  overflow: hidden;
+}
+
+.my-daily-skeleton-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transform: translateX(-100%);
   background: linear-gradient(
     90deg,
-    var(--bg-subtle) 25%,
-    var(--border) 37%,
-    var(--bg-subtle) 63%
+    transparent 0%,
+    var(--border) 50%,
+    transparent 100%
   );
-  background-size: 400% 100%;
-  animation: my-daily-shimmer 1.4s ease-in-out infinite;
+  animation: my-daily-shimmer 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 @keyframes my-daily-shimmer {
-  from {
-    background-position: 100% 50%;
-  }
-
-  to {
-    background-position: 0 50%;
+  100% {
+    transform: translateX(100%);
   }
 }
 
@@ -245,8 +335,18 @@
 
 /* 尊重系统「减弱动态效果」 */
 @media (prefers-reduced-motion: reduce) {
-  .my-daily-skeleton-bar {
+  .my-daily-skeleton-bar::after {
     animation: none;
+    display: none;
+  }
+  .article-card.is-scoring-just-updated .my-daily-score-badge {
+    animation: none;
+  }
+  .my-daily-list .article-card {
+    transition: none !important;
+  }
+  .my-daily-date-hint {
+    transition: none;
   }
 }
 

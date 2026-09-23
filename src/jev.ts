@@ -320,13 +320,20 @@ export async function scoreArticle(
   }
 }
 
+export type OnArticleScoredCallback = (
+  result: JevScoreResult,
+  index: number,
+  total: number
+) => Promise<void> | void;
+
 /**
  * 批量并行评分（按并发数分批处理）
  */
 export async function scoreArticlesBatch(
   articles: ArticleForScoring[],
   topics: TopicInfo[],
-  concurrency = 5
+  concurrency = 5,
+  onArticleScored?: OnArticleScoredCallback
 ): Promise<JevScoreResult[]> {
   if (topics.length === 0) {
     log.warn('用户没有设置主题领域，跳过评分');
@@ -343,10 +350,23 @@ export async function scoreArticlesBatch(
 
   // 按并发数分批处理
   const results: JevScoreResult[] = [];
+  let completedCount = 0;
+
   for (let i = 0; i < articles.length; i += concurrency) {
     const batch = articles.slice(i, i + concurrency);
     const batchResults = await Promise.all(
-      batch.map(article => scoreArticle(article, topics, jevConfig))
+      batch.map(async (article) => {
+        const res = await scoreArticle(article, topics, jevConfig);
+        completedCount++;
+        if (onArticleScored) {
+          try {
+            await onArticleScored(res, completedCount, articles.length);
+          } catch (callbackErr) {
+            log.error({ articleId: article.id, error: callbackErr }, '评分进度回调执行出错');
+          }
+        }
+        return res;
+      })
     );
     results.push(...batchResults);
   }
@@ -363,3 +383,4 @@ export async function scoreArticlesBatch(
 
   return results;
 }
+

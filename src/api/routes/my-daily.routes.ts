@@ -35,47 +35,95 @@ router.get('/my-daily/dates', requireAuth, requireUser, async (req: AuthRequest,
   }
 });
 
-// 立即重新触发当前用户的 JEV 评分
+// 立即重新触发当前用户的 JEV 评分（支持 SSE 流式实时推送出分事件）
 //
 // 同一时刻只允许一个评分任务在执行：已有任务运行时本请求会排队等待，
-// 前一个任务结束后自动开始执行（因此响应可能较慢，前端会提示"排队中"）。
+// 前一个任务结束后自动开始执行。
 router.post('/my-daily/refresh', requireAuth, requireUser, async (req: AuthRequest, res) => {
+  const isSse = req.headers.accept?.includes('text/event-stream');
+
+  if (!isSse) {
+    // 兼容传统非流式调用
+    try {
+      const date = (req.body?.date as string) || (await getUserLocalDate(req.userId!));
+      const username = req.user?.username || 'user';
+      const result = await scoreForUser(req.userId!, username, date);
+
+      if (result.skipped && (result as any).reason === 'no_topics') {
+        res.status(400).json({ error: '您尚未配置主题领域，请先前往「主题」页面添加关注的主题领域与关键词' });
+        return;
+      }
+      if ((result as any).reason === 'no_articles') {
+        res.json({ success: true, message: '该日期暂无新增文章', ...result });
+        return;
+      }
+      if ((result as any).reason === 'duplicate') {
+        res.json({ success: true, message: '该日期的评分正在进行中，完成后刷新即可看到结果', ...result });
+        return;
+      }
+      res.json({ success: true, ...result });
+    } catch (error) {
+      if (error instanceof ScoringQueueError) {
+        res.status(429).json({ error: error.message, reason: error.reason });
+        return;
+      }
+      const message = error instanceof Error ? error.message : '重新评分失败';
+      res.status(500).json({ error: message });
+    }
+    return;
+  }
+
+  // SSE 流式响应
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // 禁用 Nginx 等反向代理缓存
+  res.flushHeaders?.();
+
+  const sendEvent = (event: string, data: any) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
   try {
-    // 默认按用户时区下的当天评分，与每日总结一致
     const date = (req.body?.date as string) || (await getUserLocalDate(req.userId!));
     const username = req.user?.username || 'user';
 
-    const result = await scoreForUser(req.userId!, username, date);
+    const result = await scoreForUser(req.userId!, username, date, (progressEvent) => {
+      sendEvent(progressEvent.type, progressEvent);
+    });
 
     if (result.skipped && (result as any).reason === 'no_topics') {
-      res.status(400).json({ error: '您尚未配置主题领域，请先前往「主题」页面添加关注的主题领域与关键词' });
+      sendEvent('error', { error: '您尚未配置主题领域，请先前往「主题」页面添加关注的主题领域与关键词' });
+      res.end();
       return;
     }
 
     if ((result as any).reason === 'no_articles') {
-      res.json({ success: true, message: '该日期暂无新增文章', ...result });
+      sendEvent('info', { reason: 'no_articles', message: '该日期暂无新增文章', ...result });
+      res.end();
       return;
     }
 
     if ((result as any).reason === 'duplicate') {
-      res.json({
-        success: true,
-        message: '该日期的评分正在进行中，完成后刷新即可看到结果',
+      sendEvent('info', {
+        reason: 'duplicate',
+        message: '该日期的评分正在进行中，请稍候',
         ...result,
       });
+      res.end();
       return;
     }
 
-    res.json({ success: true, ...result });
+    // 评分结束正常关闭
+    res.end();
   } catch (error) {
-    // 排队失败（队列已满 / 等待超时）：让前端提示稍后重试
     if (error instanceof ScoringQueueError) {
-      res.status(429).json({ error: error.message, reason: error.reason });
-      return;
+      sendEvent('error', { error: error.message, reason: error.reason, statusCode: 429 });
+    } else {
+      const message = error instanceof Error ? error.message : '重新评分失败';
+      sendEvent('error', { error: message });
     }
-
-    const message = error instanceof Error ? error.message : '重新评分失败';
-    res.status(500).json({ error: message });
+    res.end();
   }
 });
 
