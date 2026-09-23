@@ -8,27 +8,29 @@
   <div class="search-container">
     <div class="search-box">
       <input type="text" id="searchInput" class="search-input" placeholder="输入问题或关键词..." autocomplete="off">
-      <button id="searchButton" class="search-button">搜索</button>
+      <button id="clearSearchInputBtn" class="search-clear-btn" type="button" aria-label="清空输入" style="display: none;">
+        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+      <button id="searchButton" class="search-button" type="button">
+        <span class="search-button-text">搜索</span>
+        <span class="search-button-spinner" id="searchButtonSpinner" style="display: none;"></span>
+      </button>
     </div>
-    <p class="search-tips">
-      提示: 尝试 <code>LLM 在代码生成中的应用</code> 或 <code>多智能体系统最新进展</code>
-    </p>
+    <div class="search-tips">
+      <span class="search-tips-label">快捷探索：</span>
+      <div class="search-tips-chips">
+        <button type="button" class="search-tip-chip" data-query="LLM 在代码生成中的应用">LLM 在代码生成中的应用</button>
+        <button type="button" class="search-tip-chip" data-query="多智能体系统最新进展">多智能体系统最新进展</button>
+        <button type="button" class="search-tip-chip" data-query="知识图谱与检索增强生成">知识图谱与检索增强生成</button>
+      </div>
+    </div>
   </div>
 
   <!-- Results Container -->
   <div id="resultsContainer">
-    <!-- Results Actions Bar (Hidden by default) -->
-    <div class="results-actions" id="resultsActions" style="display: none;">
-      <div class="selection-controls">
-        <label class="checkbox-wrapper">
-          <input type="checkbox" id="selectAll">
-          <span>全选</span>
-        </label>
-        <span class="selected-count">已选 <span id="selectedCount">0</span> 篇</span>
-        <button id="clearSelectionBtn" class="btn-clear">清空</button>
-      </div>
-      <button id="aiSummaryBtn" class="btn btn-primary">AI 总结</button>
-    </div>
     <!-- Initial State -->
     <div class="empty-state" id="initialState">
       <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -36,10 +38,10 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
           d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
       </svg>
-      <div class="empty-state-title">搜索文章</div>
+      <div class="empty-state-title">探索海量学术文章</div>
       <div class="empty-state-desc">
-        输入关键词或问题，查找相关的学术文章。<br>
-        支持语义搜索和关键词匹配。
+        输入关键词或具体问题，获取具备深度语义相关度的学术前沿。<br>
+        支持语义向量搜索与精准关键词双重召回。
       </div>
     </div>
 
@@ -72,17 +74,38 @@
     </div>
   </div>
 
+  <!-- Floating Action Dock for Batch Selection -->
+  <div class="floating-action-dock" id="resultsActions" aria-live="polite">
+    <div class="dock-container">
+      <div class="selection-controls">
+        <label class="checkbox-wrapper">
+          <input type="checkbox" id="selectAll">
+          <span>全选本页</span>
+        </label>
+        <span class="dock-divider"></span>
+        <span class="selected-count">已选 <span id="selectedCount" class="count-number">0</span> 篇</span>
+        <button id="clearSelectionBtn" class="btn-clear" type="button">清空已选</button>
+      </div>
+      <button id="aiSummaryBtn" class="btn btn-primary dock-action-btn" type="button">
+        <svg class="dock-btn-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+        <span>AI 总结</span>
+      </button>
+    </div>
+  </div>
+
   <!-- Summary Modal -->
-  <div class="modal-overlay" id="summaryModal">
+  <div class="modal-overlay" id="summaryModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal modal-large">
       <div class="modal-header">
-        <h3>AI 总结</h3>
-        <button class="modal-close" id="closeSummaryModal">×</button>
+        <h3 id="modalTitle">AI 总结</h3>
+        <button class="modal-close" id="closeSummaryModal" type="button" aria-label="关闭弹窗">×</button>
       </div>
       <div class="modal-body" id="modalBody"></div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeSummaryModal()">关闭</button>
-        <button class="btn btn-primary" onclick="copySummary()">复制内容</button>
+        <button class="btn btn-secondary" type="button" onclick="closeSummaryModal()">关闭</button>
+        <button class="btn btn-primary" type="button" onclick="copySummary()">复制内容</button>
       </div>
     </div>
   </div>
@@ -115,32 +138,63 @@
     document.addEventListener('DOMContentLoaded', () => {
       const searchInput = document.getElementById('searchInput');
       const searchButton = document.getElementById('searchButton');
+      const clearSearchInputBtn = document.getElementById('clearSearchInputBtn');
 
       // Focus search input
       searchInput.focus();
 
+      // Sync clear button visibility on load
+      toggleClearButton();
+
       // Search on Enter
       searchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
+          clearTimeout(searchTimeout);
           performSearch();
         }
       });
 
       // Search on button click
-      searchButton.addEventListener('click', performSearch);
+      searchButton.addEventListener('click', () => {
+        clearTimeout(searchTimeout);
+        performSearch();
+      });
 
-      // Auto-search with debounce
+      // Auto-search with optimized 280ms debounce
       searchInput.addEventListener('input', () => {
+        toggleClearButton();
         clearTimeout(searchTimeout);
         const query = searchInput.value.trim();
 
         if (query.length >= 2) {
           searchTimeout = setTimeout(() => {
             performSearch();
-          }, 500);
+          }, 280);
         } else if (query.length === 0) {
           showInitialState();
         }
+      });
+
+      // Clear button interaction
+      if (clearSearchInputBtn) {
+        clearSearchInputBtn.addEventListener('click', () => {
+          searchInput.value = '';
+          toggleClearButton();
+          searchInput.focus();
+          showInitialState();
+        });
+      }
+
+      // Quick explore chips interaction
+      document.querySelectorAll('.search-tip-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          clearTimeout(searchTimeout);
+          const q = chip.dataset.query || chip.textContent.trim();
+          searchInput.value = q;
+          toggleClearButton();
+          searchInput.focus();
+          performSearch();
+        });
       });
 
       // Check for query in URL
@@ -148,12 +202,22 @@
       const urlQuery = urlParams.get('q');
       if (urlQuery) {
         searchInput.value = urlQuery;
+        toggleClearButton();
         performSearch();
       }
 
       // Setup selection controls (available for all logged in users and guest with config enabled)
       setupSelectionControls();
     });
+
+    // Helper: toggle clear button visibility
+    function toggleClearButton() {
+      const searchInput = document.getElementById('searchInput');
+      const clearSearchInputBtn = document.getElementById('clearSearchInputBtn');
+      if (clearSearchInputBtn && searchInput) {
+        clearSearchInputBtn.style.display = searchInput.value ? 'inline-flex' : 'none';
+      }
+    }
 
     // Setup selection controls
     function setupSelectionControls() {
@@ -200,17 +264,33 @@
       updateSelectionUI();
     }
 
-    // Update selection UI
+    // Update selection UI (Smooth Floating Action Dock, 0 CLS)
     function updateSelectionUI() {
       const count = selectedArticles.size;
-      document.getElementById('selectedCount').textContent = count;
-      document.getElementById('resultsActions').style.display = count > 0 ? 'flex' : 'none';
-      document.getElementById('aiSummaryBtn').style.display = hasSummaryAccess ? 'inline-block' : 'none';
+      const countEl = document.getElementById('selectedCount');
+      if (countEl) countEl.textContent = count;
+
+      const dock = document.getElementById('resultsActions');
+      if (dock) {
+        if (count > 0) {
+          dock.classList.add('visible');
+        } else {
+          dock.classList.remove('visible');
+        }
+      }
+
+      const aiBtn = document.getElementById('aiSummaryBtn');
+      if (aiBtn) {
+        aiBtn.style.display = hasSummaryAccess ? 'inline-flex' : 'none';
+      }
 
       // Sync select all checkbox state
       const checkboxes = document.querySelectorAll('.article-checkbox');
       const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
-      document.getElementById('selectAll').checked = allChecked;
+      const selectAll = document.getElementById('selectAll');
+      if (selectAll) {
+        selectAll.checked = allChecked;
+      }
     }
 
     // Clear selection
@@ -218,7 +298,8 @@
       selectedArticles.clear();
       const checkboxes = document.querySelectorAll('.article-checkbox');
       checkboxes.forEach(cb => cb.checked = false);
-      document.getElementById('selectAll').checked = false;
+      const selectAll = document.getElementById('selectAll');
+      if (selectAll) selectAll.checked = false;
       updateSelectionUI();
     }
 
@@ -232,7 +313,7 @@
 
       // Show loading in modal
       document.getElementById('modalBody').innerHTML = '<div class="loading">生成中...</div>';
-      document.getElementById('summaryModal').classList.add('active');
+      openSummaryModal();
 
       try {
         const res = await fetch('/api/search/summary', {
@@ -348,9 +429,18 @@
       return html;
     }
 
+    // Open summary modal
+    function openSummaryModal() {
+      const modal = document.getElementById('summaryModal');
+      if (modal) modal.classList.add('active');
+      document.body.classList.add('modal-open');
+    }
+
     // Close summary modal
     function closeSummaryModal() {
-      document.getElementById('summaryModal').classList.remove('active');
+      const modal = document.getElementById('summaryModal');
+      if (modal) modal.classList.remove('active');
+      document.body.classList.remove('modal-open');
     }
 
     // Copy summary (with fallback for non-secure contexts)
@@ -402,8 +492,27 @@
       }
     }
 
+    // Toggle searching visual state (breathing list, button spinner)
+    function setSearchingState(isSearching) {
+      const searchButton = document.getElementById('searchButton');
+      const buttonText = searchButton?.querySelector('.search-button-text');
+      const spinner = document.getElementById('searchButtonSpinner');
+      const resultsArea = document.getElementById('resultsArea');
+
+      if (isSearching) {
+        if (buttonText) buttonText.textContent = '检索中';
+        if (spinner) spinner.style.display = 'inline-block';
+        if (resultsArea) resultsArea.classList.add('is-searching');
+      } else {
+        if (buttonText) buttonText.textContent = '搜索';
+        if (spinner) spinner.style.display = 'none';
+        if (resultsArea) resultsArea.classList.remove('is-searching');
+      }
+    }
+
     // Perform search
     async function performSearch(page = 1) {
+      clearTimeout(searchTimeout);
       const searchInput = document.getElementById('searchInput');
       const query = searchInput.value.trim();
 
@@ -421,9 +530,16 @@
       if (page > 1) url.searchParams.set('page', page);
       window.history.replaceState({}, '', url);
 
-      // Show loading - use different message for pagination
-      const loadingMessage = page > 1 ? '加载中' : '搜索中';
-      showLoading(loadingMessage);
+      // Check if we already have visible results to prevent layout thrashing/flash
+      const resultsArea = document.getElementById('resultsArea');
+      const hasExistingResults = resultsArea && resultsArea.style.display !== 'none' && currentResults.length > 0;
+
+      if (hasExistingResults) {
+        setSearchingState(true);
+      } else {
+        const loadingMessage = page > 1 ? '加载中...' : '深度检索中...';
+        showLoading(loadingMessage);
+      }
 
       try {
         const params = new URLSearchParams({
@@ -435,6 +551,7 @@
         const res = await fetch(\`/api/search?\${params}\`, { credentials: 'same-origin' });
         const data = await res.json();
 
+        setSearchingState(false);
         if (data.results && data.results.length > 0) {
           showResults(data);
         } else {
@@ -442,6 +559,7 @@
         }
       } catch (err) {
         console.error('Search failed:', err);
+        setSearchingState(false);
         showNoResults();
       }
     }
@@ -450,10 +568,11 @@
 function showInitialState() {
   hideAllStates();
   document.getElementById('initialState').style.display = 'block';
+  clearSelection();
 }
 
 // Show loading state
-function showLoading(message = '搜索中') {
+function showLoading(message = '搜索中...') {
   hideAllStates();
   document.getElementById('loadingText').textContent = message;
   document.getElementById('loadingState').style.display = 'block';
@@ -462,13 +581,14 @@ function showLoading(message = '搜索中') {
 // Show results
 function showResults(data) {
   hideAllStates();
+  currentResults = data.results || [];
   const resultsArea = document.getElementById('resultsArea');
   resultsArea.style.display = 'block';
 
-  // Update results count
+  // Update results count with tabular-nums
   const total = data.total || data.results.length;
-  document.getElementById('resultsCount').textContent =
-    \`找到 \${total} 篇相关文章\`;
+  document.getElementById('resultsCount').innerHTML =
+    \`找到 <span class="count-highlight tabular-nums">\${total}</span> 篇相关文章\`;
 
   // Update query display
   document.getElementById('resultsQuery').innerHTML =
@@ -494,6 +614,7 @@ function showResults(data) {
 function showNoResults() {
   hideAllStates();
   document.getElementById('noResultsState').style.display = 'block';
+  clearSelection();
 }
 
 // Hide all states
@@ -535,13 +656,16 @@ function renderSearchResult(result, index) {
   // Checkbox state (show for logged in users or guest with config enabled)
   const checked = selectedArticles.has(result.id) ? 'checked' : '';
   const checkboxHtml = showSelectionUI ? \`
-    <label class="checkbox-label">
+    <label class="checkbox-label" title="选择文章">
       <input type="checkbox" class="article-checkbox" data-id="\${result.id}" \${checked} onchange="updateSelection()">
     </label>
   \` : '';
 
+  // Stagger animation strictly capped to first 6 items (< 220ms total), remaining items show immediately
+  const staggerDelay = Math.min(index, 6) * 35;
+
   return \`
-    <div class="search-result fade-in-up" style="animation-delay: \${index * 30}ms">
+    <article class="search-result fade-in-up" style="animation-delay: \${staggerDelay}ms">
       <div class="search-result-header">
         <div class="search-result-header-left">
           \${checkboxHtml}
@@ -550,15 +674,15 @@ function renderSearchResult(result, index) {
           </h3>
         </div>
         <div class="relevance-score \${scoreClass}">
-          相关度 \${scorePercent}%
+          相关度 <span class="tabular-nums">\${scorePercent}%</span>
         </div>
       </div>
       <div class="search-result-meta">
-        <span>\${escapeHtml(sourceName)}</span>
-        <span>·</span>
-        <span>\${formatTime(result.published_at)}</span>
-        <span>·</span>
-        <a href="\${escapeHtml(result.url)}" target="_blank" rel="noopener">原文</a>
+        <span class="source-tag">\${escapeHtml(sourceName)}</span>
+        <span class="meta-dot">·</span>
+        <span class="meta-time">\${formatTime(result.published_at)}</span>
+        <span class="meta-dot">·</span>
+        <a href="\${escapeHtml(result.url)}" target="_blank" rel="noopener" class="meta-link">查看原文 ↗</a>
       </div>
       \${highlightedExcerpt ? \`<div class="search-result-excerpt">\${highlightedExcerpt}</div>\` : ''}
       \${result.tags ? \`
@@ -568,24 +692,34 @@ function renderSearchResult(result, index) {
           ).join('')}
         </div>
       \` : ''}
-    </div>
+    </article>
   \`;
 }
 
-// Highlight search terms in text
+// Highlight search terms safely (support Chinese characters and avoid destroying HTML entities)
 function highlightTerms(text, query) {
   if (!text) return '';
   if (!query) return escapeHtml(text);
 
-  const escapedText = escapeHtml(text);
-  const terms = query.split(/\\s+/).filter(t => t.length >= 2);
+  // Split query into distinct keywords (support single Chinese character or 2+ chars for ascii)
+  const terms = query.trim().split(/\\s+/).filter(t => {
+    return /[\\u4e00-\\u9fa5]/.test(t) ? t.length >= 1 : t.length >= 2;
+  });
 
-  if (terms.length === 0) return escapedText;
+  if (terms.length === 0) return escapeHtml(text);
 
-  // Create regex for all terms
+  // Sort terms by length descending to match longest substring first
+  terms.sort((a, b) => b.length - a.length);
+
   const pattern = new RegExp(\`(\${terms.map(t => escapeRegex(t)).join('|')})\`, 'gi');
 
-  return escapedText.replace(pattern, '<mark>$1</mark>');
+  // Split raw text first, escape each chunk, and mark matched keywords safely
+  const parts = text.split(pattern);
+  return parts.map(part => {
+    if (!part) return '';
+    const isMatch = terms.some(t => t.toLowerCase() === part.toLowerCase());
+    return isMatch ? \`<mark>\${escapeHtml(part)}</mark>\` : escapeHtml(part);
+  }).join('');
 }
 
 // Escape special regex characters
