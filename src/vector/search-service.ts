@@ -12,9 +12,11 @@
 
 import { getDb } from '../db.js';
 import { logger } from '../logger.js';
+import { config as appConfig } from '../config.js';
 import { getEmbedding } from './embedding-client.js';
 import { query as queryVector } from './vector-store.js';
 import { rerank } from './reranker.js';
+import { jevRerank, type JevRerankScore } from './jev-reranker.js';
 import { buildVectorText } from './text-builder.js';
 
 const log = logger.child({ module: 'search-service' });
@@ -23,6 +25,9 @@ type Candidate = {
   articleId: number;
   score: number;
   document: string;
+  jevScore?: number;
+  relevanceLevel?: number | null;
+  ranked?: boolean;
 };
 
 /* ── Public Types ── */
@@ -64,6 +69,12 @@ export interface SearchResult {
   score: number;
   semanticScore?: number;
   keywordScore?: number;
+  /** JEV 精排综合分 0-1（未走 JEV 时缺省） */
+  jevScore?: number;
+  /** JEV score 档位 0-4（未走 JEV 时缺省） */
+  relevanceLevel?: number | null;
+  /** 是否经过 JEV/rerank 判分；false 表示回退向量分、应沉底 */
+  ranked?: boolean;
   metadata?: {
     title: string;
     url: string;
@@ -88,6 +99,8 @@ export interface SearchResponse {
   limit?: number;
   cached: boolean;
   fallback?: boolean;
+  /** 本次排序实际使用的精排方式（仅语义检索上报） */
+  rerank?: 'jev' | 'rerank' | 'vector';
 }
 
 /* ── Configuration ── */
@@ -118,6 +131,34 @@ function createArticlesQuery(userId: number) {
         eb('keyword_subscriptions.user_id', '=', userId),
       ])
     );
+}
+
+/**
+ * 为给定文章 id 加载 JEV 精排用的候选文本（与索引器口径一致）。
+ * 仅返回能构建出非空文本的条目。
+ */
+async function loadCandidateTexts(userId: number, ids: number[]): Promise<Map<number, string>> {
+  if (ids.length === 0) return new Map();
+
+  const rows = await createArticlesQuery(userId)
+    .leftJoin('article_translations as t', 't.article_id', 'articles.id')
+    .where('articles.id', 'in', ids)
+    .select([
+      'articles.id',
+      'articles.title',
+      'articles.content',
+      'articles.markdown_content',
+      't.title_zh',
+      't.summary_zh',
+    ])
+    .execute();
+
+  const texts = new Map<number, string>();
+  for (const row of rows) {
+    const text = buildVectorText(row as any);
+    if (text) texts.set(row.id, text);
+  }
+  return texts;
 }
 
 /* ── Main Search Entry ── */
@@ -166,15 +207,24 @@ export async function search(request: SearchRequest): Promise<SearchResponse> {
   try {
     let results: SearchResult[];
     let fallback = false;
+    let rerankKind: 'jev' | 'rerank' | 'vector' | undefined;
 
     switch (mode) {
-      case SearchMode.SEMANTIC:
-        results = await semanticSearchOnly(userId, effectiveQuery, limit);
+      case SearchMode.SEMANTIC: {
+        const semOutcome = await semanticSearchOnly(
+          userId,
+          effectiveQuery,
+          limit,
+          appConfig.searchJevEnabled
+        );
+        results = semOutcome.results;
+        rerankKind = semOutcome.rerank;
         break;
+      }
       case SearchMode.KEYWORD:
         results = await keywordSearchOnly(userId, effectiveQuery, limit);
         break;
-      case SearchMode.HYBRID:
+      case SearchMode.HYBRID: {
         const hybridResult = await hybridSearch(
           userId,
           effectiveQuery,
@@ -186,7 +236,9 @@ export async function search(request: SearchRequest): Promise<SearchResponse> {
         );
         results = hybridResult.results;
         fallback = hybridResult.fallback;
+        rerankKind = hybridResult.rerank;
         break;
+      }
       default:
         throw new Error(`Unsupported search mode: ${mode}`);
     }
@@ -206,6 +258,7 @@ export async function search(request: SearchRequest): Promise<SearchResponse> {
       limit,
       cached: false,
       fallback,
+      rerank: rerankKind,
     };
   } catch (error) {
     log.warn({ error, userId, mode, query: effectiveQuery }, 'Search failed, returning empty results');
@@ -227,8 +280,9 @@ export async function search(request: SearchRequest): Promise<SearchResponse> {
 async function semanticSearchOnly(
   userId: number,
   query: string,
-  limit: number
-): Promise<SearchResult[]> {
+  limit: number,
+  enableJev = false
+): Promise<{ results: SearchResult[]; rerank: 'jev' | 'rerank' | 'vector' }> {
   const embedding = await getEmbedding(query, userId);
   const hits = await queryVector(userId, embedding, MAX_RESULTS, {
     user_id: userId,
@@ -242,9 +296,23 @@ async function semanticSearchOnly(
       document: hit.document,
     }));
 
-  // Rerank all candidates (up to MAX_RESULTS)
   let finalList = candidates;
-  if (candidates.length > 0) {
+  let rerankKind: 'jev' | 'rerank' | 'vector' = 'vector';
+
+  // 精排第一优先：JEV（未启用/未配置/失败时返回 null，落到下一层）
+  if (enableJev && candidates.length > 0) {
+    const jevItems = candidates
+      .slice(0, appConfig.searchJevMaxCandidates)
+      .map((c) => ({ articleId: c.articleId, text: c.document }));
+    const jevOutcome = await jevRerank(query, jevItems, userId);
+    if (jevOutcome && jevOutcome.scores.size > 0) {
+      finalList = applyJevRerank(candidates, jevOutcome.scores, MAX_RESULTS);
+      rerankKind = 'jev';
+    }
+  }
+
+  // 兜底：现有 reranker；其未配置时 rerank() 返回 null，最终退化为向量分排序
+  if (rerankKind !== 'jev' && candidates.length > 0) {
     const rerankResults = await rerank(
       query,
       candidates.map((c) => c.document),
@@ -253,10 +321,22 @@ async function semanticSearchOnly(
     );
     if (rerankResults) {
       finalList = applyRerank(candidates, rerankResults, MAX_RESULTS);
+      rerankKind = 'rerank';
     }
   }
 
-  return await enrichWithMetadata(userId, finalList);
+  const results = await enrichWithMetadata(
+    userId,
+    finalList.map((c) => ({
+      articleId: c.articleId,
+      score: c.score,
+      jevScore: c.jevScore,
+      relevanceLevel: c.relevanceLevel,
+      ranked: c.ranked,
+    }))
+  );
+
+  return { results, rerank: rerankKind };
 }
 
 /* ── Keyword Search Only ── */
@@ -342,6 +422,8 @@ async function keywordSearchOnly(
 interface HybridResult {
   results: SearchResult[];
   fallback: boolean;
+  /** 融合后是否走了 JEV 精排（未走时为 undefined，表示保留加权融合排序的兜底） */
+  rerank?: 'jev';
 }
 
 async function hybridSearch(
@@ -358,7 +440,7 @@ async function hybridSearch(
   let semanticFailed = false;
 
   try {
-    semanticResults = await semanticSearchOnly(userId, query, limit);
+    semanticResults = (await semanticSearchOnly(userId, query, limit)).results;
   } catch (error) {
     semanticFailed = true;
     log.warn({ error, query }, 'Semantic search failed in hybrid mode');
@@ -426,6 +508,25 @@ async function hybridSearch(
 
   const results = Array.from(mergedByArticleId.values())
     .sort((a, b) => b.score - a.score);
+
+  // Phase 3：融合去重后，对候选池统一 JEV 精排；
+  // 未配置 / 失败 / 无文本时不改变顺序，保留当前加权融合排序（兜底）。
+  if (appConfig.searchJevEnabled && results.length > 0) {
+    const pool = results.slice(0, appConfig.searchJevMaxCandidates);
+    const texts = await loadCandidateTexts(userId, pool.map((r) => r.articleId));
+    const jevItems = pool
+      .map((r) => ({ articleId: r.articleId, text: texts.get(r.articleId) ?? '' }))
+      .filter((item) => item.text.length > 0);
+
+    const jevOutcome = jevItems.length > 0 ? await jevRerank(query, jevItems, userId) : null;
+    if (jevOutcome && jevOutcome.scores.size > 0) {
+      return {
+        results: applyJevRerank(results, jevOutcome.scores, results.length),
+        fallback: false,
+        rerank: 'jev',
+      };
+    }
+  }
 
   return { results, fallback: false };
 }
@@ -644,7 +745,13 @@ async function saveRelatedToCache(articleId: number, results: SearchResult[]): P
 
 async function enrichWithMetadata(
   userId: number,
-  results: Array<{ articleId: number; score: number }>
+  results: Array<{
+    articleId: number;
+    score: number;
+    jevScore?: number;
+    relevanceLevel?: number | null;
+    ranked?: boolean;
+  }>
 ): Promise<SearchResult[]> {
   if (results.length === 0) return [];
 
@@ -675,6 +782,9 @@ async function enrichWithMetadata(
       return {
         articleId: r.articleId,
         score: r.score,
+        jevScore: r.jevScore,
+        relevanceLevel: r.relevanceLevel,
+        ranked: r.ranked,
         metadata: {
           title: article.title,
           url: article.url,
@@ -687,6 +797,54 @@ async function enrichWithMetadata(
         },
       };
     });
+}
+
+/**
+ * 应用 JEV 精排结果：JEV 分主排序，未判分候选沉底但保留。
+ *
+ * `searchJevWeight < 1` 时与归一化向量分加权融合；`>= 1` 时直接用 JEV 分。
+ */
+function applyJevRerank<
+  T extends {
+    articleId: number;
+    score: number;
+    jevScore?: number;
+    relevanceLevel?: number | null;
+    ranked?: boolean;
+  }
+>(candidates: T[], scores: Map<number, JevRerankScore>, limit: number): T[] {
+  const maxVectorScore = Math.max(...candidates.map((c) => c.score), 0.01);
+  const weight = appConfig.searchJevWeight;
+
+  const annotated = candidates.map((candidate) => {
+    const jev = scores.get(candidate.articleId);
+    if (!jev) {
+      return { ...candidate, ranked: false };
+    }
+
+    const normalizedVector = candidate.score / maxVectorScore;
+    const score =
+      weight >= 1
+        ? jev.value
+        : weight * jev.value + (1 - weight) * normalizedVector;
+
+    return {
+      ...candidate,
+      score,
+      jevScore: jev.value,
+      relevanceLevel: jev.relevanceLevel,
+      ranked: true,
+    };
+  });
+
+  annotated.sort((a, b) => {
+    const aRanked = a.ranked ? 0 : 1;
+    const bRanked = b.ranked ? 0 : 1;
+    if (aRanked !== bRanked) return aRanked - bRanked;
+    return b.score - a.score;
+  });
+
+  return annotated.slice(0, limit);
 }
 
 function applyRerank(

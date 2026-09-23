@@ -41,7 +41,7 @@
       <div class="empty-state-title">探索海量学术文章</div>
       <div class="empty-state-desc">
         输入关键词或具体问题，获取具备深度语义相关度的学术前沿。<br>
-        支持语义向量搜索与精准关键词双重召回。
+        支持向量召回 + JEV 语义精排；未配置 JEV 时自动回退关键词/向量排序。
       </div>
     </div>
 
@@ -116,6 +116,7 @@
     // ============================================
 
     let currentQuery = '';
+    let currentRerank = undefined;
     let currentPage = 1;
     let totalPages = 1;
     const perPage = 50;  // Increase to show more results per page
@@ -582,6 +583,7 @@ function showLoading(message = '搜索中...') {
 function showResults(data) {
   hideAllStates();
   currentResults = data.results || [];
+  currentRerank = data.rerank;
   const resultsArea = document.getElementById('resultsArea');
   resultsArea.style.display = 'block';
 
@@ -627,12 +629,20 @@ function hideAllStates() {
 
 // Render single search result
 function renderSearchResult(result, index) {
+  const isRanked = result.ranked !== false;
   const relevance = result.relevance || result.score || 0;
   const scorePercent = Math.round(relevance * 100);
 
   let scoreClass = 'low';
-  if (scorePercent >= 90) scoreClass = 'high';
-  else if (scorePercent >= 70) scoreClass = 'medium';
+  if (scorePercent >= 70) scoreClass = 'high';
+  else if (scorePercent >= 30) scoreClass = 'medium';
+
+  const scoreTitle = !isRanked
+    ? '未经过 JEV 语义判分，按向量相似度排序'
+    : (currentRerank === 'jev' ? 'JEV 语义相关性评分' : '综合相关度评分');
+  const badgeHtml = isRanked
+    ? '<div class="relevance-score ' + scoreClass + '" title="' + scoreTitle + '">相关度 <span class="tabular-nums">' + scorePercent + '%</span></div>'
+    : '<div class="relevance-score unranked" title="' + scoreTitle + '">未判分</div>';
 
   // Highlight matching terms in title and excerpt
   const highlightedTitle = highlightTerms(result.title, currentQuery);
@@ -673,9 +683,7 @@ function renderSearchResult(result, index) {
             <a href="/articles/\${result.id}">\${highlightedTitle}</a>
           </h3>
         </div>
-        <div class="relevance-score \${scoreClass}">
-          相关度 <span class="tabular-nums">\${scorePercent}%</span>
-        </div>
+        \${badgeHtml}
       </div>
       <div class="search-result-meta">
         <span class="source-tag">\${escapeHtml(sourceName)}</span>

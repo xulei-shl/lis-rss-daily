@@ -12,7 +12,8 @@
     "gen-password": "tsx scripts/gen-password.ts",
     "trigger-insights": "tsx scripts/trigger-insights.ts",
     "test:insights-scheduler": "tsx scripts/test-insights-scheduler.ts",
-    "test:search": "tsx scripts/search-smoke.ts"
+    "test:search": "tsx scripts/search-smoke.ts",
+    "test:search-jev-rerank": "tsx scripts/test-search-jev-rerank.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -492,6 +492,15 @@
   background: var(--bg-subtle);
 }
 
+/* 未判分（JEV 不可用/失败，已回退排序）：弱化样式，避免误导性百分比 */
+.relevance-score.unranked {
+  color: var(--text-tertiary);
+  background: transparent;
+  border-color: var(--border);
+  border-style: dashed;
+  font-weight: 500;
+}
+
 /* Meta Information */
 .search-result-meta {
   font-family: var(--font-meta);

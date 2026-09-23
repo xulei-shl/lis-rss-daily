@@ -6,7 +6,7 @@
 
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { intEnv } from './utils/env.js';
+import { floatEnv, intEnv } from './utils/env.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -117,6 +117,12 @@ export interface Config {
   typesafeApiKey?: string;
   jevRequestTimeoutMs: number;
   jevMaxRetries: number;
+
+  // 语义检索 JEV 精排
+  searchJevEnabled: boolean;
+  searchJevBatch: number;
+  searchJevMaxCandidates: number;
+  searchJevWeight: number;
 
   // 我的每日评分
   myDailyEnabled: boolean;
@@ -249,6 +255,12 @@ function getConfig(): Config {
     typesafeApiKey: process.env.TYPESAFE_API_KEY,
     jevRequestTimeoutMs: intEnv(process.env.JEV_REQUEST_TIMEOUT_MS, 30000, 1),
     jevMaxRetries: intEnv(process.env.JEV_MAX_RETRIES, 2, 0),
+
+    // 语义检索 JEV 精排
+    searchJevEnabled: process.env.SEARCH_JEV_ENABLED !== 'false',
+    searchJevBatch: intEnv(process.env.SEARCH_JEV_BATCH, 20, 1),
+    searchJevMaxCandidates: intEnv(process.env.SEARCH_JEV_MAX_CANDIDATES, 50, 1),
+    searchJevWeight: floatEnv(process.env.SEARCH_JEV_WEIGHT, 1, 0),
 
     // 我的每日评分
     myDailyEnabled: process.env.MY_DAILY_ENABLED !== 'false',

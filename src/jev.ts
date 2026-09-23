@@ -13,8 +13,18 @@ import { decryptAPIKey } from './utils/crypto.js';
 
 const log = logger.child({ module: 'jev' });
 
-const JEV_DEFAULT_API_URL = 'https://api.typesafe.ai/v1/systemone';
-const JEV_DEFAULT_MODEL = 'jev-latest';
+export const JEV_DEFAULT_API_URL = 'https://api.typesafe.ai/v1/systemone';
+export const JEV_DEFAULT_MODEL = 'jev-latest';
+
+/**
+ * 将配置里的 base_url 归一为 System One endpoint。
+ * 已经是 .../systemone 的原样返回，否则补 /v1/systemone。
+ */
+export function normalizeJevApiUrl(baseUrl: string): string {
+  const trimmed = baseUrl.trim();
+  if (trimmed.endsWith('/systemone')) return trimmed;
+  return `${trimmed.replace(/\/+$/, '')}/v1/systemone`;
+}
 
 export interface ResolvedJevConfig {
   apiUrl: string;
@@ -30,6 +40,7 @@ export async function resolveJevConfig(): Promise<ResolvedJevConfig> {
   const db = getDb();
 
   // 优先从 llm_configs 查找启用的 JEV 配置 (config_type='jev' 或 provider='typesafe')
+  // 读取失败（如数据库暂不可用 / 表缺失）不应阻断 env 兜底
   const dbConfig = await db
     .selectFrom('llm_configs')
     .where((eb) =>
@@ -44,17 +55,17 @@ export async function resolveJevConfig(): Promise<ResolvedJevConfig> {
     .orderBy('priority', 'asc')
     .orderBy('created_at', 'asc')
     .limit(1)
-    .executeTakeFirst();
+    .executeTakeFirst()
+    .catch((error) => {
+      log.warn({ error }, '读取 llm_configs 中的 JEV 配置失败，回退环境变量');
+      return undefined;
+    });
 
   if (dbConfig && dbConfig.api_key_encrypted) {
     const apiKey = decryptAPIKey(dbConfig.api_key_encrypted, config.llmEncryptionKey);
     if (apiKey) {
-      let url = dbConfig.base_url.trim();
-      if (!url.endsWith('/systemone')) {
-        url = `${url.replace(/\/+$/, '')}/v1/systemone`;
-      }
       return {
-        apiUrl: url,
+        apiUrl: normalizeJevApiUrl(dbConfig.base_url),
         apiKey,
         model: dbConfig.model || JEV_DEFAULT_MODEL,
       };
@@ -208,7 +219,7 @@ function retryDelayMs(attempt: number, retryAfterMs?: number): number {
  * （见官方 API reference「Handling rate limits」），否则并发一高就会把限流
  * 记成 0 分。超时通过 AbortController 实现，与 vector/embedding-client 一致。
  */
-async function callJevApi(requestBody: any, jevConfig: ResolvedJevConfig): Promise<any> {
+export async function callJevApi(requestBody: any, jevConfig: ResolvedJevConfig): Promise<any> {
   const maxAttempts = Math.max(1, (config.jevMaxRetries || 0) + 1);
   let lastError: Error = new Error('JEV 请求失败');
 

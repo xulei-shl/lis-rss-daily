@@ -56,6 +56,10 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
         journal_name: r.metadata?.journal_name,
         keyword_name: r.metadata?.keyword_name,
         relevance: r.score,
+        // JEV 精排信息：ranked=false 表示该行未经判分（JEV 不可用/失败，已回退排序）
+        ranked: r.ranked ?? true,
+        jev_score: r.jevScore ?? null,
+        relevance_level: r.relevanceLevel ?? null,
         excerpt: r.metadata?.summary || '',
       })),
       mode: response.mode,
@@ -65,6 +69,7 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
       limit: response.limit,
       totalPages: Math.ceil(response.total / limit),
       fallback: response.fallback,
+      rerank: response.rerank,
     });
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to search articles');
