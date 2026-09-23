@@ -114,10 +114,13 @@ export interface Config {
 
   // TypeSafe (JEV)
   typesafeApiKey?: string;
+  jevRequestTimeoutMs: number;
+  jevMaxRetries: number;
 
   // 我的每日评分
   myDailyEnabled: boolean;
   myDailySchedule: string;
+  myDailyConcurrency: number;
 
   // DeepSearch
   deepSearchApiUrl: string;
@@ -243,10 +246,13 @@ function getConfig(): Config {
 
     // TypeSafe (JEV)
     typesafeApiKey: process.env.TYPESAFE_API_KEY,
+    jevRequestTimeoutMs: parseInt(process.env.JEV_REQUEST_TIMEOUT_MS || '30000', 10),
+    jevMaxRetries: parseInt(process.env.JEV_MAX_RETRIES || '2', 10),
 
     // 我的每日评分
     myDailyEnabled: process.env.MY_DAILY_ENABLED !== 'false',
     myDailySchedule: process.env.MY_DAILY_SCHEDULE || '30 7 * * *',
+    myDailyConcurrency: parseInt(process.env.MY_DAILY_CONCURRENCY || '5', 10),
 
     // DeepSearch
     deepSearchApiUrl: process.env.DEEPSEARCH_API_URL || 'http://localhost:8082',

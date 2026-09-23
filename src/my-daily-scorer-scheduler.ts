@@ -4,9 +4,14 @@
  * 定时为每个 user 角色的用户执行 JEV 评分：
  * 1. 获取所有 role='user' 的用户
  * 2. 获取每个用户的主题领域和关键词
- * 3. 获取当日新增且通过筛选的文章
- * 4. 并行调用 JEV 评分
+ * 3. 获取当日新增的文章（不过滤 filter_status）
+ * 4. 并行调用 JEV 评分（并发数为 config.myDailyConcurrency）
  * 5. 结果写入 user_daily_scores 表
+ *
+ * 并发控制：用户之间串行（见 runDailyScoring），且全局同一时刻只允许一个评分
+ * 任务在跑。重叠触发时按 FIFO 排队等待，前一个任务结束后名额自动转交给队首，
+ * 因此定时任务与「重新评分」、以及多人同时点击都不会让 JEV 并发翻倍或重复计算
+ * 同一批文章（见 acquireScoringSlot / releaseScoringSlot）。
  */
 
 import cron from 'node-cron';
@@ -14,8 +19,130 @@ import { getDb } from './db.js';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { scoreArticlesBatch, resolveJevConfig, type TopicInfo } from './jev.js';
+import { getUserLocalDate, getUserTimezone, buildUtcRangeFromLocalDate } from './api/timezone.js';
 
 const log = logger.child({ module: 'my-daily-scorer' });
+
+/** 持有执行名额的任务 */
+interface ActiveScoringJob {
+  userId: number;
+  date: string;
+  startedAt: number;
+}
+
+/** 排队等待执行名额的任务 */
+interface QueuedScoringJob {
+  userId: number;
+  date: string;
+  enqueuedAt: number;
+  resolve: () => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+/** 排队最长等待时间，超过就放弃（避免请求无限期挂着） */
+const MAX_SCORING_WAIT_MS = 10 * 60 * 1000;
+
+/** 队列长度上限，防止请求堆积 */
+const MAX_SCORING_QUEUE_LENGTH = 10;
+
+/** 当前持有执行名额的任务 */
+let activeScoringJob: ActiveScoringJob | null = null;
+
+/** 等待执行名额的任务（FIFO） */
+const queuedScoringJobs: QueuedScoringJob[] = [];
+
+/**
+ * 排队失败时抛出：
+ * - queue_full：队列已满
+ * - wait_timeout：等待超过 MAX_SCORING_WAIT_MS
+ */
+export class ScoringQueueError extends Error {
+  constructor(message: string, public readonly reason: 'queue_full' | 'wait_timeout') {
+    super(message);
+    this.name = 'ScoringQueueError';
+  }
+}
+
+/** 同一 (userId, date) 是否已在执行或排队中 */
+function isJobActiveOrQueued(userId: number, date: string): boolean {
+  if (activeScoringJob?.userId === userId && activeScoringJob.date === date) return true;
+  return queuedScoringJobs.some(job => job.userId === userId && job.date === date);
+}
+
+/**
+ * 获取执行名额：空闲则立即获得；否则按 FIFO 排队，轮到时 resolve。
+ * 名额在获得时（包括转交时）就已记入 activeScoringJob，因此不存在插队窗口。
+ */
+function acquireScoringSlot(userId: number, date: string): Promise<void> {
+  if (!activeScoringJob) {
+    activeScoringJob = { userId, date, startedAt: Date.now() };
+    return Promise.resolve();
+  }
+
+  if (queuedScoringJobs.length >= MAX_SCORING_QUEUE_LENGTH) {
+    return Promise.reject(
+      new ScoringQueueError('当前排队的评分任务过多，请稍后再试', 'queue_full')
+    );
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const job: QueuedScoringJob = {
+      userId,
+      date,
+      enqueuedAt: Date.now(),
+      resolve,
+      reject,
+      timer: setTimeout(() => {
+        const index = queuedScoringJobs.indexOf(job);
+        if (index >= 0) queuedScoringJobs.splice(index, 1);
+        reject(
+          new ScoringQueueError(
+            `等待时间超过 ${Math.round(MAX_SCORING_WAIT_MS / 60000)} 分钟，已取消排队，请稍后再试`,
+            'wait_timeout'
+          )
+        );
+      }, MAX_SCORING_WAIT_MS),
+    };
+
+    queuedScoringJobs.push(job);
+    log.info(
+      {
+        userId,
+        date,
+        position: queuedScoringJobs.length,
+        activeUserId: activeScoringJob?.userId,
+      },
+      '评分任务已排队，等待执行'
+    );
+  });
+}
+
+/**
+ * 释放执行名额，并把名额直接转交给队首任务。
+ * 名额在转交时立即写入 activeScoringJob，新请求无法插队，保证 FIFO 顺序。
+ */
+function releaseScoringSlot() {
+  const next = queuedScoringJobs.shift();
+
+  if (!next) {
+    activeScoringJob = null;
+    return;
+  }
+
+  clearTimeout(next.timer);
+  activeScoringJob = { userId: next.userId, date: next.date, startedAt: Date.now() };
+  log.info(
+    {
+      userId: next.userId,
+      date: next.date,
+      waitedMs: Date.now() - next.enqueuedAt,
+      remaining: queuedScoringJobs.length,
+    },
+    '轮到此任务执行'
+  );
+  next.resolve();
+}
 
 /**
  * 获取用户的主题领域和关键词
@@ -54,17 +181,25 @@ async function getUserTopics(userId: number): Promise<TopicInfo[]> {
 }
 
 /**
- * 获取当日新增且通过筛选的文章
+ * 获取指定自然日新增的文章
+ *
+ * 日期口径与「每日期刊 / 每日资讯」总结一致：
+ * date 是用户时区下的本地日期，先换算成对应的 UTC 区间再查询。
+ * 文章通常在凌晨抓取，若直接按 UTC 日期查询会把同一个自然日的文章拆到两天。
+ *
+ * 注意：这里不按 filter_status 过滤——需求要求 JEV 对当日所有新增文章
+ * 评分打标过滤（低分条目灰显），因此已经过关键词预过滤的文章也要参与评分。
  */
-async function getTodayArticles(date: string) {
+async function getTodayArticles(date: string, userId: number) {
   const db = getDb();
 
-  // 查询当日通过筛选的文章
+  const timezone = await getUserTimezone(userId);
+  const [startUtc, endUtc] = buildUtcRangeFromLocalDate(date, timezone);
+
   const articles = await db
     .selectFrom('articles')
-    .where('filter_status', '=', 'passed')
-    .where('created_at', '>=', `${date} 00:00:00`)
-    .where('created_at', '<', `${date} 23:59:59`)
+    .where('created_at', '>=', startUtc)
+    .where('created_at', '<=', endUtc)
     .select(['id', 'title', 'summary'])
     .execute();
 
@@ -73,8 +208,28 @@ async function getTodayArticles(date: string) {
 
 /**
  * 为单个用户执行评分
+ *
+ * 同一时刻只允许一个评分任务在执行，其余按 FIFO 排队；
+ * 前一个任务结束后名额自动转交给队首，因此调用方只需 await。
+ * 同一 (用户, 日期) 已在执行或排队时不会重复入队。
  */
 export async function scoreForUser(userId: number, username: string, date: string) {
+  if (isJobActiveOrQueued(userId, date)) {
+    log.info({ userId, date }, '该日期的评分已在执行或排队中，跳过重复触发');
+    return { userId, scored: 0, skipped: true, reason: 'duplicate' as const };
+  }
+
+  await acquireScoringSlot(userId, date);
+
+  try {
+    return await runScoringForUser(userId, username, date);
+  } finally {
+    releaseScoringSlot();
+  }
+}
+
+/** 单个用户的评分主体（调用方须已持有评分锁） */
+async function runScoringForUser(userId: number, username: string, date: string) {
   try {
     await resolveJevConfig();
   } catch (err) {
@@ -91,16 +246,23 @@ export async function scoreForUser(userId: number, username: string, date: strin
   }
 
   // 获取当日文章
-  const articles = await getTodayArticles(date);
+  const articles = await getTodayArticles(date, userId);
   if (articles.length === 0) {
-    log.info({ userId, username, date }, '当日没有通过筛选的文章');
+    log.info({ userId, username, date }, '当日没有新增文章');
     return { userId, scored: 0, skipped: false, reason: 'no_articles', total: 0 };
   }
 
   log.info({ userId, username, articleCount: articles.length }, '开始 JEV 评分');
 
   // 批量评分
-  const results = await scoreArticlesBatch(articles, topics);
+  const results = await scoreArticlesBatch(articles, topics, config.myDailyConcurrency);
+  const failedCount = results.filter(r => r.failed).length;
+  if (failedCount > 0) {
+    log.warn(
+      { userId, date, failed: failedCount, total: results.length },
+      '部分文章的 JEV 评分失败，已写入占位 0 分'
+    );
+  }
 
   // 写入数据库
   const db = getDb();
@@ -131,8 +293,9 @@ export async function scoreForUser(userId: number, username: string, date: strin
     }
   }
 
-  log.info({ userId, username, total: articles.length, inserted }, '用户评分完成');
-  return { userId, scored: inserted, skipped: false };
+  log.info({ userId, username, total: articles.length, inserted, failed: failedCount }, '用户评分完成');
+  // scored 只统计真正拿到 JEV 结果的篇数，失败的那部分单独用 failed 报告
+  return { userId, scored: inserted - failedCount, failed: failedCount, skipped: false };
 }
 
 /**
@@ -140,9 +303,8 @@ export async function scoreForUser(userId: number, username: string, date: strin
  */
 async function runDailyScoring() {
   const startTime = Date.now();
-  const date = new Date().toISOString().split('T')[0];
 
-  log.info({ date }, '开始每日 JEV 评分任务');
+  log.info('开始每日 JEV 评分任务');
 
   // 检查 JEV 配置
   try {
@@ -167,13 +329,23 @@ async function runDailyScoring() {
 
   log.info({ userCount: users.length }, '找到需要评分的用户');
 
-  // 逐个用户评分（避免并发过高）
+  // 逐个用户评分（避免并发过高），日期按各用户时区的当天计算
   const results = [];
   for (const user of users) {
     try {
-      const result = await scoreForUser(user.id, user.username, date);
+      const userDate = await getUserLocalDate(user.id);
+      const result = await scoreForUser(user.id, user.username, userDate);
       results.push(result);
     } catch (error) {
+      // 排队失败（队列已满 / 等待超时）不视为错误，跳过该用户即可
+      if (error instanceof ScoringQueueError) {
+        log.warn(
+          { userId: user.id, username: user.username, reason: error.reason },
+          '评分排队失败，跳过该用户'
+        );
+        results.push({ userId: user.id, scored: 0, skipped: true, reason: error.reason });
+        continue;
+      }
       log.error({ userId: user.id, username: user.username, error }, '用户评分出错');
       results.push({ userId: user.id, scored: 0, skipped: false, error: true });
     }
@@ -182,7 +354,7 @@ async function runDailyScoring() {
   const elapsed = Date.now() - startTime;
   const totalScored = results.reduce((sum, r) => sum + r.scored, 0);
   log.info(
-    { date, users: users.length, totalScored, elapsed: `${elapsed}ms` },
+    { users: users.length, totalScored, elapsed: `${elapsed}ms` },
     '每日 JEV 评分任务完成'
   );
 }

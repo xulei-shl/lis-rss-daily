@@ -473,7 +473,7 @@ export async function testLLMConnection(
 
     const apiKey = decryptAPIKey(dbConfig.api_key_encrypted, config.llmEncryptionKey);
 
-    const configType = (dbConfig.config_type || 'llm') as 'llm' | 'embedding' | 'rerank';
+    const configType = (dbConfig.config_type || 'llm') as 'llm' | 'embedding' | 'rerank' | 'jev';
 
     if (configType === 'embedding') {
       const response = await fetch(`${dbConfig.base_url}/embeddings`, {

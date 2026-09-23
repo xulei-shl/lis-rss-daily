@@ -79,7 +79,8 @@ export function createApp(): express.Express {
       const result = await handleLogin(username, password, res);
 
       if (result.success) {
-        res.json({ success: true });
+        // 普通用户默认进入「我的每日」，其他角色进入首页
+        res.json({ success: true, redirectTo: result.role === 'user' ? '/my-daily' : '/' });
       } else {
         res.status(401).json({ error: result.error });
       }

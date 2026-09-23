@@ -57,8 +57,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // 检查向量配置
   checkVectorConfig();
 
-  // 访客模式：隐藏操作按钮
-  if (window.userRole === 'guest') {
+  // 只读模式（guest / 普通用户）：隐藏操作按钮
+  if (window.isReadOnly) {
     const readBtn = document.getElementById('readBtn');
     const processBtn = document.getElementById('processBtn');
     const deleteBtn = document.getElementById('deleteBtn');
@@ -165,7 +165,7 @@ function renderArticle(article) {
       '<span>·</span>' +
     '</div>' +
     '<div class="article-meta-item">' +
-      renderRatingInput(article.id, article.rating, window.userRole === 'guest') +
+      renderRatingInput(article.id, article.rating, window.isReadOnly) +
     '</div>';
   document.getElementById('articleMeta').innerHTML = metaHtml;
 

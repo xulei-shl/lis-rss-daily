@@ -22,12 +22,12 @@ const RatingComponent = {
    * 渲染交互式评级输入
    * @param {number} articleId - 文章 ID
    * @param {number|null} rating - 当前评级（1-5 或 null）
-   * @param {boolean} isGuest - 是否为访客模式
+   * @param {boolean} readOnly - 是否为只读模式（访客 / 普通用户）
    * @returns {string} HTML 字符串
    */
-  renderInput(articleId, rating, isGuest = false) {
-    // guest 只显示只读模式
-    if (isGuest) {
+  renderInput(articleId, rating, readOnly = false) {
+    // 只读模式（guest / 普通用户）只显示只读模式
+    if (readOnly) {
       return this.renderDisplay(rating);
     }
 

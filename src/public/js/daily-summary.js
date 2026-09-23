@@ -64,7 +64,7 @@
       const messages = typeMessages[type] || typeMessages.journal;
 
       if (emptyMessage) {
-        emptyMessage.textContent = window.userRole === 'guest' ? messages.guest : messages.admin;
+        emptyMessage.textContent = window.isReadOnly ? messages.guest : messages.admin;
       }
       const guestMessageEl = document.getElementById('emptyMessageGuest');
       if (guestMessageEl) {
@@ -97,10 +97,10 @@
   // Generate button (admin only)
   if (generateBtn) {
     generateBtn.addEventListener('click', async () => {
-      // Check if user is guest
-      if (window.userRole === 'guest') {
+      // Check if user has read-only permission
+      if (window.isReadOnly) {
         if (window.toast) {
-          window.toast.error('访客模式下无法生成总结');
+          window.toast.error('当前用户无生成总结的权限');
         }
         return;
       }
@@ -308,7 +308,7 @@
         </svg>
         <span>下载</span>
       </button>
-      ${window.userRole !== 'guest' ? `
+      ${!window.isReadOnly ? `
       <button class="summary-meta-action" id="regenerateBtn" title="重新生成">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M23 4v6h-6"></path>

@@ -1,8 +1,8 @@
 <%
 const pageStyles = '<link rel="stylesheet" href="/css/pages/articles-list.css"><link rel="stylesheet" href="/css/components/rating.css">';
-const isGuest = user && user.role === 'guest';
-const isGuestValue = isGuest ? 'true' : 'false';
-const pageActions = isGuest ? '' : `
+const isReadOnly = user && (user.role === 'guest' || user.role === 'user');
+const isReadOnlyValue = isReadOnly ? 'true' : 'false';
+const pageActions = isReadOnly ? '' : `
     <div class="page-actions">
       <button class="btn btn-secondary" onclick="processBatch()">批量处理</button>
       <button class="btn btn-secondary" onclick="markAllAsRead()">批量已读</button>
@@ -140,7 +140,7 @@ const pageActions = isGuest ? '' : `
     let totalPages = 1;
     const perPage = 20;
     let rssSources = [];
-    const isGuest = ${isGuestValue};
+    const isReadOnly = ${isReadOnlyValue};
 
     // Load on page ready
     document.addEventListener('DOMContentLoaded', async () => {
@@ -636,7 +636,7 @@ const summary = article.summary_zh || article.content || article.markdown_conten
         <span class="article-meta-divider">·</span>
         <a href="\${escapeHtml(article.url)}" target="_blank" rel="noopener">原文</a>
         <span class="article-meta-divider">·</span>
-        \${renderRatingInput(article.id, article.rating, isGuest)}
+        \${renderRatingInput(article.id, article.rating, isReadOnly)}
       </div>
       \${summary ? \`<div class="article-summary">\${escapeHtml(truncate(summary, 200))}</div>\` : ''}
       <div class="article-footer">
@@ -646,14 +646,14 @@ const summary = article.summary_zh || article.content || article.markdown_conten
           ).join('') : ''}
         </div>
         <div class="article-actions">
-          \${!isGuest ? \`<button class="btn-icon" onclick="toggleReadStatus(\${article.id}, \${isRead})">
+          \${!isReadOnly ? \`<button class="btn-icon" onclick="toggleReadStatus(\${article.id}, \${isRead})">
             \${isRead ? '未读' : '已读'}
           </button>\` : ''}
-          \${!isGuest && (article.process_status === 'pending' || article.process_status === 'failed')
+          \${!isReadOnly && (article.process_status === 'pending' || article.process_status === 'failed')
             ? \`<button class="btn-icon" onclick="processArticle(\${article.id})">处理</button>\`
             : ''
           }
-          \${!isGuest ? \`<button class="btn-icon" onclick="deleteArticle(\${article.id})">删除</button>\` : ''}
+          \${!isReadOnly ? \`<button class="btn-icon" onclick="deleteArticle(\${article.id})">删除</button>\` : ''}
         </div>
       </div>
     </div>

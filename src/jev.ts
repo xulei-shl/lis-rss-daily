@@ -93,6 +93,7 @@ export interface JevScoreResult {
   relevanceScore: number;       // 综合评分 0-1
   matchedDomain: string | null; // 匹配的领域名称
   jevResponse: any;             // 原始响应
+  failed?: boolean;             // JEV 调用失败时为 true（此时 relevanceScore 是占位 0，不代表真实相关性）
 }
 
 /**
@@ -163,25 +164,104 @@ function buildJevRequest(
   };
 }
 
+/** 重试退避的基准延迟 / 单次退避上限 */
+const JEV_RETRY_BASE_DELAY_MS = 1000;
+const JEV_RETRY_MAX_DELAY_MS = 30000;
+
+/** 除 5xx 外额外可重试的状态码：429 限流 / 529 过载 / 408 超时 */
+const JEV_RETRYABLE_STATUSES = new Set([408, 429, 529]);
+
+function isRetryableStatus(status: number): boolean {
+  return status >= 500 || JEV_RETRYABLE_STATUSES.has(status);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 解析 Retry-After 响应头（秒数或 HTTP 日期），返回毫秒 */
+function parseRetryAfterMs(header: string | null): number | undefined {
+  if (!header) return undefined;
+
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+
+  const dateMs = Date.parse(header);
+  if (!Number.isNaN(dateMs)) return Math.max(0, dateMs - Date.now());
+
+  return undefined;
+}
+
+/** 指数退避 + 抖动；上游给了 Retry-After 就听它的（仍受单次上限约束） */
+function retryDelayMs(attempt: number, retryAfterMs?: number): number {
+  if (retryAfterMs !== undefined) return Math.min(retryAfterMs, JEV_RETRY_MAX_DELAY_MS);
+
+  const backoff = Math.min(JEV_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), JEV_RETRY_MAX_DELAY_MS);
+  const jitter = Math.random() * backoff * 0.25;
+  return Math.round(backoff + jitter);
+}
+
 /**
  * 调用 JEV API
+ *
+ * 带超时与重试：TypeSafe 在 429 限流 / 529 过载 / 5xx 时要求指数退避后重试
+ * （见官方 API reference「Handling rate limits」），否则并发一高就会把限流
+ * 记成 0 分。超时通过 AbortController 实现，与 vector/embedding-client 一致。
  */
 async function callJevApi(requestBody: any, jevConfig: ResolvedJevConfig): Promise<any> {
-  const response = await fetch(jevConfig.apiUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${jevConfig.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-  });
+  const maxAttempts = Math.max(1, (config.jevMaxRetries || 0) + 1);
+  let lastError: Error = new Error('JEV 请求失败');
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`JEV API 错误 (${response.status}): ${errorText}`);
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), config.jevRequestTimeoutMs);
+
+    let retryable = true;
+    let retryAfterMs: number | undefined;
+
+    try {
+      const response = await fetch(jevConfig.apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${jevConfig.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      const errorText = await response.text().catch(() => '');
+      lastError = new Error(`JEV API 错误 (${response.status}): ${errorText}`);
+      retryable = isRetryableStatus(response.status);
+      retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
+    } catch (error) {
+      // 网络异常 / 超时 / 响应体解析失败都可以重试
+      lastError = error instanceof Error ? error : new Error(String(error));
+      const isTimeout = lastError.name === 'AbortError';
+      lastError = new Error(
+        isTimeout ? `JEV 请求超时（${config.jevRequestTimeoutMs}ms）` : lastError.message
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!retryable || attempt === maxAttempts) {
+      throw lastError;
+    }
+
+    const delay = retryDelayMs(attempt, retryAfterMs);
+    log.warn(
+      { attempt, maxAttempts, delay, error: lastError.message },
+      'JEV 请求失败，退避后重试'
+    );
+    await sleep(delay);
   }
 
-  return response.json();
+  throw lastError;
 }
 
 /**
@@ -226,6 +306,7 @@ export async function scoreArticle(
       relevanceScore: score,
       matchedDomain,
       jevResponse: result,
+      failed: false,
     };
   } catch (error) {
     log.error({ articleId: article.id, error }, 'JEV 评分失败');
@@ -234,6 +315,7 @@ export async function scoreArticle(
       relevanceScore: 0,
       matchedDomain: null,
       jevResponse: { error: error instanceof Error ? error.message : 'unknown' },
+      failed: true,
     };
   }
 }
@@ -269,8 +351,13 @@ export async function scoreArticlesBatch(
     results.push(...batchResults);
   }
 
+  const failedCount = results.filter(r => r.failed).length;
   log.info(
-    { total: results.length, scored: results.filter(r => r.relevanceScore > 0).length },
+    {
+      total: results.length,
+      scored: results.length - failedCount,
+      failed: failedCount,
+    },
     'JEV 评分完成'
   );
 

@@ -137,7 +137,7 @@ function renderArticleCard(article, index) {
   html += '<span>' + getPublishTimeText(article) + '</span><span>·</span>';
   html += '<a href="' + escapeHtml(article.url) + '" target="_blank" rel="noopener">原文链接</a>';
   // 添加评级组件
-  html += '<span>·</span>' + renderRatingInput(article.id, article.rating, window.userRole === 'guest');
+  html += '<span>·</span>' + renderRatingInput(article.id, article.rating, window.isReadOnly);
   html += '</div>';
   
   if (hasContent) {
@@ -159,7 +159,7 @@ function renderArticleCard(article, index) {
     });
   }
   html += '</div><div class="article-actions">';
-  if (window.userRole !== 'guest') {
+  if (!window.isReadOnly) {
     html += '<button class="btn-icon" onclick="toggleReadStatus(' + article.id + ', false)">已读</button>';
   }
   html += '</div></div></div>';

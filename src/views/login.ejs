@@ -83,7 +83,7 @@
         const result = await res.json();
 
         if (res.ok && result.success) {
-          window.location.href = '/';
+          window.location.href = result.redirectTo || '/';
         } else {
           errorDiv.textContent = result.error || '登录失败，请检查用户名或密码';
           errorDiv.style.display = 'flex'; // Uses flex from CSS
