@@ -122,12 +122,27 @@ export function createApp(): express.Express {
     if (!req.userId) {
       return res.redirect('/login');
     }
-    // Only admin can access topics
-    if (req.user?.role !== 'admin') {
+    // admin and user can access topics
+    if (req.user?.role !== 'admin' && req.user?.role !== 'user') {
       return res.redirect('/');
     }
     res.render('topics', {
       pageTitle: 'Topic Management - LIS-RSS Literature Tracker',
+      user: req.user,
+    });
+  });
+
+  // My Daily page
+  app.get('/my-daily', optionalAuth, (req: any, res: Response) => {
+    if (!req.userId) {
+      return res.redirect('/login');
+    }
+    // admin and user can access my-daily
+    if (req.user?.role !== 'admin' && req.user?.role !== 'user') {
+      return res.redirect('/');
+    }
+    res.render('my-daily', {
+      pageTitle: '我的每日 - LIS-RSS Literature Tracker',
       user: req.user,
     });
   });

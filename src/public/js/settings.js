@@ -1066,6 +1066,10 @@ function updateProviderDefaults() {
         modelInput.value = 'gemini-1.5-flash';
       }
       break;
+    case 'typesafe':
+      baseURLInput.value = 'https://api.typesafe.ai/v1/systemone';
+      modelInput.value = 'jev-latest';
+      break;
     case 'custom':
       baseURLInput.value = '';
       if (configType === 'llm') {
@@ -1076,8 +1080,14 @@ function updateProviderDefaults() {
 }
 
 function updateConfigTypeUI() {
-  // 所有类型的配置都可以启用，不需要特殊处理
-  // 启用选项始终显示
+  const configType = document.getElementById('llmConfigType').value;
+  if (configType === 'jev') {
+    const providerSelect = document.getElementById('llmProvider');
+    if (providerSelect) {
+      providerSelect.value = 'typesafe';
+      updateProviderDefaults();
+    }
+  }
 }
 
 /**

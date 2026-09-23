@@ -18,11 +18,11 @@ const log = logger.child({ module: 'llm-configs-service' });
 export type LLMConfigRecord = LlmConfigsTable;
 
 export interface CreateLLMConfigInput {
-  provider: 'openai' | 'gemini' | 'custom';
+  provider: 'openai' | 'gemini' | 'custom' | 'typesafe';
   baseURL: string;
   apiKey: string;
   model: string;
-  configType?: 'llm' | 'embedding' | 'rerank';
+  configType?: 'llm' | 'embedding' | 'rerank' | 'jev';
   taskType?: TaskType;
   enabled?: boolean;
   isDefault?: boolean;
@@ -33,11 +33,11 @@ export interface CreateLLMConfigInput {
 }
 
 export interface UpdateLLMConfigInput {
-  provider?: 'openai' | 'gemini' | 'custom';
+  provider?: 'openai' | 'gemini' | 'custom' | 'typesafe';
   baseURL?: string;
   apiKey?: string;
   model?: string;
-  configType?: 'llm' | 'embedding' | 'rerank';
+  configType?: 'llm' | 'embedding' | 'rerank' | 'jev';
   taskType?: TaskType;
   enabled?: boolean;
   isDefault?: boolean;
@@ -51,7 +51,7 @@ export interface QueryOptions {
   page?: number;
   limit?: number;
   provider?: string;
-  configType?: 'llm' | 'embedding' | 'rerank';
+  configType?: 'llm' | 'embedding' | 'rerank' | 'jev';
   taskType?: TaskType;
   sortBy?: 'priority' | 'task_type_priority';
 }
@@ -556,6 +556,36 @@ export async function testLLMConnection(
       if (!response.ok) {
         return { success: false, error: `HTTP ${response.status}: ${response.statusText}` };
       }
+    } else if (configType === 'jev' || dbConfig.provider === 'typesafe') {
+      const url = dbConfig.base_url.endsWith('/systemone')
+        ? dbConfig.base_url
+        : `${dbConfig.base_url.replace(/\/+$/, '')}/v1/systemone`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: dbConfig.model || 'jev-latest',
+          state: 'test connection',
+          questions: {
+            test: {
+              type: 'noul',
+              instructions: 'Is this a connection test?',
+            },
+          },
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        return {
+          success: false,
+          error: `HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText.slice(0, 100)}` : ''}`,
+        };
+      }
     }
 
     return { success: true };
@@ -582,7 +612,7 @@ export async function getActiveLLMConfig(userId: number): Promise<LLMConfigRecor
  */
 export async function getActiveConfigByType(
   userId: number,
-  configType: 'llm' | 'embedding' | 'rerank'
+  configType: 'llm' | 'embedding' | 'rerank' | 'jev'
 ): Promise<LLMConfigRecord | null> {
   const db = getDb();
   const config = await db
@@ -605,7 +635,7 @@ export async function getActiveConfigByType(
  */
 export async function getActiveConfigListByType(
   userId: number,
-  configType: 'llm' | 'embedding' | 'rerank'
+  configType: 'llm' | 'embedding' | 'rerank' | 'jev'
 ): Promise<LLMConfigRecord[]> {
   const db = getDb();
   const configs = await db

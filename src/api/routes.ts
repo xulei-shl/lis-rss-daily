@@ -25,6 +25,8 @@ import deepsearchRoutes from './routes/deepsearch.routes.js';
 import externalSearchRoutes from './routes/external-search.routes.js';
 import gmailSourceRoutes from './routes/gmail-sources.routes.js';
 import webSourceRoutes from './routes/web-sources.routes.js';
+import usersRoutes from './routes/users.routes.js';
+import myDailyRoutes from './routes/my-daily.routes.js';
 
 const router = express.Router();
 
@@ -54,5 +56,7 @@ router.use('/deepsearch', deepsearchRoutes);
 router.use(externalSearchRoutes);
 router.use(gmailSourceRoutes);
 router.use(webSourceRoutes);
+router.use(usersRoutes);
+router.use(myDailyRoutes);
 
 export default router;

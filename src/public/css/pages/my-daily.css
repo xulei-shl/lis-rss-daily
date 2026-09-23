@@ -1,0 +1,272 @@
+/* ============================================
+   MY DAILY (我的每日) PAGE STYLES
+   ============================================ */
+
+.my-daily-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-4) var(--space-8);
+}
+
+.my-daily-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.my-daily-title-group h1 {
+  font-family: var(--font-heading);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-1) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.my-daily-desc {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  margin: 0;
+}
+
+/* Control toolbar: Date selector and stats */
+.my-daily-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.my-daily-date-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.my-daily-date-control label {
+  font-weight: 500;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.my-daily-date-select {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated, #fff);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.my-daily-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.my-daily-stat-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.my-daily-stat-num {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Articles list */
+.my-daily-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.my-daily-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.my-daily-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.05));
+  border-color: var(--border-hover, var(--border));
+}
+
+/* Low score muted state */
+.my-daily-card.is-low-score {
+  background: var(--bg-canvas, #f9fafb);
+  border-color: var(--border-subtle, #e5e7eb);
+  opacity: 0.55;
+  filter: grayscale(70%);
+}
+
+.my-daily-card.is-low-score:hover {
+  opacity: 0.9;
+  filter: grayscale(20%);
+}
+
+.my-daily-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.my-daily-card-tags {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.my-daily-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.my-daily-tag-domain {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+
+.my-daily-tag-source {
+  background: var(--bg-elevated, rgba(0, 0, 0, 0.04));
+  color: var(--text-secondary);
+}
+
+/* Score badge */
+.my-daily-score-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full, 9999px);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  font-family: var(--font-mono, monospace);
+  letter-spacing: 0.5px;
+}
+
+.my-daily-score-high {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.my-daily-score-mid {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.my-daily-score-low {
+  background: rgba(156, 163, 175, 0.15);
+  color: #6b7280;
+  border: 1px solid rgba(156, 163, 175, 0.3);
+}
+
+.my-daily-card-title {
+  margin: 0 0 var(--space-2) 0;
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.my-daily-card-title a {
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.my-daily-card-title a:hover {
+  color: var(--color-primary, #3b82f6);
+}
+
+.my-daily-card-summary {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  margin-bottom: var(--space-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.my-daily-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.my-daily-card-date {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.my-daily-card-link {
+  color: var(--color-primary, #3b82f6);
+  text-decoration: none;
+}
+
+.my-daily-card-link:hover {
+  text-decoration: underline;
+}
+
+/* Empty state */
+.my-daily-empty {
+  text-align: center;
+  padding: var(--space-12) var(--space-4);
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+}
+
+.my-daily-empty-icon {
+  font-size: 3rem;
+  margin-bottom: var(--space-3);
+}
+
+.my-daily-empty h3 {
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.my-daily-empty p {
+  font-size: var(--text-sm);
+  max-width: 480px;
+  margin: 0 auto var(--space-4);
+}

@@ -112,6 +112,13 @@ export interface Config {
   chromaHost: string;
   chromaPort: number;
 
+  // TypeSafe (JEV)
+  typesafeApiKey?: string;
+
+  // 我的每日评分
+  myDailyEnabled: boolean;
+  myDailySchedule: string;
+
   // DeepSearch
   deepSearchApiUrl: string;
 }
@@ -233,6 +240,13 @@ function getConfig(): Config {
     // Chroma
     chromaHost: process.env.CHROMA_HOST || '127.0.0.1',
     chromaPort: parseInt(process.env.CHROMA_PORT || '8000', 10),
+
+    // TypeSafe (JEV)
+    typesafeApiKey: process.env.TYPESAFE_API_KEY,
+
+    // 我的每日评分
+    myDailyEnabled: process.env.MY_DAILY_ENABLED !== 'false',
+    myDailySchedule: process.env.MY_DAILY_SCHEDULE || '30 7 * * *',
 
     // DeepSearch
     deepSearchApiUrl: process.env.DEEPSEARCH_API_URL || 'http://localhost:8082',

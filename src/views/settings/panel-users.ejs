@@ -1,0 +1,287 @@
+<section class="settings-panel" data-tab="users">
+  <div class="settings-container">
+    <div class="section-header">
+      <div>
+        <h2>用户管理</h2>
+        <p class="panel-description" style="margin-top: 4px; color: var(--text-secondary); font-size: 0.9rem;">
+          管理系统登录用户及其角色与权限。
+        </p>
+      </div>
+      <div class="section-header-actions">
+        <button class="btn btn-primary" onclick="showAddUserModal()">+ 添加用户</button>
+      </div>
+    </div>
+
+    <table class="rss-sources-table" id="usersTable">
+      <thead>
+        <tr>
+          <th style="width: 80px;">ID</th>
+          <th>用户名</th>
+          <th style="width: 120px;">角色</th>
+          <th style="width: 180px;">创建时间</th>
+          <th style="width: 140px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="usersBody">
+        <!-- 动态加载 -->
+      </tbody>
+    </table>
+
+    <div id="usersEmptyState" class="empty-state" style="display: none;">
+      <p>暂无用户</p>
+    </div>
+  </div>
+</section>
+
+<!-- 用户添加/编辑弹窗 -->
+<div id="userModal" class="modal-overlay">
+  <div class="modal" style="max-width: 480px;">
+    <div class="modal-header">
+      <h3 id="userModalTitle">添加用户</h3>
+      <button class="modal-close" onclick="closeUserModal()">&times;</button>
+    </div>
+    <form id="userForm" onsubmit="handleUserFormSubmit(event)">
+      <div class="modal-body" style="padding: var(--space-4);">
+        <input type="hidden" id="userId" value="">
+        
+        <div class="form-group" style="margin-bottom: var(--space-3);">
+          <label for="userUsername" class="form-label" style="display: block; margin-bottom: 4px; font-weight: 500;">用户名 <span style="color: var(--danger, #e53e3e);">*</span></label>
+          <input type="text" id="userUsername" class="form-input" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md);" required autocomplete="off">
+        </div>
+
+        <div class="form-group" style="margin-bottom: var(--space-3);">
+          <label for="userPassword" class="form-label" style="display: block; margin-bottom: 4px; font-weight: 500;">
+            <span id="userPasswordLabel">密码</span> <span id="userPasswordRequired" style="color: var(--danger, #e53e3e);">*</span>
+          </label>
+          <input type="password" id="userPassword" class="form-input" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md);" autocomplete="new-password">
+          <p id="userPasswordHint" class="form-hint" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px; display: none;">留空表示不修改密码</p>
+        </div>
+
+        <div class="form-group" style="margin-bottom: var(--space-3);">
+          <label for="userRole" class="form-label" style="display: block; margin-bottom: 4px; font-weight: 500;">角色 <span style="color: var(--danger, #e53e3e);">*</span></label>
+          <select id="userRole" class="form-select" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md);" required>
+            <option value="user">普通用户 (user) - 可自定义主题、查看我的每日</option>
+            <option value="guest">访客 (guest) - 只读查看默认数据</option>
+            <option value="admin">管理员 (admin) - 拥有所有权限</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px; padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border);">
+        <button type="button" class="btn btn-secondary" onclick="closeUserModal()">取消</button>
+        <button type="submit" class="btn btn-primary" id="saveUserBtn">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+let usersList = [];
+
+async function loadUsers() {
+  try {
+    const res = await fetch('/api/users', { cache: 'no-store' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || '加载用户失败');
+    }
+    const data = await res.json();
+    usersList = data.users || [];
+    renderUsersTable();
+  } catch (error) {
+    console.error('加载用户失败:', error);
+    if (typeof showToast === 'function') {
+      showToast(error.message || '加载用户列表失败', 'error');
+    }
+  }
+}
+
+function renderUsersTable() {
+  const tbody = document.getElementById('usersBody');
+  const empty = document.getElementById('usersEmptyState');
+  if (!tbody) return;
+
+  if (usersList.length === 0) {
+    tbody.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+
+  if (empty) empty.style.display = 'none';
+
+  const roleBadges = {
+    admin: '<span class="badge" style="background: rgba(124, 58, 237, 0.15); color: #7c3aed; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">管理员</span>',
+    user: '<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">用户</span>',
+    guest: '<span class="badge" style="background: rgba(107, 114, 128, 0.15); color: #6b7280; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">访客</span>',
+  };
+
+  tbody.innerHTML = usersList.map(u => {
+    const isMainAdmin = u.id === 1;
+    const badge = roleBadges[u.role] || u.role;
+    const createdAt = u.created_at ? new Date(u.created_at).toLocaleString('zh-CN') : '-';
+    
+    return `
+      <tr>
+        <td>${u.id}</td>
+        <td><strong>${escapeHtml(u.username)}</strong></td>
+        <td>${badge}</td>
+        <td style="color: var(--text-secondary); font-size: 0.85rem;">${createdAt}</td>
+        <td>
+          <button class="btn-icon" title="编辑" onclick="showEditUserModal(${u.id})">✏️</button>
+          ${isMainAdmin ? '' : `<button class="btn-icon" title="删除" onclick="handleDeleteUser(${u.id}, '${escapeHtml(u.username)}')">🗑️</button>`}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+function showAddUserModal() {
+  document.getElementById('userModalTitle').textContent = '添加用户';
+  document.getElementById('userId').value = '';
+  document.getElementById('userUsername').value = '';
+  document.getElementById('userUsername').disabled = false;
+  document.getElementById('userPassword').value = '';
+  document.getElementById('userPassword').required = true;
+  document.getElementById('userPasswordRequired').style.display = 'inline';
+  document.getElementById('userPasswordHint').style.display = 'none';
+  document.getElementById('userRole').value = 'user';
+  
+  const modal = document.getElementById('userModal');
+  if (modal) modal.classList.add('active');
+}
+
+function showEditUserModal(userId) {
+  const user = usersList.find(u => u.id === userId);
+  if (!user) return;
+
+  document.getElementById('userModalTitle').textContent = '编辑用户: ' + user.username;
+  document.getElementById('userId').value = user.id;
+  document.getElementById('userUsername').value = user.username;
+  // 主管理员禁止修改用户名
+  document.getElementById('userUsername').disabled = user.id === 1;
+  document.getElementById('userPassword').value = '';
+  document.getElementById('userPassword').required = false;
+  document.getElementById('userPasswordRequired').style.display = 'none';
+  document.getElementById('userPasswordHint').style.display = 'block';
+  document.getElementById('userRole').value = user.role;
+  // 主管理员禁止修改角色
+  document.getElementById('userRole').disabled = user.id === 1;
+
+  const modal = document.getElementById('userModal');
+  if (modal) modal.classList.add('active');
+}
+
+function closeUserModal() {
+  const modal = document.getElementById('userModal');
+  if (modal) modal.classList.remove('active');
+}
+
+async function handleUserFormSubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById('userId').value;
+  const username = document.getElementById('userUsername').value.trim();
+  const password = document.getElementById('userPassword').value;
+  const role = document.getElementById('userRole').value;
+
+  const saveBtn = document.getElementById('saveUserBtn');
+  saveBtn.disabled = true;
+
+  try {
+    if (id) {
+      // 更新
+      const body = {};
+      if (username) body.username = username;
+      if (password) body.password = password;
+      if (role) body.role = role;
+
+      const res = await fetch(`/api/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || '更新失败');
+      }
+
+      if (typeof showToast === 'function') showToast('用户更新成功', 'success');
+    } else {
+      // 新增
+      if (!username || !password) {
+        throw new Error('用户名和密码不能为空');
+      }
+
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, role }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || '创建失败');
+      }
+
+      if (typeof showToast === 'function') showToast('用户创建成功', 'success');
+    }
+
+    closeUserModal();
+    await loadUsers();
+  } catch (error) {
+    console.error('保存用户失败:', error);
+    if (typeof showToast === 'function') {
+      showToast(error.message, 'error');
+    } else {
+      alert(error.message);
+    }
+  } finally {
+    saveBtn.disabled = false;
+  }
+}
+
+async function handleDeleteUser(userId, username) {
+  const confirmed = typeof showConfirmDialog === 'function' 
+    ? await showConfirmDialog({
+        title: '删除用户',
+        message: `确定要删除用户 "${username}" 吗？此操作无法撤销。`,
+        confirmText: '删除',
+        confirmStyle: 'danger',
+      })
+    : confirm(`确定要删除用户 "${username}" 吗？`);
+
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || '删除失败');
+    }
+
+    if (typeof showToast === 'function') showToast('用户已删除', 'success');
+    await loadUsers();
+  } catch (error) {
+    console.error('删除用户失败:', error);
+    if (typeof showToast === 'function') {
+      showToast(error.message, 'error');
+    } else {
+      alert(error.message);
+    }
+  }
+}
+
+// 标签页切换到 users 时自动加载用户列表
+document.addEventListener('DOMContentLoaded', () => {
+  const userTabBtn = document.querySelector('.settings-tab[data-tab="users"]');
+  if (userTabBtn) {
+    userTabBtn.addEventListener('click', () => {
+      loadUsers();
+    });
+  }
+});
+</script>

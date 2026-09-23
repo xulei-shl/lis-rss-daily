@@ -971,6 +971,24 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
         continue;
       }
 
+      // ============================================================
+      // 044: 添加 user 角色支持 + 用户每日评分表
+      // ============================================================
+      if (file === '044_add_user_role_and_daily_scores.sql') {
+        const hasUserDailyScores = hasTable(db, 'user_daily_scores');
+        const usersTableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get() as { sql: string } | undefined;
+        const needsUserRole = usersTableInfo?.sql.includes("CHECK(role IN ('admin', 'guest'))");
+
+        if (needsUserRole || !hasUserDailyScores) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log('      → Executed 044 migration: updated users role & created user_daily_scores table');
+        } else {
+          console.log('      → Skipped (user role and user_daily_scores already present)');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

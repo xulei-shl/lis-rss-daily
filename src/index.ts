@@ -19,6 +19,7 @@ import { initTelegramBotManager } from './telegram/bot-manager.js';
 import { initGmailScheduler } from './gmail-scheduler.js';
 import { initWebScheduler } from './web-scheduler.js';
 import { initRejectedCleanupScheduler } from './rejected-cleanup-scheduler.js';
+import { initMyDailyScorerScheduler } from './my-daily-scorer-scheduler.js';
 import { config } from './config.js';
 import { createApp, startServer } from './api/web.js';
 import path from 'path';
@@ -52,6 +53,8 @@ async function main() {
     gmailFetchSchedule: config.gmailFetchSchedule,
     rejectedCleanupEnabled: config.rejectedCleanupEnabled,
     rejectedCleanupSchedule: config.rejectedCleanupSchedule,
+    myDailyEnabled: config.myDailyEnabled,
+    myDailySchedule: config.myDailySchedule,
   }, 'Configuration loaded');
 
   // Initialize database
@@ -164,6 +167,15 @@ async function main() {
     log.info('Gmail scheduler disabled');
   }
 
+  // Initialize and start My Daily Scorer Scheduler
+  const myDailyScorerScheduler = initMyDailyScorerScheduler();
+  if (config.myDailyEnabled) {
+    myDailyScorerScheduler.start();
+    log.info(`📊 My daily scorer scheduler started (schedule: ${config.myDailySchedule})`);
+  } else {
+    log.info('📊 My daily scorer scheduler disabled');
+  }
+
   // Initialize and start Telegram Bot
   const telegramBotManager = await initTelegramBotManager();
   if (telegramBotManager) {
@@ -214,6 +226,10 @@ async function main() {
     // Stop Gmail scheduler
     await gmailScheduler.stop();
     log.info('Gmail scheduler stopped');
+
+    // Stop My Daily scorer scheduler
+    await myDailyScorerScheduler.stop();
+    log.info('📊 My daily scorer scheduler stopped');
 
     // Stop Telegram bot manager
     if (telegramBotManager) {

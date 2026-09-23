@@ -40,9 +40,12 @@
         <a href="/search">搜索</a>
         <a href="/deepsearch">深度检索</a>
         <a href="/filter-logs">日志</a>
+        <% if (user.role === 'admin' || user.role === 'user') { %>
+          <a href="/my-daily">我的每日</a>
+          <a href="/topics">主题</a>
+        <% } %>
         <% if (user.role === 'admin') { %>
           <a href="/settings">设置</a>
-          <a href="/topics">主题</a>
         <% } %>
         <form method="POST" action="/logout" style="display: inline;">
           <button type="submit" class="btn-icon">登出</button>

@@ -23,7 +23,7 @@ router.get('/llm-configs', requireAuth, async (req: AuthRequest, res) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const provider = req.query.provider as string | undefined;
-    const configType = req.query.configType as 'llm' | 'embedding' | 'rerank' | undefined;
+    const configType = req.query.configType as 'llm' | 'embedding' | 'rerank' | 'jev' | undefined;
     const taskType = req.query.taskType as TaskType | undefined;
     const sortBy = req.query.sortBy as 'priority' | 'task_type_priority' | undefined;
 
@@ -142,8 +142,8 @@ router.post('/llm-configs', requireAuth, requireAdmin, async (req: AuthRequest, 
       return res.status(400).json({ error: 'Provider is required' });
     }
 
-    if (!['openai', 'gemini', 'custom'].includes(provider)) {
-      return res.status(400).json({ error: 'Provider must be openai, gemini, or custom' });
+    if (!['openai', 'gemini', 'custom', 'typesafe'].includes(provider)) {
+      return res.status(400).json({ error: 'Provider must be openai, gemini, custom, or typesafe' });
     }
 
     if (!baseURL || typeof baseURL !== 'string' || baseURL.trim().length === 0) {
@@ -164,8 +164,8 @@ router.post('/llm-configs', requireAuth, requireAdmin, async (req: AuthRequest, 
       return res.status(400).json({ error: 'Model is required' });
     }
 
-    if (configType !== undefined && !['llm', 'embedding', 'rerank'].includes(configType)) {
-      return res.status(400).json({ error: 'configType must be llm, embedding, or rerank' });
+    if (configType !== undefined && !['llm', 'embedding', 'rerank', 'jev'].includes(configType)) {
+      return res.status(400).json({ error: 'configType must be llm, embedding, rerank, or jev' });
     }
 
     // Validate taskType if provided
@@ -256,8 +256,8 @@ router.put('/llm-configs/:id', requireAuth, requireAdmin, async (req: AuthReques
     const updateData: Record<string, unknown> = {};
 
     if (provider !== undefined) {
-      if (typeof provider !== 'string' || !['openai', 'gemini', 'custom'].includes(provider)) {
-        return res.status(400).json({ error: 'Provider must be openai, gemini, or custom' });
+      if (typeof provider !== 'string' || !['openai', 'gemini', 'custom', 'typesafe'].includes(provider)) {
+        return res.status(400).json({ error: 'Provider must be openai, gemini, custom, or typesafe' });
       }
       updateData.provider = provider;
     }
@@ -289,10 +289,10 @@ router.put('/llm-configs/:id', requireAuth, requireAdmin, async (req: AuthReques
     }
 
     if (configType !== undefined) {
-      if (typeof configType !== 'string' || !['llm', 'embedding', 'rerank'].includes(configType)) {
-        return res.status(400).json({ error: 'configType must be llm, embedding, or rerank' });
+      if (typeof configType !== 'string' || !['llm', 'embedding', 'rerank', 'jev'].includes(configType)) {
+        return res.status(400).json({ error: 'configType must be llm, embedding, rerank, or jev' });
       }
-      updateData.configType = configType as 'llm' | 'embedding' | 'rerank';
+      updateData.configType = configType as 'llm' | 'embedding' | 'rerank' | 'jev';
     }
 
     if (taskType !== undefined) {

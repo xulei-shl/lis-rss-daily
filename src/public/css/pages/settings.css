@@ -565,6 +565,11 @@
     color: #4285f4;
 }
 
+.provider-badge.typesafe {
+    background: rgba(124, 58, 237, 0.1);
+    color: #7c3aed;
+}
+
 .default-badge {
     padding: 1px 6px;
     border-radius: var(--radius-sm);

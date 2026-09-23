@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
-  role TEXT DEFAULT 'admin' CHECK(role IN ('admin', 'guest')),
+  role TEXT DEFAULT 'user' CHECK(role IN ('admin', 'user', 'guest')),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -684,6 +684,26 @@ CREATE TABLE IF NOT EXISTS rejected_cleanup_logs (
 
 CREATE INDEX IF NOT EXISTS idx_rejected_cleanup_logs_user_id ON rejected_cleanup_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_rejected_cleanup_logs_created_at ON rejected_cleanup_logs(created_at);
+
+-- ===========================================
+-- 24. User Daily Scores Table (用户每日评分表)
+-- ===========================================
+CREATE TABLE IF NOT EXISTS user_daily_scores (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  article_id INTEGER NOT NULL,
+  score_date TEXT NOT NULL,
+  relevance_score REAL NOT NULL,
+  matched_domain TEXT,
+  jev_response TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE,
+  UNIQUE(user_id, article_id, score_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_daily_scores_user_date ON user_daily_scores(user_id, score_date);
+CREATE INDEX IF NOT EXISTS idx_user_daily_scores_score ON user_daily_scores(relevance_score);
 
 -- ===========================================
 -- 19. Schema Metadata Table

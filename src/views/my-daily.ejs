@@ -1,0 +1,55 @@
+<%- include('layout', {
+  pageTitle: pageTitle,
+  pageStyles: '<link rel="stylesheet" href="/css/pages/my-daily.css">',
+  body: `
+  <div class="my-daily-container">
+    <!-- Header -->
+    <header class="my-daily-header">
+      <div class="my-daily-title-group">
+        <h1><span>🎯</span> 我的每日</h1>
+        <p class="my-daily-desc">基于您关注的主题领域与关键词，由 JEV 模型对每日新增文章进行相关性评分与智能排序</p>
+      </div>
+      <div style="display: flex; gap: var(--space-2); align-items: center;">
+        <button id="myDailyRefreshBtn" class="btn btn-primary" onclick="triggerRefreshDaily()">🔄 重新评分</button>
+        <a href="/topics" class="btn btn-secondary">⚙️ 设置我的主题</a>
+      </div>
+    </header>
+
+    <!-- Toolbar: Date selector & Stats -->
+    <section class="my-daily-toolbar">
+      <div class="my-daily-date-control">
+        <label for="myDailyDateSelect">日期：</label>
+        <select id="myDailyDateSelect" class="my-daily-date-select">
+          <!-- 动态加载 -->
+        </select>
+      </div>
+
+      <div class="my-daily-stats">
+        <span class="my-daily-stat-item">
+          总文章: <span id="myDailyTotalCount" class="my-daily-stat-num">0</span>
+        </span>
+        <span class="my-daily-stat-item" style="color: #059669;">
+          高度相关 (≥70%): <span id="myDailyHighCount" class="my-daily-stat-num" style="color: #059669;">0</span>
+        </span>
+        <span class="my-daily-stat-item" style="color: #6b7280;">
+          低相关 (&lt;30%): <span id="myDailyLowCount" class="my-daily-stat-num" style="color: #6b7280;">0</span>
+        </span>
+      </div>
+    </section>
+
+    <!-- Articles List -->
+    <div id="myDailyArticlesList" class="my-daily-list">
+      <!-- 动态加载 -->
+    </div>
+
+    <!-- Empty State -->
+    <div id="myDailyEmptyState" class="my-daily-empty" style="display: none;">
+      <div class="my-daily-empty-icon">📭</div>
+      <h3>暂无评分文章</h3>
+      <p>所选日期暂无定时评分文章记录。定时任务每日自动执行评分，请确保已在「主题」页面设置关注的主题领域和关键词。</p>
+      <a href="/topics" class="btn btn-primary">前往配置主题</a>
+    </div>
+  </div>
+
+  <script src="/js/my-daily.js"></script>
+` }) %>

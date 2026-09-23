@@ -26,13 +26,14 @@ export interface AuthRequest extends Request {
 /**
  * User roles
  */
-export type UserRole = 'admin' | 'guest';
+export type UserRole = 'admin' | 'user' | 'guest';
 
 /**
  * Role hierarchy for permission checking
  */
 const ROLE_HIERARCHY: Record<UserRole, number> = {
-  admin: 2,
+  admin: 3,
+  user: 2,
   guest: 1,
 };
 
@@ -108,8 +109,8 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
 
   req.userId = payload.userId;
   req.user = { id: payload.userId, username: payload.username, role: payload.role };
-  // Set effectiveUserId: guest users read admin's data (user_id=1), others use their own
-  req.effectiveUserId = payload.role === 'guest' ? 1 : (payload.userId || 1);
+  // guest 和 user 角色读取 admin 的数据源（user_id=1），admin 使用自己的 ID
+  req.effectiveUserId = payload.role === 'admin' ? (payload.userId || 1) : 1;
   next();
 }
 
@@ -124,7 +125,7 @@ export function optionalAuth(req: AuthRequest, res: Response, next: NextFunction
     if (payload) {
       req.userId = payload.userId;
       req.user = { id: payload.userId, username: payload.username, role: payload.role };
-      req.effectiveUserId = payload.role === 'guest' ? 1 : (payload.userId || 1);
+      req.effectiveUserId = payload.role === 'admin' ? (payload.userId || 1) : 1;
     }
   }
 
@@ -147,6 +148,24 @@ export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction
   if (!hasRole(req.user?.role, 'admin')) {
     if (req.path.startsWith('/api/')) {
       res.status(403).json({ error: '权限不足，需要管理员权限' });
+      return;
+    }
+    res.status(403).render('error', {
+      pageTitle: '权限不足',
+      error: '您没有权限访问此页面',
+    });
+    return;
+  }
+  next();
+}
+
+/**
+ * 要求登录用户角色中间件（user 或 admin 可访问）
+ */
+export function requireUser(req: AuthRequest, res: Response, next: NextFunction): void {
+  if (!hasRole(req.user?.role, 'user')) {
+    if (req.path.startsWith('/api/')) {
+      res.status(403).json({ error: '权限不足，需要用户权限' });
       return;
     }
     res.status(403).render('error', {

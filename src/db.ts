@@ -54,13 +54,15 @@ export interface DatabaseTable {
   rejected_articles: RejectedArticlesTable;
   rejected_cleanup_stats: RejectedCleanupStatsTable;
   rejected_cleanup_logs: RejectedCleanupLogsTable;
+  user_daily_scores: UserDailyScoresTable;
 }
 
 export interface UsersTable {
-  id: number;
+  id: Generated<number>;
   username: string;
   password_hash: string;
-  created_at: string;
+  role: 'admin' | 'user' | 'guest';
+  created_at: Generated<string>;
   updated_at: string;
 }
 
@@ -395,6 +397,17 @@ export interface RejectedCleanupLogsTable {
   created_at: Generated<string>;
 }
 
+export interface UserDailyScoresTable {
+  id: Generated<number>;
+  user_id: number;
+  article_id: number;
+  score_date: string;
+  relevance_score: number;
+  matched_domain: string | null;
+  jev_response: string | null;
+  created_at: Generated<string>;
+}
+
 export interface EmailFetchLogsTable {
   id: Generated<number>;
   email_source_id: number;
@@ -482,6 +495,7 @@ export type EmailFetchLogsSelection = SelectionType<EmailFetchLogsTable>;
 export type WebSourcesSelection = SelectionType<WebSourcesTable>;
 export type WebFetchLogsSelection = SelectionType<WebFetchLogsTable>;
 export type RejectedArticlesSelection = SelectionType<RejectedArticlesTable>;
+export type UserDailyScoresSelection = SelectionType<UserDailyScoresTable>;
 
 let _db: DB | null = null;
 
