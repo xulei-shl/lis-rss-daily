@@ -5,17 +5,17 @@
   </div>
 
   <!-- Search & Filters -->
-  <div class="filters-bar">
+  <div class="filters-bar" role="search" aria-label="历史总结筛选">
     <div class="search-box">
       <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"
         stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
       </svg>
-      <input type="text" id="searchInput" class="search-input" placeholder="搜索日期（YYYY-MM-DD）...">
+      <input type="text" id="searchInput" class="search-input" placeholder="搜索日期（YYYY-MM-DD）..." aria-label="搜索总结日期">
     </div>
     <div class="filter-group">
       <span class="filter-label">类型</span>
-      <select id="typeFilter" class="filter-select">
+      <select id="typeFilter" class="filter-select" aria-label="总结类型筛选">
         <option value="">全部类型</option>
         <option value="journal_all">全部期刊</option>
         <option value="journal">期刊精选</option>
@@ -26,13 +26,13 @@
     </div>
     <div class="filter-group">
       <span class="filter-label">年份</span>
-      <select id="yearFilter" class="filter-select">
+      <select id="yearFilter" class="filter-select" aria-label="年份筛选">
         <option value="">全部年份</option>
       </select>
     </div>
     <div class="filter-group">
       <span class="filter-label">月份</span>
-      <select id="monthFilter" class="filter-select">
+      <select id="monthFilter" class="filter-select" aria-label="月份筛选">
         <option value="">全部月份</option>
         <option value="1">一月</option>
         <option value="2">二月</option>
@@ -55,7 +55,26 @@
 
   <!-- History List -->
   <div id="historyContainer">
-    <div class="loading">加载中...</div>
+    <div class="history-group">
+      <div class="history-group-header">
+        <div class="skeleton-pulse skeleton-line" style="width: 140px; height: 18px;"></div>
+        <div class="skeleton-pulse skeleton-line" style="width: 60px; height: 16px;"></div>
+      </div>
+      <div class="history-group-items">
+        <div class="history-item-card">
+          <div class="skeleton-pulse skeleton-line" style="width: 50%; height: 18px; margin-bottom: 12px;"></div>
+          <div class="skeleton-pulse skeleton-line" style="width: 80%; height: 14px;"></div>
+        </div>
+        <div class="history-item-card">
+          <div class="skeleton-pulse skeleton-line" style="width: 50%; height: 18px; margin-bottom: 12px;"></div>
+          <div class="skeleton-pulse skeleton-line" style="width: 80%; height: 14px;"></div>
+        </div>
+        <div class="history-item-card">
+          <div class="skeleton-pulse skeleton-line" style="width: 50%; height: 18px; margin-bottom: 12px;"></div>
+          <div class="skeleton-pulse skeleton-line" style="width: 80%; height: 14px;"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Summary Detail Modal -->
@@ -63,10 +82,16 @@
     <div class="modal modal-large">
       <div class="modal-header">
         <h3 id="modalTitle">每日总结</h3>
-        <button class="modal-close" id="closeSummaryModal">×</button>
+        <button class="modal-close" id="closeSummaryModal" aria-label="关闭详情窗口">×</button>
       </div>
       <div class="modal-body" id="modalBody">
-        <div class="loading">加载中...</div>
+        <div class="history-skeleton">
+          <div class="skeleton-pulse skeleton-line title"></div>
+          <div class="skeleton-pulse skeleton-line" style="margin-top: 14px;"></div>
+          <div class="skeleton-pulse skeleton-line medium"></div>
+          <div class="skeleton-pulse skeleton-line"></div>
+          <div class="skeleton-pulse skeleton-line short"></div>
+        </div>
       </div>
     </div>
   </div>

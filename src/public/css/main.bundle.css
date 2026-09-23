@@ -1,6 +1,6 @@
 /* ============================================ */
 /* CSS BUNDLE - Development Mode               */
-/* Generated: 2026-09-23T08:35:16.708Z  */
+/* Generated: 2026-09-23T08:45:11.951Z  */
 /* ============================================ */
 
 /* ============================================ */
@@ -1465,9 +1465,10 @@ td.table-actions {
   max-height: 85vh;
   overflow-y: auto;
   box-shadow: var(--shadow-elevated);
-  transform: scale(0.95) translateY(10px);
+  transform: scale(0.97) translateY(8px);
   opacity: 0;
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease-out;
+  min-height: 280px;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease-out;
 }
 
 .modal-header {
@@ -1485,6 +1486,7 @@ td.table-actions {
   font-weight: 600;
   margin: 0;
   color: var(--text-primary);
+  text-wrap: balance;
 }
 
 .modal-close {

@@ -8,6 +8,7 @@
   let allHistory = [];
   let filteredHistory = [];
   let isFullDataLoaded = false;  // 是否已加载全部数据
+  let lastActiveCard = null;     // 记录唤起弹窗的卡片元素，用于关闭后焦点还原
   const DEFAULT_DAYS = 30;  // 默认显示最近30天
 
   // DOM Elements
@@ -45,23 +46,20 @@
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(() => {
         loadFullDataAndFilter();
-      }, 300);
+      }, 250);
     });
 
     typeFilter.addEventListener('change', () => {
       loadFullDataAndFilter();
     });
 
-    // Load full data when user opens year filter dropdown
-    yearFilter.addEventListener('focus', async () => {
-      if (!isFullDataLoaded) {
-        await loadFullDataAndFilter();
-      }
-    });
-
     yearFilter.addEventListener('change', () => {
       updateMonthFilter();
-      filterAndRender();
+      if (!isFullDataLoaded) {
+        loadFullDataAndFilter();
+      } else {
+        filterAndRender();
+      }
     });
 
     monthFilter.addEventListener('change', () => {
@@ -73,9 +71,14 @@
       if (e.target === summaryModal) closeModal();
     });
 
-    // Close modal on Escape key
+    // Close modal on Escape key & Support Enter/Space on cards
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeModal();
+      if (e.key === 'Escape') {
+        closeModal();
+      } else if ((e.key === 'Enter' || e.key === ' ') && document.activeElement?.classList?.contains('history-item-card')) {
+        e.preventDefault();
+        document.activeElement.click();
+      }
     });
   }
 
@@ -94,13 +97,13 @@
       allHistory = data.history || [];
       isFullDataLoaded = loadAll;
 
-      // Populate year filter with all available data
-      if (!loadAll) {
-        // For initial load, populate filters based on returned data
-        populateYearFilter();
-      }
-
+      populateYearFilter();
       filterAndRender();
+
+      // 如果首次只加载了部分，在空闲时静默预取完整历史，避免后续交互卡顿或打断选择
+      if (!loadAll) {
+        scheduleSilentPreload();
+      }
     } catch (err) {
       console.error('Failed to load history:', err);
       historyContainer.innerHTML = `
@@ -109,6 +112,29 @@
           <div class="empty-state-desc">请稍后重试</div>
         </div>
       `;
+    }
+  }
+
+  // 静默后台预加载完整数据
+  function scheduleSilentPreload() {
+    const preload = async () => {
+      if (isFullDataLoaded) return;
+      try {
+        const res = await fetch('/api/daily-summary/history?limit=10000');
+        if (!res.ok) return;
+        const data = await res.json();
+        allHistory = data.history || [];
+        isFullDataLoaded = true;
+        populateYearFilter();
+      } catch (e) {
+        // 静默失败不打扰用户
+      }
+    };
+
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(preload);
+    } else {
+      setTimeout(preload, 1000);
     }
   }
 
@@ -127,7 +153,6 @@
       allHistory = data.history || [];
       isFullDataLoaded = true;
 
-      // Re-populate year filter with full data
       populateYearFilter();
       filterAndRender();
     } catch (err) {
@@ -135,26 +160,55 @@
     }
   }
 
-  // Populate year filter based on available data
+  // Populate year filter based on available data (无损更新，绝不破坏用户正处于 focus 的菜单)
   function populateYearFilter() {
     const years = new Set();
     allHistory.forEach(item => {
       const year = new Date(item.created_at).getFullYear();
-      years.add(year);
+      if (!isNaN(year)) years.add(year);
     });
 
     const sortedYears = Array.from(years).sort((a, b) => b - a);
+    const currentVal = yearFilter.value;
+
+    // 检查是否已有完全匹配的选项
+    const existingValues = Array.from(yearFilter.options).map(o => o.value).filter(Boolean);
+    const isSame = existingValues.length === sortedYears.length && sortedYears.every((y, idx) => String(y) === existingValues[idx]);
+    if (isSame) return;
+
+    // 如果用户当前焦点在 yearFilter 上，延迟到 blur 后再无损更新，避免击溃展开中的原生菜单
+    if (document.activeElement === yearFilter) {
+      yearFilter.addEventListener('blur', () => populateYearFilter(), { once: true });
+      return;
+    }
+
     yearFilter.innerHTML = '<option value="">全部年份</option>' +
       sortedYears.map(year => `<option value="${year}">${year}年</option>`).join('');
+
+    if (currentVal && sortedYears.includes(parseInt(currentVal))) {
+      yearFilter.value = currentVal;
+    }
   }
 
   // Update month filter options based on year
   function updateMonthFilter() {
-    const selectedYear = yearFilter.value;
+    const currentMonth = monthFilter.value;
     monthFilter.innerHTML = '<option value="">全部月份</option>' +
       [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m =>
         `<option value="${m}">${m}月</option>`
       ).join('');
+    if (currentMonth) {
+      monthFilter.value = currentMonth;
+    }
+  }
+
+  // 一键重置所有筛选条件
+  function resetFilters() {
+    searchInput.value = '';
+    typeFilter.value = '';
+    yearFilter.value = '';
+    monthFilter.value = '';
+    filterAndRender();
   }
 
   // Filter and render
@@ -207,12 +261,21 @@
     if (filteredHistory.length === 0) {
       const hasFilter = searchInput.value.trim() || typeFilter.value || yearFilter.value || monthFilter.value;
       historyContainer.innerHTML = `
-        <div class="empty-state">
+        <div class="empty-state history-fade-in">
           <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           <div class="empty-state-title">${hasFilter ? '未找到匹配的记录' : '暂无最近30天的历史记录'}</div>
           <div class="empty-state-desc">${hasFilter ? '尝试调整筛选条件或搜索关键词' : '生成总结后将在此显示'}</div>
+          ${hasFilter ? `
+            <button class="empty-state-reset-btn" onclick="window.historyPage.resetFilters()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+              </svg>
+              <span>清空筛选条件</span>
+            </button>
+          ` : ''}
         </div>
       `;
       return;
@@ -222,7 +285,7 @@
     const grouped = groupByMonth(filteredHistory);
 
     historyContainer.innerHTML = Object.entries(grouped).map(([monthKey, items]) => `
-      <div class="history-group">
+      <div class="history-group history-fade-in">
         <div class="history-group-header">
           <h2 class="history-group-title">${monthKey}</h2>
           <span class="history-group-count">${items.length} 篇总结</span>
@@ -250,13 +313,13 @@
   function renderHistoryItem(item) {
     const typeLabel = typeLabels[item.summary_type] || '综合';
     return `
-      <div class="history-item-card" onclick="window.historyPage.viewSummary('${item.summary_date}', '${item.summary_type}')">
+      <div class="history-item-card" role="button" tabindex="0" aria-label="查看 ${item.summary_date} 的 ${typeLabel} 总结" onclick="window.historyPage.viewSummary('${item.summary_date}', '${item.summary_type}', this)">
         <div class="history-item-header">
           <span class="history-item-date">${item.summary_date}</span>
           <span class="history-item-type badge-${item.summary_type}">${typeLabel}</span>
         </div>
         <div class="history-item-meta">
-          <span class="history-item-count">${item.article_count} 篇章</span>
+          <span class="history-item-count">${item.article_count} 篇文献</span>
           <span class="history-item-time">${formatDate(item.created_at)}</span>
         </div>
       </div>
@@ -280,11 +343,29 @@
   }
 
   // View summary detail
-  async function viewSummary(date, summaryType) {
+  async function viewSummary(date, summaryType, triggerEl) {
+    lastActiveCard = triggerEl || document.activeElement;
     const typeLabel = typeLabels[summaryType] || '综合';
     modalTitle.textContent = `每日总结 - ${date} (${typeLabel})`;
-    modalBody.innerHTML = '<div class="loading">加载中...</div>';
+    
+    // 使用呼吸感骨架屏占位，消除高度突跳
+    modalBody.innerHTML = `
+      <div class="history-skeleton">
+        <div class="skeleton-pulse skeleton-line title"></div>
+        <div class="skeleton-pulse skeleton-line" style="margin-top: 14px;"></div>
+        <div class="skeleton-pulse skeleton-line medium"></div>
+        <div class="skeleton-pulse skeleton-line"></div>
+        <div class="skeleton-pulse skeleton-line short"></div>
+        <div class="skeleton-pulse skeleton-line" style="margin-top: 24px;"></div>
+        <div class="skeleton-pulse skeleton-line medium"></div>
+      </div>
+    `;
     summaryModal.classList.add('active');
+
+    // 焦点转移至关闭按钮，便于键盘 Esc / Space 触发
+    if (closeSummaryModal) {
+      setTimeout(() => closeSummaryModal.focus(), 50);
+    }
 
     try {
       // Load summary and articles in parallel
@@ -306,7 +387,6 @@
           <div class="empty-state-title">加载失败</div>
           <div class="empty-state-desc">请稍后重试</div>
         </div>
-      `;
     }
   }
 
@@ -348,7 +428,7 @@
             </svg>
             <span>生成于 ${new Date(summaryData.created_at + 'Z').toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</span>
           </div>
-          <button class="summary-meta-action" onclick="window.historyPage.copySummary()" title="复制内容">
+          <button class="summary-meta-action" onclick="window.historyPage.copySummary(this)" title="复制内容">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -434,6 +514,14 @@
   // Close modal
   function closeModal() {
     summaryModal.classList.remove('active');
+    // 焦点还原至原本激活的卡片
+    if (lastActiveCard && typeof lastActiveCard.focus === 'function') {
+      try {
+        lastActiveCard.focus();
+      } catch (e) {
+        // 忽略聚焦异常
+      }
+    }
   }
 
   // Build articles list HTML
@@ -465,7 +553,7 @@
           <ul class="articles-list">
             ${articleList.map(article => `
               <li class="articles-list-item">
-                <a href="${escapeHtml(article.url)}" target="_blank" rel="noopener" class="article-link">
+                <a href="${escapeHtml(article.url)}" target="_blank" rel="noopener" class="article-link" title="${escapeHtml(article.title)}">
                   ${escapeHtml(article.title)}
                 </a>
                 <span class="article-source">${escapeHtml(article.source_name)}</span>
@@ -514,9 +602,10 @@
   }
 
   // Copy summary
-  async function copySummary() {
+  async function copySummary(btnEl) {
     const contentEl = document.querySelector('.summary-detail-content');
     const textToCopy = contentEl?.dataset.fullContent || contentEl?.innerText || '';
+    const actionBtn = btnEl || document.querySelector('.summary-meta-action');
 
     if (!textToCopy) return;
 
@@ -526,6 +615,23 @@
       } else {
         fallbackCopyText(textToCopy);
       }
+      
+      // 按钮即时微动效与对勾反馈
+      if (actionBtn) {
+        actionBtn.classList.add('copied');
+        const originalHTML = actionBtn.innerHTML;
+        actionBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          <span>已复制</span>
+        `;
+        setTimeout(() => {
+          actionBtn.classList.remove('copied');
+          actionBtn.innerHTML = originalHTML;
+        }, 2000);
+      }
+
       showToastMessage('已复制到剪贴板', 'success');
     } catch (err) {
       console.error('Failed to copy:', err);
@@ -578,7 +684,8 @@
   window.historyPage = {
     viewSummary,
     copySummary,
-    downloadSummary
+    downloadSummary,
+    resetFilters
   };
 
 })();
