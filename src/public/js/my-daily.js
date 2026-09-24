@@ -121,6 +121,9 @@
   function renderSkeleton(count = 3) {
     if (!articlesList) return;
 
+    // 骨架屏需要 min-height 预留，移除空列表标记
+    articlesList.classList.remove('is-empty');
+
     // 外壳直接复用 .article-card，骨架与真实卡片的尺寸/间距天然一致
     const card = `
         <div class="article-card">
@@ -226,10 +229,13 @@
 
     if (articles.length === 0) {
       articlesList.innerHTML = '';
+      // 空列表时取消骨架屏的 min-height 预留，避免空状态上方出现大片空白
+      articlesList.classList.add('is-empty');
       if (emptyState) emptyState.style.display = 'block';
       return;
     }
 
+    articlesList.classList.remove('is-empty');
     if (emptyState) emptyState.style.display = 'none';
     articlesList.innerHTML = articles.map(article => renderArticleCardHtml(article)).join('');
   }
@@ -240,6 +246,9 @@
    */
   function applyFlipSort(updatedArticle) {
     if (!articlesList || !updatedArticle) return;
+
+    // 有真实卡片插入，取消空列表的 min-height 抑制
+    articlesList.classList.remove('is-empty');
 
     // 清除骨架屏占位（锁定当前高度以避免清空时列表骤缩塌陷）
     const skeletonEl = articlesList.querySelector('[role="status"]');

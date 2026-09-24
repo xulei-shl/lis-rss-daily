@@ -211,6 +211,11 @@
   min-height: 220px;
 }
 
+/* 列表为空（显示空状态占位）时取消骨架高度预留，避免工具栏下方出现大片空白 */
+.my-daily-list.is-empty {
+  min-height: 0;
+}
+
 /* 刚出分/分值更新的卡片微交互动效：240ms 柔和微光与弹性微脉冲，体现极速出分质感 */
 .article-card.is-scoring-just-updated {
   position: relative;
