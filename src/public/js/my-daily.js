@@ -13,6 +13,7 @@
 
   let viewMonth = ''; // 当前日历面板查看的月份 (YYYY-MM)
   let availableDatesSet = new Set(); // 服务端已返回的可选/有文章日期集合 (降级兜底)
+  let scoredDatesSet = new Set(); // 服务端已返回的已评分日期集合 (降级兜底)
   let calendarPickerInstance = null;
 
   const dateHint = document.getElementById('myDailyDateHint');
@@ -116,7 +117,7 @@
           const isCollapsed = this.hudEl.classList.toggle('is-collapsed');
           this.toggleBtn.setAttribute('aria-expanded', !isCollapsed);
           if (this.toggleText) {
-            this.toggleText.textContent = isCollapsed ? '展开中枢' : '收起中枢';
+            this.toggleText.textContent = isCollapsed ? '展开' : '收起';
           }
           if (this.capsuleEl) {
             this.capsuleEl.hidden = !isCollapsed;
@@ -581,15 +582,11 @@
 
       const scoreClass = score >= 0.7 ? 'high' : score >= 0.3 ? 'mid' : 'low';
       item.innerHTML = `
-        <div class="jev-stream-left">
-          <span class="jev-stream-seq">#${seq}</span>
-          <span class="jev-stream-tag">${escapeHtml(domain)}</span>
-          <span class="jev-stream-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
-        </div>
-        <div class="jev-stream-right">
-          <span class="jev-stream-score ${scoreClass}">★ ${Math.round(score * 100)}%</span>
-          <span class="jev-stream-latency">${latency}ms</span>
-        </div>
+        <span class="jev-stream-seq">#${seq}</span>
+        <span class="jev-stream-tag" title="${escapeHtml(domain)}">${escapeHtml(domain)}</span>
+        <span class="jev-stream-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
+        <span class="jev-stream-score ${scoreClass}">★ ${Math.round(score * 100)}%</span>
+        <span class="jev-stream-latency">${latency}ms</span>
       `;
 
       if (prepend && this.streamListEl.firstChild) {
@@ -636,7 +633,7 @@
           console.error('拉取日历状态异常:', err);
         }
 
-        // 降级兜底：若后端月份接口未准备就绪，基于已获取的可评分日期集合兜底
+        // 降级兜底：若后端月份接口未准备就绪，基于已获取的可评分日期与已评分日期集合兜底
         if (availableDatesSet.size > 0) {
           const fallbackDays = {};
           const [year, m] = month.split('-').map(Number);
@@ -647,6 +644,8 @@
             const k = `${month}-${dayStr}`;
             if (k > realToday) {
               fallbackDays[k] = { status: 'future', articleCount: 0 };
+            } else if (scoredDatesSet.has(k)) {
+              fallbackDays[k] = { status: 'green', articleCount: 0 };
             } else if (availableDatesSet.has(k)) {
               fallbackDays[k] = { status: 'yellow', articleCount: 0 };
             } else {
@@ -674,7 +673,9 @@
       if (!res.ok) throw new Error('获取日期失败');
       const data = await res.json();
       const dates = data.dates || [];
+      const scoredDates = data.scoredDates || [];
       availableDatesSet = new Set(dates);
+      scoredDatesSet = new Set(scoredDates);
 
       // 服务端按用户时区返回的今天 (YYYY-MM-DD)，回退到浏览器本地日期
       todayDate = data.today || getLocalToday();

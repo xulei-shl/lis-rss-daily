@@ -518,10 +518,10 @@
   display: none;
 }
 
-/* HUD Body 3栏网格 */
+/* HUD Body 3栏网格：优化比例，为右侧瀑布流注入充足的横向空间 */
 .jev-hud-body {
   display: grid;
-  grid-template-columns: 260px 1.4fr 1fr;
+  grid-template-columns: 230px 1.15fr 1fr;
   gap: var(--space-4);
   padding: var(--space-4);
   background: var(--bg-surface);
@@ -1158,15 +1158,15 @@
 }
 
 .jev-stream-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 20px 50px minmax(0, 1fr) 42px 28px;
   align-items: center;
-  justify-content: space-between;
+  gap: 5px;
   background: var(--bg-primary);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 6px 10px;
+  padding: 5px 8px;
   font-size: 12px;
-  gap: var(--space-2);
   cursor: pointer;
   user-select: none;
   animation: jevStreamSlideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -1188,30 +1188,28 @@
   box-shadow: 0 0 0 1px var(--accent-primary), inset 3px 0 0 var(--accent-primary);
 }
 
-.jev-stream-left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
 .jev-stream-seq {
   font-weight: 700;
   font-size: 10px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
-  flex: none;
+  white-space: nowrap;
 }
 
 .jev-stream-tag {
+  display: block;
+  box-sizing: border-box;
+  width: 50px;
   font-size: 10px;
-  padding: 1px 5px;
+  padding: 1px 2px;
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-secondary);
   border: 1px solid var(--border);
   white-space: nowrap;
-  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
 }
 
 .jev-stream-title {
@@ -1219,19 +1217,16 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 140px;
-}
-
-.jev-stream-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
+  min-width: 0;
+  line-height: 1.4;
 }
 
 .jev-stream-score {
   font-weight: 700;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .jev-stream-score.high {
@@ -1250,6 +1245,8 @@
   font-size: 10px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
 }
 
 @keyframes jevStreamSlideIn {

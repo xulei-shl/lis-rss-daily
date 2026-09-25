@@ -131,6 +131,7 @@ export async function getAvailableDates(userId: number) {
 
   return {
     dates: Array.from(dates).sort().reverse().slice(0, limit),
+    scoredDates: scoredDates.map((d) => d.score_date),
     today: todayLocal,
   };
 }
