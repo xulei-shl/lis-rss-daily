@@ -517,6 +517,39 @@
 
 /* 状态 */
 
+/* 5. Users Table Specifics (#usersTable) - 与全局全宽保持统一 */
+#usersTable th:nth-child(1),
+#usersTable td:nth-child(1) {
+    width: 6%;
+    text-align: center;
+}
+
+/* 用户名 */
+#usersTable th:nth-child(2),
+#usersTable td:nth-child(2) {
+    width: 34%;
+}
+
+/* 角色 */
+#usersTable th:nth-child(3),
+#usersTable td:nth-child(3) {
+    width: 20%;
+    text-align: center;
+}
+
+/* 创建时间 */
+#usersTable th:nth-child(4),
+#usersTable td:nth-child(4) {
+    width: 27%;
+}
+
+/* 操作列（与全局设置表格统一 13%） */
+#usersTable th:last-child,
+#usersTable td:last-child {
+    width: 13%;
+    text-align: right;
+}
+
 .rss-name {
     font-weight: 600;
     color: var(--text-primary);

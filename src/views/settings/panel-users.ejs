@@ -15,11 +15,11 @@
     <table class="rss-sources-table" id="usersTable">
       <thead>
         <tr>
-          <th style="width: 80px;">ID</th>
+          <th>ID</th>
           <th>用户名</th>
-          <th style="width: 120px;">角色</th>
-          <th style="width: 180px;">创建时间</th>
-          <th style="width: 140px;">操作</th>
+          <th>角色</th>
+          <th>创建时间</th>
+          <th>操作</th>
         </tr>
       </thead>
       <tbody id="usersBody">
@@ -126,8 +126,10 @@ function renderUsersTable() {
         <td>${badge}</td>
         <td style="color: var(--text-secondary); font-size: 0.85rem;">${createdAt}</td>
         <td>
-          <button class="btn-icon" title="编辑" onclick="showEditUserModal(${u.id})">✏️</button>
-          ${isMainAdmin ? '' : `<button class="btn-icon" title="删除" onclick="handleDeleteUser(${u.id}, '${escapeHtml(u.username)}')">🗑️</button>`}
+          <div class="action-buttons">
+            <button class="btn-icon" title="编辑" aria-label="编辑用户" onclick="showEditUserModal(${u.id})">✏️</button>
+            ${isMainAdmin ? '' : `<button class="btn-icon" title="删除" aria-label="删除用户" onclick="handleDeleteUser(${u.id}, '${escapeHtml(u.username)}')">🗑️</button>`}
+          </div>
         </td>
       </tr>
     `;
