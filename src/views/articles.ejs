@@ -41,7 +41,11 @@ const pageActions = isReadOnly ? '' : `
         <span class="filter-label">来源</span>
         <div class="searchable-select" id="sourceSearchableSelect">
           <input type="text" id="filterSource" class="filter-select searchable-input" placeholder="搜索来源..." autocomplete="off">
-          <span class="select-arrow">▼</span>
+          <span class="select-arrow">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </span>
           <div class="select-dropdown" id="sourceDropdown" style="display: none;">
             <div class="select-option" data-value="">全部来源</div>
           </div>
@@ -274,71 +278,6 @@ const pageActions = isReadOnly ? '' : `
         currentPage = 1;
         loadArticles();
       });
-    }
-
-    // Setup searchable select functionality
-    function setupSearchableSelect(containerId, inputId, dropdownId, onSelect) {
-      const container = document.getElementById(containerId);
-      const input = document.getElementById(inputId);
-      const dropdown = document.getElementById(dropdownId);
-
-      if (!container || !input || !dropdown) return;
-
-      let selectedValue = '';
-
-      // Toggle dropdown on input focus
-      input.addEventListener('focus', () => {
-        dropdown.style.display = 'block';
-      });
-
-      // Filter options on input
-      input.addEventListener('input', () => {
-        const query = input.value.toLowerCase();
-        const options = dropdown.querySelectorAll('.select-option');
-
-        options.forEach(option => {
-          const text = option.textContent.toLowerCase();
-          if (text.includes(query) || option.dataset.value === '') {
-            option.style.display = 'block';
-          } else {
-            option.style.display = 'none';
-          }
-        });
-
-        dropdown.style.display = 'block';
-      });
-
-      // Handle option selection
-      dropdown.addEventListener('click', (e) => {
-        const option = e.target.closest('.select-option');
-        if (!option) return;
-
-        selectedValue = option.dataset.value;
-        input.value = option.textContent;
-        dropdown.style.display = 'none';
-
-        if (onSelect) onSelect();
-      });
-
-      // Close dropdown when clicking outside
-      document.addEventListener('click', (e) => {
-        if (!container.contains(e.target)) {
-          dropdown.style.display = 'none';
-        }
-      });
-
-      // Handle keyboard navigation
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-          dropdown.style.display = 'none';
-        }
-      });
-
-      // Expose getter for selected value
-      input.getSelectedValue = () => selectedValue;
-      input.setSelectedValue = (value) => {
-        selectedValue = value || '';
-      };
     }
 
     // Load merged sources for filter (RSS sources + journals)

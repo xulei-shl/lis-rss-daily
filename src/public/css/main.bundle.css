@@ -1,6 +1,6 @@
 /* ============================================ */
 /* CSS BUNDLE - Development Mode               */
-/* Generated: 2026-09-25T10:58:29.475Z  */
+/* Generated: 2026-09-25T12:14:28.452Z  */
 /* ============================================ */
 
 /* ============================================ */
@@ -1886,6 +1886,416 @@ td.table-actions {
     transition: none !important;
     animation: none !important;
     transform: none !important;
+  }
+}
+
+
+
+/* ============================================ */
+/* ./components/custom-select.css */
+/* ============================================ */
+/* ============================================
+   CUSTOM SELECT COMPONENT (统一圆角矩形下拉组件)
+   遵循 Design System & better-ui 设计规范
+   与 articles 页面来源下拉框及通用日历组件视觉完全对齐
+   ============================================ */
+
+.custom-select-wrapper {
+  position: relative;
+  width: 100%;
+  display: block;
+  box-sizing: border-box;
+}
+
+/* 视觉隐藏原生 select，保持无障碍与原生表单可访问性 */
+.custom-select-native {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* 自定义触发器按钮（封闭状态的圆角矩形） */
+.custom-select-trigger {
+  height: 42px;
+  width: 100%;
+  padding: 0 12px !important;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md) !important; /* 8px 统一圆角 */
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  box-sizing: border-box;
+  text-align: left;
+  user-select: none;
+  background-image: none !important; /* 清除原生 select 的背景箭头 */
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.custom-select-trigger:hover:not(:disabled) {
+  border-color: var(--text-tertiary);
+}
+
+.custom-select-trigger:focus,
+.custom-select-wrapper.is-open .custom-select-trigger {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+  z-index: 2;
+}
+
+.custom-select-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.custom-select-trigger.is-invalid {
+  border-color: var(--red);
+}
+
+.custom-select-trigger.is-invalid:focus {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+
+/* 文本展示区 */
+.custom-select-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 8px;
+  line-height: 1.2;
+}
+
+.custom-select-value.is-placeholder {
+  color: var(--text-tertiary);
+}
+
+/* 箭头指示图标 */
+.custom-select-arrow {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--text-tertiary);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s ease;
+  pointer-events: none;
+}
+
+.custom-select-wrapper.is-open .custom-select-arrow {
+  transform: rotate(180deg);
+  color: var(--accent-primary);
+}
+
+/* 下拉菜单弹出层（核心：圆角矩形与平滑阴影） */
+.custom-select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 100%;
+  max-height: 250px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md); /* 8px 统一圆角矩形 */
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.2), 0 2px 6px -1px rgba(0, 0, 0, 0.08);
+  padding: 4px;
+  z-index: 1050; /* 高于常规内容及表格，低于全局 toast */
+  transform-origin: top center;
+  animation: customSelectFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+/* 向上展开 */
+.custom-select-dropdown.open-upward {
+  top: auto;
+  bottom: calc(100% + 4px);
+  transform-origin: bottom center;
+}
+
+/* 下拉选项项 */
+.custom-select-option {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm); /* 4px 内圆角 */
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  user-select: none;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.custom-select-option:hover,
+.custom-select-option.is-focused {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.custom-select-option.is-selected {
+  background: var(--accent-subtle);
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.custom-select-option.is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* 选中对勾 */
+.custom-select-check {
+  margin-left: 8px;
+  flex-shrink: 0;
+  color: var(--accent-primary);
+}
+
+/* 分组标题 */
+.custom-select-group-label {
+  padding: 6px 10px 2px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+  user-select: none;
+}
+
+/* 滚动条美化（与 sourceDropdown 保持一致） */
+.custom-select-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-select-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-select-dropdown::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.custom-select-dropdown::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* 轻量微动效 */
+@keyframes customSelectFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .custom-select-dropdown {
+    animation: none !important;
+  }
+  .custom-select-arrow {
+    transition: none !important;
+  }
+}
+
+
+
+/* ============================================ */
+/* ./components/searchable-select.css */
+/* ============================================ */
+/* ============================================
+   SEARCHABLE SELECT COMPONENT (可搜索下拉组件)
+   遵循 Design System & better-ui 设计规范
+   与 custom-select 保持 100% 一致的视觉风格与圆角设计
+   ============================================ */
+
+.searchable-select {
+  position: relative;
+  width: 100%;
+  display: block;
+  box-sizing: border-box;
+}
+
+/* 输入框（与 custom-select-trigger / filter-select 统一） */
+.searchable-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 36px 0 12px !important;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md) !important; /* 8px 统一圆角 */
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: text;
+  box-sizing: border-box;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.searchable-input:hover {
+  border-color: var(--text-tertiary);
+}
+
+.searchable-input:focus,
+.searchable-select.is-open .searchable-input {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+  z-index: 2;
+}
+
+/* 箭头指示图标 (对齐 custom-select) */
+.searchable-select .select-arrow {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.searchable-select.is-open .select-arrow {
+  transform: translateY(-50%) rotate(180deg);
+  color: var(--accent-primary);
+}
+
+/* 下拉菜单弹出层 (对齐 custom-select 的圆角矩形与精致阴影) */
+.searchable-select .select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 100%;
+  max-height: 250px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md); /* 8px 统一圆角矩形 */
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.2), 0 2px 6px -1px rgba(0, 0, 0, 0.08);
+  padding: 4px;
+  z-index: 1050;
+  transform-origin: top center;
+  animation: searchableSelectFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.searchable-select .select-dropdown.open-upward {
+  top: auto;
+  bottom: calc(100% + 4px);
+  transform-origin: bottom center;
+}
+
+/* 选项样式 (对齐 custom-select) */
+.searchable-select .select-option {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm); /* 4px 内圆角 */
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  user-select: none;
+  line-height: 1.4;
+  white-space: nowrap;
+  border-bottom: none !important;
+}
+
+.searchable-select .select-option:hover,
+.searchable-select .select-option.is-focused {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.searchable-select .select-option.is-selected {
+  background: var(--accent-subtle);
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+/* 选中勾选图标 */
+.searchable-select .select-check {
+  margin-left: 8px;
+  flex-shrink: 0;
+  color: var(--accent-primary);
+}
+
+/* 无匹配项提示 */
+.searchable-select .select-empty {
+  padding: 12px 10px;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  text-align: center;
+  user-select: none;
+}
+
+/* 滚动条美化 (对齐 custom-select) */
+.searchable-select .select-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.searchable-select .select-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.searchable-select .select-dropdown::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.searchable-select .select-dropdown::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+@keyframes searchableSelectFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .searchable-select .select-dropdown {
+    animation: none !important;
+  }
+  .searchable-select .select-arrow {
+    transition: none !important;
   }
 }
 

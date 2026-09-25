@@ -30,6 +30,8 @@ const CSS_IMPORTS = [
   './components/status-badge.css',
   './components/modal.css',
   './components/calendar-picker.css',
+  './components/custom-select.css',
+  './components/searchable-select.css',
 ];
 
 /**

@@ -1,0 +1,173 @@
+/* ============================================
+   SEARCHABLE SELECT COMPONENT (可搜索下拉组件)
+   遵循 Design System & better-ui 设计规范
+   与 custom-select 保持 100% 一致的视觉风格与圆角设计
+   ============================================ */
+
+.searchable-select {
+  position: relative;
+  width: 100%;
+  display: block;
+  box-sizing: border-box;
+}
+
+/* 输入框（与 custom-select-trigger / filter-select 统一） */
+.searchable-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 36px 0 12px !important;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md) !important; /* 8px 统一圆角 */
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: text;
+  box-sizing: border-box;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.searchable-input:hover {
+  border-color: var(--text-tertiary);
+}
+
+.searchable-input:focus,
+.searchable-select.is-open .searchable-input {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+  z-index: 2;
+}
+
+/* 箭头指示图标 (对齐 custom-select) */
+.searchable-select .select-arrow {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.searchable-select.is-open .select-arrow {
+  transform: translateY(-50%) rotate(180deg);
+  color: var(--accent-primary);
+}
+
+/* 下拉菜单弹出层 (对齐 custom-select 的圆角矩形与精致阴影) */
+.searchable-select .select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 100%;
+  max-height: 250px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md); /* 8px 统一圆角矩形 */
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.2), 0 2px 6px -1px rgba(0, 0, 0, 0.08);
+  padding: 4px;
+  z-index: 1050;
+  transform-origin: top center;
+  animation: searchableSelectFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.searchable-select .select-dropdown.open-upward {
+  top: auto;
+  bottom: calc(100% + 4px);
+  transform-origin: bottom center;
+}
+
+/* 选项样式 (对齐 custom-select) */
+.searchable-select .select-option {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm); /* 4px 内圆角 */
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  user-select: none;
+  line-height: 1.4;
+  white-space: nowrap;
+  border-bottom: none !important;
+}
+
+.searchable-select .select-option:hover,
+.searchable-select .select-option.is-focused {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.searchable-select .select-option.is-selected {
+  background: var(--accent-subtle);
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+/* 选中勾选图标 */
+.searchable-select .select-check {
+  margin-left: 8px;
+  flex-shrink: 0;
+  color: var(--accent-primary);
+}
+
+/* 无匹配项提示 */
+.searchable-select .select-empty {
+  padding: 12px 10px;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  text-align: center;
+  user-select: none;
+}
+
+/* 滚动条美化 (对齐 custom-select) */
+.searchable-select .select-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.searchable-select .select-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.searchable-select .select-dropdown::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.searchable-select .select-dropdown::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+@keyframes searchableSelectFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .searchable-select .select-dropdown {
+    animation: none !important;
+  }
+  .searchable-select .select-arrow {
+    transition: none !important;
+  }
+}
