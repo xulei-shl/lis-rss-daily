@@ -168,6 +168,41 @@
     background: var(--bg-surface);
 }
 
+/* Filter Clear Button */
+.filters-bar .filter-clear-btn {
+    height: 42px;
+    padding: 0 var(--space-3);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+    flex-shrink: 0;
+    transition: color 150ms ease-out, background-color 150ms ease-out, border-color 150ms ease-out, opacity 150ms ease-out, transform 100ms ease-out;
+}
+
+.filters-bar .filter-clear-btn:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--bg-subtle);
+    border-color: var(--border-strong);
+}
+
+.filters-bar .filter-clear-btn:active:not(:disabled) {
+    transform: scale(0.97);
+}
+
+.filters-bar .filter-clear-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    border-color: var(--border);
+    color: var(--text-tertiary);
+}
+
 /* Results Count */
 .results-count {
     font-family: var(--font-meta);
@@ -690,6 +725,11 @@
     #historyDateFilter .calendar-picker-btn {
         width: 100%;
     }
+
+    .filters-bar .filter-clear-btn {
+        width: 100%;
+        flex: 1 1 100%;
+    }
 }
 
 @media (max-width: 480px) {
@@ -713,6 +753,7 @@
     .history-item-card,
     .filter-select,
     .search-input,
+    .filter-clear-btn,
     .summary-meta-action,
     .empty-state-reset-btn,
     .articles-list-item,

@@ -16,6 +16,7 @@
   const resultsCount = document.getElementById('resultsCount');
   const searchInput = document.getElementById('searchInput');
   const typeFilter = document.getElementById('typeFilter');
+  const clearFiltersBtn = document.getElementById('clearFiltersBtn');
   const summaryModal = document.getElementById('summaryModal');
   const closeSummaryModal = document.getElementById('closeSummaryModal');
   const modalTitle = document.getElementById('modalTitle');
@@ -72,6 +73,12 @@
     typeFilter.addEventListener('change', () => {
       loadFullDataAndFilter();
     });
+
+    if (clearFiltersBtn) {
+      clearFiltersBtn.addEventListener('click', () => {
+        resetFilters();
+      });
+    }
 
     closeSummaryModal.addEventListener('click', closeModal);
     summaryModal.addEventListener('click', (e) => {
@@ -215,7 +222,8 @@
     });
 
     renderHistory();
-    renderResultsCount();
+    renderResultsCount(hasActiveFilter);
+    updateClearFiltersButton(hasActiveFilter);
   }
 
   // Render history grouped by month
@@ -290,11 +298,13 @@
   }
 
   // Render results count
-  function renderResultsCount() {
+  function renderResultsCount(hasFilter) {
     const total = filteredHistory.length;
-    const hasFilter = searchInput.value.trim() || typeFilter.value || yearFilter.value || monthFilter.value;
+    const isFiltered = hasFilter !== undefined
+      ? Boolean(hasFilter)
+      : Boolean(searchInput.value.trim() || typeFilter.value || (dateCalendarPicker && dateCalendarPicker.getValue()));
 
-    if (hasFilter) {
+    if (isFiltered) {
       resultsCount.textContent = total > 0
         ? `找到 ${total} 条记录`
         : '未找到匹配记录';
@@ -302,6 +312,13 @@
       resultsCount.textContent = total > 0
         ? `最近 ${DEFAULT_DAYS} 天：共 ${total} 条记录`
         : '最近30天暂无记录';
+    }
+  }
+
+  // Update clear filters button state
+  function updateClearFiltersButton(hasActiveFilter) {
+    if (clearFiltersBtn) {
+      clearFiltersBtn.disabled = !hasActiveFilter;
     }
   }
 
