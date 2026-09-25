@@ -16,12 +16,12 @@
   const resultsCount = document.getElementById('resultsCount');
   const searchInput = document.getElementById('searchInput');
   const typeFilter = document.getElementById('typeFilter');
-  const yearFilter = document.getElementById('yearFilter');
-  const monthFilter = document.getElementById('monthFilter');
   const summaryModal = document.getElementById('summaryModal');
   const closeSummaryModal = document.getElementById('closeSummaryModal');
   const modalTitle = document.getElementById('modalTitle');
   const modalBody = document.getElementById('modalBody');
+
+  let dateCalendarPicker = null;
 
   // Type labels
   const typeLabels = {
@@ -35,9 +35,29 @@
 
   // Initialize
   document.addEventListener('DOMContentLoaded', () => {
+    initDateFilter();
     loadHistory();
     setupEventListeners();
   });
+
+  // 初始化通用日历选择组件（无圆点模式）
+  function initDateFilter() {
+    const container = document.getElementById('historyDateFilter');
+    if (container && typeof window.createCalendarPicker === 'function') {
+      dateCalendarPicker = window.createCalendarPicker({
+        container,
+        placeholder: '全部日期',
+        showDots: false, // 历史页面不需要状态圆点
+        allowClear: true,
+        clearText: '全部',
+        todayText: '今天',
+        alignRight: true, // 靠右边缘对齐避免超出屏幕
+        onChange: () => {
+          loadFullDataAndFilter();
+        }
+      });
+    }
+  }
 
   // Setup event listeners
   function setupEventListeners() {
@@ -50,19 +70,6 @@
     });
 
     typeFilter.addEventListener('change', () => {
-      loadFullDataAndFilter();
-    });
-
-    yearFilter.addEventListener('change', () => {
-      updateMonthFilter();
-      if (!isFullDataLoaded) {
-        loadFullDataAndFilter();
-      } else {
-        filterAndRender();
-      }
-    });
-
-    monthFilter.addEventListener('change', () => {
       loadFullDataAndFilter();
     });
 
@@ -97,7 +104,6 @@
       allHistory = data.history || [];
       isFullDataLoaded = loadAll;
 
-      populateYearFilter();
       filterAndRender();
 
       // 如果首次只加载了部分，在空闲时静默预取完整历史，避免后续交互卡顿或打断选择
@@ -125,7 +131,6 @@
         const data = await res.json();
         allHistory = data.history || [];
         isFullDataLoaded = true;
-        populateYearFilter();
       } catch (e) {
         // 静默失败不打扰用户
       }
@@ -153,52 +158,9 @@
       allHistory = data.history || [];
       isFullDataLoaded = true;
 
-      populateYearFilter();
       filterAndRender();
     } catch (err) {
       console.error('Failed to load full history:', err);
-    }
-  }
-
-  // Populate year filter based on available data (无损更新，绝不破坏用户正处于 focus 的菜单)
-  function populateYearFilter() {
-    const years = new Set();
-    allHistory.forEach(item => {
-      const year = new Date(item.created_at).getFullYear();
-      if (!isNaN(year)) years.add(year);
-    });
-
-    const sortedYears = Array.from(years).sort((a, b) => b - a);
-    const currentVal = yearFilter.value;
-
-    // 检查是否已有完全匹配的选项
-    const existingValues = Array.from(yearFilter.options).map(o => o.value).filter(Boolean);
-    const isSame = existingValues.length === sortedYears.length && sortedYears.every((y, idx) => String(y) === existingValues[idx]);
-    if (isSame) return;
-
-    // 如果用户当前焦点在 yearFilter 上，延迟到 blur 后再无损更新，避免击溃展开中的原生菜单
-    if (document.activeElement === yearFilter) {
-      yearFilter.addEventListener('blur', () => populateYearFilter(), { once: true });
-      return;
-    }
-
-    yearFilter.innerHTML = '<option value="">全部年份</option>' +
-      sortedYears.map(year => `<option value="${year}">${year}年</option>`).join('');
-
-    if (currentVal && sortedYears.includes(parseInt(currentVal))) {
-      yearFilter.value = currentVal;
-    }
-  }
-
-  // Update month filter options based on year
-  function updateMonthFilter() {
-    const currentMonth = monthFilter.value;
-    monthFilter.innerHTML = '<option value="">全部月份</option>' +
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m =>
-        `<option value="${m}">${m}月</option>`
-      ).join('');
-    if (currentMonth) {
-      monthFilter.value = currentMonth;
     }
   }
 
@@ -206,46 +168,46 @@
   function resetFilters() {
     searchInput.value = '';
     typeFilter.value = '';
-    yearFilter.value = '';
-    monthFilter.value = '';
+    if (dateCalendarPicker) {
+      dateCalendarPicker.clear(false);
+    }
     filterAndRender();
   }
 
   // Filter and render
   function filterAndRender() {
-    const searchQuery = searchInput.value.trim();
+    const searchQuery = searchInput.value.trim().toLowerCase();
     const selectedType = typeFilter.value;
-    const selectedYear = yearFilter.value;
-    const selectedMonth = monthFilter.value;
+    const selectedDate = dateCalendarPicker ? dateCalendarPicker.getValue() : '';
 
     // Calculate 30 days ago date
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - DEFAULT_DAYS);
     thirtyDaysAgo.setHours(0, 0, 0, 0);
 
-    // Check if any filter is active (search, type, year, month)
-    const hasActiveFilter = searchQuery || selectedType || selectedYear || selectedMonth;
+    // Check if any filter is active
+    const hasActiveFilter = searchQuery || selectedType || selectedDate;
 
     filteredHistory = allHistory.filter(item => {
       // Type filter
       if (selectedType && item.summary_type !== selectedType) return false;
 
-      // Date filter
-      const date = new Date(item.created_at);
-      const year = date.getFullYear();
-      const month = date.getMonth() + 1;
+      // 日历选择器过滤：精确匹配 YYYY-MM-DD
+      if (selectedDate) {
+        const itemDate = item.summary_date || (item.created_at ? item.created_at.slice(0, 10) : '');
+        if (itemDate !== selectedDate) return false;
+      }
 
-      if (selectedYear && year !== parseInt(selectedYear)) return false;
-      if (selectedMonth && month !== parseInt(selectedMonth)) return false;
-
-      // Search filter (YYYY-MM-DD format)
+      // Search filter (keyword or date string)
       if (searchQuery) {
-        const dateStr = item.summary_date;
-        if (!dateStr.includes(searchQuery)) return false;
+        const dateStr = (item.summary_date || '').toLowerCase();
+        const contentStr = (item.content || item.summary_content || item.title || '').toLowerCase();
+        if (!dateStr.includes(searchQuery) && !contentStr.includes(searchQuery)) return false;
       }
 
       // Default: only show last 30 days if no filters are active
       if (!hasActiveFilter) {
+        const date = new Date(item.created_at);
         if (date < thirtyDaysAgo) return false;
       }
 
@@ -259,7 +221,8 @@
   // Render history grouped by month
   function renderHistory() {
     if (filteredHistory.length === 0) {
-      const hasFilter = searchInput.value.trim() || typeFilter.value || yearFilter.value || monthFilter.value;
+      const selectedDate = dateCalendarPicker ? dateCalendarPicker.getValue() : '';
+      const hasFilter = searchInput.value.trim() || typeFilter.value || selectedDate;
       historyContainer.innerHTML = `
         <div class="empty-state history-fade-in">
           <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -387,6 +350,7 @@
           <div class="empty-state-title">加载失败</div>
           <div class="empty-state-desc">请稍后重试</div>
         </div>
+      `;
     }
   }
 

@@ -133,3 +133,129 @@ export async function getAvailableDates(userId: number) {
     today: todayLocal,
   };
 }
+
+/**
+ * 每日状态项
+ */
+export interface DailyStatusItem {
+  status: 'green' | 'yellow' | 'red' | 'future';
+  hasArticles: boolean;
+  isScored: boolean;
+  articleCount: number;
+}
+
+/**
+ * 获取指定月份每一天的文章与 JEV 排序状态
+ * 
+ * 状态判定规则：
+ * - future: 未来日期（不可选，不渲染状态圆点）
+ * - green:  已执行 JEV 排序
+ * - yellow: 当天有文章，但尚未执行 JEV 排序
+ * - red:    当天没有文章
+ */
+export async function getMonthDailyStatus(userId: number, yearMonth?: string) {
+  const db = getDb();
+  const [timezone, todayLocal] = await Promise.all([
+    getUserTimezone(userId),
+    getUserLocalDate(userId),
+  ]);
+
+  // 若未提供合法的 YYYY-MM，默认使用用户时区下的当月
+  let targetMonth = yearMonth;
+  if (!targetMonth || !/^\d{4}-\d{2}$/.test(targetMonth)) {
+    targetMonth = todayLocal.slice(0, 7);
+  }
+
+  const [yearStr, monthStr] = targetMonth.split('-');
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+
+  // 计算当月总天数
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const lastDayStr = String(daysInMonth).padStart(2, '0');
+
+  // 构建当月的起始与结束 UTC 范围
+  const [startUtc] = buildUtcRangeFromLocalDate(`${targetMonth}-01`, timezone);
+  const [, endUtc] = buildUtcRangeFromLocalDate(`${targetMonth}-${lastDayStr}`, timezone);
+
+  // 1. 查询当月已评分记录的日期集合
+  const scoredRows = await db
+    .selectFrom('user_daily_scores')
+    .where('user_id', '=', userId)
+    .where('score_date', '>=', `${targetMonth}-01`)
+    .where('score_date', '<=', `${targetMonth}-${lastDayStr}`)
+    .select('score_date')
+    .distinct()
+    .execute();
+  const scoredSet = new Set(scoredRows.map((r) => r.score_date));
+
+  // 2. 查询当月范围内的文章创建时间
+  const articleRows = await db
+    .selectFrom('articles')
+    .where('created_at', '>=', startUtc)
+    .where('created_at', '<=', endUtc)
+    .select('created_at')
+    .execute();
+
+  // 按用户时区格式化日期 (YYYY-MM-DD)
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+
+  const articleDatesCount = new Map<string, number>();
+  for (const row of articleRows) {
+    if (!row.created_at) continue;
+    const localDate = formatter.format(new Date(row.created_at));
+    // 仅统计属于当前月份内的文章
+    if (localDate.startsWith(targetMonth)) {
+      articleDatesCount.set(localDate, (articleDatesCount.get(localDate) || 0) + 1);
+    }
+  }
+
+  // 3. 构建整月每日状态字典
+  const days: Record<string, DailyStatusItem> = {};
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayStr = String(d).padStart(2, '0');
+    const dateKey = `${targetMonth}-${dayStr}`;
+
+    if (dateKey > todayLocal) {
+      days[dateKey] = {
+        status: 'future',
+        hasArticles: false,
+        isScored: false,
+        articleCount: 0,
+      };
+      continue;
+    }
+
+    const isScored = scoredSet.has(dateKey);
+    const articleCount = articleDatesCount.get(dateKey) || 0;
+    const hasArticles = articleCount > 0;
+
+    let status: 'green' | 'yellow' | 'red' = 'red';
+    if (isScored) {
+      status = 'green';
+    } else if (hasArticles) {
+      status = 'yellow';
+    } else {
+      status = 'red';
+    }
+
+    days[dateKey] = {
+      status,
+      hasArticles,
+      isScored,
+      articleCount,
+    };
+  }
+
+  return {
+    month: targetMonth,
+    today: todayLocal,
+    days,
+  };
+}
+

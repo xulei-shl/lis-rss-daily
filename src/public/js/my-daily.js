@@ -11,7 +11,10 @@
   let articles = [];
   let flipCleanupTimer = null;
 
-  const dateSelect = document.getElementById('myDailyDateSelect');
+  let viewMonth = ''; // 当前日历面板查看的月份 (YYYY-MM)
+  let availableDatesSet = new Set(); // 服务端已返回的可选/有文章日期集合 (降级兜底)
+  let calendarPickerInstance = null;
+
   const dateHint = document.getElementById('myDailyDateHint');
   const statusEl = document.getElementById('myDailyStatus');
   const articlesList = document.getElementById('myDailyArticlesList');
@@ -23,31 +26,74 @@
 
   // 初始化
   async function init() {
-    // 先上骨架屏，避免首屏空白后突然出现内容
     renderSkeleton();
-
     await loadAvailableDates();
+    initCalendarPicker();
+    updateDateHint();
     await loadArticles(currentDate);
-
-    if (dateSelect) {
-      dateSelect.addEventListener('change', (e) => {
-        // 用户清空控件时回退到今天，避免日期状态与控件显示不一致
-        const value = e.target.value || todayDate || getLocalToday();
-        currentDate = value;
-        dateSelect.value = value;
-        updateDateHint();
-        loadArticles(currentDate);
-      });
-    }
   }
 
-  // 加载可评分的日期范围（原生日期控件用 min/max 限定，不再逐项列出可选日期）
+  // 初始化通用日历选择组件（启用状态圆点模式）
+  function initCalendarPicker() {
+    const container = document.getElementById('myDailyDatePicker');
+    if (!container || typeof window.createCalendarPicker !== 'function') return;
+
+    calendarPickerInstance = window.createCalendarPicker({
+      container,
+      value: currentDate,
+      showDots: true, // 我的每日显示状态圆点与图例
+      allowClear: false, // 每日文章必须对应某一天
+      todayText: '今天',
+      fetchDotsStatus: async (month) => {
+        try {
+          const res = await fetch(`/api/my-daily/calendar-status?month=${encodeURIComponent(month)}`);
+          if (res.ok) {
+            const data = await res.json();
+            return data.days || {};
+          }
+        } catch (err) {
+          console.error('拉取日历状态异常:', err);
+        }
+
+        // 降级兜底：若后端月份接口未准备就绪，基于已获取的可评分日期集合兜底
+        if (availableDatesSet.size > 0) {
+          const fallbackDays = {};
+          const [year, m] = month.split('-').map(Number);
+          const daysCount = new Date(year, m, 0).getDate();
+          const realToday = todayDate || getLocalToday();
+          for (let d = 1; d <= daysCount; d++) {
+            const dayStr = String(d).padStart(2, '0');
+            const k = `${month}-${dayStr}`;
+            if (k > realToday) {
+              fallbackDays[k] = { status: 'future', articleCount: 0 };
+            } else if (availableDatesSet.has(k)) {
+              fallbackDays[k] = { status: 'yellow', articleCount: 0 };
+            } else {
+              fallbackDays[k] = { status: 'red', articleCount: 0 };
+            }
+          }
+          return fallbackDays;
+        }
+
+        return {};
+      },
+      onChange: (selectedDate) => {
+        if (!selectedDate || selectedDate === currentDate) return;
+        currentDate = selectedDate;
+        updateDateHint();
+        loadArticles(currentDate);
+      }
+    });
+  }
+
+  // 加载可评分的日期范围
   async function loadAvailableDates() {
     try {
       const res = await fetch('/api/my-daily/dates');
       if (!res.ok) throw new Error('获取日期失败');
       const data = await res.json();
       const dates = data.dates || [];
+      availableDatesSet = new Set(dates);
 
       // 服务端按用户时区返回的今天 (YYYY-MM-DD)，回退到浏览器本地日期
       todayDate = data.today || getLocalToday();
@@ -59,20 +105,15 @@
       // dates 由服务端按时间倒序返回，第一天即最近的一天
       currentDate = dates[0] || todayDate;
 
-      if (dateSelect) {
-        dateSelect.value = currentDate;
-        // 有效范围：可评分窗口内最早的一天 ~ 今天（不允许选未来日期）
-        dateSelect.min = dates[dates.length - 1] || todayDate;
-        dateSelect.max = todayDate;
+      if (calendarPickerInstance) {
+        calendarPickerInstance.setValue(currentDate, false);
       }
     } catch (err) {
       console.error('加载日期出错:', err);
       todayDate = getLocalToday();
       currentDate = todayDate;
-      if (dateSelect) {
-        dateSelect.value = todayDate;
-        dateSelect.min = todayDate;
-        dateSelect.max = todayDate;
+      if (calendarPickerInstance) {
+        calendarPickerInstance.setValue(currentDate, false);
       }
     }
 
@@ -586,8 +627,11 @@
         }
       }
 
-      // 评分完成后同步日期控件的可选范围
+      // 评分完成后更新可选日期范围并刷新日历圆点缓存
       await loadAvailableDates();
+      if (calendarPickerInstance) {
+        calendarPickerInstance.refreshDotsCache();
+      }
     } catch (err) {
       console.error('重新评分失败:', err);
       setStatus('');

@@ -34,10 +34,12 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .search-box {
-    flex: 3;
+    flex: 1 1 auto;
     min-width: 220px;
     position: relative;
 }
@@ -54,50 +56,56 @@
     transition: color 150ms ease-out;
 }
 
-.search-input {
+.filters-bar .search-input {
     width: 100%;
-    padding: 8px 12px 8px 38px;
+    height: 42px;
+    padding: 0 12px 0 38px;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     background: var(--bg-subtle);
     color: var(--text-primary);
     font-family: var(--font-body);
     font-size: var(--text-sm);
+    box-sizing: border-box;
     transition: border-color 150ms ease-out, box-shadow 150ms ease-out, background-color 150ms ease-out;
 }
 
-.search-input:hover {
+.filters-bar .search-input:hover {
     border-color: var(--border-strong);
+    background-color: var(--bg-surface);
 }
 
-.search-input:focus {
+.filters-bar .search-input:focus {
     outline: none;
     border-color: var(--accent-primary);
     box-shadow: 0 0 0 3px var(--accent-subtle);
     background: var(--bg-surface);
 }
 
-.search-input:focus ~ .search-icon {
+.filters-bar .search-input:focus ~ .search-icon {
     color: var(--accent-primary);
 }
 
-.filter-group {
+.filters-bar .filter-group {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: var(--space-1-5);
+    flex: 0 0 170px;
+    width: 170px;
+    min-width: 170px;
 }
 
 .filter-label {
     display: none;
 }
 
-.filter-select {
-    padding: 7px 28px 7px 10px;
-    height: 38px;
+.filters-bar .filter-select {
+    width: 100%;
+    height: 42px;
+    padding: 0 32px 0 12px;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    background: var(--bg-subtle);
+    background-color: var(--bg-subtle);
     color: var(--text-primary);
     font-family: var(--font-body);
     font-size: var(--text-sm);
@@ -107,20 +115,57 @@
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 8px center;
-    min-width: 80px;
+    background-position: right 12px center;
+    box-sizing: border-box;
     transition: border-color 150ms ease-out, box-shadow 150ms ease-out, background-color 150ms ease-out;
 }
 
-.filter-select:hover {
+.filters-bar .filter-select:hover {
     background-color: var(--bg-surface);
     border-color: var(--border-strong);
 }
 
-.filter-select:focus {
+.filters-bar .filter-select:focus {
     outline: none;
     border-color: var(--accent-primary);
     box-shadow: 0 0 0 3px var(--accent-subtle);
+    background-color: var(--bg-surface);
+}
+
+/* History Date Filter */
+#historyDateFilter {
+    width: 100%;
+}
+
+#historyDateFilter .calendar-picker {
+    width: 100%;
+    display: flex;
+}
+
+#historyDateFilter .calendar-picker-btn {
+    width: 100%;
+    height: 42px;
+    min-width: 0;
+    padding: 0 12px;
+    border-radius: var(--radius-md);
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    box-sizing: border-box;
+    transition: border-color 150ms ease-out, box-shadow 150ms ease-out, background-color 150ms ease-out;
+}
+
+#historyDateFilter .calendar-picker-btn:hover {
+    background: var(--bg-surface);
+    border-color: var(--border-strong);
+}
+
+#historyDateFilter .calendar-picker-btn[aria-expanded="true"] {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px var(--accent-subtle);
+    background: var(--bg-surface);
 }
 
 /* Results Count */
@@ -624,17 +669,33 @@
         gap: var(--space-2);
     }
 
-    .filter-group {
-        justify-content: space-between;
-    }
-
-    .search-box {
+    .filters-bar .search-box {
         width: 100%;
-        min-width: unset;
+        flex: 1 1 100%;
+        min-width: 0;
     }
 
-    .filter-select {
-        min-width: 70px;
+    .filters-bar .filter-group {
+        flex: 1 1 calc(50% - var(--space-1));
+        width: auto;
+        min-width: 130px;
+    }
+
+    .filters-bar .filter-select {
+        min-width: 0;
+    }
+
+    #historyDateFilter,
+    #historyDateFilter .calendar-picker,
+    #historyDateFilter .calendar-picker-btn {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .filters-bar .filter-group {
+        flex: 1 1 100%;
+        width: 100%;
     }
 
     .history-group-items {

@@ -7,7 +7,7 @@
 
 import { Router } from 'express';
 import { requireAuth, requireUser, type AuthRequest } from '../../middleware/auth.js';
-import { getDailyArticles, getAvailableDates } from '../my-daily.js';
+import { getDailyArticles, getAvailableDates, getMonthDailyStatus } from '../my-daily.js';
 import { getUserLocalDate } from '../timezone.js';
 import { scoreForUser, ScoringQueueError } from '../../my-daily-scorer-scheduler.js';
 
@@ -31,6 +31,18 @@ router.get('/my-daily/dates', requireAuth, requireUser, async (req: AuthRequest,
     res.json(await getAvailableDates(req.userId!));
   } catch (error) {
     const message = error instanceof Error ? error.message : '获取日期列表失败';
+    res.status(500).json({ error: message });
+  }
+});
+
+// 获取指定月份每日的状态（用于日历组件圆点展示：green / yellow / red / future）
+router.get('/my-daily/calendar-status', requireAuth, requireUser, async (req: AuthRequest, res) => {
+  try {
+    const month = req.query.month as string | undefined;
+    const result = await getMonthDailyStatus(req.userId!, month);
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '获取日历状态失败';
     res.status(500).json({ error: message });
   }
 });

@@ -11,7 +11,7 @@
         stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
       </svg>
-      <input type="text" id="searchInput" class="search-input" placeholder="搜索日期（YYYY-MM-DD）..." aria-label="搜索总结日期">
+      <input type="text" id="searchInput" class="search-input" placeholder="搜索内容或日期..." aria-label="搜索总结">
     </div>
     <div class="filter-group">
       <span class="filter-label">类型</span>
@@ -25,28 +25,8 @@
       </select>
     </div>
     <div class="filter-group">
-      <span class="filter-label">年份</span>
-      <select id="yearFilter" class="filter-select" aria-label="年份筛选">
-        <option value="">全部年份</option>
-      </select>
-    </div>
-    <div class="filter-group">
-      <span class="filter-label">月份</span>
-      <select id="monthFilter" class="filter-select" aria-label="月份筛选">
-        <option value="">全部月份</option>
-        <option value="1">一月</option>
-        <option value="2">二月</option>
-        <option value="3">三月</option>
-        <option value="4">四月</option>
-        <option value="5">五月</option>
-        <option value="6">六月</option>
-        <option value="7">七月</option>
-        <option value="8">八月</option>
-        <option value="9">九月</option>
-        <option value="10">十月</option>
-        <option value="11">十一月</option>
-        <option value="12">十二月</option>
-      </select>
+      <span class="filter-label">日期</span>
+      <div id="historyDateFilter"></div>
     </div>
   </div>
 
@@ -96,5 +76,6 @@
     </div>
   </div>
 
+  <script src="/js/components/calendar-picker.js"></script>
   <script src="/js/history.js"></script>
   ` }) %>

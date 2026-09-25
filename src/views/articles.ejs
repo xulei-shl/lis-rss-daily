@@ -85,9 +85,11 @@ const pageActions = isReadOnly ? '' : `
         <div class="filter-group date-group">
           <span class="filter-label">爬取日期</span>
           <div class="date-range-group">
-            <input type="date" id="dateFrom" class="filter-date" placeholder="起始日期" title="起始日期">
+            <input type="hidden" id="dateFrom">
+            <div id="calendarPickerFrom"></div>
             <span class="date-separator">—</span>
-            <input type="date" id="dateTo" class="filter-date" placeholder="结束日期" title="结束日期">
+            <input type="hidden" id="dateTo">
+            <div id="calendarPickerTo"></div>
           </div>
         </div>
 
@@ -131,6 +133,7 @@ const pageActions = isReadOnly ? '' : `
   <!-- Pagination -->
   <div class="pagination" id="pagination" style="display: none;"></div>
 
+  <script src="/js/components/calendar-picker.js"></script>
   <script>
     // ============================================
     // ARTICLES PAGE LOGIC
@@ -141,9 +144,55 @@ const pageActions = isReadOnly ? '' : `
     const perPage = 20;
     let rssSources = [];
     const isReadOnly = ${isReadOnlyValue};
+    let pickerFrom = null;
+    let pickerTo = null;
+
+    // 初始化爬取日期范围日历组件
+    function setupDatePickers() {
+      const fromEl = document.getElementById('calendarPickerFrom');
+      const toEl = document.getElementById('calendarPickerTo');
+      const dateFromInput = document.getElementById('dateFrom');
+      const dateToInput = document.getElementById('dateTo');
+
+      if (fromEl && typeof window.createCalendarPicker === 'function') {
+        pickerFrom = window.createCalendarPicker({
+          container: fromEl,
+          value: dateFromInput.value,
+          placeholder: '起始日期',
+          showDots: false,
+          allowClear: true,
+          clearText: '清除',
+          todayText: '今天',
+          onChange: (val) => {
+            dateFromInput.value = val;
+            currentPage = 1;
+            loadArticles();
+          }
+        });
+      }
+
+      if (toEl && typeof window.createCalendarPicker === 'function') {
+        pickerTo = window.createCalendarPicker({
+          container: toEl,
+          value: dateToInput.value,
+          placeholder: '结束日期',
+          showDots: false,
+          allowClear: true,
+          clearText: '清除',
+          todayText: '今天',
+          alignRight: true,
+          onChange: (val) => {
+            dateToInput.value = val;
+            currentPage = 1;
+            loadArticles();
+          }
+        });
+      }
+    }
 
     // Load on page ready
     document.addEventListener('DOMContentLoaded', async () => {
+      setupDatePickers();
       restoreFiltersFromUrl();
       setupEventListeners();
       await loadSources();
@@ -164,13 +213,6 @@ const pageActions = isReadOnly ? '' : `
       });
 
       ['filterStatus', 'filterProcess', 'filterRead', 'filterRating'].forEach(id => {
-        document.getElementById(id).addEventListener('change', () => {
-          currentPage = 1;
-          loadArticles();
-        });
-      });
-
-      ['dateFrom', 'dateTo'].forEach(id => {
         document.getElementById(id).addEventListener('change', () => {
           currentPage = 1;
           loadArticles();
@@ -342,6 +384,8 @@ const pageActions = isReadOnly ? '' : `
       document.getElementById('searchInput').value = '';
       document.getElementById('dateFrom').value = '';
       document.getElementById('dateTo').value = '';
+      if (pickerFrom) pickerFrom.clear(false);
+      if (pickerTo) pickerTo.clear(false);
       currentPage = 1;
       loadArticles();
     }
@@ -376,8 +420,12 @@ const pageActions = isReadOnly ? '' : `
       document.getElementById('filterRead').value = params.get('filterRead') || '';
       document.getElementById('filterRating').value = params.get('filterRating') || '';
       document.getElementById('searchInput').value = params.get('search') || '';
-      document.getElementById('dateFrom').value = params.get('dateFrom') || '';
-      document.getElementById('dateTo').value = params.get('dateTo') || '';
+      const fromVal = params.get('dateFrom') || '';
+      const toVal = params.get('dateTo') || '';
+      document.getElementById('dateFrom').value = fromVal;
+      document.getElementById('dateTo').value = toVal;
+      if (pickerFrom) pickerFrom.setValue(fromVal, false);
+      if (pickerTo) pickerTo.setValue(toVal, false);
     }
 
     // Update clear filters button state
@@ -483,9 +531,9 @@ const pageActions = isReadOnly ? '' : `
       }
     }
 
-    // Skeleton cards for zero CLS
+    // 骨架屏卡片渲染（零 CLS 优化）
     function renderSkeletonCards(count = 3) {
-      return Array(count).fill(0).map(() => `
+      return Array(count).fill(0).map(() => \`
         <div class="skeleton-card">
           <div class="skeleton-line skeleton-title"></div>
           <div class="skeleton-line skeleton-meta"></div>
@@ -495,7 +543,7 @@ const pageActions = isReadOnly ? '' : `
             <div class="skeleton-tag"></div>
           </div>
         </div>
-      `).join('');
+      \`).join('');
     }
 
     // Load articles

@@ -28,6 +28,8 @@
 /* Filters Bar Override */
 /* In the list context, we might want the filters to feel more integrated */
 .filters-bar {
+    position: relative;
+    z-index: 20;
     background: var(--bg-surface);
     box-shadow: none;
     /* Flatter look on the list page? Or keep consistency? */
@@ -182,6 +184,37 @@
   grid-template-rows: 1fr;
   opacity: 1;
   margin-top: var(--space-3);
+}
+
+.advanced-filters.expanded > * {
+  overflow: visible;
+}
+
+/* 高级筛选栏网格比例优化：
+   日期范围包含起止两个日历组件，分配 2fr，让每个日历各占约 1fr；
+   评级与处理状态各占 1fr，视觉各占 1/4，呈现和谐规整的视觉节奏 */
+.advanced-filters .filter-row {
+  grid-template-columns: 2fr 1fr 1fr;
+}
+
+@media (max-width: 1024px) {
+  .advanced-filters .filter-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .advanced-filters .filter-row .date-group {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 768px) {
+  .advanced-filters .filter-row {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: none;
+  }
+  .advanced-filters .filter-row .date-group {
+    grid-column: auto;
+  }
 }
 
 /* ============================================

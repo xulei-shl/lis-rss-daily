@@ -148,59 +148,42 @@
   cursor: pointer;
 }
 
-/* Date Range Group - Cohesive Unit */
+/* 日期范围组合容器 (适配通用日历组件，解除 overflow 限制) */
 .date-range-group {
   display: flex;
   align-items: center;
-  /* We use the group to manage the layout, but inputs keep their borders 
-     for a "split" look which is popular in modern UIs, or we can merge them.
-     Let's merge them for a premium "Range" feel. */
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-surface);
-  overflow: hidden;
-  height: 42px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-/* Interaction for the whole group */
-.date-range-group:focus-within {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px var(--accent-subtle);
-}
-
-.date-range-group .filter-date {
+  gap: var(--space-2);
+  position: relative;
+  overflow: visible;
+  height: auto;
   border: none;
-  border-radius: 0;
-  height: 100%;
-  box-shadow: none !important;
-  /* Remove focus ring here, handled by group */
   background: transparent;
 }
 
-.date-range-group .filter-date:focus {
-  background: var(--bg-subtle);
-  /* Highlight active input slightly */
+.date-range-group .calendar-picker {
+  flex: 1;
+  min-width: 0;
 }
 
-.date-separator {
-  padding: 0 8px;
+.date-range-group .calendar-picker-btn {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 12px;
+}
+
+.date-range-group .date-separator {
+  padding: 0 4px;
   color: var(--text-tertiary);
   font-weight: 500;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-surface);
-  height: 100%;
-  border-left: 1px solid var(--divider);
-  border-right: 1px solid var(--divider);
-}
-
-/* Make inner borders transparent to avoid double borders? 
-   Actually, let's keep it simple: No vertical dividers, just the dash. 
-   Looks cleaner. */
-.date-range-group .date-separator {
-  border: none;
+  flex-shrink: 0;
+  user-select: none;
 }
 
 /* Custom Date Picker Icon - Replacing native black icon with a neutral gray custom SVG */

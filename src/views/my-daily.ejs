@@ -24,9 +24,8 @@
     <!-- Toolbar: Date selector & Stats -->
     <section class="my-daily-toolbar">
       <div class="my-daily-date-control">
-        <label for="myDailyDateSelect">日期：</label>
-        <!-- 原生日期控件，样式复用设计系统的 .filter-date（与文章列表/深度检索页一致） -->
-        <input type="date" id="myDailyDateSelect" class="filter-date my-daily-date-input">
+        <label id="myDailyDateLabel">日期：</label>
+        <div id="myDailyDatePicker"></div>
         <span id="myDailyDateHint" class="my-daily-date-hint">今天</span>
       </div>
 
@@ -60,5 +59,6 @@
     </div>
   </div>
 
+  <script src="/js/components/calendar-picker.js"></script>
   <script src="/js/my-daily.js"></script>
 ` }) %>

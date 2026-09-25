@@ -121,26 +121,7 @@
   color: var(--text-secondary);
 }
 
-/* 日期控件：基础外观来自设计系统的 .filter-date（components/filters.css），
-   这里只做工具条内的宽度修正与日历图标调整 */
-.my-daily-date-input {
-  /* .filter-date 默认 width: 100%，在工具条里改为自适应宽度 */
-  width: auto;
-  min-width: 172px;
-  cursor: pointer;
-}
-
-/* 日历图标默认偏淡，悬停加深，与 --accent-primary 交互色保持一致 */
-.my-daily-date-input::-webkit-calendar-picker-indicator {
-  display: block;
-  cursor: pointer;
-  opacity: 0.55;
-  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.my-daily-date-input::-webkit-calendar-picker-indicator:hover {
-  opacity: 1;
-}
+/* 日历组件使用通用的 components/calendar-picker.css 样式 */
 
 /* 「今天」标记：原生日期控件旁的胶囊标签（平滑缩放淡入淡出） */
 .my-daily-date-hint {
@@ -352,6 +333,11 @@
   }
   .my-daily-date-hint {
     transition: none;
+  }
+  .my-daily-calendar-dropdown,
+  .calendar-day-btn,
+  .calendar-today-btn {
+    transition: none !important;
   }
 }
 
