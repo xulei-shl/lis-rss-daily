@@ -105,6 +105,14 @@ export interface JevScoreResult {
   matchedDomain: string | null; // 匹配的领域名称
   jevResponse: any;             // 原始响应
   failed?: boolean;             // JEV 调用失败时为 true（此时 relevanceScore 是占位 0，不代表真实相关性）
+  latencyMs?: number;           // JEV 单次推理耗时毫秒
+  breakdown?: {
+    noulProb: number;           // is_relevant noul 概率
+    scoreLevel: number;         // relevance_level score 等级 0-4
+    scoreNormalized: number;    // 归一化得分 0-1
+    levelLabel: string;         // 等级说明文案
+    candidates?: Array<{ name: string; score: number }>; // 候选领域或选项概率
+  };
 }
 
 /**
@@ -286,12 +294,20 @@ export async function callJevApi(requestBody: any, jevConfig: ResolvedJevConfig)
  * 领域归属：单领域提问（含按文章来源绑定领域的情形）归属是确定的，直接取该
  * 领域；只有多领域回退提问时才由 choice 答案决定。
  */
+const RELEVANCE_LEVEL_LABELS = [
+  '完全不相关',
+  '边缘相关',
+  '中度相关',
+  '高度相关',
+  '完全匹配',
+];
+
 function calculateScore(
   answers: any,
   topics: TopicInfo[]
-): { score: number; matchedDomain: string | null } {
-  const noulProb = answers.is_relevant?.noul ?? 0;
-  const scoreValue = answers.relevance_level?.score ?? 0;
+): { score: number; matchedDomain: string | null; breakdown: JevScoreResult['breakdown'] } {
+  const noulProb = typeof answers.is_relevant?.noul === 'number' ? answers.is_relevant.noul : 0;
+  const scoreValue = typeof answers.relevance_level?.score === 'number' ? answers.relevance_level.score : 0;
   const maxLevel = 4; // score criteria 有 5 个等级 (0-4)
   const normalizedScore = scoreValue / maxLevel;
 
@@ -301,7 +317,35 @@ function calculateScore(
   const matchedDomain =
     topics.length === 1 ? topics[0].name : answers.best_domain?.choice ?? null;
 
-  return { score: relevanceScore, matchedDomain };
+  const levelIdx = Math.min(Math.max(Math.round(scoreValue), 0), 4);
+  const levelLabel = RELEVANCE_LEVEL_LABELS[levelIdx] || '未知';
+
+  // 候选选项分布
+  const candidates: Array<{ name: string; score: number }> = [];
+  if (answers.best_domain?.distribution && typeof answers.best_domain.distribution === 'object') {
+    for (const [name, prob] of Object.entries(answers.best_domain.distribution)) {
+      candidates.push({ name, score: typeof prob === 'number' ? Math.round(prob * 100) / 100 : 0 });
+    }
+  } else if (topics.length > 0) {
+    for (const t of topics) {
+      candidates.push({
+        name: t.name,
+        score: t.name === matchedDomain ? relevanceScore : Math.round(((1 - relevanceScore) / Math.max(1, topics.length - 1)) * 100) / 100,
+      });
+    }
+  }
+
+  return {
+    score: relevanceScore,
+    matchedDomain,
+    breakdown: {
+      noulProb: Math.round(noulProb * 100) / 100,
+      scoreLevel: scoreValue,
+      scoreNormalized: Math.round(normalizedScore * 100) / 100,
+      levelLabel,
+      candidates,
+    },
+  };
 }
 
 /**
@@ -312,11 +356,13 @@ export async function scoreArticle(
   topics: TopicInfo[],
   jevConfig?: ResolvedJevConfig
 ): Promise<JevScoreResult> {
+  const startTime = Date.now();
   try {
     const activeConfig = jevConfig || (await resolveJevConfig());
     const requestBody = buildJevRequest(article, topics, activeConfig.model);
     const result = await callJevApi(requestBody, activeConfig);
-    const { score, matchedDomain } = calculateScore(result.answers, topics);
+    const latencyMs = Date.now() - startTime;
+    const { score, matchedDomain, breakdown } = calculateScore(result.answers, topics);
 
     return {
       articleId: article.id,
@@ -324,8 +370,11 @@ export async function scoreArticle(
       matchedDomain,
       jevResponse: result,
       failed: false,
+      latencyMs,
+      breakdown,
     };
   } catch (error) {
+    const latencyMs = Date.now() - startTime;
     log.error({ articleId: article.id, error }, 'JEV 评分失败');
     return {
       articleId: article.id,
@@ -333,6 +382,7 @@ export async function scoreArticle(
       matchedDomain: null,
       jevResponse: { error: error instanceof Error ? error.message : 'unknown' },
       failed: true,
+      latencyMs,
     };
   }
 }

@@ -44,6 +44,7 @@ export async function getDailyArticles(userId: number, date?: string) {
       'a.created_at',
       's.relevance_score',
       's.matched_domain',
+      's.jev_response',
       't.title_zh',
       't.summary_zh',
     ])

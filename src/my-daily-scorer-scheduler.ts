@@ -201,6 +201,14 @@ export interface ScoringProgressItemEvent {
   type: 'item';
   current: number;
   total: number;
+  latencyMs?: number;
+  breakdown?: {
+    noulProb: number;
+    scoreLevel: number;
+    scoreNormalized: number;
+    levelLabel: string;
+    candidates?: Array<{ name: string; score: number }>;
+  };
   article: {
     id: number;
     title: string;
@@ -527,6 +535,8 @@ async function runScoringForUser(
           type: 'item',
           current: currentIndex,
           total: totalCount,
+          latencyMs: result.latencyMs,
+          breakdown: result.breakdown,
           article: {
             id: result.articleId,
             title: meta.title,

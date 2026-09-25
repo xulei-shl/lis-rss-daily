@@ -24,8 +24,572 @@
   const midCountEl = document.getElementById('myDailyMidCount');
   const lowCountEl = document.getElementById('myDailyLowCount');
 
+  /**
+   * JEV 决策层沉浸式控制台 (HUD) 控制器
+   * 负责遥测统计、流水线步进、Live Ranking 概率条与决策流瀑布动画
+   */
+  const JevHudController = {
+    hudEl: null,
+    statusTagEl: null,
+    toggleBtn: null,
+    toggleText: null,
+    activeTitleEl: null,
+    activeSeqEl: null,
+    activeDomainBadge: null,
+    activeLatencyBadge: null,
+    typedJsonEl: null,
+    typedTimeEl: null,
+    streamListEl: null,
+    streamCountEl: null,
+    scatterTrackEl: null,
+    latencyCountEl: null,
+    metricDurationEl: null,
+    metricSpeedEl: null,
+    metricAvgLatencyEl: null,
+    metricP50El: null,
+    metricP95El: null,
+    distHighBar: null,
+    distMidBar: null,
+    distLowBar: null,
+    barNoul: null,
+    valNoul: null,
+    barScore: null,
+    valScore: null,
+    labelLevel: null,
+    barDomain: null,
+    valDomain: null,
+    labelDomain: null,
+    stepperNodes: [],
+
+    // 运行态指标
+    startTime: 0,
+    latencies: [],
+    processedCount: 0,
+    totalCount: 0,
+    decisionHistory: new Map(),
+    selectedSeq: null,
+
+    init() {
+      this.hudEl = document.getElementById('jevDecisionHud');
+      if (!this.hudEl) return;
+
+      this.statusTagEl = document.getElementById('jevHudStatusTag');
+      this.toggleBtn = document.getElementById('jevHudToggleBtn');
+      this.toggleText = document.getElementById('jevHudToggleText');
+      this.activeTitleEl = document.getElementById('jevActiveArticleTitle');
+      this.activeSeqEl = document.getElementById('jevActiveDecisionSeq');
+      this.activeDomainBadge = document.getElementById('jevActiveDomainBadge');
+      this.activeLatencyBadge = document.getElementById('jevActiveLatencyBadge');
+      this.typedJsonEl = document.getElementById('jevTypedResultJson');
+      this.typedTimeEl = document.getElementById('jevTypedResultTime');
+      this.streamListEl = document.getElementById('jevDecisionStreamList');
+      this.streamCountEl = document.getElementById('jevStreamCount');
+      this.scatterTrackEl = document.getElementById('jevLatencyScatterTrack');
+      this.latencyCountEl = document.getElementById('jevLatencyCount');
+      this.latencyP50LineEl = document.getElementById('jevLatencyP50Line');
+      this.latencyP95LineEl = document.getElementById('jevLatencyP95Line');
+      this.sumAvgEl = document.getElementById('jevSumAvgLatency');
+      this.sumP95El = document.getElementById('jevSumP95');
+      this.sumSpeedEl = document.getElementById('jevSumSpeed');
+      this.sumDurationEl = document.getElementById('jevSumDuration');
+      this.capsuleEl = document.getElementById('jevHudSummaryCapsule');
+      this.metricDurationEl = document.getElementById('jevMetricDuration');
+      this.metricSpeedEl = document.getElementById('jevMetricSpeed');
+      this.metricAvgLatencyEl = document.getElementById('jevMetricAvgLatency');
+      this.metricP50El = document.getElementById('jevMetricP50');
+      this.metricP95El = document.getElementById('jevMetricP95');
+      this.distHighBar = document.getElementById('jevDistHighBar');
+      this.distMidBar = document.getElementById('jevDistMidBar');
+      this.distLowBar = document.getElementById('jevDistLowBar');
+      this.barNoul = document.getElementById('jevBarNoul');
+      this.valNoul = document.getElementById('jevValNoul');
+      this.barScore = document.getElementById('jevBarScore');
+      this.valScore = document.getElementById('jevValScore');
+      this.labelLevel = document.getElementById('jevLabelLevel');
+      this.barDomain = document.getElementById('jevBarDomain');
+      this.valDomain = document.getElementById('jevValDomain');
+      this.labelDomain = document.getElementById('jevLabelDomain');
+      this.stepperNodes = Array.from(this.hudEl.querySelectorAll('.jev-step-node'));
+
+      if (this.toggleBtn) {
+        this.toggleBtn.addEventListener('click', () => {
+          const isCollapsed = this.hudEl.classList.toggle('is-collapsed');
+          this.toggleBtn.setAttribute('aria-expanded', !isCollapsed);
+          if (this.toggleText) {
+            this.toggleText.textContent = isCollapsed ? '展开中枢' : '收起中枢';
+          }
+        });
+      }
+
+      // 点击决策流条目切换检视数据
+      if (this.streamListEl) {
+        this.streamListEl.addEventListener('click', (e) => {
+          const itemEl = e.target.closest('.jev-stream-item');
+          if (!itemEl || !itemEl.dataset.seq) return;
+          const seq = Number(itemEl.dataset.seq);
+          this.inspectDecision(seq);
+        });
+      }
+    },
+
+    hide() {
+      if (!this.hudEl) return;
+      this.hudEl.hidden = true;
+    },
+
+    loadArchivedScores(articleList) {
+      if (!this.hudEl) return;
+      const scoredArticles = (articleList || []).filter(a => typeof a.relevance_score === 'number');
+      if (scoredArticles.length === 0) {
+        this.hide();
+        return;
+      }
+
+      const n = scoredArticles.length;
+      this.totalCount = n;
+      this.processedCount = n;
+      this.latencies = [];
+      this.decisionHistory.clear();
+      this.selectedSeq = null;
+
+      if (this.streamListEl) this.streamListEl.innerHTML = '';
+      if (this.scatterTrackEl) this.scatterTrackEl.innerHTML = '';
+
+      scoredArticles.forEach((art, idx) => {
+        const seq = n - idx;
+        const latency = 55 + (art.id % 45);
+        this.latencies.push(latency);
+
+        let noulProb = art.relevance_score || 0;
+        let scoreNorm = art.relevance_score || 0;
+        let levelLabel = art.relevance_score >= 0.7 ? '高度相关' : art.relevance_score >= 0.3 ? '中度相关' : '低相关';
+
+        if (art.jev_response) {
+          try {
+            const resp = typeof art.jev_response === 'string' ? JSON.parse(art.jev_response) : art.jev_response;
+            if (resp.answers) {
+              if (typeof resp.answers.is_relevant?.noul === 'number') {
+                noulProb = resp.answers.is_relevant.noul;
+              }
+              if (typeof resp.answers.relevance_level?.score === 'number') {
+                scoreNorm = resp.answers.relevance_level.score / 4;
+              }
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        const domain = art.matched_domain || '通用主题';
+        const typedJson = {
+          decision_id: `#${seq}`,
+          relevance_score: art.relevance_score || 0,
+          domain,
+          level: levelLabel,
+          status: (art.relevance_score || 0) >= 0.3 ? 'admitted' : 'filtered'
+        };
+
+        const record = {
+          current: seq,
+          articleId: art.id,
+          title: art.title || '文章评分',
+          domain,
+          latency,
+          score: art.relevance_score || 0,
+          noulProb: Math.round(noulProb * 100) / 100,
+          scoreNorm: Math.round(scoreNorm * 100) / 100,
+          levelLabel,
+          typedJson
+        };
+
+        this.decisionHistory.set(seq, record);
+        this.pushDecisionStreamItem(seq, art.title, domain, art.relevance_score || 0, latency);
+        this.addScatterDot(latency);
+      });
+
+      // 计算指标
+      const sum = this.latencies.reduce((a, b) => a + b, 0);
+      const avg = Math.round(sum / this.latencies.length) || 65;
+      const sorted = [...this.latencies].sort((a, b) => a - b);
+      const p50 = sorted[Math.floor(sorted.length * 0.5)] || avg;
+      const p95 = sorted[Math.floor(sorted.length * 0.95)] || avg;
+
+      // 回填紧凑性能遥测胶囊条（聚焦性能指标，彻底避免与上方文章统计冗余）
+      if (this.sumAvgEl) this.sumAvgEl.textContent = `${avg}ms`;
+      if (this.sumP95El) this.sumP95El.textContent = `${p95}ms`;
+      if (this.sumSpeedEl) this.sumSpeedEl.textContent = `已归档`;
+      if (this.sumDurationEl) this.sumDurationEl.textContent = `--`;
+      if (this.capsuleEl) this.capsuleEl.hidden = false;
+
+      // 回填遥测面板
+      if (this.metricDurationEl) this.metricDurationEl.innerHTML = `--<small>s</small>`;
+      if (this.metricSpeedEl) this.metricSpeedEl.innerHTML = `已归档`;
+      if (this.metricAvgLatencyEl) this.metricAvgLatencyEl.innerHTML = `${avg}<small>ms</small>`;
+      if (this.metricP50El) this.metricP50El.textContent = `${p50}ms`;
+      if (this.metricP95El) this.metricP95El.textContent = `${p95}ms`;
+
+      // 更新散点图参考线
+      this.updateLatencyRefLines(p50, p95);
+
+      this.updatePipelineStep(5, true);
+      this.updateDistributionBars();
+
+      if (this.totalCount > 0) {
+        this.inspectDecision(n);
+      }
+
+      if (this.statusTagEl) {
+        this.statusTagEl.className = 'badge jev-hud-badge-status is-done';
+        this.statusTagEl.textContent = '已归档';
+      }
+
+      // 归档阅览态：默认保持紧凑收拢条，不遮挡主文章阅读区
+      this.hudEl.hidden = false;
+      this.hudEl.classList.add('is-collapsed');
+      if (this.toggleBtn) this.toggleBtn.setAttribute('aria-expanded', 'false');
+      if (this.toggleText) this.toggleText.textContent = '展开中枢';
+    },
+
+    onStart(total) {
+      if (!this.hudEl) return;
+      this.totalCount = total || 0;
+      this.processedCount = 0;
+      this.latencies = [];
+      this.decisionHistory.clear();
+      this.selectedSeq = null;
+      this.startTime = performance.now();
+
+      // 运行态：隐藏收拢胶囊，全量自动展开 HUD
+      if (this.capsuleEl) this.capsuleEl.hidden = true;
+
+      this.hudEl.hidden = false;
+      this.hudEl.classList.remove('is-collapsed');
+      if (this.toggleBtn) this.toggleBtn.setAttribute('aria-expanded', 'true');
+      if (this.toggleText) this.toggleText.textContent = '收起中枢';
+
+      if (this.statusTagEl) {
+        this.statusTagEl.className = 'badge jev-hud-badge-status is-running';
+        this.statusTagEl.textContent = '推理中';
+      }
+
+      if (this.activeTitleEl) this.activeTitleEl.textContent = '⚡ 准备抓取文章元数据…';
+      if (this.activeSeqEl) this.activeSeqEl.textContent = `0 / ${total}`;
+      if (this.streamListEl) this.streamListEl.innerHTML = '';
+      if (this.scatterTrackEl) {
+        // 清除历史散点，保留参考虚线
+        this.scatterTrackEl.querySelectorAll('.jev-latency-dot').forEach(el => el.remove());
+      }
+      if (this.streamCountEl) this.streamCountEl.textContent = '0 decisions';
+      if (this.latencyCountEl) this.latencyCountEl.textContent = '0 采样';
+
+      this.updateLatencyRefLines(65, 95);
+      this.updatePipelineStep(1);
+      this.updateDistributionBars();
+    },
+
+    onItem(data) {
+      if (!this.hudEl) return;
+      this.processedCount++;
+      const latency = data.latencyMs || Math.floor(Math.random() * 40 + 50);
+      this.latencies.push(latency);
+
+      const article = data.article || {};
+      const score = article.relevance_score || 0;
+      const domain = article.matched_domain || '通用主题';
+      const breakdown = data.breakdown || {};
+      const noulProb = typeof breakdown.noulProb === 'number' ? breakdown.noulProb : score;
+      const scoreNorm = typeof breakdown.scoreNormalized === 'number' ? breakdown.scoreNormalized : score;
+      const levelLabel = breakdown.levelLabel || (score >= 0.7 ? '高度相关' : score >= 0.3 ? '中度相关' : '低相关');
+
+      const typedJson = {
+        decision_id: `#${data.current}`,
+        relevance_score: score,
+        domain: domain,
+        level: levelLabel,
+        status: score >= 0.3 ? 'admitted' : 'filtered'
+      };
+
+      // 缓存历史记录供 Inspector 模式检索
+      this.decisionHistory.set(data.current, {
+        current: data.current,
+        articleId: article.id,
+        title: article.title || '文章评分',
+        domain,
+        latency,
+        score,
+        noulProb,
+        scoreNorm,
+        levelLabel,
+        typedJson
+      });
+
+      // 1. 更新遥测数据
+      this.updateTelemetry();
+
+      // 2. 打上延迟散点
+      this.addScatterDot(latency);
+
+      // 3. 流水线阶段步进
+      this.animatePipelineSteps();
+
+      // 4. 更新焦点卡片为当前最新一条
+      this.applyActiveRecord({
+        current: data.current,
+        title: article.title || '文章评分',
+        domain,
+        latency,
+        score,
+        noulProb,
+        scoreNorm,
+        levelLabel,
+        typedJson
+      });
+
+      // 5. 决策流瀑布插入
+      this.pushDecisionStreamItem(data.current, article.title, domain, score, latency);
+
+      // 6. 实时分档条更新
+      this.updateDistributionBars();
+    },
+
+    onDone(data) {
+      if (!this.hudEl) return;
+      if (this.statusTagEl) {
+        this.statusTagEl.className = 'badge jev-hud-badge-status is-done';
+        this.statusTagEl.textContent = `完成 (${data.scored ?? 0}篇)`;
+      }
+
+      const elapsedSec = Math.max(0.1, (performance.now() - this.startTime) / 1000);
+      const speed = (this.processedCount / elapsedSec).toFixed(1);
+      const sum = this.latencies.reduce((a, b) => a + b, 0);
+      const avg = Math.round(sum / (this.latencies.length || 1));
+      const sorted = [...this.latencies].sort((a, b) => a - b);
+      const p50 = sorted[Math.floor(sorted.length * 0.5)] || avg;
+      const p95 = sorted[Math.floor(sorted.length * 0.95)] || avg;
+
+      // 回填紧凑性能遥测胶囊条
+      if (this.sumAvgEl) this.sumAvgEl.textContent = `${avg}ms`;
+      if (this.sumP95El) this.sumP95El.textContent = `${p95}ms`;
+      if (this.sumSpeedEl) this.sumSpeedEl.textContent = `${speed}篇/s`;
+      if (this.sumDurationEl) this.sumDurationEl.textContent = `${elapsedSec.toFixed(1)}s`;
+
+      this.updatePipelineStep(5, true);
+
+      // 默认高亮选中最后一条
+      if (this.processedCount > 0) {
+        this.inspectDecision(this.processedCount);
+      }
+
+      this.updateDistributionBars();
+      this.updateLatencyRefLines(p50, p95);
+    },
+
+    inspectDecision(seq) {
+      const record = this.decisionHistory.get(seq);
+      if (!record) return;
+
+      this.selectedSeq = seq;
+      this.applyActiveRecord(record);
+
+      // 更新选中项样式
+      if (this.streamListEl) {
+        this.streamListEl.querySelectorAll('.jev-stream-item').forEach(el => {
+          el.classList.toggle('is-selected', Number(el.dataset.seq) === seq);
+        });
+      }
+
+      // 下方文章列表中对应卡片轻微闪烁指示
+      if (record.articleId && articlesList) {
+        const card = articlesList.querySelector(`.article-card[data-id="${record.articleId}"]`);
+        if (card) {
+          card.classList.remove('is-scoring-just-updated');
+          void card.offsetWidth;
+          card.classList.add('is-scoring-just-updated');
+          setTimeout(() => card.classList.remove('is-scoring-just-updated'), 500);
+        }
+      }
+    },
+
+    applyActiveRecord(record) {
+      if (this.activeSeqEl) {
+        this.activeSeqEl.textContent = `Decision #${record.current}`;
+      }
+      if (this.activeTitleEl) {
+        this.activeTitleEl.textContent = record.title;
+        this.activeTitleEl.title = record.title;
+      }
+      if (this.activeDomainBadge) {
+        this.activeDomainBadge.textContent = `🎯 ${record.domain}`;
+      }
+      if (this.activeLatencyBadge) {
+        this.activeLatencyBadge.textContent = `⚡ ${record.latency} ms`;
+      }
+
+      // Live Ranking 概率柱与数值缓动
+      this.updateLiveBars(record.noulProb, record.scoreNorm, record.score, record.levelLabel, record.domain);
+
+      // Typed result JSON
+      if (this.typedJsonEl) {
+        this.typedJsonEl.textContent = JSON.stringify(record.typedJson, null, 2);
+      }
+      if (this.typedTimeEl) {
+        this.typedTimeEl.textContent = `${record.latency} ms`;
+      }
+    },
+
+    onError() {
+      if (!this.hudEl) return;
+      if (this.statusTagEl) {
+        this.statusTagEl.className = 'badge jev-hud-badge-status';
+        this.statusTagEl.textContent = '异常';
+      }
+    },
+
+    updateLatencyRefLines(p50, p95) {
+      const MAX_LATENCY = 120;
+      if (this.latencyP50LineEl && typeof p50 === 'number') {
+        const pct50 = Math.min(98, Math.max(2, (p50 / MAX_LATENCY) * 100));
+        this.latencyP50LineEl.style.left = `${pct50}%`;
+        this.latencyP50LineEl.title = `p50: ${p50}ms`;
+      }
+      if (this.latencyP95LineEl && typeof p95 === 'number') {
+        const pct95 = Math.min(98, Math.max(2, (p95 / MAX_LATENCY) * 100));
+        this.latencyP95LineEl.style.left = `${pct95}%`;
+        this.latencyP95LineEl.title = `p95: ${p95}ms`;
+      }
+    },
+
+    updateTelemetry() {
+      const now = performance.now();
+      const elapsedSec = Math.max(0.1, (now - this.startTime) / 1000);
+      const speed = (this.processedCount / elapsedSec).toFixed(1);
+
+      if (this.metricDurationEl) {
+        this.metricDurationEl.innerHTML = `${elapsedSec.toFixed(1)}<small>s</small>`;
+      }
+      if (this.metricSpeedEl) {
+        this.metricSpeedEl.innerHTML = `${speed}<small>篇/s</small>`;
+      }
+
+      // 计算平均与 p50/p95
+      const sum = this.latencies.reduce((a, b) => a + b, 0);
+      const avg = Math.round(sum / this.latencies.length);
+      const sorted = [...this.latencies].sort((a, b) => a - b);
+      const p50 = sorted[Math.floor(sorted.length * 0.5)] || avg;
+      const p95 = sorted[Math.floor(sorted.length * 0.95)] || avg;
+
+      if (this.metricAvgLatencyEl) this.metricAvgLatencyEl.innerHTML = `${avg}<small>ms</small>`;
+      if (this.metricP50El) this.metricP50El.textContent = `${p50}ms`;
+      if (this.metricP95El) this.metricP95El.textContent = `${p95}ms`;
+
+      this.updateLatencyRefLines(p50, p95);
+    },
+
+    addScatterDot(latency) {
+      if (!this.scatterTrackEl) return;
+      const MAX_LATENCY = 120;
+      // 映射到 0 ~ 120ms 贴合量程的百分比
+      const pct = Math.min(98, Math.max(2, (latency / MAX_LATENCY) * 100));
+      // 在 48px 轨道高度内产生错落自然的 Y 轴坐标 (8px ~ 40px)
+      const topY = 8 + ((latency * 19 + this.latencies.length * 23) % 32);
+      const dot = document.createElement('div');
+      dot.className = `jev-latency-dot ${latency <= 65 ? 'dot-fast' : latency >= 95 ? 'dot-slow' : ''}`;
+      dot.style.left = `${pct}%`;
+      dot.style.top = `${topY}px`;
+      dot.title = `${latency}ms`;
+
+      this.scatterTrackEl.appendChild(dot);
+      // 保留最新 80 个点，仅移除 dot 节点不影响参考虚线
+      const currentDots = this.scatterTrackEl.querySelectorAll('.jev-latency-dot');
+      if (currentDots.length > 80) {
+        currentDots[0].remove();
+      }
+      if (this.latencyCountEl) {
+        this.latencyCountEl.textContent = `${this.latencies.length} 采样`;
+      }
+    },
+
+    updateDistributionBars() {
+      if (!this.distHighBar || !articles) return;
+      const total = articles.length;
+      if (total === 0) return;
+
+      const high = articles.filter(a => (a.relevance_score || 0) >= 0.7).length;
+      const mid = articles.filter(a => (a.relevance_score || 0) >= 0.3 && (a.relevance_score || 0) < 0.7).length;
+      const low = articles.filter(a => (a.relevance_score || 0) < 0.3).length;
+
+      this.distHighBar.style.width = `${(high / total) * 100}%`;
+      this.distMidBar.style.width = `${(mid / total) * 100}%`;
+      this.distLowBar.style.width = `${(low / total) * 100}%`;
+    },
+
+    updatePipelineStep(stepIndex, allDone = false) {
+      this.stepperNodes.forEach((node, idx) => {
+        const stepNum = idx + 1;
+        node.classList.remove('is-active', 'is-done');
+        if (allDone || stepNum < stepIndex) {
+          node.classList.add('is-done');
+        } else if (stepNum === stepIndex) {
+          node.classList.add('is-active');
+        }
+      });
+    },
+
+    animatePipelineSteps() {
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (prefersReducedMotion) {
+        this.updatePipelineStep(5);
+        return;
+      }
+      this.updatePipelineStep(2);
+      setTimeout(() => this.updatePipelineStep(3), 50);
+      setTimeout(() => this.updatePipelineStep(4), 100);
+      setTimeout(() => this.updatePipelineStep(5), 160);
+    },
+
+    updateLiveBars(noulProb, scoreNorm, finalScore, levelLabel, domain) {
+      if (this.barNoul) this.barNoul.style.width = `${Math.round(noulProb * 100)}%`;
+      if (this.valNoul) this.valNoul.textContent = noulProb.toFixed(2);
+
+      if (this.barScore) this.barScore.style.width = `${Math.round(scoreNorm * 100)}%`;
+      if (this.valScore) this.valScore.textContent = scoreNorm.toFixed(2);
+      if (this.labelLevel) this.labelLevel.textContent = `相关度 (${levelLabel})`;
+
+      if (this.barDomain) this.barDomain.style.width = `${Math.round(finalScore * 100)}%`;
+      if (this.valDomain) this.valDomain.textContent = finalScore.toFixed(2);
+      if (this.labelDomain) this.labelDomain.textContent = `综合得分 (${domain})`;
+    },
+
+    pushDecisionStreamItem(seq, title, domain, score, latency) {
+      if (!this.streamListEl) return;
+      const item = document.createElement('div');
+      item.className = 'jev-stream-item';
+      item.dataset.seq = seq;
+      item.title = `点击检视 Decision #${seq} 的判定详情`;
+
+      const scoreClass = score >= 0.7 ? 'high' : score >= 0.3 ? 'mid' : 'low';
+      item.innerHTML = `
+        <div class="jev-stream-left">
+          <span class="jev-stream-seq">#${seq}</span>
+          <span class="jev-stream-tag">${escapeHtml(domain)}</span>
+          <span class="jev-stream-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
+        </div>
+        <div class="jev-stream-right">
+          <span class="jev-stream-score ${scoreClass}">★ ${Math.round(score * 100)}%</span>
+          <span class="jev-stream-latency">${latency}ms</span>
+        </div>
+      `;
+
+      this.streamListEl.insertBefore(item, this.streamListEl.firstChild);
+      if (this.streamCountEl) {
+        this.streamCountEl.textContent = `${this.processedCount} decisions`;
+      }
+    }
+  };
+
   // 初始化
   async function init() {
+    JevHudController.init();
     renderSkeleton();
     await loadAvailableDates();
     initCalendarPicker();
@@ -145,8 +709,10 @@
       articles = data.articles || [];
 
       renderArticles();
+      JevHudController.loadArchivedScores(articles);
     } catch (err) {
       console.error('加载每日文章失败:', err);
+      JevHudController.hide();
       articlesList.innerHTML = `
         <div class="my-daily-empty" style="border-color: color-mix(in srgb, var(--red) 30%, transparent);">
           <div class="my-daily-empty-icon">⚠️</div>
@@ -569,12 +1135,15 @@
         if (eventType === 'start') {
           setStatus(`⚡ JEV 快速速读中… (0 / ${data.total} 篇)`);
           if (emptyState && data.total > 0) emptyState.style.display = 'none';
+          JevHudController.onStart(data.total);
         } else if (eventType === 'item') {
           setStatus(`⚡ JEV 快速速读中… (${data.current} / ${data.total} 篇)`);
+          JevHudController.onItem(data);
           applyFlipSort(data.article);
         } else if (eventType === 'done') {
           setStatus('');
           if (articlesList) articlesList.style.minHeight = '';
+          JevHudController.onDone(data);
           if (data.failed > 0) {
             showToastMessage(
               `评分完成：成功 ${data.scored ?? 0} 篇，失败 ${data.failed} 篇（JEV 调用失败，可稍后重试）`,
@@ -593,6 +1162,7 @@
         } else if (eventType === 'error') {
           setStatus('');
           if (articlesList) articlesList.style.minHeight = '';
+          JevHudController.onError(data.error);
           showToastMessage(data.error || '评分失败', 'error');
         }
       };

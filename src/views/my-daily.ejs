@@ -45,6 +45,216 @@
       </div>
     </section>
 
+    <!-- JEV Decision Layer HUD (沉浸式决策控制台) -->
+    <section id="jevDecisionHud" class="jev-hud" hidden aria-live="polite">
+      <!-- HUD Header -->
+      <div class="jev-hud-header">
+        <div class="jev-hud-branding">
+          <div class="jev-hud-meta">
+            <div class="jev-hud-title-row">
+              <span class="jev-hud-title">Jev 决策中枢</span>
+              <span class="badge jev-hud-badge-engine">System One · 极速推理</span>
+              <span id="jevHudStatusTag" class="badge jev-hud-badge-status">待命</span>
+            </div>
+          </div>
+        </div>
+        <!-- 归档收拢态时的紧凑统计条：聚焦模型性能遥测，避免与上方文章统计冗余 -->
+        <div id="jevHudSummaryCapsule" class="jev-hud-summary-capsule" hidden>
+          <span class="jev-capsule-item">均延 <strong id="jevSumAvgLatency">--</strong></span>
+          <span class="jev-capsule-sep">·</span>
+          <span class="jev-capsule-item">p95 <strong id="jevSumP95">--</strong></span>
+          <span class="jev-capsule-sep">·</span>
+          <span class="jev-capsule-item">速率 <strong id="jevSumSpeed">--</strong></span>
+          <span class="jev-capsule-sep">·</span>
+          <span class="jev-capsule-item">耗时 <strong id="jevSumDuration">--</strong></span>
+        </div>
+        <div class="jev-hud-controls">
+          <button id="jevHudToggleBtn" class="jev-hud-toggle-btn" type="button" aria-expanded="true" title="展开/收起决策中枢">
+            <span id="jevHudToggleText">收起中枢</span>
+            <span class="jev-hud-toggle-arrow">▾</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- HUD Body: 三栏式网格 -->
+      <div id="jevHudBody" class="jev-hud-body">
+        <!-- 栏 1: 实时遥测指标 (Telemetry HUD) -->
+        <div class="jev-hud-col jev-hud-col-telemetry">
+          <div class="jev-col-heading">
+            <span>遥测指标</span>
+            <span class="jev-heading-sub">Telemetry</span>
+          </div>
+          
+          <div class="jev-telemetry-metrics">
+            <div class="jev-metric-card">
+              <span class="jev-metric-label">总耗时 / 速率</span>
+              <div class="jev-metric-val-row">
+                <span id="jevMetricDuration" class="jev-metric-num">0.0<small>s</small></span>
+                <span id="jevMetricSpeed" class="jev-metric-rate">0.0<small>篇/s</small></span>
+              </div>
+            </div>
+
+            <div class="jev-metric-card">
+              <span class="jev-metric-label">平均延迟 (Latency)</span>
+              <div class="jev-metric-val-row">
+                <span id="jevMetricAvgLatency" class="jev-metric-num">--<small>ms</small></span>
+                <span class="jev-metric-badge-tag">p50: <strong id="jevMetricP50">--</strong></span>
+                <span class="jev-metric-badge-tag">p95: <strong id="jevMetricP95">--</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 延迟分布散点条带 (0 ~ 120ms 贴合量程) -->
+          <div class="jev-latency-strip-box">
+            <div class="jev-strip-header">
+              <span>延迟分布散点 (0 ~ 120ms)</span>
+              <span id="jevLatencyCount" class="jev-strip-sub">0 采样</span>
+            </div>
+            <div id="jevLatencyScatterTrack" class="jev-latency-track" aria-hidden="true">
+              <div id="jevLatencyP50Line" class="jev-latency-ref-line ref-p50" style="left: 50%;" title="p50 参考线">
+                <span class="jev-ref-label">p50</span>
+              </div>
+              <div id="jevLatencyP95Line" class="jev-latency-ref-line ref-p95" style="left: 80%;" title="p95 参考线">
+                <span class="jev-ref-label">p95</span>
+              </div>
+              <!-- 动态打散点 -->
+            </div>
+            <div class="jev-latency-scale" aria-hidden="true">
+              <span>0ms</span>
+              <span>40ms</span>
+              <span>80ms</span>
+              <span>120ms</span>
+            </div>
+          </div>
+
+          <!-- 分档分布能量进度 -->
+          <div class="jev-score-dist-box">
+            <div class="jev-dist-header">
+              <span>实时分档比例</span>
+            </div>
+            <div class="jev-dist-bar-stack">
+              <div id="jevDistHighBar" class="jev-dist-slice slice-high" style="width: 0%;" title="高度相关"></div>
+              <div id="jevDistMidBar" class="jev-dist-slice slice-mid" style="width: 0%;" title="中度相关"></div>
+              <div id="jevDistLowBar" class="jev-dist-slice slice-low" style="width: 0%;" title="低相关"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 栏 2: 正在判定的焦点文章决策视窗 (Active Decision Card) -->
+        <div class="jev-hud-col jev-hud-col-active">
+          <div class="jev-col-heading">
+            <span>活跃判定视窗</span>
+            <span id="jevActiveDecisionSeq" class="badge jev-active-seq-badge">Decision #--</span>
+          </div>
+
+          <!-- 5步流水线步进器 -->
+          <div class="jev-pipeline-stepper" role="progressbar" aria-label="JEV 流水线">
+            <div class="jev-step-node is-active" data-step="1">
+              <span class="jev-step-dot"></span>
+              <span class="jev-step-name">提取元数据</span>
+            </div>
+            <span class="jev-step-connector"></span>
+            <div class="jev-step-node" data-step="2">
+              <span class="jev-step-dot"></span>
+              <span class="jev-step-name">Jev 打分</span>
+            </div>
+            <span class="jev-step-connector"></span>
+            <div class="jev-step-node" data-step="3">
+              <span class="jev-step-dot"></span>
+              <span class="jev-step-name">综合判定</span>
+            </div>
+            <span class="jev-step-connector"></span>
+            <div class="jev-step-node" data-step="4">
+              <span class="jev-step-dot"></span>
+              <span class="jev-step-name">规则分档</span>
+            </div>
+            <span class="jev-step-connector"></span>
+            <div class="jev-step-node" data-step="5">
+              <span class="jev-step-dot"></span>
+              <span class="jev-step-name">落库重排</span>
+            </div>
+          </div>
+
+          <!-- 焦点卡片内容 -->
+          <div class="jev-active-decision-card">
+            <div class="jev-active-target-info">
+              <h4 id="jevActiveArticleTitle" class="jev-active-title">等待评分任务开始…</h4>
+              <div class="jev-active-meta-line">
+                <span id="jevActiveDomainBadge" class="article-tag">🎯 待解析领域</span>
+                <span id="jevActiveLatencyBadge" class="jev-tag-latency">⚡ -- ms</span>
+              </div>
+            </div>
+
+            <!-- Live Ranking 概率对比条 -->
+            <div class="jev-live-ranking-section">
+              <div class="jev-ranking-legend">
+                <span>候选判定概率分布</span>
+                <span class="jev-ranking-indicator"><span class="jev-pulse-dot"></span>Live ranking</span>
+              </div>
+
+              <div id="jevLiveRankingBars" class="jev-ranking-bars-list">
+                <div class="jev-ranking-item" data-id="opt-relevant">
+                  <div class="jev-ranking-item-head">
+                    <span class="jev-opt-badge opt-1">1</span>
+                    <span class="jev-opt-label">主题相关度 (noul)</span>
+                    <span class="jev-opt-score" id="jevValNoul">0.00</span>
+                  </div>
+                  <div class="jev-opt-bar-bg">
+                    <div class="jev-opt-bar-fill bar-emerald" id="jevBarNoul" style="width: 0%;"></div>
+                  </div>
+                </div>
+
+                <div class="jev-ranking-item" data-id="opt-level">
+                  <div class="jev-ranking-item-head">
+                    <span class="jev-opt-badge opt-2">2</span>
+                    <span class="jev-opt-label" id="jevLabelLevel">相关度等级 (score)</span>
+                    <span class="jev-opt-score" id="jevValScore">0.00</span>
+                  </div>
+                  <div class="jev-opt-bar-bg">
+                    <div class="jev-opt-bar-fill bar-amber" id="jevBarScore" style="width: 0%;"></div>
+                  </div>
+                </div>
+
+                <div class="jev-ranking-item" data-id="opt-domain">
+                  <div class="jev-ranking-item-head">
+                    <span class="jev-opt-badge opt-3">3</span>
+                    <span class="jev-opt-label" id="jevLabelDomain">领域归属 (domain)</span>
+                    <span class="jev-opt-score" id="jevValDomain">0.00</span>
+                  </div>
+                  <div class="jev-opt-bar-bg">
+                    <div class="jev-opt-bar-fill bar-cyan" id="jevBarDomain" style="width: 0%;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Typed Result 终端风格输出 -->
+            <div class="jev-typed-result-box">
+              <div class="jev-typed-header">
+                <span>Typed result</span>
+                <span id="jevTypedResultTime" class="jev-typed-time">0 ms</span>
+              </div>
+              <pre id="jevTypedResultJson" class="jev-typed-json">{ "status": "idle" }</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- 栏 3: 决策流瀑布历史 (Decision Stream) -->
+        <div class="jev-hud-col jev-hud-col-stream">
+          <div class="jev-col-heading">
+            <span title="评分完成后点击任意条目可回溯检视判定详情">决策流瀑布 <small style="font-size: 10px; opacity: 0.75; font-weight: normal; text-transform: none;">(可点击检视)</small></span>
+            <span id="jevStreamCount" class="jev-heading-sub">0 decisions</span>
+          </div>
+
+          <div id="jevDecisionStreamList" class="jev-stream-list" role="feed" aria-label="JEV 决策记录">
+            <div class="jev-stream-placeholder">
+              <span>就绪，点击上方「Jev 评分」开始流式出分</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Articles List -->
     <div id="myDailyArticlesList" class="my-daily-list">
       <!-- 动态加载 -->
