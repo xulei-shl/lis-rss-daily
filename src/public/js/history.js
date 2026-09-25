@@ -233,7 +233,7 @@
       const hasFilter = searchInput.value.trim() || typeFilter.value || selectedDate;
       historyContainer.innerHTML = `
         <div class="empty-state history-fade-in">
-          <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="empty-state-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           <div class="empty-state-title">${hasFilter ? '未找到匹配的记录' : '暂无最近30天的历史记录'}</div>

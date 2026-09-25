@@ -11,7 +11,7 @@ const pageActions = isReadOnly ? '' : `
 <%- include('layout', { pageTitle: pageTitle, pageStyles: pageStyles
   , body: ` <!-- Page Header -->
   <div class="page-header">
-    <h1 class="page-title">文章列表</h1>${pageActions}
+    <h1 class="page-title"><span aria-hidden="true">📑</span> 文章列表</h1>${pageActions}
   </div>
 
   <!-- Filters Bar -->
@@ -584,7 +584,7 @@ function renderArticles(articles) {
   if (articles.length === 0) {
     container.innerHTML = \`
       <div class="empty-state">
-        <svg class="empty-state-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg class="empty-state-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
         </svg>
         <div class="empty-state-title">未找到文章</div>
