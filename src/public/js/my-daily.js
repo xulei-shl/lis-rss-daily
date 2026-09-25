@@ -118,6 +118,9 @@
           if (this.toggleText) {
             this.toggleText.textContent = isCollapsed ? '展开中枢' : '收起中枢';
           }
+          if (this.capsuleEl) {
+            this.capsuleEl.hidden = !isCollapsed;
+          }
         });
       }
 
@@ -155,8 +158,9 @@
       if (this.streamListEl) this.streamListEl.innerHTML = '';
       if (this.scatterTrackEl) this.scatterTrackEl.innerHTML = '';
 
+      // 归档数据按评分从高到低排列，让最高分的推荐决策排在最前面
       scoredArticles.forEach((art, idx) => {
-        const seq = n - idx;
+        const seq = idx + 1;
         const latency = 55 + (art.id % 45);
         this.latencies.push(latency);
 
@@ -203,7 +207,8 @@
         };
 
         this.decisionHistory.set(seq, record);
-        this.pushDecisionStreamItem(seq, art.title, domain, art.relevance_score || 0, latency);
+        // 归档列表按高分到低分正向追加
+        this.pushDecisionStreamItem(seq, art.title, domain, art.relevance_score || 0, latency, false);
         this.addScatterDot(latency);
       });
 
@@ -214,12 +219,11 @@
       const p50 = sorted[Math.floor(sorted.length * 0.5)] || avg;
       const p95 = sorted[Math.floor(sorted.length * 0.95)] || avg;
 
-      // 回填紧凑性能遥测胶囊条（聚焦性能指标，彻底避免与上方文章统计冗余）
+      // 回填紧凑性能遥测胶囊条（仅在收起态展示，避免与展开态左侧指标冲突）
       if (this.sumAvgEl) this.sumAvgEl.textContent = `${avg}ms`;
       if (this.sumP95El) this.sumP95El.textContent = `${p95}ms`;
       if (this.sumSpeedEl) this.sumSpeedEl.textContent = `已归档`;
       if (this.sumDurationEl) this.sumDurationEl.textContent = `--`;
-      if (this.capsuleEl) this.capsuleEl.hidden = false;
 
       // 回填遥测面板
       if (this.metricDurationEl) this.metricDurationEl.innerHTML = `--<small>s</small>`;
@@ -234,8 +238,9 @@
       this.updatePipelineStep(5, true);
       this.updateDistributionBars();
 
+      // 默认高亮并聚焦在排在第 1 项的高分决策上
       if (this.totalCount > 0) {
-        this.inspectDecision(n);
+        this.inspectDecision(1);
       }
 
       if (this.statusTagEl) {
@@ -246,6 +251,7 @@
       // 归档阅览态：默认保持紧凑收拢条，不遮挡主文章阅读区
       this.hudEl.hidden = false;
       this.hudEl.classList.add('is-collapsed');
+      if (this.capsuleEl) this.capsuleEl.hidden = false;
       if (this.toggleBtn) this.toggleBtn.setAttribute('aria-expanded', 'false');
       if (this.toggleText) this.toggleText.textContent = '展开中枢';
     },
@@ -391,11 +397,17 @@
       this.selectedSeq = seq;
       this.applyActiveRecord(record);
 
-      // 更新选中项样式
+      // 更新选中项样式与可视滚动
       if (this.streamListEl) {
+        let activeEl = null;
         this.streamListEl.querySelectorAll('.jev-stream-item').forEach(el => {
-          el.classList.toggle('is-selected', Number(el.dataset.seq) === seq);
+          const isSelected = Number(el.dataset.seq) === seq;
+          el.classList.toggle('is-selected', isSelected);
+          if (isSelected) activeEl = el;
         });
+        if (activeEl) {
+          activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
       }
 
       // 下方文章列表中对应卡片轻微闪烁指示
@@ -560,7 +572,7 @@
       if (this.labelDomain) this.labelDomain.textContent = `综合得分 (${domain})`;
     },
 
-    pushDecisionStreamItem(seq, title, domain, score, latency) {
+    pushDecisionStreamItem(seq, title, domain, score, latency, prepend = true) {
       if (!this.streamListEl) return;
       const item = document.createElement('div');
       item.className = 'jev-stream-item';
@@ -580,7 +592,12 @@
         </div>
       `;
 
-      this.streamListEl.insertBefore(item, this.streamListEl.firstChild);
+      if (prepend && this.streamListEl.firstChild) {
+        this.streamListEl.insertBefore(item, this.streamListEl.firstChild);
+      } else {
+        this.streamListEl.appendChild(item);
+      }
+
       if (this.streamCountEl) {
         this.streamCountEl.textContent = `${this.processedCount} decisions`;
       }
