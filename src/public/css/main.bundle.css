@@ -1,6 +1,6 @@
 /* ============================================ */
 /* CSS BUNDLE - Development Mode               */
-/* Generated: 2026-09-25T12:14:28.452Z  */
+/* Generated: 2026-09-25T12:47:21.731Z  */
 /* ============================================ */
 
 /* ============================================ */
@@ -1595,6 +1595,7 @@ td.table-actions {
   font-variant-numeric: tabular-nums;
   font-weight: 500;
   color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .calendar-picker-placeholder {

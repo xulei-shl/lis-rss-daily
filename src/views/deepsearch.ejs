@@ -22,13 +22,16 @@
           </select>
         </div>
         <div class="filter-group deepsearch-date-group">
-          <label class="filter-label" for="createdFrom">任务时间</label>
+          <label class="filter-label">任务时间</label>
           <div class="date-range-group">
-            <input type="date" id="createdFrom" class="filter-date">
-            <span class="date-separator">至</span>
-            <input type="date" id="createdTo" class="filter-date">
+            <input type="hidden" id="createdFrom">
+            <div id="calendarPickerCreatedFrom"></div>
+            <span class="date-separator">—</span>
+            <input type="hidden" id="createdTo">
+            <div id="calendarPickerCreatedTo"></div>
           </div>
         </div>
+        <button type="button" id="clearFiltersBtn" class="filter-clear-btn" disabled>清除筛选</button>
       </div>
       </div>
     </div>
@@ -138,6 +141,7 @@
     </div>
   </div>
 
+  <script src="/js/components/calendar-picker.js"></script>
   <script>
     let tasks = [];
     let listRefreshTimer = null;
@@ -146,9 +150,68 @@
     let searchDebounceTimer = null;
     let detailLogScrollTop = 0;
     let detailLogPinnedBottom = true;
+    let pickerCreatedFrom = null;
+    let pickerCreatedTo = null;
+
+    // 初始化任务时间日历组件
+    function setupDatePickers() {
+      const fromEl = document.getElementById('calendarPickerCreatedFrom');
+      const toEl = document.getElementById('calendarPickerCreatedTo');
+      const createdFromInput = document.getElementById('createdFrom');
+      const createdToInput = document.getElementById('createdTo');
+
+      if (fromEl && typeof window.createCalendarPicker === 'function') {
+        pickerCreatedFrom = window.createCalendarPicker({
+          container: fromEl,
+          value: createdFromInput ? createdFromInput.value : '',
+          placeholder: '起始日期',
+          showDots: false,
+          allowClear: true,
+          clearText: '清除',
+          todayText: '今天',
+          onChange: (val) => {
+            if (createdFromInput) createdFromInput.value = val;
+            updateClearButtonState();
+            loadTasks();
+          }
+        });
+      }
+
+      if (toEl && typeof window.createCalendarPicker === 'function') {
+        pickerCreatedTo = window.createCalendarPicker({
+          container: toEl,
+          value: createdToInput ? createdToInput.value : '',
+          placeholder: '结束日期',
+          showDots: false,
+          allowClear: true,
+          clearText: '清除',
+          todayText: '今天',
+          alignRight: true,
+          onChange: (val) => {
+            if (createdToInput) createdToInput.value = val;
+            updateClearButtonState();
+            loadTasks();
+          }
+        });
+      }
+    }
+
+    // 检查并更新清除筛选按钮状态
+    function updateClearButtonState() {
+      const clearBtn = document.getElementById('clearFiltersBtn');
+      if (!clearBtn) return;
+      const keyword = (document.getElementById('keywordInput')?.value || '').trim();
+      const status = document.getElementById('statusFilter')?.value || '';
+      const createdFrom = document.getElementById('createdFrom')?.value || '';
+      const createdTo = document.getElementById('createdTo')?.value || '';
+      const hasFilter = Boolean(keyword || status || createdFrom || createdTo);
+      clearBtn.disabled = !hasFilter;
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
+      setupDatePickers();
       bindEvents();
+      updateClearButtonState();
       loadTasks();
       startListAutoRefresh();
     });
@@ -169,17 +232,27 @@
       bindNumericFieldValidation();
 
       document.getElementById('keywordInput').addEventListener('input', () => {
+        updateClearButtonState();
         scheduleAutoSearch();
       });
       document.getElementById('statusFilter').addEventListener('change', () => {
+        updateClearButtonState();
         loadTasks();
       });
-      document.getElementById('createdFrom').addEventListener('change', () => {
-        loadTasks();
-      });
-      document.getElementById('createdTo').addEventListener('change', () => {
-        loadTasks();
-      });
+
+      const clearBtn = document.getElementById('clearFiltersBtn');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+          document.getElementById('keywordInput').value = '';
+          document.getElementById('statusFilter').value = '';
+          document.getElementById('createdFrom').value = '';
+          document.getElementById('createdTo').value = '';
+          if (pickerCreatedFrom) pickerCreatedFrom.clear(false);
+          if (pickerCreatedTo) pickerCreatedTo.clear(false);
+          updateClearButtonState();
+          loadTasks();
+        });
+      }
 
       document.getElementById('keywordInput').addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
