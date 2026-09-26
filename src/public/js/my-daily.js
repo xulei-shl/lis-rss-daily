@@ -254,7 +254,7 @@
       this.hudEl.classList.add('is-collapsed');
       if (this.capsuleEl) this.capsuleEl.hidden = false;
       if (this.toggleBtn) this.toggleBtn.setAttribute('aria-expanded', 'false');
-      if (this.toggleText) this.toggleText.textContent = '展开中枢';
+      if (this.toggleText) this.toggleText.textContent = '展开';
     },
 
     onStart(total) {

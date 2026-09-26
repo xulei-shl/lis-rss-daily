@@ -735,27 +735,28 @@
   height: 6px;
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  background: var(--accent-primary);
-  box-shadow: 0 0 3px color-mix(in srgb, var(--accent-primary) 60%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 70%, transparent);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--accent-primary) 40%, transparent);
   animation: jevDotPop 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   z-index: 2;
-  transition: transform 0.15s ease-out;
+  transition: transform 0.15s ease-out, opacity 0.15s ease-out, box-shadow 0.15s ease-out;
 }
 
 .jev-latency-dot:hover {
   transform: translate(-50%, -50%) scale(1.6);
   opacity: 1;
+  box-shadow: 0 0 8px currentColor;
   z-index: 10;
 }
 
 .jev-latency-dot.dot-fast {
-  background: var(--green);
-  box-shadow: 0 0 3px color-mix(in srgb, var(--green) 60%, transparent);
+  background: color-mix(in srgb, var(--green) 70%, transparent);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--green) 40%, transparent);
 }
 
 .jev-latency-dot.dot-slow {
-  background: var(--amber);
-  box-shadow: 0 0 3px color-mix(in srgb, var(--amber) 60%, transparent);
+  background: color-mix(in srgb, var(--amber) 70%, transparent);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--amber) 40%, transparent);
 }
 
 /* 从 scale(0.92) 柔和微现，杜绝从 scale(0.2) 突兀飞出 */
@@ -766,7 +767,7 @@
   }
   100% {
     transform: translate(-50%, -50%) scale(1);
-    opacity: 0.85;
+    opacity: 0.65;
   }
 }
 
@@ -794,12 +795,13 @@
 }
 
 .jev-dist-bar-stack {
-  height: 14px;
-  background: var(--bg-primary);
+  height: 8px;
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
   border-radius: var(--radius-full);
   display: flex;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  gap: 1px;
 }
 
 .jev-dist-slice {
@@ -808,15 +810,15 @@
 }
 
 .slice-high {
-  background: var(--green);
+  background: color-mix(in srgb, var(--green) 75%, transparent);
 }
 
 .slice-mid {
-  background: var(--amber);
+  background: color-mix(in srgb, var(--amber) 75%, transparent);
 }
 
 .slice-low {
-  background: color-mix(in srgb, var(--text-tertiary) 40%, transparent);
+  background: color-mix(in srgb, var(--text-tertiary) 25%, transparent);
 }
 
 /* 栏 2: 焦点卡片与流水线 (Active Decision) */
@@ -871,8 +873,9 @@
 }
 
 .jev-step-node.is-done .jev-step-dot {
-  border-color: var(--green);
-  background: var(--green);
+  border-color: color-mix(in srgb, var(--green) 60%, transparent);
+  background: color-mix(in srgb, var(--green) 85%, transparent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--green) 25%, transparent);
 }
 
 .jev-step-node.is-done .jev-step-name {
@@ -1013,20 +1016,21 @@
   justify-content: center;
   font-size: 9px;
   font-weight: 700;
-  color: #fff;
   flex: none;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
 }
 
 .opt-1 {
-  background: var(--green);
+  color: var(--green);
 }
 
 .opt-2 {
-  background: var(--amber);
+  color: var(--amber);
 }
 
 .opt-3 {
-  background: #06b6d4;
+  color: var(--accent-primary);
 }
 
 .jev-opt-label {
@@ -1044,11 +1048,11 @@
 }
 
 .jev-opt-bar-bg {
-  height: 6px;
-  background: var(--bg-surface);
+  height: 5px;
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
   border-radius: var(--radius-full);
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
 }
 
 .jev-opt-bar-fill {
@@ -1058,15 +1062,18 @@
 }
 
 .bar-emerald {
-  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--green) 85%, transparent) 0%, color-mix(in srgb, var(--green) 60%, transparent) 100%);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--green) 25%, transparent);
 }
 
 .bar-amber {
-  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--amber) 85%, transparent) 0%, color-mix(in srgb, var(--amber) 60%, transparent) 100%);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--amber) 25%, transparent);
 }
 
 .bar-cyan {
-  background: linear-gradient(90deg, #06b6d4 0%, #0284c7 100%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent-primary) 85%, transparent) 0%, color-mix(in srgb, var(--accent-primary) 60%, transparent) 100%);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-primary) 25%, transparent);
 }
 
 /* Typed result 终端小窗：还原经典极客黑终端风格（图2原貌） */
@@ -1267,7 +1274,7 @@
   }
   .jev-latency-dot {
     animation: none;
-    opacity: 0.85;
+    opacity: 0.65;
   }
   .jev-dist-slice {
     transition: none !important;
