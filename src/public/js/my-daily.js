@@ -272,7 +272,7 @@
       this.hudEl.hidden = false;
       this.hudEl.classList.remove('is-collapsed');
       if (this.toggleBtn) this.toggleBtn.setAttribute('aria-expanded', 'true');
-      if (this.toggleText) this.toggleText.textContent = '收起中枢';
+      if (this.toggleText) this.toggleText.textContent = '收起';
 
       if (this.statusTagEl) {
         this.statusTagEl.className = 'badge jev-hud-badge-status is-running';
