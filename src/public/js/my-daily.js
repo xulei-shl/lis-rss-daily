@@ -62,6 +62,10 @@
     labelDomain: null,
     stepperNodes: [],
 
+    // 延迟散点自适应量程（随真实采样动态缩放）与轴刻度
+    latencyScale: 120,
+    scaleLabels: [],
+
     // 运行态指标
     startTime: 0,
     latencies: [],
@@ -112,6 +116,7 @@
       this.valDomain = document.getElementById('jevValDomain');
       this.labelDomain = document.getElementById('jevLabelDomain');
       this.stepperNodes = Array.from(this.hudEl.querySelectorAll('.jev-step-node'));
+      this.scaleLabels = Array.from(this.hudEl.querySelectorAll('.jev-latency-scale span'));
 
       if (this.toggleBtn) {
         this.toggleBtn.addEventListener('click', () => {
@@ -155,11 +160,16 @@
       this.totalCount = n;
       this.processedCount = n;
       this.latencies = [];
+      this.latencyScale = 120;
+      this.updateScaleLabels();
       this.decisionHistory.clear();
       this.selectedSeq = null;
 
       if (this.streamListEl) this.streamListEl.innerHTML = '';
-      if (this.scatterTrackEl) this.scatterTrackEl.innerHTML = '';
+      // 仅清除散点，保留 p50/p95 参考虚线
+      if (this.scatterTrackEl) {
+        this.scatterTrackEl.querySelectorAll('.jev-latency-dot').forEach(el => el.remove());
+      }
 
       // 归档数据按评分从高到低排列，让最高分的推荐决策排在最前面
       scoredArticles.forEach((art, idx) => {
@@ -305,6 +315,8 @@
       if (this.streamCountEl) this.streamCountEl.textContent = '0 decisions';
       if (this.latencyCountEl) this.latencyCountEl.textContent = '0 采样';
 
+      this.latencyScale = 120;
+      this.updateScaleLabels();
       this.updateLatencyRefLines(65, 95);
       this.updatePipelineStep(1);
       this.updateDistributionBars();
@@ -353,11 +365,11 @@
         failed
       });
 
-      // 1. 更新遥测数据
-      this.updateTelemetry();
-
-      // 2. 打上延迟散点（失败项不参与延迟分布）
+      // 1. 打上延迟散点（失败项不参与延迟分布；可能触发量程自适应缩放）
       if (!failed) this.addScatterDot(latency);
+
+      // 2. 更新遥测数据（参考线使用最新的散点量程）
+      this.updateTelemetry();
 
       // 3. 流水线阶段步进
       this.animatePipelineSteps();
@@ -494,7 +506,7 @@
     },
 
     updateLatencyRefLines(p50, p95) {
-      const MAX_LATENCY = 120;
+      const MAX_LATENCY = this.latencyScale || 120;
       if (this.latencyP50LineEl && typeof p50 === 'number') {
         const pct50 = Math.min(98, Math.max(2, (p50 / MAX_LATENCY) * 100));
         this.latencyP50LineEl.style.left = `${pct50}%`;
@@ -534,15 +546,61 @@
       if (hasMetrics) this.updateLatencyRefLines(p50, p95);
     },
 
+    /**
+     * 依据当前真实采样计算自适应量程：
+     * 取最大延迟留 15% 余量后向上取整到 1/2/5 × 10^n，并设 120ms 下限，
+     * 避免样本很少时过度放大。真实 JEV 单次推理常在数百 ms，
+     * 固定 0~120ms 量程会把所有点钳制在轨道最右端，看起来不像真实分布。
+     */
+    computeLatencyScale() {
+      const max = this.latencies.reduce((m, v) => Math.max(m, v), 0);
+      if (!max) return this.latencyScale || 120;
+      const padded = max * 1.15;
+      const pow = Math.pow(10, Math.floor(Math.log10(padded)));
+      const normalized = padded / pow;
+      const factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+      return Math.max(120, Math.round(factor * pow));
+    },
+
+    /** 同步轴刻度文案：0 / 1/3 / 2/3 / 满量程 */
+    updateScaleLabels() {
+      if (!this.scaleLabels || this.scaleLabels.length < 4) return;
+      const s = this.latencyScale;
+      const values = [0, Math.round(s / 3), Math.round((s * 2) / 3), s];
+      this.scaleLabels.forEach((el, i) => {
+        el.textContent = `${values[i]}ms`;
+      });
+    },
+
+    /** 量程变化后按新比例重排已有散点（不重建节点，保留弹出动效） */
+    repositionScatterDots() {
+      if (!this.scatterTrackEl) return;
+      this.scatterTrackEl.querySelectorAll('.jev-latency-dot').forEach(el => {
+        const latency = Number(el.dataset.latency);
+        if (!Number.isFinite(latency)) return;
+        el.style.left = `${Math.min(98, Math.max(2, (latency / this.latencyScale) * 100))}%`;
+        el.classList.toggle('dot-fast', latency <= this.latencyScale / 3);
+        el.classList.toggle('dot-slow', latency >= (this.latencyScale * 2) / 3);
+      });
+    },
+
     addScatterDot(latency) {
       if (!this.scatterTrackEl) return;
-      const MAX_LATENCY = 120;
-      // 映射到 0 ~ 120ms 贴合量程的百分比
-      const pct = Math.min(98, Math.max(2, (latency / MAX_LATENCY) * 100));
+
+      // 量程随真实采样自适应增长，避免高延迟点被钳制在右端
+      const scale = this.computeLatencyScale();
+      if (scale !== this.latencyScale) {
+        this.latencyScale = scale;
+        this.updateScaleLabels();
+        this.repositionScatterDots();
+      }
+
+      const pct = Math.min(98, Math.max(2, (latency / this.latencyScale) * 100));
       // 在 48px 轨道高度内产生错落自然的 Y 轴坐标 (8px ~ 40px)
       const topY = 8 + ((latency * 19 + this.latencies.length * 23) % 32);
       const dot = document.createElement('div');
-      dot.className = `jev-latency-dot ${latency <= 65 ? 'dot-fast' : latency >= 95 ? 'dot-slow' : ''}`;
+      dot.dataset.latency = String(latency);
+      dot.className = `jev-latency-dot ${latency <= this.latencyScale / 3 ? 'dot-fast' : latency >= (this.latencyScale * 2) / 3 ? 'dot-slow' : ''}`;
       dot.style.left = `${pct}%`;
       dot.style.top = `${topY}px`;
       dot.title = `${latency}ms`;
