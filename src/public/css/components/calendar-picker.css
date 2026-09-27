@@ -246,6 +246,11 @@
   box-shadow: 0 0 4px color-mix(in srgb, var(--amber, #f59e0b) 50%, transparent);
 }
 
+.calendar-picker-dot.dot-orange {
+  background-color: var(--orange, #ea580c);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--orange, #ea580c) 50%, transparent);
+}
+
 .calendar-picker-dot.dot-red {
   background-color: var(--red, #ef4444);
   box-shadow: 0 0 4px color-mix(in srgb, var(--red, #ef4444) 50%, transparent);

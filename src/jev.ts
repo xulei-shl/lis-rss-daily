@@ -183,6 +183,32 @@ function buildJevRequest(
   };
 }
 
+/**
+ * 判断数据库中持久化的 jev_response 是否代表一次失败的 JEV 调用。
+ *
+ * scoreArticle 在调用失败时写入 `{ error: message }`，成功时写入完整响应
+ * （含 answers / usage）。因此只要解析出 error 字段即视为调用失败——占位 0 分
+ * 不代表真实相关性，展示层需要单独标识。
+ */
+export function isJevResponseFailed(jevResponse: unknown): boolean {
+  if (jevResponse == null) return false;
+
+  let parsed: unknown = jevResponse;
+  if (typeof jevResponse === 'string') {
+    try {
+      parsed = JSON.parse(jevResponse);
+    } catch {
+      return false;
+    }
+  }
+
+  return (
+    typeof parsed === 'object' &&
+    parsed !== null &&
+    typeof (parsed as { error?: unknown }).error === 'string'
+  );
+}
+
 /** 重试退避的基准延迟 / 单次退避上限 */
 const JEV_RETRY_BASE_DELAY_MS = 1000;
 const JEV_RETRY_MAX_DELAY_MS = 30000;

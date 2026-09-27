@@ -67,6 +67,7 @@
     latencies: [],
     processedCount: 0,
     totalCount: 0,
+    failedCount: 0,
     decisionHistory: new Map(),
     selectedSeq: null,
 
@@ -150,6 +151,7 @@
       }
 
       const n = scoredArticles.length;
+      const failedCount = scoredArticles.filter(a => a.failed).length;
       this.totalCount = n;
       this.processedCount = n;
       this.latencies = [];
@@ -162,14 +164,18 @@
       // 归档数据按评分从高到低排列，让最高分的推荐决策排在最前面
       scoredArticles.forEach((art, idx) => {
         const seq = idx + 1;
-        const latency = 55 + (art.id % 45);
-        this.latencies.push(latency);
+        const failed = !!art.failed;
+        // 失败项没有真实推理耗时，不为其编造延迟，也不计入遥测
+        const latency = failed ? null : 55 + (art.id % 45);
+        if (!failed) this.latencies.push(latency);
 
         let noulProb = art.relevance_score || 0;
         let scoreNorm = art.relevance_score || 0;
-        let levelLabel = art.relevance_score >= 0.7 ? '高度相关' : art.relevance_score >= 0.3 ? '中度相关' : '低相关';
+        let levelLabel = failed
+          ? '调用失败'
+          : art.relevance_score >= 0.7 ? '高度相关' : art.relevance_score >= 0.3 ? '中度相关' : '低相关';
 
-        if (art.jev_response) {
+        if (!failed && art.jev_response) {
           try {
             const resp = typeof art.jev_response === 'string' ? JSON.parse(art.jev_response) : art.jev_response;
             if (resp.answers) {
@@ -185,13 +191,13 @@
           }
         }
 
-        const domain = art.matched_domain || '通用主题';
+        const domain = art.matched_domain || (failed ? '—' : '通用主题');
         const typedJson = {
           decision_id: `#${seq}`,
           relevance_score: art.relevance_score || 0,
           domain,
           level: levelLabel,
-          status: (art.relevance_score || 0) >= 0.3 ? 'admitted' : 'filtered'
+          status: failed ? 'failed' : (art.relevance_score || 0) >= 0.3 ? 'admitted' : 'filtered'
         };
 
         const record = {
@@ -201,40 +207,44 @@
           domain,
           latency,
           score: art.relevance_score || 0,
-          noulProb: Math.round(noulProb * 100) / 100,
-          scoreNorm: Math.round(scoreNorm * 100) / 100,
+          noulProb: failed ? 0 : Math.round(noulProb * 100) / 100,
+          scoreNorm: failed ? 0 : Math.round(scoreNorm * 100) / 100,
           levelLabel,
-          typedJson
+          typedJson,
+          failed
         };
 
         this.decisionHistory.set(seq, record);
         // 归档列表按高分到低分正向追加
-        this.pushDecisionStreamItem(seq, art.title, domain, art.relevance_score || 0, latency, false);
-        this.addScatterDot(latency);
+        this.pushDecisionStreamItem(seq, art.title, domain, art.relevance_score || 0, latency, false, failed);
+        if (!failed) this.addScatterDot(latency);
       });
 
-      // 计算指标
+      // 计算指标：仅统计真正拿到 JEV 分数的条目，失败项不参与
+      const successCount = this.latencies.length;
+      const hasMetrics = successCount > 0;
       const sum = this.latencies.reduce((a, b) => a + b, 0);
-      const avg = Math.round(sum / this.latencies.length) || 65;
+      const avg = hasMetrics ? Math.round(sum / successCount) : 0;
       const sorted = [...this.latencies].sort((a, b) => a - b);
-      const p50 = sorted[Math.floor(sorted.length * 0.5)] || avg;
-      const p95 = sorted[Math.floor(sorted.length * 0.95)] || avg;
+      const p50 = hasMetrics ? (sorted[Math.floor(sorted.length * 0.5)] || avg) : 0;
+      const p95 = hasMetrics ? (sorted[Math.floor(sorted.length * 0.95)] || avg) : 0;
+      const archiveLabel = failedCount === n ? '全部失败' : failedCount > 0 ? '部分失败' : '已归档';
 
       // 回填紧凑性能遥测胶囊条（仅在收起态展示，避免与展开态左侧指标冲突）
-      if (this.sumAvgEl) this.sumAvgEl.textContent = `${avg}ms`;
-      if (this.sumP95El) this.sumP95El.textContent = `${p95}ms`;
-      if (this.sumSpeedEl) this.sumSpeedEl.textContent = `已归档`;
+      if (this.sumAvgEl) this.sumAvgEl.textContent = hasMetrics ? `${avg}ms` : '--';
+      if (this.sumP95El) this.sumP95El.textContent = hasMetrics ? `${p95}ms` : '--';
+      if (this.sumSpeedEl) this.sumSpeedEl.textContent = archiveLabel;
       if (this.sumDurationEl) this.sumDurationEl.textContent = `--`;
 
       // 回填遥测面板
       if (this.metricDurationEl) this.metricDurationEl.innerHTML = `--<small>s</small>`;
-      if (this.metricSpeedEl) this.metricSpeedEl.innerHTML = `已归档`;
-      if (this.metricAvgLatencyEl) this.metricAvgLatencyEl.innerHTML = `${avg}<small>ms</small>`;
-      if (this.metricP50El) this.metricP50El.textContent = `${p50}ms`;
-      if (this.metricP95El) this.metricP95El.textContent = `${p95}ms`;
+      if (this.metricSpeedEl) this.metricSpeedEl.innerHTML = archiveLabel;
+      if (this.metricAvgLatencyEl) this.metricAvgLatencyEl.innerHTML = hasMetrics ? `${avg}<small>ms</small>` : `--<small>ms</small>`;
+      if (this.metricP50El) this.metricP50El.textContent = hasMetrics ? `${p50}ms` : '--';
+      if (this.metricP95El) this.metricP95El.textContent = hasMetrics ? `${p95}ms` : '--';
 
       // 更新散点图参考线
-      this.updateLatencyRefLines(p50, p95);
+      if (hasMetrics) this.updateLatencyRefLines(p50, p95);
 
       this.updatePipelineStep(5, true);
       this.updateDistributionBars();
@@ -245,8 +255,13 @@
       }
 
       if (this.statusTagEl) {
-        this.statusTagEl.className = 'badge jev-hud-badge-status is-done';
-        this.statusTagEl.textContent = '已归档';
+        if (failedCount === 0) {
+          this.statusTagEl.className = 'badge jev-hud-badge-status is-done';
+          this.statusTagEl.textContent = '已归档';
+        } else {
+          this.statusTagEl.className = 'badge jev-hud-badge-status is-failed';
+          this.statusTagEl.textContent = failedCount === n ? `全部失败 (${failedCount}篇)` : `部分失败 (${failedCount}篇)`;
+        }
       }
 
       // 归档阅览态：默认保持紧凑收拢条，不遮挡主文章阅读区
@@ -261,6 +276,7 @@
       if (!this.hudEl) return;
       this.totalCount = total || 0;
       this.processedCount = 0;
+      this.failedCount = 0;
       this.latencies = [];
       this.decisionHistory.clear();
       this.selectedSeq = null;
@@ -297,23 +313,29 @@
     onItem(data) {
       if (!this.hudEl) return;
       this.processedCount++;
-      const latency = data.latencyMs || Math.floor(Math.random() * 40 + 50);
-      this.latencies.push(latency);
-
       const article = data.article || {};
+      const failed = !!article.failed;
+      if (failed) this.failedCount++;
+
+      // 失败项没有可用的推理结果，不编造延迟，也不计入遥测
+      const latency = failed ? null : (data.latencyMs || Math.floor(Math.random() * 40 + 50));
+      if (!failed) this.latencies.push(latency);
+
       const score = article.relevance_score || 0;
-      const domain = article.matched_domain || '通用主题';
+      const domain = article.matched_domain || (failed ? '—' : '通用主题');
       const breakdown = data.breakdown || {};
-      const noulProb = typeof breakdown.noulProb === 'number' ? breakdown.noulProb : score;
-      const scoreNorm = typeof breakdown.scoreNormalized === 'number' ? breakdown.scoreNormalized : score;
-      const levelLabel = breakdown.levelLabel || (score >= 0.7 ? '高度相关' : score >= 0.3 ? '中度相关' : '低相关');
+      const noulProb = failed ? 0 : (typeof breakdown.noulProb === 'number' ? breakdown.noulProb : score);
+      const scoreNorm = failed ? 0 : (typeof breakdown.scoreNormalized === 'number' ? breakdown.scoreNormalized : score);
+      const levelLabel = failed
+        ? '调用失败'
+        : breakdown.levelLabel || (score >= 0.7 ? '高度相关' : score >= 0.3 ? '中度相关' : '低相关');
 
       const typedJson = {
         decision_id: `#${data.current}`,
         relevance_score: score,
         domain: domain,
         level: levelLabel,
-        status: score >= 0.3 ? 'admitted' : 'filtered'
+        status: failed ? 'failed' : score >= 0.3 ? 'admitted' : 'filtered'
       };
 
       // 缓存历史记录供 Inspector 模式检索
@@ -327,14 +349,15 @@
         noulProb,
         scoreNorm,
         levelLabel,
-        typedJson
+        typedJson,
+        failed
       });
 
       // 1. 更新遥测数据
       this.updateTelemetry();
 
-      // 2. 打上延迟散点
-      this.addScatterDot(latency);
+      // 2. 打上延迟散点（失败项不参与延迟分布）
+      if (!failed) this.addScatterDot(latency);
 
       // 3. 流水线阶段步进
       this.animatePipelineSteps();
@@ -349,11 +372,12 @@
         noulProb,
         scoreNorm,
         levelLabel,
-        typedJson
+        typedJson,
+        failed
       });
 
       // 5. 决策流瀑布插入
-      this.pushDecisionStreamItem(data.current, article.title, domain, score, latency);
+      this.pushDecisionStreamItem(data.current, article.title, domain, score, latency, true, failed);
 
       // 6. 实时分档条更新
       this.updateDistributionBars();
@@ -361,22 +385,33 @@
 
     onDone(data) {
       if (!this.hudEl) return;
+      const failed = typeof data.failed === 'number' ? data.failed : this.failedCount;
+
       if (this.statusTagEl) {
-        this.statusTagEl.className = 'badge jev-hud-badge-status is-done';
-        this.statusTagEl.textContent = `完成 (${data.scored ?? 0}篇)`;
+        if (failed > 0) {
+          this.statusTagEl.className = 'badge jev-hud-badge-status is-failed';
+          this.statusTagEl.textContent = failed === this.totalCount
+            ? `全部失败 (${failed}篇)`
+            : `完成 (${data.scored ?? 0}篇 · ${failed}失败)`;
+        } else {
+          this.statusTagEl.className = 'badge jev-hud-badge-status is-done';
+          this.statusTagEl.textContent = `完成 (${data.scored ?? 0}篇)`;
+        }
       }
 
       const elapsedSec = Math.max(0.1, (performance.now() - this.startTime) / 1000);
       const speed = (this.processedCount / elapsedSec).toFixed(1);
+      const successCount = this.latencies.length;
+      const hasMetrics = successCount > 0;
       const sum = this.latencies.reduce((a, b) => a + b, 0);
-      const avg = Math.round(sum / (this.latencies.length || 1));
+      const avg = hasMetrics ? Math.round(sum / successCount) : 0;
       const sorted = [...this.latencies].sort((a, b) => a - b);
-      const p50 = sorted[Math.floor(sorted.length * 0.5)] || avg;
-      const p95 = sorted[Math.floor(sorted.length * 0.95)] || avg;
+      const p50 = hasMetrics ? (sorted[Math.floor(sorted.length * 0.5)] || avg) : 0;
+      const p95 = hasMetrics ? (sorted[Math.floor(sorted.length * 0.95)] || avg) : 0;
 
-      // 回填紧凑性能遥测胶囊条
-      if (this.sumAvgEl) this.sumAvgEl.textContent = `${avg}ms`;
-      if (this.sumP95El) this.sumP95El.textContent = `${p95}ms`;
+      // 回填紧凑性能遥测胶囊条（延迟指标仅统计成功出分的条目）
+      if (this.sumAvgEl) this.sumAvgEl.textContent = hasMetrics ? `${avg}ms` : '--';
+      if (this.sumP95El) this.sumP95El.textContent = hasMetrics ? `${p95}ms` : '--';
       if (this.sumSpeedEl) this.sumSpeedEl.textContent = `${speed}篇/s`;
       if (this.sumDurationEl) this.sumDurationEl.textContent = `${elapsedSec.toFixed(1)}s`;
 
@@ -388,7 +423,7 @@
       }
 
       this.updateDistributionBars();
-      this.updateLatencyRefLines(p50, p95);
+      if (hasMetrics) this.updateLatencyRefLines(p50, p95);
     },
 
     inspectDecision(seq) {
@@ -435,7 +470,7 @@
         this.activeDomainBadge.textContent = `🎯 ${record.domain}`;
       }
       if (this.activeLatencyBadge) {
-        this.activeLatencyBadge.textContent = `⚡ ${record.latency} ms`;
+        this.activeLatencyBadge.textContent = record.failed ? '✕ 调用失败' : `⚡ ${record.latency} ms`;
       }
 
       // Live Ranking 概率柱与数值缓动
@@ -446,7 +481,7 @@
         this.typedJsonEl.textContent = JSON.stringify(record.typedJson, null, 2);
       }
       if (this.typedTimeEl) {
-        this.typedTimeEl.textContent = `${record.latency} ms`;
+        this.typedTimeEl.textContent = record.failed ? '调用失败' : `${record.latency} ms`;
       }
     },
 
@@ -484,18 +519,19 @@
         this.metricSpeedEl.innerHTML = `${speed}<small>篇/s</small>`;
       }
 
-      // 计算平均与 p50/p95
+      // 计算平均与 p50/p95（仅统计成功出分的条目，失败项没有真实延迟）
+      const hasMetrics = this.latencies.length > 0;
       const sum = this.latencies.reduce((a, b) => a + b, 0);
-      const avg = Math.round(sum / this.latencies.length);
+      const avg = hasMetrics ? Math.round(sum / this.latencies.length) : 0;
       const sorted = [...this.latencies].sort((a, b) => a - b);
-      const p50 = sorted[Math.floor(sorted.length * 0.5)] || avg;
-      const p95 = sorted[Math.floor(sorted.length * 0.95)] || avg;
+      const p50 = hasMetrics ? (sorted[Math.floor(sorted.length * 0.5)] || avg) : 0;
+      const p95 = hasMetrics ? (sorted[Math.floor(sorted.length * 0.95)] || avg) : 0;
 
-      if (this.metricAvgLatencyEl) this.metricAvgLatencyEl.innerHTML = `${avg}<small>ms</small>`;
-      if (this.metricP50El) this.metricP50El.textContent = `${p50}ms`;
-      if (this.metricP95El) this.metricP95El.textContent = `${p95}ms`;
+      if (this.metricAvgLatencyEl) this.metricAvgLatencyEl.innerHTML = hasMetrics ? `${avg}<small>ms</small>` : `--<small>ms</small>`;
+      if (this.metricP50El) this.metricP50El.textContent = hasMetrics ? `${p50}ms` : '--';
+      if (this.metricP95El) this.metricP95El.textContent = hasMetrics ? `${p95}ms` : '--';
 
-      this.updateLatencyRefLines(p50, p95);
+      if (hasMetrics) this.updateLatencyRefLines(p50, p95);
     },
 
     addScatterDot(latency) {
@@ -524,16 +560,23 @@
 
     updateDistributionBars() {
       if (!this.distHighBar || !articles) return;
-      const total = articles.length;
-      if (total === 0) return;
+      // 失败项分数不可用，不参与相关度分档分布
+      const scored = articles.filter(a => !a.failed);
+      const total = scored.length;
+      if (total === 0) {
+        this.distHighBar.style.width = '0%';
+        if (this.distMidBar) this.distMidBar.style.width = '0%';
+        if (this.distLowBar) this.distLowBar.style.width = '0%';
+        return;
+      }
 
-      const high = articles.filter(a => (a.relevance_score || 0) >= 0.7).length;
-      const mid = articles.filter(a => (a.relevance_score || 0) >= 0.3 && (a.relevance_score || 0) < 0.7).length;
-      const low = articles.filter(a => (a.relevance_score || 0) < 0.3).length;
+      const high = scored.filter(a => (a.relevance_score || 0) >= 0.7).length;
+      const mid = scored.filter(a => (a.relevance_score || 0) >= 0.3 && (a.relevance_score || 0) < 0.7).length;
+      const low = scored.filter(a => (a.relevance_score || 0) < 0.3).length;
 
       this.distHighBar.style.width = `${(high / total) * 100}%`;
-      this.distMidBar.style.width = `${(mid / total) * 100}%`;
-      this.distLowBar.style.width = `${(low / total) * 100}%`;
+      if (this.distMidBar) this.distMidBar.style.width = `${(mid / total) * 100}%`;
+      if (this.distLowBar) this.distLowBar.style.width = `${(low / total) * 100}%`;
     },
 
     updatePipelineStep(stepIndex, allDone = false) {
@@ -573,20 +616,29 @@
       if (this.labelDomain) this.labelDomain.textContent = `综合得分 (${domain})`;
     },
 
-    pushDecisionStreamItem(seq, title, domain, score, latency, prepend = true) {
+    pushDecisionStreamItem(seq, title, domain, score, latency, prepend = true, failed = false) {
       if (!this.streamListEl) return;
       const item = document.createElement('div');
-      item.className = 'jev-stream-item';
+      item.className = `jev-stream-item${failed ? ' is-failed' : ''}`;
       item.dataset.seq = seq;
-      item.title = `点击检视 Decision #${seq} 的判定详情`;
+      item.title = failed
+        ? `Decision #${seq}：JEV 调用失败，分数不可用，可重新评分`
+        : `点击检视 Decision #${seq} 的判定详情`;
 
       const scoreClass = score >= 0.7 ? 'high' : score >= 0.3 ? 'mid' : 'low';
+      const scoreHtml = failed
+        ? `<span class="jev-stream-score failed">调用失败</span>`
+        : `<span class="jev-stream-score ${scoreClass}">★ ${Math.round(score * 100)}%</span>`;
+      const latencyHtml = failed
+        ? `<span class="jev-stream-latency">—</span>`
+        : `<span class="jev-stream-latency">${latency}ms</span>`;
+
       item.innerHTML = `
         <span class="jev-stream-seq">#${seq}</span>
         <span class="jev-stream-tag" title="${escapeHtml(domain)}">${escapeHtml(domain)}</span>
         <span class="jev-stream-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
-        <span class="jev-stream-score ${scoreClass}">★ ${Math.round(score * 100)}%</span>
-        <span class="jev-stream-latency">${latency}ms</span>
+        ${scoreHtml}
+        ${latencyHtml}
       `;
 
       if (prepend && this.streamListEl.firstChild) {
@@ -775,27 +827,45 @@
       </div>`;
   }
 
+  /**
+   * 文章列表排序：JEV 调用失败的条目分数不可用，统一沉底；
+   * 其余按综合评分从高到低，同分按 id 降序保证稳定。
+   */
+  function sortArticles(list) {
+    return list.sort((a, b) => {
+      const aFailed = a.failed ? 1 : 0;
+      const bFailed = b.failed ? 1 : 0;
+      if (aFailed !== bFailed) return aFailed - bFailed;
+      const diff = (b.relevance_score ?? 0) - (a.relevance_score ?? 0);
+      if (diff !== 0) return diff;
+      return (b.id ?? 0) - (a.id ?? 0);
+    });
+  }
+
   // 统计计数更新
   function updateStatsCounters() {
     const total = articles.length;
-    const high = articles.filter(a => a.relevance_score >= 0.7).length;
-    const mid = articles.filter(a => a.relevance_score >= 0.3 && a.relevance_score < 0.7).length;
-    const low = articles.filter(a => a.relevance_score < 0.3).length;
+    // 评分失败的条目不计入相关性分档（其 0 分是占位值）
+    const scored = articles.filter(a => !a.failed);
+    const high = scored.filter(a => a.relevance_score >= 0.7).length;
+    const mid = scored.filter(a => a.relevance_score >= 0.3 && a.relevance_score < 0.7).length;
+    const low = scored.filter(a => a.relevance_score < 0.3).length;
 
     if (totalCountEl) totalCountEl.textContent = total;
     if (highCountEl) highCountEl.textContent = high;
     if (midCountEl) midCountEl.textContent = mid;
     if (lowCountEl) lowCountEl.textContent = low;
 
-    if (high + mid + low !== total) {
-      console.error('评分分档统计不一致:', { total, high, mid, low });
+    if (high + mid + low !== scored.length) {
+      console.error('评分分档统计不一致:', { total, scored: scored.length, high, mid, low });
     }
   }
 
   // 生成单张卡片的 HTML 字符串
   function renderArticleCardHtml(article, isJustUpdated = false) {
+    const failed = !!article.failed;
     const score = article.relevance_score || 0;
-    const isLow = score < 0.3;
+    const isLow = !failed && score < 0.3;
     
     let scoreClass = 'my-daily-score-low';
     if (score >= 0.7) {
@@ -805,6 +875,10 @@
     }
 
     const scorePercent = Math.round(score * 100);
+    // JEV 调用失败时 relevance_score 是占位 0 分，不能展示成真实的 ★ 0%
+    const scoreBadgeHtml = failed
+      ? `<span class="badge my-daily-score-failed my-daily-score-badge" title="JEV 调用失败，分数不可用">⚠ 评分失败</span>`
+      : `<span class="badge ${scoreClass} my-daily-score-badge" title="JEV 综合相关性评分">★ ${scorePercent}%</span>`;
     const title = article.title;
     const summary = article.summary_zh || article.summary || '';
     const domain = article.matched_domain;
@@ -819,12 +893,12 @@
     const timeStr = formatDate(article.published_at || article.created_at);
 
     return `
-      <article class="article-card ${isLow ? 'is-low-score' : ''} ${isJustUpdated ? 'is-scoring-just-updated' : ''}" data-id="${article.id}">
+      <article class="article-card ${isLow ? 'is-low-score' : ''} ${failed ? 'is-score-failed' : ''} ${isJustUpdated ? 'is-scoring-just-updated' : ''}" data-id="${article.id}">
         <div class="article-card-header">
           <h3 class="article-title">
             <a href="/articles/${article.id}">${escapeHtml(title)}</a>
           </h3>
-          <span class="badge ${scoreClass} my-daily-score-badge" title="JEV 综合相关性评分">★ ${scorePercent}%</span>
+          ${scoreBadgeHtml}
         </div>
 
         <div class="article-meta">
@@ -862,6 +936,7 @@
 
     articlesList.classList.remove('is-empty');
     if (emptyState) emptyState.style.display = 'none';
+    sortArticles(articles);
     articlesList.innerHTML = articles.map(article => renderArticleCardHtml(article)).join('');
   }
 
@@ -899,12 +974,8 @@
       articles.push(updatedArticle);
     }
 
-    // 按评分从高到低排序，同分则按 id 降序保证稳定
-    articles.sort((a, b) => {
-      const diff = (b.relevance_score ?? 0) - (a.relevance_score ?? 0);
-      if (diff !== 0) return diff;
-      return (b.id ?? 0) - (a.id ?? 0);
-    });
+    // 按评分从高到低排序（失败项沉底），同分则按 id 降序保证稳定
+    sortArticles(articles);
 
     if (emptyState) emptyState.style.display = 'none';
     updateStatsCounters();
@@ -929,21 +1000,29 @@
         cardEl = temp.firstElementChild;
       } else {
         // 已有卡片：更新分数徽章与分档状态
+        const failed = !!art.failed;
         const score = art.relevance_score || 0;
-        const isLow = score < 0.3;
+        const isLow = !failed && score < 0.3;
         cardEl.classList.toggle('is-low-score', isLow);
-
-        let scoreClass = 'my-daily-score-low';
-        if (score >= 0.7) {
-          scoreClass = 'my-daily-score-high';
-        } else if (score >= 0.3) {
-          scoreClass = 'my-daily-score-mid';
-        }
+        cardEl.classList.toggle('is-score-failed', failed);
 
         const badgeEl = cardEl.querySelector('.my-daily-score-badge, .badge');
         if (badgeEl) {
-          badgeEl.className = `badge ${scoreClass} my-daily-score-badge`;
-          badgeEl.textContent = `★ ${Math.round(score * 100)}%`;
+          if (failed) {
+            badgeEl.className = 'badge my-daily-score-failed my-daily-score-badge';
+            badgeEl.textContent = '⚠ 评分失败';
+            badgeEl.title = 'JEV 调用失败，分数不可用';
+          } else {
+            let scoreClass = 'my-daily-score-low';
+            if (score >= 0.7) {
+              scoreClass = 'my-daily-score-high';
+            } else if (score >= 0.3) {
+              scoreClass = 'my-daily-score-mid';
+            }
+            badgeEl.className = `badge ${scoreClass} my-daily-score-badge`;
+            badgeEl.textContent = `★ ${Math.round(score * 100)}%`;
+            badgeEl.title = 'JEV 综合相关性评分';
+          }
         }
 
         // 刚刚出分的卡片触发微脉冲动效（240ms 轻盈脉冲）

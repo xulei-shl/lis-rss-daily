@@ -10,6 +10,7 @@
 
 import { getDb } from '../db.js';
 import { logger } from '../logger.js';
+import { isJevResponseFailed } from '../jev.js';
 import { getUserLocalDate, getUserTimezone, buildUtcRangeFromLocalDate } from './timezone.js';
 
 const log = logger.child({ module: 'my-daily-api' });
@@ -27,7 +28,7 @@ export async function getDailyArticles(userId: number, date?: string) {
   const scoreDate = date || (await getUserLocalDate(userId));
 
   // 联表查询：评分 + 文章 + 翻译
-  const articles = await db
+  const rows = await db
     .selectFrom('user_daily_scores as s')
     .innerJoin('articles as a', 'a.id', 's.article_id')
     .leftJoin('article_translations as t', 't.article_id', 'a.id')
@@ -50,6 +51,17 @@ export async function getDailyArticles(userId: number, date?: string) {
     ])
     .orderBy('s.relevance_score', 'desc')
     .execute();
+
+  // 标记 JEV 调用失败的条目：其 relevance_score 是占位 0 分，不代表真实相关性，
+  // 因此统一沉底，交给前端单独标识而不是混进相关性排序。
+  const articles = rows.map((row) => ({
+    ...row,
+    failed: isJevResponseFailed(row.jev_response),
+  }));
+  articles.sort((a, b) => {
+    if (a.failed !== b.failed) return a.failed ? 1 : -1;
+    return (b.relevance_score ?? 0) - (a.relevance_score ?? 0);
+  });
 
   return {
     date: scoreDate,
@@ -140,18 +152,21 @@ export async function getAvailableDates(userId: number) {
  * 每日状态项
  */
 export interface DailyStatusItem {
-  status: 'green' | 'yellow' | 'red' | 'future';
+  status: 'green' | 'yellow' | 'orange' | 'red' | 'future';
   hasArticles: boolean;
   isScored: boolean;
+  /** JEV 调用失败的条目数（占位 0 分，不代表真实相关性） */
+  failedCount: number;
   articleCount: number;
 }
 
 /**
  * 获取指定月份每一天的文章与 JEV 排序状态
- * 
+ *
  * 状态判定规则：
  * - future: 未来日期（不可选，不渲染状态圆点）
- * - green:  已执行 JEV 排序
+ * - green:  已执行 JEV 排序且至少一篇拿到真实分数
+ * - orange: 已调用 JEV 但全部失败，分数不可用（待重试）
  * - yellow: 当天有文章，但尚未执行 JEV 排序
  * - red:    当天没有文章
  */
@@ -180,16 +195,23 @@ export async function getMonthDailyStatus(userId: number, yearMonth?: string) {
   const [startUtc] = buildUtcRangeFromLocalDate(`${targetMonth}-01`, timezone);
   const [, endUtc] = buildUtcRangeFromLocalDate(`${targetMonth}-${lastDayStr}`, timezone);
 
-  // 1. 查询当月已评分记录的日期集合
+  // 1. 查询当月已评分记录，并按日期聚合成功 / 失败篇数；
+  //    失败判定依据 jev_response 中是否记录了调用错误（见 isJevResponseFailed）
   const scoredRows = await db
     .selectFrom('user_daily_scores')
     .where('user_id', '=', userId)
     .where('score_date', '>=', `${targetMonth}-01`)
     .where('score_date', '<=', `${targetMonth}-${lastDayStr}`)
-    .select('score_date')
-    .distinct()
+    .select(['score_date', 'jev_response'])
     .execute();
-  const scoredSet = new Set(scoredRows.map((r) => r.score_date));
+
+  const scoredStats = new Map<string, { total: number; failed: number }>();
+  for (const row of scoredRows) {
+    const stat = scoredStats.get(row.score_date) || { total: 0, failed: 0 };
+    stat.total++;
+    if (isJevResponseFailed(row.jev_response)) stat.failed++;
+    scoredStats.set(row.score_date, stat);
+  }
 
   // 2. 查询当月范围内的文章创建时间
   const articleRows = await db
@@ -228,28 +250,34 @@ export async function getMonthDailyStatus(userId: number, yearMonth?: string) {
         status: 'future',
         hasArticles: false,
         isScored: false,
+        failedCount: 0,
         articleCount: 0,
       };
       continue;
     }
 
-    const isScored = scoredSet.has(dateKey);
+    const stat = scoredStats.get(dateKey);
+    const isScored = !!stat;
+    const failedCount = stat?.failed ?? 0;
+    const successCount = stat ? stat.total - stat.failed : 0;
     const articleCount = articleDatesCount.get(dateKey) || 0;
     const hasArticles = articleCount > 0;
 
-    let status: 'green' | 'yellow' | 'red' = 'red';
-    if (isScored) {
-      status = 'green';
-    } else if (hasArticles) {
-      status = 'yellow';
+    // 有评分记录但一篇都没拿到真实分数：当天 JEV 调用全部失败，标成待重试
+    let status: 'green' | 'yellow' | 'orange' | 'red';
+    if (!isScored) {
+      status = hasArticles ? 'yellow' : 'red';
+    } else if (successCount === 0) {
+      status = 'orange';
     } else {
-      status = 'red';
+      status = 'green';
     }
 
     days[dateKey] = {
       status,
       hasArticles,
       isScored,
+      failedCount,
       articleCount,
     };
   }

@@ -73,7 +73,7 @@ relevanceScore = noul概率 × (score值 / 4)
 - 两者相乘：被判为「不相关」的文章，即使 score 打高分也会被压到接近 0。
 - 结果保留两位小数，范围 0–1；前端展示为百分比（`★ 85%`）。
 - `matched_domain`：单领域提问（含来源绑定领域）时直接取该领域名；多领域回退时取 `choice` 答案。
-- JEV 调用失败时写入占位 0 分并标记 `failed: true`，`jev_response` 中记录错误信息——占位 0 分不代表真实相关性。
+- JEV 调用失败时写入占位 0 分并标记 `failed: true`，`jev_response` 中记录错误信息（`{ error: message }`）——占位 0 分不代表真实相关性，展示层需单独标识（见第 7 节）。
 
 原始响应完整 JSON 存入 `user_daily_scores.jev_response`，便于事后审计与调参。
 
@@ -86,7 +86,7 @@ relevanceScore = noul概率 × (score值 / 4)
 | `user_id` + `article_id` + `score_date` | 联合唯一键；重复评分时 upsert 覆盖 |
 | `relevance_score` | 综合评分（REAL，0–1） |
 | `matched_domain` | 匹配的主题领域名称（可空） |
-| `jev_response` | JEV 原始响应 JSON（TEXT） |
+| `jev_response` | JEV 原始响应 JSON（TEXT）。成功时为完整响应（含 `answers` / `usage`）；失败时为 `{ error: message }`，是判定该条是否调用失败的持久化依据（`isJevResponseFailed`） |
 
 日期口径：`score_date` 是**用户时区下的本地自然日**（YYYY-MM-DD）。查询文章时先换算成对应 UTC 区间（`buildUtcRangeFromLocalDate`）再按 `created_at` 过滤，避免凌晨抓取的文章被拆到两天。
 
@@ -123,8 +123,9 @@ relevanceScore = noul概率 × (score值 / 4)
 
 | 路由 | 方法 | 说明 |
 |---|---|---|
-| `/api/my-daily?date=` | GET | 查询指定日期的评分文章（联表 articles + translations），按 `relevance_score` 降序 |
+| `/api/my-daily?date=` | GET | 查询指定日期的评分文章（联表 articles + translations）；每条附带 `failed` 标志，失败项沉底，其余按 `relevance_score` 降序 |
 | `/api/my-daily/dates` | GET | 可评分日期列表 = 已有评分结果的日期 ∪ 最近 30 个自然日内有新增文章的日期（倒序，上限 30） |
+| `/api/my-daily/calendar-status?month=` | GET | 指定月份每日状态（`green`/`yellow`/`orange`/`red`/`future`）与 `failedCount`，供日历圆点与 tooltip 使用 |
 | `/api/my-daily/refresh` | POST | 手动触发当前用户评分；`Accept: text/event-stream` 时走 SSE 流式，否则走传统 JSON |
 
 **SSE 流式评分**（前端「Jev 评分」按钮）推送三类事件：
@@ -132,7 +133,7 @@ relevanceScore = noul概率 × (score值 / 4)
 | 事件 | 时机 | 载荷 |
 |---|---|---|
 | `start` | 评分开始 | `{ total }` |
-| `item` | 每篇出分 | `{ current, total, article: { ..., relevance_score, matched_domain } }` |
+| `item` | 每篇出分 | `{ current, total, article: { ..., relevance_score, matched_domain, failed } }`（`failed: true` 表示该篇 JEV 调用失败，分数为占位 0） |
 | `done` | 全部完成 | `{ total, scored, failed }` |
 
 另有 `info`（`no_articles` / `duplicate`）与 `error`（未配置主题、排队失败、JEV 异常）事件。前端收到 `item` 即插入卡片并按分数动态重排（FLIP 动画），直到全部完成。
@@ -145,7 +146,17 @@ relevanceScore = noul概率 × (score值 / 4)
 | 中度相关 | 0.3 ≤ score < 0.7 | 正常徽章 |
 | 低相关 | score < 0.3 | 徽章为 low 样式，整卡 `is-low-score` **灰显** |
 
-工具栏统计三类数量（高 / 中 / 低），三项之和必须等于总数（不一致时控制台报错）。摘要展示优先中文翻译（`summary_zh`），超过 400 字折叠。
+工具栏统计三类数量（高 / 中 / 低），三项之和必须等于**成功出分**的文章数（失败项不计入，不一致时控制台报错）。摘要展示优先中文翻译（`summary_zh`），超过 400 字折叠。
+
+### 7.1 JEV 调用失败态的展示
+
+失败判定统一由 `isJevResponseFailed(jev_response)` 给出（解析出 `error` 字段即视为调用失败），前端不再把占位 0 分当作真实低分：
+
+- **文章卡片**：显示红色「⚠ 评分失败」徽标（不再显示 `★ 0%`），整卡加 `is-score-failed` 红边弱化；失败项在列表中统一**沉底**，且**不计入**高/中/低相关分档统计。
+- **决策中枢 HUD**：失败项标记为「调用失败」，不为其编造延迟、不计入延迟遥测与散点、不参与分档分布；状态标签显示「全部失败 (N篇)」/「部分失败 (N篇)」，全部失败时延迟指标显示 `--`。
+- **日历组件**：某天已调用 JEV 但一篇都没拿到真实分数时显示新增的**橙色圆点**（`orange`）并附「评分失败」图例，tooltip「JEV 评分失败（N篇），可重新评分」；部分失败仍为绿点。
+
+失败标志随 `/api/my-daily` 查询与 SSE `item` 事件下发；日历另有 `/api/my-daily/calendar-status` 返回的 `failedCount`。
 
 ## 8. 配置项（`src/config.ts`）
 

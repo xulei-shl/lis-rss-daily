@@ -32,7 +32,7 @@
       minDate = '',
       maxDate = getLocalDateString(), // 默认最大不超过今天
       showDots = false,
-      fetchDotsStatus = null, // async (month) => Record<string, { status: 'green'|'yellow'|'red'|'future', articleCount?: number }>
+      fetchDotsStatus = null, // async (month) => Record<string, { status: 'green'|'yellow'|'orange'|'red'|'future', articleCount?: number, failedCount?: number }>
       allowClear = true,
       clearText = '清除',
       todayText = '今天',
@@ -100,6 +100,7 @@
             <div class="calendar-picker-legends" aria-label="状态图例">
               <span class="calendar-picker-legend-item"><span class="calendar-picker-dot dot-green"></span>已排序</span>
               <span class="calendar-picker-legend-item"><span class="calendar-picker-dot dot-yellow"></span>待排序</span>
+              <span class="calendar-picker-legend-item"><span class="calendar-picker-dot dot-orange"></span>评分失败</span>
               <span class="calendar-picker-legend-item"><span class="calendar-picker-dot dot-red"></span>无文章</span>
             </div>
           ` : ''}
@@ -291,6 +292,9 @@
           } else if (dayInfo.status === 'yellow') {
             dotHtml = `<span class="calendar-picker-dot dot-yellow" aria-hidden="true"></span>`;
             statusDesc = `待评分（${dayInfo.articleCount || 0}篇）`;
+          } else if (dayInfo.status === 'orange') {
+            dotHtml = `<span class="calendar-picker-dot dot-orange" aria-hidden="true"></span>`;
+            statusDesc = `JEV 评分失败（${dayInfo.failedCount || 0}篇），可重新评分`;
           } else if (dayInfo.status === 'red') {
             dotHtml = `<span class="calendar-picker-dot dot-red" aria-hidden="true"></span>`;
             statusDesc = '无文章';

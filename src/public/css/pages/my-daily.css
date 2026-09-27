@@ -267,6 +267,25 @@
   color: var(--text-tertiary);
 }
 
+/* 评分失败（JEV 调用失败）：分数不可用，弱化卡片并以红边区分，避免与真实低分混淆 */
+.article-card.is-score-failed {
+  background: var(--bg-primary);
+  border-color: color-mix(in srgb, var(--red) 22%, transparent);
+}
+
+.article-card.is-score-failed .article-title a {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.article-card.is-score-failed .article-summary {
+  color: var(--text-tertiary);
+}
+
+.my-daily-score-failed {
+  color: var(--red);
+}
+
 /* 加载中的骨架屏：外壳复用 .article-card，GPU 硬件加速扫光 */
 .my-daily-skeleton-lines {
   display: flex;
@@ -402,6 +421,12 @@
   background: color-mix(in srgb, var(--green) 15%, transparent);
   color: var(--green);
   border: 1px solid var(--green);
+}
+
+.jev-hud-badge-status.is-failed {
+  background: color-mix(in srgb, var(--red) 15%, transparent);
+  color: var(--red);
+  border: 1px solid var(--red);
 }
 
 @keyframes jevGlowPulse {
@@ -1246,6 +1271,10 @@
 
 .jev-stream-score.low {
   color: var(--text-tertiary);
+}
+
+.jev-stream-score.failed {
+  color: var(--red);
 }
 
 .jev-stream-latency {

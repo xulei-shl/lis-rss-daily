@@ -222,6 +222,8 @@ export interface ScoringProgressItemEvent {
     summary_zh: string | null;
     relevance_score: number;
     matched_domain: string | null;
+    /** JEV 调用失败：relevance_score 为占位 0 分，不代表真实相关性 */
+    failed: boolean;
   };
 }
 
@@ -550,6 +552,7 @@ async function runScoringForUser(
             summary_zh: meta.summary_zh,
             relevance_score: result.relevanceScore,
             matched_domain: result.matchedDomain,
+            failed: !!result.failed,
           },
         });
       } catch (err) {
