@@ -382,7 +382,9 @@ TELEGRAM_USER_ID=your_telegram_user_id
 
 # API 地址（默认 http://localhost:8081）
 TELEGRAM_API_URL=http://localhost:8081
-TELEGRAM_API_TIMEOUT=300
+# 等待任务完成的总截止时间（秒）。异步提交+轮询模式：任务阶段变化会实时推送进度；
+# 超时仅中断等待并提示，不影响 Python 端任务继续执行
+TELEGRAM_API_TIMEOUT=600
 
 # HTTP 代理（已废弃，当前网络可直连 Telegram）
 # 如需使用代理，取消注释并设置 TELEGRAM_HTTP_PROXY

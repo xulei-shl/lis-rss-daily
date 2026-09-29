@@ -17,6 +17,25 @@ const DEFAULT_TIMEOUT = 300;
 const POLL_TIMEOUT = 30;
 const POLL_LIMIT = 100;
 
+// PDF 总结 API 调用参数
+const API_SUBMIT_TIMEOUT = 15;   // 异步提交超时（秒）
+const API_POLL_TIMEOUT = 15;     // 单次状态轮询超时（秒）
+const API_POLL_INTERVAL = 5;     // 状态轮询间隔（秒）
+
+// 任务阶段 → 用户可见的进度文案
+const STAGE_LABELS: Record<string, string> = {
+  queued: '⏳ 排队等待中',
+  pdf_download: '📥 正在下载 PDF…',
+  pdf_validate: '📋 正在校验 PDF…',
+  pdf_summary: '📝 正在生成 AI 摘要…',
+  pdf_summary_check: '📝 正在检查摘要内容…',
+  upload: '📤 正在上传到各平台…',
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 interface TelegramMessageResponse {
   ok: boolean;
   result?: {
@@ -49,6 +68,21 @@ interface ProcessApiResponse {
   stages?: Record<string, string>;
   reason?: string;
   md_path?: string;
+}
+
+interface ProcessAcceptedResponse {
+  task_id: string;
+  queue_size?: number;
+  duplicate?: boolean;
+}
+
+interface TaskStatusResponse {
+  task_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  stage?: string;
+  elapsed_seconds?: number;
+  queue_wait_seconds?: number;
+  result?: ProcessApiResponse | null;
 }
 
 class TelegramClient {
@@ -224,8 +258,42 @@ class PaperTelegramBot {
     return { title: title || '', articleId, pushWechat };
   }
 
-  private async callApi(title: string, articleId?: number, pushWechat?: boolean): Promise<ProcessApiResponse> {
-    const payload: Record<string, unknown> = { title };
+  private async fetchJson<T>(url: string, init: RequestInit, timeoutSeconds: number): Promise<T> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
+
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+        dispatcher: this.httpProxyAgent ?? undefined,
+      } as RequestInit & { dispatcher?: ProxyAgent });
+
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(`API error ${response.status}: ${text}`);
+      }
+
+      return JSON.parse(text) as T;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * 异步提交任务并轮询状态直到完成。
+   *
+   * 替代原来的阻塞式调用：处理常超过 5 分钟，阻塞请求会被超时中断，
+   * 导致误报失败（Python 端实际仍在继续执行）。轮询模式同时可以
+   * 通过 onStage 回调向用户推送实时进度。
+   */
+  private async callApi(
+    title: string,
+    articleId?: number,
+    pushWechat?: boolean,
+    onStage?: (stage: string) => Promise<void>
+  ): Promise<ProcessApiResponse> {
+    const payload: Record<string, unknown> = { title, wait: false };
     if (articleId !== undefined) {
       payload.id = articleId;
     }
@@ -233,31 +301,65 @@ class PaperTelegramBot {
       payload.push_wechat = true;
     }
 
-    log.info('Calling API', { url: `${this.apiBaseUrl}/process`, payload });
+    log.info('Submitting task to API', { url: `${this.apiBaseUrl}/process`, payload });
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.apiTimeout * 1000);
-
-    try {
-      const response = await fetch(`${this.apiBaseUrl}/process`, {
+    const submitted = await this.fetchJson<ProcessAcceptedResponse>(
+      `${this.apiBaseUrl}/process`,
+      {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-        signal: controller.signal,
-        dispatcher: this.httpProxyAgent ?? undefined,
-      } as RequestInit & { dispatcher?: ProxyAgent });
+      },
+      API_SUBMIT_TIMEOUT
+    );
 
-      clearTimeout(timer);
+    if (!submitted.task_id) {
+      throw new Error('提交响应缺少 task_id');
+    }
+    if (submitted.duplicate) {
+      log.info('Task deduplicated, reusing existing task', { taskId: submitted.task_id });
+    }
 
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`API error ${response.status}: ${text}`);
+    log.info('Polling task status', { taskId: submitted.task_id });
+
+    // apiTimeout 作为等待任务完成的总截止时间（秒）
+    const deadline = Date.now() + this.apiTimeout * 1000;
+    let lastStage: string | null = null;
+
+    while (Date.now() < deadline) {
+      let status: TaskStatusResponse;
+      try {
+        status = await this.fetchJson<TaskStatusResponse>(
+          `${this.apiBaseUrl}/process/status/${submitted.task_id}`,
+          { method: 'GET' },
+          API_POLL_TIMEOUT
+        );
+      } catch (error) {
+        // 单次轮询失败不中断整体等待，记日志后重试
+        log.warn('Status poll failed, will retry', {
+          taskId: submitted.task_id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        await sleep(API_POLL_INTERVAL * 1000);
+        continue;
       }
 
-      return await response.json() as ProcessApiResponse;
-    } finally {
-      clearTimeout(timer);
+      if (status.stage && status.stage !== lastStage) {
+        log.info('Task stage changed', { taskId: submitted.task_id, stage: status.stage });
+        lastStage = status.stage;
+        if (onStage) {
+          await onStage(status.stage);
+        }
+      }
+
+      if (status.status === 'completed' || status.status === 'failed') {
+        return status.result ?? { success: false, reason: `任务${status.status === 'failed' ? '失败' : '异常结束'}` };
+      }
+
+      await sleep(API_POLL_INTERVAL * 1000);
     }
+
+    throw new Error(`等待任务超时（${this.apiTimeout} 秒），任务可能仍在后台执行`);
   }
 
   private formatResponse(title: string, result: ProcessApiResponse): string {
@@ -394,9 +496,18 @@ class PaperTelegramBot {
     this.isProcessing = true;
 
     try {
-      await this.sendText(chatId, `📥 开始处理: ${parsed.title}\n⏳ 等待结果中...`);
+      await this.sendText(chatId, `📥 开始处理: ${parsed.title}`);
 
-      const result = await this.callApi(parsed.title, parsed.articleId, parsed.pushWechat);
+      // 阶段变化时向用户推送实时进度（每个阶段只发一条，不刷屏）
+      const result = await this.callApi(
+        parsed.title,
+        parsed.articleId,
+        parsed.pushWechat,
+        async (stage) => {
+          const label = STAGE_LABELS[stage] ?? `⏳ ${stage}`;
+          await this.sendText(chatId, label);
+        }
+      );
       log.info('API returned result', { success: result.success, stages: result.stages });
 
       const responseText = this.formatResponse(parsed.title, result);

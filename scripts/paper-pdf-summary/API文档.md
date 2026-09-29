@@ -13,7 +13,8 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/process` | 提交论文全文处理请求（PDF 下载→总结→上传，阻塞，等待完成） |
+| `POST` | `/process` | 提交论文全文处理请求（默认阻塞等待完成；`wait=false` 时异步提交，立即返回 `task_id`） |
+| `GET`  | `/process/status/{task_id}` | 查询异步任务实时状态（心跳/进度轮询） |
 | `POST` | `/upload-text` | 直接上传文本内容到所有平台（无需 PDF 下载和总结） |
 | `GET`  | `/health` | 健康检查 + 队列状态 |
 
@@ -43,8 +44,9 @@ POST /process
 | `push_hiagent` | `bool` | 否 | `null` | 是否上传到 HiAgent RAG。`null` 沿用 config 配置；`true` 强制上传；`false` 强制跳过 |
 | `push_memos` | `bool` | 否 | `null` | 是否上传到 Memos。`null` 沿用 config 配置；`true` 强制上传；`false` 强制跳过 |
 | `push_blinko` | `bool` | 否 | `null` | 是否上传到 Blinko。`null` 沿用 config 配置；`true` 强制上传；`false` 强制跳过 |
+| `wait` | `bool` | 否 | `true` | `true` 阻塞等待工作流完成后返回结果；`false` 异步模式，立即返回 `task_id`，配合 `GET /process/status/{task_id}` 轮询（适合 agent 调用，避免长时间阻塞被误判为卡死） |
 
-### 响应（200）
+### 响应（200，默认阻塞模式）
 
 ```json
 {
@@ -87,7 +89,75 @@ POST /process
 | `pdf_summary` | HiAgent 生成 AI 摘要 | `"success"` | `"failed"` |
 | `upload` | 并行上传结果（详见下） | `object` | `{"error": "..."}` |
 
-### `upload` 上传结果
+## 2. 查询任务状态（心跳轮询）
+
+```
+GET /process/status/{task_id}
+```
+
+查询 `POST /process`（`wait=false`）提交的任务的实时状态。轮询间隔建议 **5-10 秒**。
+
+### 响应（200，任务进行中）
+
+```json
+{
+  "task_id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "面向数字图书馆的智能检索技术研究",
+  "status": "running",
+  "stage": "pdf_summary",
+  "elapsed_seconds": 95.3,
+  "queue_wait_seconds": null,
+  "queued_at": 1769700000.123,
+  "finished_at": null,
+  "result": null
+}
+```
+
+### 响应（200，任务完成）
+
+```json
+{
+  "task_id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "面向数字图书馆的智能检索技术研究",
+  "status": "completed",
+  "stage": "upload",
+  "elapsed_seconds": 132.6,
+  "queue_wait_seconds": null,
+  "queued_at": 1769700000.123,
+  "finished_at": 1769700132.7,
+  "result": {
+    "success": true,
+    "article_id": 42,
+    "md_path": "/opt/lis-rss-daily/scripts/paper-pdf-summary/download/2026-05-25/xxx.md",
+    "md_content": "# 摘要标题\n\n摘要正文...",
+    "stages": { "...": "与阻塞模式响应中的 stages 结构一致" },
+    "reason": null
+  }
+}
+```
+
+### 字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `status` | `string` | `queued` 排队中 → `running` 处理中 → `completed` / `failed` |
+| `stage` | `string` | 处理中的具体阶段：`pdf_download` → `pdf_validate` → `pdf_summary` → `pdf_summary_check` → `upload`；排队时为 `queued` |
+| `elapsed_seconds` | `float` / `null` | 任务开始处理至今（或至完成）的秒数；未开始时为 `null` |
+| `queue_wait_seconds` | `float` / `null` | 排队已等待秒数（仅 `status=queued` 时有值） |
+| `queued_at` / `finished_at` | `float` / `null` | 提交 / 完成的 Unix 时间戳 |
+| `result` | `object` / `null` | 完成后为完整工作流结果（与阻塞模式响应结构一致）；未完成时为 `null` |
+
+### 响应（404）
+
+```json
+{
+  "detail": "Task not found or expired"
+}
+```
+
+> 任务完成后结果保留 **5 分钟**（TTL）供轮询读取，过期后返回 404。服务重启后任务状态丢失（内存队列）。
+
+## 3. `upload` 上传结果
 
 | 子字段 | 类型 | 说明 |
 |--------|------|------|
@@ -98,7 +168,23 @@ POST /process
 | `wechat` | `bool` | 推送企业微信 |
 | `_skipped` | `string[]` | 被跳过的子系统列表（如 `["lis_rss"]`） |
 
-### 响应（500 — 处理异常）
+### 响应（200，异步模式 `wait=false`）
+
+```json
+{
+  "task_id": "550e8400-e29b-41d4-a716-446655440000",
+  "queue_size": 0,
+  "duplicate": false
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `task_id` | `string` | 任务 ID，用于轮询 `GET /process/status/{task_id}` |
+| `queue_size` | `int` | 提交时队列中等待的任务数 |
+| `duplicate` | `bool` | 是否命中在途任务去重：相同标题（忽略大小写/首尾空白）已有排队或处理中的任务时，不重复执行，直接返回现有 `task_id` 并标记 `duplicate=true` |
+
+### 响应（500 — 处理异常，仅阻塞模式）
 
 ```json
 {
@@ -114,7 +200,7 @@ POST /process
 
 ---
 
-## 2. 直接上传文本
+## 4. 直接上传文本
 
 ```
 POST /upload-text
@@ -186,7 +272,7 @@ POST /upload-text
 
 ---
 
-## 3. 健康检查
+## 5. 健康检查
 
 ```
 GET /health
@@ -333,6 +419,15 @@ curl -X POST http://localhost:8081/process \
   -H "Content-Type: application/json" \
   -d '{"title": "面向数字图书馆的智能检索技术研究", "id": 42, "push_wechat": true}'
 
+# 异步提交（适合 agent：立即返回 task_id，不阻塞）
+TASK_ID=$(curl -s -X POST http://localhost:8081/process \
+  -H "Content-Type: application/json" \
+  -d '{"title": "基于大模型的学术文献自动摘要研究", "wait": false}' \
+  | python3 -c "import sys,json;print(json.load(sys.stdin)['task_id'])")
+
+# 每 5-10 秒轮询一次，status 变为 completed/failed 后读取 result
+curl http://localhost:8081/process/status/$TASK_ID
+
 # 直接上传文本（携带 LIS-RSS 文章 ID）
 curl -X POST http://localhost:8081/upload-text \
   -H "Content-Type: application/json" \
@@ -350,9 +445,27 @@ curl http://localhost:8081/health
 ### Python
 
 ```python
+import time
 import requests
 
-# 提交处理
+# 异步提交 + 轮询（推荐 agent 使用，可随时感知进度、不会长时间阻塞）
+resp = requests.post("http://localhost:8081/process", json={
+    "title": "基于大模型的学术文献自动摘要研究",
+    "id": 42,
+    "push_wechat": False,
+    "wait": False
+})
+task_id = resp.json()["task_id"]
+
+while True:
+    st = requests.get(f"http://localhost:8081/process/status/{task_id}").json()
+    print(f"[{st['status']}] stage={st['stage']} elapsed={st['elapsed_seconds']}s")
+    if st["status"] in ("completed", "failed"):
+        result = st["result"]
+        break
+    time.sleep(5)
+
+# 阻塞模式（一次调用等到底）
 resp = requests.post("http://localhost:8081/process", json={
     "title": "基于大模型的学术文献自动摘要研究",
     "id": 42,
@@ -384,8 +497,25 @@ print(health.json())
 ### JavaScript
 
 ```javascript
-// 提交处理
+// 异步提交 + 轮询
 const resp = await fetch("http://localhost:8081/process", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    title: "基于大模型的学术文献自动摘要研究",
+    id: 42,
+    push_wechat: false,
+    wait: false
+  })
+});
+const { task_id } = await resp.json();
+
+// 每 5-10 秒轮询一次，直到 status 变为 completed/failed
+const status = await fetch(`http://localhost:8081/process/status/${task_id}`).then(r => r.json());
+console.log(status.status, status.stage, status.elapsed_seconds);
+
+// 阻塞模式
+const resp2 = await fetch("http://localhost:8081/process", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -410,10 +540,12 @@ console.log(await health.json());
 ## 注意事项
 
 1. **耗时差异**: `/process` 通常需要 1-5 分钟（PDF 下载 + 总结）；`/upload-text` 仅上传，通常秒级完成
-2. **幂等性**: 相同 `title` 重复调用 `/process` 会重复执行完整流程，不会自动去重；`/upload-text` 重复调用会重复上传相同内容
+2. **幂等性**: 相同标题（忽略大小写/首尾空白）的重复 `/process` 调用在途（排队/处理中）时会被去重，返回同一个 `task_id`（异步模式响应中 `duplicate=true`）；任务已完成/失败后的重复调用会重新执行完整流程；`/upload-text` 重复调用会重复上传相同内容
 3. **自动清理**: `/process` 生成的 PDF 文件默认在上传后删除（`config.yaml` 中 `delete_pdf: true`），MD 文件默认保留；`/upload-text` 自动创建临时文件，上传后立即删除
 4. **队列**: `/process` 请求会排队串行处理，队列中等待数可通过 `/health` 的 `queue_size` 查看；`/upload-text` 直接执行，不排队
 5. **PDF 下载**: 依赖知社科、万方、CNKI 三个数据库的可访问性，如果论文不在这些数据库中则无法获取 PDF
+6. **心跳/进度**: agent 调用推荐使用 `wait=false` 异步提交 + `GET /process/status/{task_id}` 轮询（建议 5-10 秒一次），可实时区分“排队中 / 下载中 / 总结中 / 上传中”，避免长时间阻塞被误判为卡死；任务状态保存在内存中，服务重启后丢失
+7. **稳健性**: 处理阶段在线程池中执行，处理期间 `/health` 与状态查询端点始终可响应；阻塞模式经代理调用时 Node 侧设为 10 分钟总超时 + 5 秒轮询，超过总超时返回失败原因，但 Python 端任务仍会继续执行并正常上传
 
 ---
 
@@ -430,4 +562,4 @@ API 服务由 `uvicorn api:app --host 0.0.0.0 --port 8081` 启动，CORS 已全�
 
 ---
 
-*文档版本: v1.1 | 最后更新: 2026-05-25*
+*文档版本: v1.2 | 最后更新: 2026-09-29*
