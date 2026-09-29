@@ -269,6 +269,43 @@ async function verifyPassword(password: string, storedHash: string): Promise<boo
 }
 
 /**
+ * 已通过账号密码校验的用户信息
+ */
+export interface AuthenticatedUser {
+  id: number;
+  username: string;
+  role: UserRole;
+}
+
+/**
+ * 校验用户名密码并返回用户信息（不签发 Cookie）
+ *
+ * 供外部 API 的账号密码鉴权复用：这类调用需要以真实用户身份访问与其绑定的数据
+ * （如「我的每日」评分），无法用共享的 CLI API Key 代替用户身份。
+ */
+export async function authenticateUser(
+  username: string,
+  password: string
+): Promise<AuthenticatedUser | null> {
+  const { getDb } = await import('../db.js');
+  const db = getDb();
+
+  const user = await db
+    .selectFrom('users')
+    .where('username', '=', username)
+    .selectAll()
+    .executeTakeFirst();
+
+  if (!user) return null;
+
+  const role = ((user as any).role || 'admin') as UserRole;
+  const passwordValid = await verifyPassword(password, user.password_hash);
+  if (!passwordValid) return null;
+
+  return { id: user.id, username: user.username, role };
+}
+
+/**
  * Login handler
  */
 export async function handleLogin(
@@ -276,34 +313,16 @@ export async function handleLogin(
   password: string,
   res: Response
 ): Promise<LoginResult> {
-  const { getDb } = await import('../db.js');
-  const db = getDb();
-
-  // Get user from database
-  const user = await db
-    .selectFrom('users')
-    .where('username', '=', username)
-    .selectAll()
-    .executeTakeFirst();
+  const user = await authenticateUser(username, password);
 
   if (!user) {
     return { success: false, error: 'Invalid username or password' };
   }
 
-  // Get the role
-  const role = (user as any).role || 'admin';
-
-  // Verify password
-  const passwordValid = await verifyPassword(password, user.password_hash);
-  
-  if (!passwordValid) {
-    return { success: false, error: 'Invalid username or password' };
-  }
-
-  const token = createToken(user.id, user.username, role);
+  const token = createToken(user.id, user.username, user.role);
   setSessionCookie(res, token);
 
-  return { success: true, role };
+  return { success: true, role: user.role };
 }
 
 /**
@@ -314,26 +333,46 @@ export function handleLogout(res: Response): void {
 }
 
 /**
- * CLI authentication middleware
+ * CLI / 外部 API 鉴权失败原因
  */
-export async function requireCliAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+export type CliAuthFailureReason =
+  | 'cli_api_key_not_configured'
+  | 'missing_user_id'
+  | 'invalid_user_id'
+  | 'missing_api_key'
+  | 'invalid_api_key'
+  | 'user_not_found'
+  | 'database_error';
+
+/**
+ * CLI / 外部 API 鉴权结果
+ */
+export type CliAuthResult =
+  | { ok: true; userId: number; username: string }
+  | { ok: false; status: number; reason: CliAuthFailureReason; message: string };
+
+/**
+ * CLI / 外部 API 鉴权核心逻辑（user_id + api_key / x-api-key 对 CLI_API_KEY）
+ *
+ * 只做校验并返回结果，不写响应；由调用方决定错误响应格式：
+ * - 站内 CLI 端点沿用 requireCliAuth 的 `{ status: 'error', error }`；
+ * - 外部 API 使用统一响应信封（见 api/external-api-response.ts）。
+ */
+export async function verifyCliAuth(req: AuthRequest): Promise<CliAuthResult> {
   const cliApiKey = process.env.CLI_API_KEY;
 
   if (!cliApiKey) {
-    res.status(500).json({ status: 'error', error: 'CLI_API_KEY not configured on server' });
-    return;
+    return { ok: false, status: 500, reason: 'cli_api_key_not_configured', message: 'CLI_API_KEY not configured on server' };
   }
 
   const userIdStr = req.query.user_id as string;
   if (!userIdStr) {
-    res.status(400).json({ status: 'error', error: 'Missing user_id parameter' });
-    return;
+    return { ok: false, status: 400, reason: 'missing_user_id', message: 'Missing user_id parameter' };
   }
 
   const userId = parseInt(userIdStr, 10);
   if (isNaN(userId)) {
-    res.status(400).json({ status: 'error', error: 'Invalid user_id parameter' });
-    return;
+    return { ok: false, status: 400, reason: 'invalid_user_id', message: 'Invalid user_id parameter' };
   }
 
   const apiKeyQuery = req.query.api_key as string;
@@ -341,13 +380,11 @@ export async function requireCliAuth(req: AuthRequest, res: Response, next: Next
   const providedApiKey = apiKeyQuery || apiKeyHeader;
 
   if (!providedApiKey) {
-    res.status(401).json({ status: 'error', error: 'Missing api_key' });
-    return;
+    return { ok: false, status: 401, reason: 'missing_api_key', message: 'Missing api_key' };
   }
 
   if (providedApiKey !== cliApiKey) {
-    res.status(401).json({ status: 'error', error: 'Invalid api_key' });
-    return;
+    return { ok: false, status: 401, reason: 'invalid_api_key', message: 'Invalid api_key' };
   }
 
   try {
@@ -360,15 +397,28 @@ export async function requireCliAuth(req: AuthRequest, res: Response, next: Next
       .executeTakeFirst();
 
     if (!user) {
-      res.status(404).json({ status: 'error', error: 'User not found' });
-      return;
+      return { ok: false, status: 404, reason: 'user_not_found', message: 'User not found' };
     }
 
-    req.userId = userId;
-    req.user = { id: userId, username: user.username };
-    next();
+    return { ok: true, userId, username: user.username };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Database error';
-    res.status(500).json({ status: 'error', error: message });
+    return { ok: false, status: 500, reason: 'database_error', message };
   }
+}
+
+/**
+ * CLI authentication middleware（保持既有响应格式不变）
+ */
+export async function requireCliAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  const result = await verifyCliAuth(req);
+
+  if (!result.ok) {
+    res.status(result.status).json({ status: 'error', error: result.message });
+    return;
+  }
+
+  req.userId = result.userId;
+  req.user = { id: result.userId, username: result.username };
+  next();
 }

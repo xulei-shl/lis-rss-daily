@@ -14,6 +14,7 @@ import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { optionalAuth } from '../middleware/auth.js';
 import apiRoutes from './routes.js';
+import { EXTERNAL_API_CODES, externalApiFailure } from './external-api-response.js';
 
 const log = logger.child({ module: 'web-server' });
 
@@ -236,6 +237,43 @@ export function createApp(): express.Express {
       pageTitle: '历史总结 - LIS-RSS Literature Tracker',
       user: req.user,
     });
+  });
+
+  // Topic cluster pages（对所有已登录角色开放：admin / user / guest）
+  app.get('/clusters', optionalAuth, (req: any, res: Response) => {
+    if (!req.userId) {
+      return res.redirect('/login');
+    }
+    res.render('clusters', {
+      pageTitle: '主题洞察 - LIS-RSS Literature Tracker',
+      user: req.user,
+    });
+  });
+
+  app.get('/clusters/:slug', optionalAuth, (req: any, res: Response) => {
+    if (!req.userId) {
+      return res.redirect('/login');
+    }
+    res.render('cluster-detail', {
+      pageTitle: '主题详情 - LIS-RSS Literature Tracker',
+      user: req.user,
+    });
+  });
+
+  // 外部 API（/api/external/*）的请求体解析失败也必须返回结构化错误
+  // （body-parser 在进入路由前抛错，只能在应用级兜底）
+  app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+    if (
+      req.path.startsWith('/api/external/') &&
+      (err as any).type === 'entity.parse.failed'
+    ) {
+      res.status(400).json(externalApiFailure(
+        EXTERNAL_API_CODES.INVALID_JSON_BODY,
+        '请求体不是合法的 JSON'
+      ));
+      return;
+    }
+    next(err);
   });
 
   // Error handling middleware

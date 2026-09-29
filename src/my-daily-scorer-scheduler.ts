@@ -183,6 +183,24 @@ async function getUserTopics(userId: number): Promise<TopicInfo[]> {
 }
 
 /**
+ * 判断用户是否配置了可用的主题领域（至少一个激活领域）
+ *
+ * 与 getUserTopics 的过滤口径一致（topic_domains 中 is_active = 1）。
+ * 供外部 API 在执行评分前提前校验，避免没有主题时白白占用全局评分名额。
+ */
+export async function hasActiveTopics(userId: number): Promise<boolean> {
+  const db = getDb();
+  const hit = await db
+    .selectFrom('topic_domains')
+    .where('user_id', '=', userId)
+    .where('is_active', '=', 1)
+    .select('id')
+    .limit(1)
+    .executeTakeFirst();
+  return !!hit;
+}
+
+/**
  * 获取指定自然日新增的文章
  *
  * 日期口径与「每日期刊 / 每日资讯」总结一致：

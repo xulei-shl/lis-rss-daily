@@ -51,6 +51,9 @@ export interface SearchRequest {
   limit?: number;
   offset?: number;
 
+  /** 最低最终得分过滤（按 results[].score，分页前生效）；缺省不过滤 */
+  minScore?: number;
+
   // Fusion parameters
   semanticWeight?: number;
   keywordWeight?: number;
@@ -174,6 +177,7 @@ export async function search(request: SearchRequest): Promise<SearchResponse> {
     articleId,
     limit = DEFAULT_LIMIT,
     offset = 0,
+    minScore,
     semanticWeight = DEFAULT_SEMANTIC_WEIGHT,
     keywordWeight = DEFAULT_KEYWORD_WEIGHT,
     normalizeScores = true,
@@ -192,12 +196,21 @@ export async function search(request: SearchRequest): Promise<SearchResponse> {
 
   // Related articles with cache
   if (mode === SearchMode.RELATED) {
-    return searchRelated(
+    const related = await searchRelated(
       userId,
       articleId!,
       limit,
       useCache && !refreshCache
     );
+
+    if (minScore === undefined) return related;
+
+    const filtered = related.results.filter((r) => r.score >= minScore);
+    return {
+      ...related,
+      results: filtered.slice(offset, offset + limit),
+      total: filtered.length,
+    };
   }
 
   // Text search modes
@@ -249,11 +262,16 @@ export async function search(request: SearchRequest): Promise<SearchResponse> {
       'Search completed'
     );
 
+    // 最低分过滤在分页前生效，保证 total / page 与过滤后的结果一致
+    const scored = minScore === undefined
+      ? results
+      : results.filter((r) => r.score >= minScore);
+
     return {
-      results: results.slice(offset, offset + limit),
+      results: scored.slice(offset, offset + limit),
       mode,
       query: effectiveQuery,
-      total: results.length,
+      total: scored.length,
       page: Math.floor(offset / limit) + 1,
       limit,
       cached: false,

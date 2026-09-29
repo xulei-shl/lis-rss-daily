@@ -23,10 +23,12 @@ import wechatRoutes from './routes/wechat.routes.js';
 import pdfSummaryRoutes from './routes/pdf-summary.routes.js';
 import deepsearchRoutes from './routes/deepsearch.routes.js';
 import externalSearchRoutes from './routes/external-search.routes.js';
+import externalMyDailyRoutes from './routes/external-my-daily.routes.js';
 import gmailSourceRoutes from './routes/gmail-sources.routes.js';
 import webSourceRoutes from './routes/web-sources.routes.js';
 import usersRoutes from './routes/users.routes.js';
 import myDailyRoutes from './routes/my-daily.routes.js';
+import clusterTopicRoutes from './routes/cluster-topics.routes.js';
 
 const router = express.Router();
 
@@ -54,9 +56,11 @@ router.use(wechatRoutes);
 router.use(pdfSummaryRoutes);
 router.use('/deepsearch', deepsearchRoutes);
 router.use(externalSearchRoutes);
+router.use(externalMyDailyRoutes);
 router.use(gmailSourceRoutes);
 router.use(webSourceRoutes);
 router.use(usersRoutes);
 router.use(myDailyRoutes);
+router.use(clusterTopicRoutes);
 
 export default router;
