@@ -4,18 +4,24 @@
  * 供外部项目 / agent 调用统一检索，支持 4 种模式：
  * semantic / keyword / hybrid（兼容 mixed）/ related。
  *
- * 鉴权沿用既有 CLI 机制（user_id + api_key / x-api-key 对 CLI_API_KEY），
- * 不使用账号密码；具体校验复用 middleware/auth.ts 的 verifyCliAuth。
+ * 鉴权：
+ * - Header: x-api-key: <CLI_API_KEY>（或 query.api_key）
+ * - 支持 username（用户名）与 userId 双轨兼容输入
  *
- * 所有响应（含错误）都使用 src/api/external-api-response.ts 中的统一信封，
- * 每种情况对应一个稳定的 code，详见 docs/统一检索外部API调用说明.md。
+ * 特性：
+ * - 默认返回 limit: 5 条最相关文献（双轨分离：默认轻量感知轨，体积严格 < 1KB）
+ * - 默认 fields: "core"，排除长摘要与无效占位，保持语义纯净
+ * - 所有响应都使用 src/api/external-api-response.ts 中的统一信封
+ *
+ * 详见 docs/统一检索外部API调用说明.md。
  */
 
 import express from 'express';
-import type { NextFunction, Response } from 'express';
+import type { Response } from 'express';
 import { logger } from '../../logger.js';
-import { verifyCliAuth, type AuthRequest, type CliAuthFailureReason } from '../../middleware/auth.js';
+import type { AuthRequest } from '../../middleware/auth.js';
 import { search, SearchMode, type SearchRequest } from '../../vector/search.js';
+import { verifyExternalApiAuth } from '../external-auth.js';
 import {
   EXTERNAL_API_CODES,
   externalApiFailure,
@@ -28,32 +34,24 @@ const log = logger.child({ module: 'api-routes/external-search' });
 
 const router = express.Router();
 
-/** 默认返回条数（不传 limit 时） */
-const DEFAULT_LIMIT = 20;
-
-/** CLI 鉴权失败原因 → 对外状态码 */
-const CLI_AUTH_CODES: Record<CliAuthFailureReason, ExternalApiCode> = {
-  cli_api_key_not_configured: EXTERNAL_API_CODES.CLI_API_KEY_NOT_CONFIGURED,
-  missing_user_id: EXTERNAL_API_CODES.MISSING_USER_ID,
-  invalid_user_id: EXTERNAL_API_CODES.INVALID_USER_ID,
-  missing_api_key: EXTERNAL_API_CODES.MISSING_API_KEY,
-  invalid_api_key: EXTERNAL_API_CODES.INVALID_API_KEY,
-  user_not_found: EXTERNAL_API_CODES.USER_NOT_FOUND,
-  database_error: EXTERNAL_API_CODES.INTERNAL_ERROR,
-};
+/** 默认返回条数与上限 */
+const DEFAULT_LIMIT = 5;
+const MAX_LIMIT = 100;
 
 /** 构建检索请求的结果（避免用异常做流程控制） */
 type BuildSearchResult =
-  | { ok: true; request: SearchRequest }
+  | { ok: true; request: SearchRequest; fields: 'core' | 'full' }
   | { ok: false; status: number; code: ExternalApiCode; message: string };
 
 type ExternalSearchBody = Partial<Omit<SearchRequest, 'userId'>> & {
+  username?: string;
   userId?: number | string;
   query?: string;
   articleId?: number | string;
   limit?: number | string;
   offset?: number | string;
   minScore?: number | string;
+  fields?: string;
   semanticWeight?: number | string;
   keywordWeight?: number | string;
   normalizeScores?: boolean | string;
@@ -64,29 +62,6 @@ type ExternalSearchBody = Partial<Omit<SearchRequest, 'userId'>> & {
 
 function sendJson(res: Response, status: number, body: ExternalApiResponse<unknown>): void {
   res.status(status).json(body);
-}
-
-function injectUserIdFromBody(req: AuthRequest, _res: Response, next: NextFunction): void {
-  if (req.query.user_id) {
-    next();
-    return;
-  }
-
-  const body = req.body as ExternalSearchBody | undefined;
-  if (!body || body.userId === undefined || body.userId === null) {
-    next();
-    return;
-  }
-
-  const rawUserId = body.userId;
-  const userId = typeof rawUserId === 'number' ? rawUserId : parseInt(String(rawUserId), 10);
-  if (!Number.isFinite(userId)) {
-    next();
-    return;
-  }
-
-  (req.query as Record<string, unknown>).user_id = String(userId);
-  next();
 }
 
 function parseMode(value: unknown): SearchMode | undefined {
@@ -150,9 +125,9 @@ function parseOptionalBoolean(value: unknown): boolean | undefined {
 }
 
 /** 校验并构建检索请求，返回明确的状态码而不是抛异常 */
-function buildSearchRequest(req: AuthRequest): BuildSearchResult {
-  const body = (req.body ?? {}) as ExternalSearchBody;
-  const mode = parseMode(body.mode);
+function buildSearchRequest(userId: number, body: ExternalSearchBody, queryParams: Record<string, unknown>): BuildSearchResult {
+  const modeVal = body.mode ?? queryParams.mode;
+  const mode = parseMode(modeVal);
 
   if (!mode) {
     return {
@@ -163,7 +138,8 @@ function buildSearchRequest(req: AuthRequest): BuildSearchResult {
     };
   }
 
-  const parsedLimit = parseOptionalInteger(body.limit);
+  const limitVal = body.limit ?? queryParams.limit;
+  const parsedLimit = parseOptionalInteger(limitVal);
   if (parsedLimit !== undefined && parsedLimit <= 0) {
     return {
       ok: false,
@@ -172,10 +148,11 @@ function buildSearchRequest(req: AuthRequest): BuildSearchResult {
       message: 'limit must be a positive integer',
     };
   }
-  const limit = parsedLimit ?? DEFAULT_LIMIT;
+  const limit = Math.min(parsedLimit ?? DEFAULT_LIMIT, MAX_LIMIT);
 
-  const offset = parseOptionalInteger(body.offset);
-  if (offset !== undefined && offset < 0) {
+  const offsetVal = body.offset ?? queryParams.offset;
+  const parsedOffset = parseOptionalInteger(offsetVal);
+  if (parsedOffset !== undefined && parsedOffset < 0) {
     return {
       ok: false,
       status: 400,
@@ -183,8 +160,10 @@ function buildSearchRequest(req: AuthRequest): BuildSearchResult {
       message: 'offset must be greater than or equal to 0',
     };
   }
+  const offset = parsedOffset ?? 0;
 
-  const articleId = parseOptionalInteger(body.articleId);
+  const articleIdVal = body.articleId ?? queryParams.articleId;
+  const articleId = parseOptionalInteger(articleIdVal);
   if (mode === SearchMode.RELATED && articleId === undefined) {
     return {
       ok: false,
@@ -194,7 +173,8 @@ function buildSearchRequest(req: AuthRequest): BuildSearchResult {
     };
   }
 
-  const query = typeof body.query === 'string' ? body.query.trim() : undefined;
+  const rawQuery = body.query ?? queryParams.query;
+  const query = typeof rawQuery === 'string' ? rawQuery.trim() : undefined;
   if (mode !== SearchMode.RELATED && !query) {
     return {
       ok: false,
@@ -204,7 +184,8 @@ function buildSearchRequest(req: AuthRequest): BuildSearchResult {
     };
   }
 
-  const minScore = parseOptionalMinScore(body.minScore);
+  const minScoreVal = body.minScore ?? queryParams.minScore;
+  const minScore = parseOptionalMinScore(minScoreVal);
   if (minScore === null) {
     return {
       ok: false,
@@ -214,88 +195,129 @@ function buildSearchRequest(req: AuthRequest): BuildSearchResult {
     };
   }
 
+  const fieldsVal = String(body.fields ?? queryParams.fields ?? 'core').toLowerCase();
+  const fields: 'core' | 'full' = fieldsVal === 'full' ? 'full' : 'core';
+
   return {
     ok: true,
+    fields,
     request: {
       mode,
-      userId: req.userId!,
+      userId,
       query,
       articleId,
       limit,
       offset,
       minScore,
-      semanticWeight: parseOptionalNumber(body.semanticWeight),
-      keywordWeight: parseOptionalNumber(body.keywordWeight),
-      normalizeScores: parseOptionalBoolean(body.normalizeScores),
-      useCache: parseOptionalBoolean(body.useCache),
-      refreshCache: parseOptionalBoolean(body.refreshCache),
-      fallbackEnabled: parseOptionalBoolean(body.fallbackEnabled),
+      semanticWeight: parseOptionalNumber(body.semanticWeight ?? queryParams.semanticWeight),
+      keywordWeight: parseOptionalNumber(body.keywordWeight ?? queryParams.keywordWeight),
+      normalizeScores: parseOptionalBoolean(body.normalizeScores ?? queryParams.normalizeScores),
+      useCache: parseOptionalBoolean(body.useCache ?? queryParams.useCache),
+      refreshCache: parseOptionalBoolean(body.refreshCache ?? queryParams.refreshCache),
+      fallbackEnabled: parseOptionalBoolean(body.fallbackEnabled ?? queryParams.fallbackEnabled),
     },
   };
+}
+
+/** 裁剪结果以符合 core 或 full 规范 */
+function sanitizeResults(results: any[], fields: 'core' | 'full') {
+  return results.map((r) => {
+    const meta = r.metadata || {};
+    if (fields === 'core') {
+      return {
+        articleId: r.articleId,
+        score: r.score,
+        semanticScore: r.semanticScore,
+        keywordScore: r.keywordScore,
+        jevScore: r.jevScore,
+        relevanceLevel: r.relevanceLevel,
+        ranked: r.ranked,
+        metadata: {
+          title: meta.title,
+          url: meta.url,
+          published_at: meta.published_at ?? null,
+          source_origin: meta.source_origin ?? null,
+          journal_name: meta.journal_name ?? undefined,
+          rss_source_name: meta.rss_source_name ?? undefined,
+          keyword_name: meta.keyword_name ?? undefined,
+        },
+      };
+    }
+
+    return r;
+  });
 }
 
 /**
  * POST /api/external/search
  *
- * 鉴权（沿用既有 CLI 机制）：
- * - query: user_id=1
- * - header: x-api-key: <CLI_API_KEY>（也支持 query.api_key）
+ * 鉴权：
+ * - Header: x-api-key: <CLI_API_KEY>（或 query.api_key）
  *
- * 也支持在 body 中传 userId，路由会自动兼容到鉴权参数 user_id。
- *
- * Body（除 mode/query/articleId 等检索参数外）：
- * - limit: number    可选，返回条数，默认 20
- * - minScore: number 可选，0~1，按最终得分过滤（分页前生效）
+ * Body 参数：
+ * - username: string   可选，用户名（与 userId 二选一）
+ * - userId: number     可选，用户 ID（与 username 二选一）
+ * - mode: string       必填，semantic | keyword | hybrid | related
+ * - query: string      semantic / keyword / hybrid 必填
+ * - articleId: number  related 必填
+ * - limit: number      可选，返回条数，默认 5，最大 100
+ * - offset: number     可选，偏移量，默认 0
+ * - fields: string     可选，"core" | "full"，默认 "core"
+ * - minScore: number   可选，0~1，最终得分过滤
  */
-router.post('/external/search', injectUserIdFromBody, async (req: AuthRequest, res) => {
+router.post('/external/search', async (req: AuthRequest, res) => {
   try {
-    const auth = await verifyCliAuth(req);
+    const auth = await verifyExternalApiAuth(req);
     if (!auth.ok) {
-      const details = auth.reason === 'cli_api_key_not_configured'
-        ? { requiredAction: 'configure_cli_api_key' }
-        : auth.reason === 'user_not_found'
-          ? { userId: req.query.user_id }
-          : null;
-
-      return sendJson(res, auth.status, externalApiFailure(CLI_AUTH_CODES[auth.reason], auth.message, {
-        retryable: auth.reason === 'database_error',
-        details,
-      }));
+      return sendJson(res, auth.status, auth.response);
     }
+    const user = auth.user;
 
-    req.userId = auth.userId;
-    req.user = { id: auth.userId, username: auth.username };
+    const body = (req.body ?? {}) as ExternalSearchBody;
+    const queryParams = (req.query ?? {}) as Record<string, unknown>;
 
-    const built = buildSearchRequest(req);
+    const built = buildSearchRequest(user.id, body, queryParams);
     if (!built.ok) {
       return sendJson(res, built.status, externalApiFailure(built.code, built.message));
     }
 
     const response = await search(built.request);
     const total = response.total ?? response.results.length;
+    const returnedResults = sanitizeResults(response.results, built.fields);
 
-    sendJson(res, 200, externalApiSuccess(
-      total > 0 ? EXTERNAL_API_CODES.SEARCH_COMPLETED : EXTERNAL_API_CODES.SEARCH_NO_RESULTS,
-      total > 0 ? `检索完成，共 ${total} 条结果` : '检索完成，但没有匹配的结果',
-      {
-        mode: response.mode,
-        query: response.query ?? null,
-        total,
-        page: response.page ?? null,
-        limit: response.limit ?? null,
-        cached: response.cached,
-        fallback: response.fallback ?? false,
-        rerank: response.rerank ?? null,
-        results: response.results,
-      }
-    ));
+    sendJson(
+      res,
+      200,
+      externalApiSuccess(
+        total > 0 ? EXTERNAL_API_CODES.SEARCH_COMPLETED : EXTERNAL_API_CODES.SEARCH_NO_RESULTS,
+        total > 0 ? `检索完成，共 ${total} 条结果` : '检索完成，但没有匹配的结果',
+        {
+          userId: user.id,
+          username: user.username,
+          mode: response.mode,
+          query: response.query ?? null,
+          total,
+          limit: built.request.limit ?? DEFAULT_LIMIT,
+          offset: built.request.offset ?? 0,
+          returned: returnedResults.length,
+          cached: response.cached,
+          fallback: response.fallback ?? false,
+          rerank: response.rerank ?? null,
+          results: returnedResults,
+        }
+      )
+    );
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'Failed to execute external search';
     log.error({ error, userId: req.userId }, 'Failed to execute external search');
-    sendJson(res, 500, externalApiFailure(EXTERNAL_API_CODES.INTERNAL_ERROR, '服务端检索失败', {
-      retryable: true,
-      details: { reason },
-    }));
+    sendJson(
+      res,
+      500,
+      externalApiFailure(EXTERNAL_API_CODES.INTERNAL_ERROR, '服务端检索失败', {
+        retryable: true,
+        details: { reason },
+      })
+    );
   }
 });
 
