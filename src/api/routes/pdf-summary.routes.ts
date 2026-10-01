@@ -192,9 +192,13 @@ router.post('/pdf-summary', requireAuth, requireAdmin, async (req: AuthRequest, 
       throw new Error(`提交失败（HTTP ${submitResponse.status}）`);
     }
 
-    const submitted = await submitResponse.json() as { task_id: string; queue_size?: number; duplicate?: boolean };
+    // v2.0：调度元信息（队列深度 / 在途去重）改由响应头承载，响应体只留 task_id
+    const submitted = await submitResponse.json() as { task_id: string; status_url?: string };
     if (!submitted.task_id) {
       throw new Error('提交响应缺少 task_id');
+    }
+    if (submitResponse.headers.get('x-deduplicated') === 'true') {
+      console.log(`PDF summary task ${submitted.task_id} deduplicated, reusing in-flight task`);
     }
 
     // 轮询任务状态直到完成，带单次轮询超时与总截止时间
@@ -203,12 +207,13 @@ router.post('/pdf-summary', requireAuth, requireAdmin, async (req: AuthRequest, 
     let lastStage: string | null = null;
 
     while (Date.now() < deadline) {
-      const statusResponse = await fetch(`${PDF_API_URL}/process/status/${submitted.task_id}`, {
+      // include=meta：轮询阶段不搬运整篇摘要，控制响应体体积
+      const statusResponse = await fetch(`${PDF_API_URL}/process/status/${submitted.task_id}?include=meta`, {
         signal: AbortSignal.timeout(PDF_POLL_TIMEOUT_MS),
       });
 
       if (statusResponse.status === 404) {
-        throw new Error('任务状态丢失（服务可能已重启或结果过期）');
+        throw new Error('任务状态丢失（结果已过保留期或服务重启且未落盘）');
       }
       if (!statusResponse.ok) {
         throw new Error(`查询任务状态失败（HTTP ${statusResponse.status}）`);
@@ -217,7 +222,7 @@ router.post('/pdf-summary', requireAuth, requireAdmin, async (req: AuthRequest, 
       const status = await statusResponse.json() as {
         status: string;
         stage?: string;
-        result?: Record<string, unknown> | null;
+        error_code?: string | null;
       };
 
       if (status.stage && status.stage !== lastStage) {
@@ -226,7 +231,19 @@ router.post('/pdf-summary', requireAuth, requireAdmin, async (req: AuthRequest, 
       }
 
       if (status.status === 'completed' || status.status === 'failed') {
-        result = status.result ?? { success: false, reason: `任务${status.status === 'failed' ? '失败' : '异常结束'}` };
+        // 终态再取一次完整结果（含摘要正文与 distribution）
+        const finalResponse = await fetch(`${PDF_API_URL}/process/status/${submitted.task_id}`, {
+          signal: AbortSignal.timeout(PDF_POLL_TIMEOUT_MS),
+        });
+        if (!finalResponse.ok) {
+          throw new Error(`获取任务结果失败（HTTP ${finalResponse.status}）`);
+        }
+        const final = await finalResponse.json() as { result?: Record<string, unknown> | null };
+        result = final.result ?? {
+          success: false,
+          error_code: status.error_code ?? 'internal_error',
+          reason: `任务${status.status === 'failed' ? '失败' : '异常结束'}`,
+        };
         break;
       }
 
@@ -234,7 +251,7 @@ router.post('/pdf-summary', requireAuth, requireAdmin, async (req: AuthRequest, 
     }
 
     if (!result) {
-      result = { success: false, reason: `等待 PDF 总结任务超时（${PDF_TOTAL_TIMEOUT_MS / 60000} 分钟）` };
+      result = { success: false, error_code: 'poll_timeout', reason: `等待 PDF 总结任务超时（${PDF_TOTAL_TIMEOUT_MS / 60000} 分钟）` };
     }
 
     const userId = req.userId;

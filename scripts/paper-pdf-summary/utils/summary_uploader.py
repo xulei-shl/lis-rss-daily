@@ -668,25 +668,6 @@ def sync_upload_all(md_path: str, article_id: int, article_title: str, config: D
     return asyncio.run(upload_all(md_path, article_id, article_title, config))
 
 
-def is_all_upload_failed(upload_results: Optional[Dict]) -> bool:
-    """
-    判断是否所有上传均失败（排除被跳过的子系统）
-
-    Args:
-        upload_results: upload_all() 或 upload_all_from_text() 返回的结果字典
-
-    Returns:
-        所有非跳过的子系统均失败时返回 True
-    """
-    if not upload_results:
-        return True
-    skipped = upload_results.get('_skipped', [])
-    for key in ('hiagent_rag', 'lis_rss', 'memos', 'blinko', 'wechat'):
-        if key not in skipped and upload_results.get(key, False):
-            return False
-    return True
-
-
 async def upload_all_from_text(
     md_content: str,
     article_id: int,

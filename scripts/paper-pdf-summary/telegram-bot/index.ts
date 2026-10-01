@@ -32,6 +32,15 @@ const STAGE_LABELS: Record<string, string> = {
   upload: '📤 正在上传到各平台…',
 };
 
+// 推送目标 → 展示名（对应 API 的 distribution.ok / failed / skipped）
+const UPLOAD_LABELS: Record<string, string> = {
+  hiagent_rag: 'HiAgent RAG',
+  lis_rss: 'LIS-RSS',
+  memos: 'Memos',
+  blinko: 'Blinko',
+  wechat: '企业微信',
+};
+
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -63,17 +72,26 @@ interface TelegramUpdate {
   };
 }
 
+interface DistributionResult {
+  requested?: string[];
+  ok?: string[];
+  failed?: string[];
+  skipped?: string[];
+  error?: string | null;
+}
+
 interface ProcessApiResponse {
   success?: boolean;
+  error_code?: string | null;
   stages?: Record<string, string>;
   reason?: string;
   md_path?: string;
+  distribution?: DistributionResult | null;
 }
 
 interface ProcessAcceptedResponse {
   task_id: string;
-  queue_size?: number;
-  duplicate?: boolean;
+  status_url?: string;
 }
 
 interface TaskStatusResponse {
@@ -316,9 +334,6 @@ class PaperTelegramBot {
     if (!submitted.task_id) {
       throw new Error('提交响应缺少 task_id');
     }
-    if (submitted.duplicate) {
-      log.info('Task deduplicated, reusing existing task', { taskId: submitted.task_id });
-    }
 
     log.info('Polling task status', { taskId: submitted.task_id });
 
@@ -383,14 +398,19 @@ class PaperTelegramBot {
       lines.push(`📋 PDF验证: ${pdfValidate === 'success' ? '✅' : '❌'}`);
       lines.push(`📝 摘要生成: ${pdfSummary === 'success' ? '✅' : '❌'}`);
 
-      const upload = (stages['upload'] as unknown) as Record<string, boolean> | undefined;
-      if (upload) {
-        lines.push('\n📤 上传:');
-        lines.push(`   • HiAgent RAG: ${upload['hiagent_rag'] ? '✅' : '❌'}`);
-        lines.push(`   • LIS-RSS: ${upload['lis_rss'] ? '✅' : '❌'}`);
-        lines.push(`   • Memos: ${upload['memos'] ? '✅' : '❌'}`);
-        lines.push(`   • Blinko: ${upload['blinko'] ? '✅' : '❌'}`);
-        lines.push(`   • 企业微信: ${upload['wechat'] ? '✅' : '❌'}`);
+      // 推送是独立副作用：只有实际尝试且失败的目标才算失败，跳过不计入
+      const distribution = result.distribution;
+      if (distribution) {
+        const label = (t: string): string => UPLOAD_LABELS[t] ?? t;
+        const parts = [
+          ...(distribution.ok ?? []).map((t) => `   • ${label(t)}: ✅`),
+          ...(distribution.failed ?? []).map((t) => `   • ${label(t)}: ❌`),
+          ...(distribution.skipped ?? []).map((t) => `   • ${label(t)}: ⏭️ 已跳过`),
+        ];
+        if (parts.length > 0) {
+          lines.push('\n📤 分发:');
+          lines.push(...parts);
+        }
       }
 
       if (mdPath) {
@@ -398,6 +418,9 @@ class PaperTelegramBot {
       }
     } else {
       lines.push('\n❌ 失败\n');
+      if (result.error_code) {
+        lines.push(`错误码: ${result.error_code}`);
+      }
       if (reason) {
         lines.push(reason);
       }

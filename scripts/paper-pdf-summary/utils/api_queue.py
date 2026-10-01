@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 import time
 import uuid
@@ -18,6 +19,23 @@ import yaml
 # 结果保留时长（秒）：任务完成后保留一段时间供 GET /process/status 轮询读取
 RESULT_TTL_SECONDS = 300
 
+# 落盘结果的保留时长（秒）：跨服务重启可查，弥补内存态重启即丢
+PERSISTED_RESULT_TTL_SECONDS = 86400
+
+# 摘要流水线阶段（推送不属于摘要成败判定）
+PIPELINE_STAGES = ("pdf_download", "pdf_validate", "pdf_summary")
+
+# 推送目标全集，顺序即 distribution 列表展示顺序
+DISTRIBUTION_TARGETS = ("hiagent_rag", "lis_rss", "memos", "blinko", "wechat")
+
+# 稳定错误码：调用方按码路由，不再匹配中文 reason 文案
+ERR_PDF_UNAVAILABLE = "pdf_unavailable"
+ERR_TITLE_MISMATCH = "title_mismatch"
+ERR_SUMMARY_FAILED = "summary_failed"
+ERR_SUMMARY_EMPTY = "summary_empty"
+ERR_DISTRIBUTION_FAILED = "distribution_failed"
+ERR_INTERNAL = "internal_error"
+
 # 有效任务状态集合
 VALID_STATUSES = {"queued", "running", "completed", "failed"}
 
@@ -30,6 +48,45 @@ def load_workflow_config(config_path: str = None) -> Dict:
         raise FileNotFoundError(f"配置文件不存在: {config_path}")
     with open(config_path, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
+
+
+def build_distribution(upload_results: Optional[Dict]) -> Dict:
+    """
+    upload_all 的原始结果 → 面向调用方的推送视图。
+
+    原始 dict 里 bool=False 有「被跳过」和「真失败」两种含义，只能靠 _skipped 区分；
+    这里显式拆成 ok / failed / skipped 三段，避免调用方自行推断。
+    """
+    if not upload_results:
+        return {"requested": [], "ok": [], "failed": [], "skipped": [], "error": None}
+
+    skipped = [t for t in DISTRIBUTION_TARGETS if t in (upload_results.get("_skipped") or [])]
+    ok = [t for t in DISTRIBUTION_TARGETS if upload_results.get(t) is True and t not in skipped]
+    failed = [t for t in DISTRIBUTION_TARGETS if upload_results.get(t) is False and t not in skipped]
+    error = upload_results.get("error") if isinstance(upload_results.get("error"), str) else None
+
+    # upload 整体异常（如 {"error": "..."}）：没有逐项结果，未被跳过的目标视为全部失败
+    if error and not ok and not failed:
+        failed = [t for t in DISTRIBUTION_TARGETS if t not in skipped]
+
+    return {
+        "requested": [t for t in DISTRIBUTION_TARGETS if t not in skipped],
+        "ok": ok,
+        "failed": failed,
+        "skipped": skipped,
+        "error": error,
+    }
+
+
+def pipeline_succeeded(stages: Dict, md_content: Optional[str]) -> bool:
+    """
+    摘要流水线是否成功：只认 pdf_download / pdf_validate / pdf_summary 三段 + 摘要正文非空。
+
+    推送结果（distribution）不参与判定——推送全跳过或全失败都不改变摘要本身的成败。
+    """
+    if any(stages.get(name) != "success" for name in PIPELINE_STAGES):
+        return False
+    return isinstance(md_content, str) and bool(md_content.strip())
 
 
 class QueueManager:
@@ -52,9 +109,57 @@ class QueueManager:
             self._config = load_workflow_config(str(PROJECT_ROOT / "config" / "config.yaml"))
         return self._config
 
-    async def enqueue(self, title: str, article_id: Optional[int], push_wechat: bool = False, push_hiagent: Optional[bool] = None, push_memos: Optional[bool] = None, push_blinko: Optional[bool] = None):
+    @property
+    def _tasks_dir(self) -> Path:
+        logs_root = self._ensure_config().get('storage', {}).get('logs_root', 'logs')
+        return PROJECT_ROOT / logs_root / 'tasks'
+
+    def load_persisted_results(self) -> int:
+        """
+        回载历史任务结果，使服务重启后已终结任务仍可查（内存态重启即丢是旧行为）。
+
+        Returns:
+            回载条数
+        """
+        tasks_dir = self._tasks_dir
+        if not tasks_dir.is_dir():
+            return 0
+
+        now = time.time()
+        loaded = 0
+        for path in tasks_dir.glob('*.json'):
+            try:
+                snapshot = json.loads(path.read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                continue
+            task_id = snapshot.get('task_id')
+            finished_at = snapshot.get('finished_at')
+            if not task_id or not finished_at or task_id in self.results:
+                continue
+            if now - finished_at > PERSISTED_RESULT_TTL_SECONDS:
+                continue  # 过期文件由 _cleanup_expired_results 删除
+            snapshot['persisted'] = True
+            self.results[task_id] = snapshot
+            loaded += 1
+        return loaded
+
+    def _persist_result(self, snapshot: Dict) -> None:
+        """任务终结后落盘（写失败不影响主链路，仅失去跨重启可查性）"""
+        try:
+            tasks_dir = self._tasks_dir
+            tasks_dir.mkdir(parents=True, exist_ok=True)
+            payload = {k: v for k, v in snapshot.items() if k != 'persisted'}
+            (tasks_dir / f"{snapshot['task_id']}.json").write_text(
+                json.dumps(payload, ensure_ascii=False), encoding='utf-8'
+            )
+        except (OSError, KeyError, TypeError, ValueError) as e:
+            print(f"[警告] 任务结果落盘失败（不影响本次处理结果）: {e}")
+
+    async def enqueue(self, title: str, article_id: Optional[int], push_wechat: Optional[bool] = None, push_hiagent: Optional[bool] = None, push_memos: Optional[bool] = None, push_blinko: Optional[bool] = None):
         """
         提交处理任务。
+
+        push_* 均为三态：None 沿用服务端配置，True 强制推送，False 强制跳过。
 
         Returns:
             (task_id, is_duplicate) 元组。同一标题（忽略大小写/首尾空白）
@@ -102,27 +207,33 @@ class QueueManager:
 
         return task_id, False
 
-    async def get_result(self, task_id: str) -> Dict:
+    async def get_result(self, task_id: str) -> Optional[Dict]:
         """
         阻塞等待任务完成并返回结果（非破坏性读取，多等待者安全）。
 
         记录由 TTL 清理机制回收，读取时不再 pop，避免去重场景下
         多个等待者（重复提交命中同一任务）中先到者取空。
+
+        Returns:
+            终态结果；task_id 不存在或已过期返回 None
         """
         if task_id not in self.events:
-            return {"error": "Task not found"}
+            return None
 
         await self.events[task_id].wait()
 
         snapshot = self.results.get(task_id)
         if snapshot is None:
-            return {"error": "Task not found"}
+            return None
 
-        return snapshot.get("result") or {"success": False, "reason": "Unknown error"}
+        return snapshot.get("result")
 
-    async def get_task_status(self, task_id: str) -> Optional[Dict]:
+    async def get_task_status(self, task_id: str, include_result: bool = True) -> Optional[Dict]:
         """
         查询任务实时状态（供状态轮询端点使用）。
+
+        include_result=False 时只返回轻量进度视图（不含 result / 摘要正文），
+        供高频轮询使用，避免每轮都搬运整篇摘要。
 
         Returns:
             任务状态快照；task_id 不存在或已过期返回 None
@@ -132,21 +243,26 @@ class QueueManager:
             return None
 
         status = snapshot.get("status")
+        finished_at = snapshot.get("finished_at")
 
-        # 超过 TTL 的已完成任务视为过期
-        if snapshot.get("finished_at") and (time.time() - snapshot["finished_at"]) > RESULT_TTL_SECONDS:
-            return None
+        # 超过 TTL 的已完成任务视为过期（落盘回载的任务保留更久）
+        if finished_at:
+            ttl = PERSISTED_RESULT_TTL_SECONDS if snapshot.get("persisted") else RESULT_TTL_SECONDS
+            if (time.time() - finished_at) > ttl:
+                return None
 
         elapsed = None
         if snapshot.get("started_at"):
-            end = snapshot.get("finished_at") or time.time()
+            end = finished_at or time.time()
             elapsed = round(end - snapshot["started_at"], 1)
 
         queue_wait = None
         if status == "queued" and snapshot.get("queued_at"):
             queue_wait = round(time.time() - snapshot["queued_at"], 1)
 
-        return {
+        result = snapshot.get("result")
+
+        payload = {
             "task_id": task_id,
             "title": snapshot.get("title"),
             "status": status,
@@ -154,36 +270,52 @@ class QueueManager:
             "elapsed_seconds": elapsed,
             "queue_wait_seconds": queue_wait,
             "queued_at": snapshot.get("queued_at"),
-            "finished_at": snapshot.get("finished_at"),
-            "result": snapshot.get("result"),
+            "finished_at": finished_at,
+            "error_code": (result or {}).get("error_code"),
         }
 
-    async def _is_all_upload_failed(self, upload_results: Optional[Dict]) -> bool:
-        if not upload_results:
-            return True
-        skipped = upload_results.get('_skipped', [])
-        success_count = 0
-        if 'hiagent_rag' not in skipped and upload_results.get('hiagent_rag', False):
-            success_count += 1
-        if 'lis_rss' not in skipped and upload_results.get('lis_rss', False):
-            success_count += 1
-        if 'memos' not in skipped and upload_results.get('memos', False):
-            success_count += 1
-        if 'blinko' not in skipped and upload_results.get('blinko', False):
-            success_count += 1
-        if 'wechat' not in skipped and upload_results.get('wechat', False):
-            success_count += 1
-        return success_count == 0
+        if include_result:
+            payload["result"] = result
+        else:
+            payload["error_code"] = (result or {}).get("error_code")
+
+        return payload
 
     def _cleanup_expired_results(self) -> None:
-        """清理超过 TTL 的已完成任务记录，避免 results/events 字典无限增长"""
+        """
+        清理超过 TTL 的任务记录，避免内存字典与 logs/tasks 目录无限增长。
+
+        内存态与落盘态 TTL 不同（5 分钟 / 24 小时），因此分两把尺子量：
+        内存条目按 RESULT_TTL 判定，落盘文件按 PERSISTED_RESULT_TTL 判定——
+        不能因为内存条目到期就删掉仍有 24 小时效力的文件。
+        """
         now = time.time()
+
         for task_id in list(self.results.keys()):
             snapshot = self.results[task_id]
             finished_at = snapshot.get("finished_at")
-            if finished_at and (now - finished_at) > RESULT_TTL_SECONDS:
+            if not finished_at:
+                continue
+            ttl = PERSISTED_RESULT_TTL_SECONDS if snapshot.get("persisted") else RESULT_TTL_SECONDS
+            if (now - finished_at) > ttl:
                 self.results.pop(task_id, None)
                 self.events.pop(task_id, None)
+
+        # 落盘文件单独按落盘 TTL 清理（含重启前遗留的）
+        try:
+            paths = list(self._tasks_dir.glob('*.json'))
+        except OSError:
+            return
+        for path in paths:
+            try:
+                finished_at = json.loads(path.read_text(encoding='utf-8')).get('finished_at')
+            except (OSError, ValueError):
+                finished_at = None
+            if not finished_at or (now - finished_at) > PERSISTED_RESULT_TTL_SECONDS:
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
 
     def _set_stage(self, task_id: str, stage: str) -> None:
         """更新任务当前阶段（心跳可见的进度信息）"""
@@ -191,11 +323,12 @@ class QueueManager:
         if snapshot is not None:
             snapshot["stage"] = stage
 
-    async def _process_single_article(self, task_id: str, title: str, article_id: Optional[int], push_wechat: bool = False, push_hiagent: Optional[bool] = None, push_memos: Optional[bool] = None, push_blinko: Optional[bool] = None) -> Dict:
+    async def _process_single_article(self, task_id: str, title: str, article_id: Optional[int], push_wechat: Optional[bool] = None, push_hiagent: Optional[bool] = None, push_memos: Optional[bool] = None, push_blinko: Optional[bool] = None) -> Dict:
         article_id = article_id if article_id else 0
         skip_lis_rss = article_id == 0
-        default_push_wechat = get_env_bool('PDF_SUMMARY_PUSH_WECHAT', False)
-        final_push_wechat = push_wechat or default_push_wechat
+        # 三态：None 沿用环境变量默认，False 强制不推（客户端可真正关闭该通道）
+        env_default_push_wechat = get_env_bool('PDF_SUMMARY_PUSH_WECHAT', False)
+        final_push_wechat = env_default_push_wechat if push_wechat is None else bool(push_wechat)
 
         config = self._ensure_config()
         today = datetime.now().strftime("%Y-%m-%d")
@@ -204,7 +337,10 @@ class QueueManager:
             "article_id": article_id,
             "title": title,
             "success": False,
-            "stages": {}
+            "error_code": None,
+            "reason": None,
+            "stages": {},
+            "distribution": None,
         }
 
         self._set_stage(task_id, "pdf_download")
@@ -221,6 +357,7 @@ class QueueManager:
         )
 
         if not pdf_path:
+            result["error_code"] = ERR_PDF_UNAVAILABLE
             result["reason"] = "PDF下载失败（所有脚本均失败）"
             return result
 
@@ -238,6 +375,7 @@ class QueueManager:
 
         if not matched:
             result["stages"]["pdf_validate"] = "failed"
+            result["error_code"] = ERR_TITLE_MISMATCH
             result["reason"] = f"PDF文件名不匹配: {match_reason}"
             return result
 
@@ -250,6 +388,7 @@ class QueueManager:
 
         if not md_path:
             result["stages"]["pdf_summary"] = "failed"
+            result["error_code"] = ERR_SUMMARY_FAILED
             result["reason"] = "PDF总结失败"
             return result
 
@@ -264,10 +403,10 @@ class QueueManager:
             r'无法正常',
             r'No /Root object',
             r'Is this really a PDF',
-            r'文件链接无法正常访问',
-            r'文件格式异常',
-            r'链接无效',
-            r'格式异常',
+            r'^文件链接无法正常访问',
+            r'^文件格式异常',
+            r'^链接无效',
+            r'^格式异常',
             r'PDF.*?异常',
             r'处理失败',
             r'调用失败',
@@ -284,6 +423,7 @@ class QueueManager:
             print(f"[删除] 删除无效MD文件: {md_path}")
             Path(md_path).unlink(missing_ok=True)
             result["stages"]["pdf_summary"] = "failed"
+            result["error_code"] = ERR_SUMMARY_FAILED
             result["reason"] = reason
             return result
 
@@ -291,6 +431,7 @@ class QueueManager:
         result["md_path"] = str(md_path)
         result["md_content"] = md_content
 
+        # 推送是独立副作用：无论成功、失败还是全部跳过，都不改变上面的 success 判定
         self._set_stage(task_id, "upload")
         try:
             upload_results = await parallel_upload(
@@ -306,20 +447,14 @@ class QueueManager:
                 push_blinko=push_blinko,
             )
             result["stages"]["upload"] = upload_results
+            result["distribution"] = build_distribution(upload_results)
         except Exception as e:
             result["stages"]["upload"] = {"error": str(e)}
-            result["reason"] = f"上传过程异常: {e}"
-            return result
+            result["distribution"] = build_distribution({"error": str(e)})
 
-        is_fully_successful = (
-            result["stages"].get("pdf_download") == "success" and
-            result["stages"].get("pdf_summary") == "success" and
-            not await self._is_all_upload_failed(result["stages"].get("upload"))
-        )
-
-        result["success"] = is_fully_successful
-        if not is_fully_successful and "reason" not in result:
-            result["reason"] = "部分上传任务失败"
+        result["success"] = pipeline_succeeded(result["stages"], md_content)
+        if not result["success"]:
+            result["error_code"] = ERR_SUMMARY_EMPTY
 
         return result
 
@@ -331,7 +466,7 @@ class QueueManager:
                 task_id = task["task_id"]
                 title = task["title"]
                 article_id = task["article_id"]
-                push_wechat = task.get("push_wechat", False)
+                push_wechat = task.get("push_wechat")
                 push_hiagent = task.get("push_hiagent")
                 push_memos = task.get("push_memos")
                 push_blinko = task.get("push_blinko")
@@ -345,17 +480,24 @@ class QueueManager:
                     result = await self._process_single_article(task_id, title, article_id, push_wechat, push_hiagent, push_memos, push_blinko)
                     if snapshot is not None:
                         snapshot["result"] = result
+                        # status 只表达「任务执行终态」；业务成败看 result.success / result.error_code
                         snapshot["status"] = "completed"
                 except Exception as e:
                     if snapshot is not None:
                         snapshot["result"] = {
                             "success": False,
-                            "reason": f"处理异常: {e}"
+                            "error_code": ERR_INTERNAL,
+                            "reason": f"处理异常: {e}",
+                            "article_id": task["article_id"],
+                            "title": title,
+                            "stages": {},
+                            "distribution": None,
                         }
                         snapshot["status"] = "failed"
                 finally:
                     if snapshot is not None:
                         snapshot["finished_at"] = time.time()
+                        self._persist_result(snapshot)
                     if task_id in self.events:
                         self.events[task_id].set()
 
