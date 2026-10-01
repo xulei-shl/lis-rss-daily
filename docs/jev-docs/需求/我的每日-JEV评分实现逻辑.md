@@ -5,6 +5,8 @@
 > 主要代码：`src/jev.ts`（JEV 调用与评分）、`src/my-daily-scorer-scheduler.ts`（调度与并发控制）、`src/api/my-daily.ts`（查询）、`src/api/routes/my-daily.routes.ts`（路由）、`src/api/routes/external-my-daily.routes.ts`（对外 API）、`src/public/js/my-daily.js`（前端展示）、`src/public/js/components/calendar-picker.js`（日历圆点）。
 >
 > 仓库内另有一处**同口径**的相关性判断实现（语义检索精排，`finalScore = noul × (score / 4)`）：`src/vector/jev-reranker.ts`，见第 9 节。
+>
+> 配套的源文件快照与移植说明见 [`参考代码/README.md`](./参考代码/README.md)。
 
 ## 1. 问题类型：noul / choice / score 三种按需组合
 
