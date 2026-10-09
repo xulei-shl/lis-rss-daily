@@ -235,8 +235,11 @@ async def upload_to_lis_rss(article_id: int, md_content: str, config: Dict) -> b
         return False
 
 
-# Memos 单条内容最大限制（按字节计算，Memos 服务端限制通常为 8192 字节）
-MEMOS_MAX_CONTENT_BYTES = 6400
+# Memos 单条内容最大限制（按字节计算，UTF-8）
+# 服务端限制由实例设置 instance/settings/MEMO_RELATED 的 contentLengthLimit 决定（最低 8192，
+# 当前实例为 16384 字节，约 5,400 个纯汉字 + 常用标点），可用以下只读接口复核：
+#   POST /api/v1/instance/settings:batchGet  {"names":["instance/settings/MEMO_RELATED"]}
+MEMOS_MAX_CONTENT_BYTES = 16384
 
 
 def _truncate_content_by_bytes(content: str, max_bytes: int = MEMOS_MAX_CONTENT_BYTES) -> str:
