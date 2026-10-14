@@ -523,6 +523,83 @@ chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update
 2. 服务是否可访问
 3. 查看各子系统的详细错误日志
 
+### 定时任务未执行（cron 停摆）
+
+**现象**：到点没有收到推送，`logs/` 下当天也没有生成报告。
+
+**1. 先确认任务是否真的启动过**
+
+cron 会把 `main.py` 的全部输出追加到 `logs/cron.log`：
+
+```bash
+ls -la logs/cron.log logs/$(date +%F).md download/$(date +%F)/
+```
+
+若 `cron.log` 最后写入时间停留在几天前，且当天报告、`download/日期/` 目录都不存在，说明脚本根本没被拉起 —— 问题在 cron 侧，不是本模块的下载/总结逻辑。
+
+**2. 确认 crontab 与 cron 服务状态**
+
+```bash
+sudo -u xulei crontab -l
+systemctl status cron --no-pager
+```
+
+**3. 确认 cron 是否真的在执行作业**
+
+每条作业启动时系统日志都会有一条 `CMD` 记录（`main.py` 的记录在每天 07:00 前后）：
+
+```bash
+sudo journalctl -u cron --since "-3 days" | grep "CMD" | tail
+```
+
+若连 root 的 `debian-sa1`（每 10 分钟一次）都停了，说明是整个 cron 停摆，而不是单个任务的问题。
+
+**4. 判断 cron 是否“活着但不干活”**
+
+典型症状：进程在、每分钟照常醒来做配置检查，却不再触发任何作业，也不报错。用 strace 观察 1~2 分钟即可区分：
+
+```bash
+sudo strace -f -tt -e trace=clone,execve,openat,newfstatat,clock_nanosleep -p $(pgrep -x cron)
+```
+
+只有 `openat`/`newfstatat` 配置检查和 `clock_nanosleep(60)` 心跳、没有任何 `clone`/`execve`，就是这个状态。它**不会自行恢复**（cron 仅在配置文件 mtime 变化时才重载），重启即可：
+
+```bash
+sudo systemctl restart cron
+# 重启后 10 分钟内应出现 root 的 debian-sa1 记录，用来确认调度恢复
+sudo journalctl -u cron --since "-15 min" | tail
+```
+
+> 已知触发原因之一：根磁盘 I/O 异常（内核日志出现 `ataX.00 ... frozen`、`I/O error, dev sdX, sector ...`）会让 cron 内存中的作业表失效。因此恢复调度后还要顺带检查磁盘健康，见下一节。
+
+### 僵留进程（Xvfb / PDF 下载脚本）
+
+`xvfb-run` 拉起浏览器后，若下载脚本卡死或被强杀，`Xvfb` 与 `wanfang_pdf_download.py` 会变成 `PPID=1` 的孤儿进程长期驻留，占用 `DISPLAY :99`、内存和浏览器资源：
+
+```bash
+# 查找（重点看运行时长，正常单篇任务不会跑几小时以上）
+ps -eo pid,ppid,lstart,etime,cmd | grep -E "Xvfb|xvfb-run|_pdf_download|run-driver" | grep -v grep
+```
+
+清理前务必确认当前没有正在进行的处理任务，避免误杀正常作业：
+
+```bash
+ps -eo pid,cmd | grep main.py | grep -v grep   # 应为空
+
+sudo kill -TERM <pid> ...                      # 先 TERM；仍不退出再 kill -KILL
+```
+
+收尾：
+
+```bash
+# 清理残留的临时目录（Xvfb 退出会自行回收 /tmp/.X11-unix/X99 socket）
+ls -ld /tmp/xvfb-run.*
+sudo rm -rf /tmp/xvfb-run.XXXXXX
+
+# 确认 cron 的 cgroup 里只剩主进程
+systemctl status cron --no-pager | sed -n '/CGroup/,$p'
+```
+
 ## 部署检查清单
 
 首次部署或重新部署时，按以下顺序执行：
