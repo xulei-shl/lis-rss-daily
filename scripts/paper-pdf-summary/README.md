@@ -616,3 +616,22 @@ find download/ -type f -mtime +7 -delete
 ```bash
 tar -czf config-backup-$(date +%Y%m%d).tar.gz config/
 ```
+
+### 日志轮转
+
+`logs/cron.log` 使用系统 logrotate 轮转：每日执行，保留 14 份并压缩，单个文件超过 20MB 时提前轮转（防止异常刷屏把日志撑大）。
+
+```bash
+# 安装（首次部署或配置更新后）
+sudo cp deploy/paper-pdf-summary-logrotate /etc/logrotate.d/paper-pdf-summary
+
+# 校验配置（-d 只检查，不实际轮转）
+sudo logrotate -d /etc/logrotate.d/paper-pdf-summary
+
+# 手动立即轮转
+sudo logrotate -f /etc/logrotate.d/paper-pdf-summary
+```
+
+- 轮转生成的新日志为 `0664 xulei:xulei`，cron 作业（xulei 用户）可直接写入
+- 归档文件为 `logs/cron.log.N.gz`，编号越大越旧；`logs/` 下的每日报告（`*.md` / `*.json`）不参与轮转，按需用上面的「清理旧日志」命令处理
+- 依赖系统 `logrotate.timer`，可用 `systemctl status logrotate.timer` 查看下次执行时间

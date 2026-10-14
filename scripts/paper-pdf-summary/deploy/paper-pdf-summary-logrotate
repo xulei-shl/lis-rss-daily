@@ -1,0 +1,14 @@
+# PDF 摘要工作流 cron.log 轮转配置
+# 安装：sudo cp deploy/paper-pdf-summary-logrotate /etc/logrotate.d/paper-pdf-summary
+# 校验：sudo logrotate -d /etc/logrotate.d/paper-pdf-summary
+# 说明：系统 logrotate.timer 每日执行；maxsize 用于防止日志异常膨胀（历史上曾出现刷屏导致 181MB）
+
+/opt/lis-rss-daily/scripts/paper-pdf-summary/logs/cron.log {
+    daily
+    rotate 14
+    maxsize 20M
+    missingok
+    notifempty
+    compress
+    create 0664 xulei xulei
+}
