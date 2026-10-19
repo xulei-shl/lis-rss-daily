@@ -131,6 +131,26 @@ export interface Config {
 
   // DeepSearch
   deepSearchApiUrl: string;
+
+  // Topic Cluster（主题聚类与多维分析）
+  clusterEnabled: boolean;
+  clusterSchedule: string;
+  clusterUserId: number;
+  clusterScope: 'journal_only' | 'all_summary';
+  clusterSimThreshold: number;
+  clusterInitThreshold: number;
+  clusterReclaimThreshold: number;
+  clusterAngleThreshold: number;
+  clusterChainThreshold: number;
+  clusterStrongThreshold: number;
+  clusterMinPoolSize: number;
+  clusterMinClusterSize: number;
+  clusterMaxTopicsPerArticle: number;
+  clusterMinTrendSamples: number;
+  clusterDormantDays: number;
+  clusterLlmConcurrency: number;
+  clusterEmbeddingDim: number;
+  clusterFacetContractVersion: string;
 }
 
 function getConfig(): Config {
@@ -269,6 +289,32 @@ function getConfig(): Config {
 
     // DeepSearch
     deepSearchApiUrl: process.env.DEEPSEARCH_API_URL || 'http://localhost:8082',
+
+    // Topic Cluster（默认值均为初始值，需按设计文档 §14.3 校准后固化）
+    clusterEnabled: process.env.CLUSTER_ENABLED !== 'false',
+    clusterSchedule: process.env.CLUSTER_SCHEDULE || '30 8 * * *',
+    clusterUserId: intEnv(process.env.CLUSTER_USER_ID, 1, 1),
+    clusterScope: process.env.CLUSTER_SCOPE === 'journal_only' ? 'journal_only' : 'all_summary',
+    clusterSimThreshold: floatEnv(process.env.CLUSTER_SIM_THRESHOLD, 0.78, 0),
+    // 冷启动/孵化：平均连接凝聚的**簇间平均相似度**阈值。
+    // 注意尺度与单链不同（平均连接恒 ≤ 单链），且实测本语料两两相似度上界在 0.75 附近，
+    // 因此旧值 0.80 在新算法下**结构性不可达**（一簇都孵不出）。
+    // 当前 0.65 为待校准的临时值，必须以 pnpm run cluster:validate 在 200+ 篇切面上实测后定稿。
+    clusterInitThreshold: floatEnv(process.env.CLUSTER_INIT_THRESHOLD, 0.65, 0),
+    clusterReclaimThreshold: floatEnv(process.env.CLUSTER_RECLAIM_THRESHOLD, 0.8, 0),
+    clusterAngleThreshold: floatEnv(process.env.CLUSTER_ANGLE_THRESHOLD, 0.82, 0),
+    clusterChainThreshold: floatEnv(process.env.CLUSTER_CHAIN_THRESHOLD, 0.78, 0),
+    clusterStrongThreshold: floatEnv(process.env.CLUSTER_STRONG_THRESHOLD, 0.88, 0),
+    clusterMinPoolSize: intEnv(process.env.CLUSTER_MIN_POOL_SIZE, 6, 1),
+    clusterMinClusterSize: intEnv(process.env.CLUSTER_MIN_CLUSTER_SIZE, 3, 2),
+    clusterMaxTopicsPerArticle: intEnv(process.env.CLUSTER_MAX_TOPICS_PER_ARTICLE, 2, 1),
+    clusterMinTrendSamples: intEnv(process.env.CLUSTER_MIN_TREND_SAMPLES, 6, 2),
+    clusterDormantDays: intEnv(process.env.CLUSTER_DORMANT_DAYS, 60, 1),
+    clusterLlmConcurrency: intEnv(process.env.CLUSTER_LLM_CONCURRENCY, 2, 1),
+    clusterEmbeddingDim: intEnv(process.env.CLUSTER_EMBEDDING_DIM, 1024, 1),
+    // v2：方法/研究对象改为封闭词表（见 topic-cluster/domain/vocab.ts），
+    // 契约变更后 v1 切面自动回到「待抽取」，无需手工清库（设计文档 §7.9）
+    clusterFacetContractVersion: process.env.CLUSTER_FACET_CONTRACT_VERSION || 'v2',
   };
 }
 

@@ -1,0 +1,39 @@
+<%- include('layout', { pageTitle: pageTitle, pageStyles: '<link rel="stylesheet" href="/css/pages/clusters.css">' ,
+  body: ` <div class="page-header">
+    <h1 class="page-title"><span aria-hidden="true">🔭</span> 主题洞察</h1>
+    <p class="cluster-subtitle">
+      对已完成全文总结的文章自动做主题聚类与多维度分析：研究角度、研究脉络、研究趋势、研究空白。
+      全部内容由每日流水线预生成，页面仅做展示与检索。
+    </p>
+  </div>
+
+  <div class="cluster-overview" id="overviewBar" aria-live="polite">
+    <div class="cluster-stat"><div class="skeleton-pulse skeleton-line" style="height: 26px;"></div></div>
+    <div class="cluster-stat"><div class="skeleton-pulse skeleton-line" style="height: 26px;"></div></div>
+    <div class="cluster-stat"><div class="skeleton-pulse skeleton-line" style="height: 26px;"></div></div>
+    <div class="cluster-stat"><div class="skeleton-pulse skeleton-line" style="height: 26px;"></div></div>
+  </div>
+
+  <div class="filters-bar" role="search" aria-label="主题检索">
+    <div class="search-box">
+      <svg class="search-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+      <input type="text" id="clusterSearch" class="search-input" placeholder="搜索主题名称、关键词、方法、研究对象..." aria-label="搜索主题">
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">排序</span>
+      <select id="clusterSort" class="filter-select" aria-label="排序方式">
+        <option value="recent">最近更新</option>
+        <option value="size">文献最多</option>
+        <option value="name">按名称</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="results-count" id="clusterCount"></div>
+  <div class="cluster-grid" id="clusterGrid"></div>
+  <div class="cluster-empty" id="clusterEmpty" hidden>暂无主题。流水线执行后会自动出现。</div>
+
+  <script src="/js/clusters.js"></script>
+  ` }) %>

@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Response } from 'express';
 import type { AuthRequest } from '../../middleware/auth.js';
 import { requireAuth, requireAdmin, requireCliAuth } from '../../middleware/auth.js';
 import { getArticleById } from '../../api/articles.js';
@@ -6,6 +6,7 @@ import { TelegramClient } from '../../telegram/client.js';
 import { getTelegramNotifier } from '../../telegram/index.js';
 import { getWeChatNotifier } from '../../wechat/index.js';
 import type { PdfSummaryNotificationData } from '../../telegram/types.js';
+import type { HealthAlertNotificationData } from '../../notifications/types.js';
 
 const router = express.Router();
 
@@ -18,7 +19,8 @@ const PDF_POLL_TIMEOUT_MS = 10_000;     // 单次状态轮询
 const PDF_TOTAL_TIMEOUT_MS = 10 * 60_000; // 等待任务完成的总截止时间（下载+总结可能超过 5 分钟）
 const PDF_POLL_INTERVAL_MS = 5_000;
 
-interface PdfSummaryNotifyPayload {
+interface NotifyPayload {
+  type?: string;
   articleId?: number;
   title?: string;
   sourceName?: string;
@@ -27,7 +29,7 @@ interface PdfSummaryNotifyPayload {
   reason?: string;
 }
 
-function normalizeNotifyPayload(body: any): PdfSummaryNotifyPayload {
+function normalizeNotifyPayload(body: any): NotifyPayload {
   const articleId = typeof body?.articleId === 'number'
     ? body.articleId
     : typeof body?.id === 'number'
@@ -35,6 +37,7 @@ function normalizeNotifyPayload(body: any): PdfSummaryNotifyPayload {
       : undefined;
 
   return {
+    type: typeof body?.type === 'string' ? body.type : undefined,
     articleId,
     title: typeof body?.title === 'string' ? body.title.trim() : undefined,
     sourceName: typeof body?.sourceName === 'string' ? body.sourceName.trim() : undefined,
@@ -44,9 +47,13 @@ function normalizeNotifyPayload(body: any): PdfSummaryNotifyPayload {
   };
 }
 
+function normalizeNotifyType(value: unknown): 'pdf_summary' | 'health_alert' {
+  return value === 'health_alert' ? 'health_alert' : 'pdf_summary';
+}
+
 async function buildPdfSummaryNotifyData(
   userId: number,
-  payload: PdfSummaryNotifyPayload
+  payload: NotifyPayload
 ): Promise<PdfSummaryNotificationData> {
   const article = payload.articleId !== undefined
     ? await getArticleById(payload.articleId, userId)
@@ -81,6 +88,19 @@ async function dispatchPdfSummaryNotification(userId: number, data: PdfSummaryNo
   const [telegram, wechat] = await Promise.all([
     getTelegramNotifier().sendPdfSummary(userId, data),
     getWeChatNotifier().sendPdfSummary(userId, data),
+  ]);
+
+  return {
+    telegram,
+    wechat,
+    notified: telegram || wechat,
+  };
+}
+
+async function dispatchHealthAlertNotification(userId: number, data: HealthAlertNotificationData) {
+  const [telegram, wechat] = await Promise.all([
+    getTelegramNotifier().sendHealthAlert(userId, data),
+    getWeChatNotifier().sendHealthAlert(data),
   ]);
 
   return {
@@ -291,7 +311,7 @@ router.post('/pdf-summary', requireAuth, requireAdmin, async (req: AuthRequest, 
   }
 });
 
-router.post('/pdf-summary/notify/cli', requireCliAuth, async (req: AuthRequest, res) => {
+async function handleCliNotify(req: AuthRequest, res: Response) {
   try {
     const userId = req.userId;
     if (!userId) {
@@ -299,6 +319,28 @@ router.post('/pdf-summary/notify/cli', requireCliAuth, async (req: AuthRequest, 
     }
 
     const payload = normalizeNotifyPayload(req.body);
+
+    if (normalizeNotifyType(payload.type) === 'health_alert') {
+      const summary = payload.summary || '';
+      if (!summary) {
+        return res.status(400).json({
+          success: false,
+          error: 'summary is required for health_alert',
+        });
+      }
+
+      const notifyResult = await dispatchHealthAlertNotification(userId, {
+        title: payload.title || '服务器健康告警',
+        sourceName: payload.sourceName || 'health-watchdog',
+        summary,
+      });
+
+      return res.json({
+        success: true,
+        ...notifyResult,
+      });
+    }
+
     const notifyData = await buildPdfSummaryNotifyData(userId, payload);
     const notifyResult = await dispatchPdfSummaryNotification(userId, notifyData);
 
@@ -307,13 +349,19 @@ router.post('/pdf-summary/notify/cli', requireCliAuth, async (req: AuthRequest, 
       ...notifyResult,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to send PDF summary notification';
-    console.error('PDF summary CLI notify error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to send notification';
+    console.error('CLI notify error:', error);
     res.status(500).json({
       success: false,
       error: message,
     });
   }
-});
+}
+
+// 通用通知入口：通过 type 字段区分 pdf_summary / health_alert
+router.post('/notify/cli', requireCliAuth, handleCliNotify);
+
+// 兼容旧调用方
+router.post('/pdf-summary/notify/cli', requireCliAuth, handleCliNotify);
 
 export default router;

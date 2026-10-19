@@ -223,6 +223,74 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
   },
 
   /**
+   * cluster_facet 类型变量 - 主题聚类切面抽取
+   */
+  cluster_facet: {
+    ARTICLE_TITLE: {
+      description: '文章标题',
+      source: 'articles.title',
+      required: true,
+    },
+    AI_SUMMARY: {
+      description: '全文总结（可能被截断）',
+      source: 'articles.ai_summary',
+      required: true,
+    },
+    METHOD_VOCAB: {
+      description: '规范研究方法词表（method 字段只能取自此表）',
+      source: 'src/topic-cluster/domain/vocab.ts 的 FACET_METHODS',
+      required: true,
+    },
+    OBJECT_VOCAB: {
+      description: '规范研究对象词表（study_object 的通用类别只能取自此表）',
+      source: 'src/topic-cluster/domain/vocab.ts 的 FACET_OBJECTS',
+      required: true,
+    },
+  },
+
+  /**
+   * cluster_analysis 类型变量 - 主题多维分析
+   */
+  cluster_analysis: {
+    TOPIC_NAME: {
+      description: '主题名称',
+      source: 'cluster_topics.name',
+      required: true,
+    },
+    TOPIC_KEYWORDS: {
+      description: '主题关键词（逗号分隔）',
+      source: 'cluster_topics.keywords',
+      required: true,
+    },
+    TOPIC_STATS: {
+      description: '主题概览统计与规则计算的替代指标',
+      source: '规则计算（周期指标/方法分布）',
+      required: true,
+    },
+    THREADS_JSON: {
+      description: '已完成时间排序与串联的角度/线索结构化清单',
+      source: '规则计算（簇内分群与串链）',
+      required: true,
+    },
+    MATRIX_SUMMARY: {
+      description: 'method × study_object 覆盖矩阵与空缺格',
+      source: '规则聚合',
+      required: true,
+    },
+  },
+
+  /**
+   * cluster_naming 类型变量 - 主题命名
+   */
+  cluster_naming: {
+    FACETS_JSON: {
+      description: '簇内文献切面列表',
+      source: 'article_cluster_facets.facet_json',
+      required: true,
+    },
+  },
+
+  /**
    * email_parse 类型变量 - 邮件文章解析
    */
   email_parse: {
@@ -304,4 +372,4 @@ export const TASK_TYPES = _taskTypes as readonly string[];
 /**
  * 任务类型（用于 LLM 配置验证）
  */
-export type TaskType = 'filter' | 'summary' | 'keywords' | 'translation' | 'daily_summary' | 'daily_summary_journal' | 'daily_summary_blog_news' | 'analysis' | 'insights' | 'email_parse';
+export type TaskType = 'filter' | 'summary' | 'keywords' | 'translation' | 'daily_summary' | 'daily_summary_journal' | 'daily_summary_blog_news' | 'analysis' | 'insights' | 'email_parse' | 'cluster_facet' | 'cluster_analysis' | 'cluster_naming';

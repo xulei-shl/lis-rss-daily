@@ -8,20 +8,14 @@ import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 import { logger } from '../logger.js';
+import { PUSH_TYPE_DEFINITIONS, type PushType } from '../constants/push-types.js';
 
 const log = logger.child({ module: 'wechat-config' });
 
 /**
  * 推送类型配置接口
  */
-export interface WeChatPushTypes {
-  daily_summary_journal: boolean;
-  daily_summary_blog_news: boolean;
-  journal_all: boolean;
-  new_articles: boolean;
-  insights: boolean;
-  pdf_summary: boolean;
-}
+export type WeChatPushTypes = Record<PushType, boolean>;
 
 /**
  * Webhook 配置接口
@@ -90,6 +84,50 @@ function createDefaultConfig(configPath: string): WeChatConfig {
 }
 
 /**
+ * 规范化 push_types
+ *
+ * - 更新已有 webhook：请求里没带的类型保持原值
+ * - 新增 webhook：使用注册表里的 defaultEnabled（健康告警默认关闭）
+ * - 加载旧版 YAML：健康告警继承 pdf_summary，避免升级后告警静默消失
+ */
+export function normalizeWeChatPushTypes(
+  input: Partial<Record<PushType | 'daily_summary', boolean>> | undefined,
+  existing?: WeChatPushTypes,
+  legacyMode = false
+): WeChatPushTypes {
+  const raw = (input || {}) as Record<string, boolean | undefined>;
+  const pdfSummary = raw.pdf_summary ?? existing?.pdf_summary ?? true;
+  const legacyDailySummary = raw.daily_summary ?? existing?.daily_summary_journal ?? true;
+  const result = {} as WeChatPushTypes;
+
+  for (const type of PUSH_TYPE_DEFINITIONS) {
+    const value = raw[type.key];
+    if (value !== undefined) {
+      result[type.key] = value !== false;
+      continue;
+    }
+    if (existing) {
+      result[type.key] = existing[type.key];
+      continue;
+    }
+    if (legacyMode && type.key === 'health_alert') {
+      result[type.key] = pdfSummary !== false;
+      continue;
+    }
+    if (
+      raw.daily_summary !== undefined &&
+      (type.key === 'daily_summary_journal' || type.key === 'daily_summary_blog_news')
+    ) {
+      result[type.key] = legacyDailySummary !== false;
+      continue;
+    }
+    result[type.key] = type.defaultEnabled;
+  }
+
+  return result;
+}
+
+/**
  * 加载并解析 YAML 配置文件
  */
 function loadConfig(): WeChatConfig {
@@ -113,37 +151,11 @@ function loadConfig(): WeChatConfig {
       _config.webhooks = [];
     }
 
-    // 为旧版本数据迁移：确保每个 webhook 都有 push_types
-    _config.webhooks = _config.webhooks.map((webhook) => {
-      if (!webhook.push_types) {
-        return {
-          ...webhook,
-          push_types: {
-            daily_summary_journal: true,
-            daily_summary_blog_news: true,
-            journal_all: true,
-            new_articles: true,
-            insights: true,
-            pdf_summary: true,
-          },
-        };
-      }
-      const legacyDailySummary = (webhook.push_types as any).daily_summary;
-      if (webhook.push_types.daily_summary_journal === undefined) {
-        webhook.push_types.daily_summary_journal = legacyDailySummary !== false;
-      }
-      if (webhook.push_types.daily_summary_blog_news === undefined) {
-        webhook.push_types.daily_summary_blog_news = legacyDailySummary !== false;
-      }
-      // 确保新增的推送类型有默认值
-      if (webhook.push_types.insights === undefined) {
-        webhook.push_types.insights = true;
-      }
-      if (webhook.push_types.pdf_summary === undefined) {
-        webhook.push_types.pdf_summary = true;
-      }
-      return webhook;
-    });
+    // 为旧版本数据迁移：确保每个 webhook 都有完整的 push_types
+    _config.webhooks = _config.webhooks.map((webhook) => ({
+      ...webhook,
+      push_types: normalizeWeChatPushTypes(webhook.push_types, undefined, true),
+    }));
 
     log.debug({ path: configPath, webhookCount: _config.webhooks.length }, 'WeChat config loaded');
     return _config;
@@ -202,26 +214,27 @@ export function getActiveWeChatWebhooks(): WeChatWebhook[] {
 /**
  * 根据推送类型获取启用的 webhook
  */
-export function getWebhooksForPushType(pushType: keyof WeChatPushTypes): WeChatWebhook[] {
+export function getWebhooksForPushType(pushType: PushType): WeChatWebhook[] {
   const config = loadConfig();
   return config.webhooks.filter((w) => w.enabled && w.push_types[pushType]);
 }
 
 export function getWebhooksForDailySummaryType(type: 'journal' | 'blog_news' | 'all'): WeChatWebhook[] {
-  const config = loadConfig();
+  if (type === 'journal') {
+    return getWebhooksForPushType('daily_summary_journal');
+  }
+  if (type === 'blog_news') {
+    return getWebhooksForPushType('daily_summary_blog_news');
+  }
 
-  return config.webhooks.filter((webhook) => {
-    if (!webhook.enabled) {
-      return false;
-    }
-    if (type === 'journal') {
-      return webhook.push_types.daily_summary_journal;
-    }
-    if (type === 'blog_news') {
-      return webhook.push_types.daily_summary_blog_news;
-    }
-    return webhook.push_types.daily_summary_journal || webhook.push_types.daily_summary_blog_news;
-  });
+  const webhooks = new Map<string, WeChatWebhook>();
+  for (const webhook of [
+    ...getWebhooksForPushType('daily_summary_journal'),
+    ...getWebhooksForPushType('daily_summary_blog_news'),
+  ]) {
+    webhooks.set(webhook.id, webhook);
+  }
+  return Array.from(webhooks.values());
 }
 
 /**

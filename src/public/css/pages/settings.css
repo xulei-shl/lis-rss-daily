@@ -1098,3 +1098,11 @@
     cursor: pointer;
     accent-color: var(--accent-primary);
 }
+
+/* Health alert push type tag */
+.wechat-webhook-tag.health-alert,
+.telegram-chat-tag.health-alert {
+    background: rgba(220, 38, 38, 0.1);
+    color: var(--red);
+    border-color: rgba(220, 38, 38, 0.2);
+}

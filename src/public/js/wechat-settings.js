@@ -1,6 +1,30 @@
 // 企业微信设置 - 前端 JavaScript
 let wechatWebhooks = [];
 
+const WECHAT_PUSH_TYPES = window.PUSH_TYPES || [];
+
+function getWeChatPushCheckbox(key) {
+  return document.querySelector(`#wechatWebhookForm [data-push-type="${key}"]`);
+}
+
+function applyWeChatPushFlags(webhook) {
+  for (const type of WECHAT_PUSH_TYPES) {
+    const checkbox = getWeChatPushCheckbox(type.key);
+    if (checkbox) {
+      checkbox.checked = webhook ? webhook.push_types?.[type.key] === true : type.defaultEnabled;
+    }
+  }
+}
+
+function readWeChatPushFlags() {
+  const flags = {};
+  for (const type of WECHAT_PUSH_TYPES) {
+    const checkbox = getWeChatPushCheckbox(type.key);
+    flags[type.key] = checkbox ? checkbox.checked : false;
+  }
+  return flags;
+}
+
 // 页面加载时自动加载 webhook 列表
 document.addEventListener('DOMContentLoaded', function() {
   loadWeChatWebhooks();
@@ -38,37 +62,10 @@ function renderWeChatWebhooks() {
   emptyEl.style.display = 'none';
 
   listEl.innerHTML = wechatWebhooks.map(function(webhook) {
-    const pushTypeTags = [];
-    if (webhook.push_types?.daily_summary_journal) {
-      pushTypeTags.push('<span class="wechat-webhook-tag daily-summary">通过期刊</span>');
-    } else if (webhook.push_types?.daily_summary_journal !== undefined) {
-      pushTypeTags.push('<span class="wechat-webhook-tag daily-summary disabled">通过期刊</span>');
-    }
-    if (webhook.push_types?.daily_summary_blog_news) {
-      pushTypeTags.push('<span class="wechat-webhook-tag daily-summary">通过资讯</span>');
-    } else if (webhook.push_types?.daily_summary_blog_news !== undefined) {
-      pushTypeTags.push('<span class="wechat-webhook-tag daily-summary disabled">通过资讯</span>');
-    }
-    if (webhook.push_types?.journal_all) {
-      pushTypeTags.push('<span class="wechat-webhook-tag journal-all">全部期刊</span>');
-    } else if (webhook.push_types?.journal_all !== undefined) {
-      pushTypeTags.push('<span class="wechat-webhook-tag journal-all disabled">全部期刊</span>');
-    }
-    if (webhook.push_types?.new_articles) {
-      pushTypeTags.push('<span class="wechat-webhook-tag new-articles">新增文章</span>');
-    } else if (webhook.push_types?.new_articles !== undefined) {
-      pushTypeTags.push('<span class="wechat-webhook-tag new-articles disabled">新增文章</span>');
-    }
-    if (webhook.push_types?.insights) {
-      pushTypeTags.push('<span class="wechat-webhook-tag insights">洞察报告</span>');
-    } else if (webhook.push_types?.insights !== undefined) {
-      pushTypeTags.push('<span class="wechat-webhook-tag insights disabled">洞察报告</span>');
-    }
-    if (webhook.push_types?.pdf_summary) {
-      pushTypeTags.push('<span class="wechat-webhook-tag pdf-summary">PDF 总结</span>');
-    } else if (webhook.push_types?.pdf_summary !== undefined) {
-      pushTypeTags.push('<span class="wechat-webhook-tag pdf-summary disabled">PDF 总结</span>');
-    }
+    const pushTypeTags = WECHAT_PUSH_TYPES.map(function(type) {
+      const enabled = webhook.push_types?.[type.key] === true;
+      return '<span class="wechat-webhook-tag ' + type.tagClass + (enabled ? '' : ' disabled') + '">' + type.tagLabel + '</span>';
+    });
 
     const statusClass = webhook.enabled ? '' : 'inactive';
 
@@ -116,22 +113,12 @@ function openWeChatWebhookModal(webhookId) {
     document.getElementById('wechatWebhookId').value = webhook.id;
     document.getElementById('wechatWebhookName').value = webhook.name;
     document.getElementById('wechatWebhookUrl').value = webhook.url;
-    document.getElementById('wechatWebhookDailySummaryJournal').checked = webhook.push_types?.daily_summary_journal !== false;
-    document.getElementById('wechatWebhookDailySummaryBlogNews').checked = webhook.push_types?.daily_summary_blog_news !== false;
-    document.getElementById('wechatWebhookJournalAll').checked = webhook.push_types?.journal_all !== false;
-    document.getElementById('wechatWebhookNewArticles').checked = webhook.push_types?.new_articles !== false;
-    document.getElementById('wechatWebhookInsights').checked = webhook.push_types?.insights !== false;
-    document.getElementById('wechatWebhookPdfSummary').checked = webhook.push_types?.pdf_summary !== false;
+    applyWeChatPushFlags(webhook);
     document.getElementById('wechatWebhookEnabled').checked = webhook.enabled;
   } else {
     title.textContent = '添加 Webhook';
     document.getElementById('wechatWebhookId').value = '';
-    document.getElementById('wechatWebhookDailySummaryJournal').checked = true;
-    document.getElementById('wechatWebhookDailySummaryBlogNews').checked = true;
-    document.getElementById('wechatWebhookJournalAll').checked = true;
-    document.getElementById('wechatWebhookNewArticles').checked = true;
-    document.getElementById('wechatWebhookInsights').checked = true;
-    document.getElementById('wechatWebhookPdfSummary').checked = true;
+    applyWeChatPushFlags(null);
     document.getElementById('wechatWebhookEnabled').checked = true;
   }
 
@@ -232,26 +219,13 @@ document.addEventListener('DOMContentLoaded', function() {
       const name = document.getElementById('wechatWebhookName').value.trim();
       const url = document.getElementById('wechatWebhookUrl').value.trim();
       const enabled = document.getElementById('wechatWebhookEnabled').checked;
-      const daily_summary_journal = document.getElementById('wechatWebhookDailySummaryJournal').checked;
-      const daily_summary_blog_news = document.getElementById('wechatWebhookDailySummaryBlogNews').checked;
-      const journal_all = document.getElementById('wechatWebhookJournalAll').checked;
-      const new_articles = document.getElementById('wechatWebhookNewArticles').checked;
-      const insights = document.getElementById('wechatWebhookInsights').checked;
-      const pdf_summary = document.getElementById('wechatWebhookPdfSummary').checked;
 
       try {
         const body = {
           name,
           url,
           enabled,
-          push_types: {
-            daily_summary_journal,
-            daily_summary_blog_news,
-            journal_all,
-            new_articles,
-            insights,
-            pdf_summary
-          }
+          push_types: readWeChatPushFlags()
         };
 
         let res;

@@ -56,6 +56,9 @@ const DEFAULT_PROMPT_CONFIG: Record<
   daily_summary_blog_news: { fileName: 'daily_summary_blog_news.md', name: '默认资讯类每日总结提示词' },
   insights: { fileName: 'insights.md', name: '默认洞察报告提示词' },
   email_parse: { fileName: 'email_parse.md', name: '默认邮件文章解析提示词' },
+  cluster_facet: { fileName: 'cluster_facet.md', name: '默认主题聚类切面抽取提示词' },
+  cluster_analysis: { fileName: 'cluster_analysis.md', name: '默认主题聚类多维分析提示词' },
+  cluster_naming: { fileName: 'cluster_naming.md', name: '默认主题聚类主题命名提示词' },
 };
 
 /**
@@ -66,7 +69,7 @@ const DEFAULT_PROMPTS_DIR = path.join(__dirname, '../config/default-prompts');
 /**
  * 从 md 文件读取默认提示词模板
  */
-function readDefaultPromptTemplate(type: string): string | null {
+export function readDefaultPromptTemplate(type: string): string | null {
   const config = DEFAULT_PROMPT_CONFIG[type];
   if (!config) {
     return null;

@@ -15,6 +15,7 @@ import { logger } from '../logger.js';
 import { optionalAuth } from '../middleware/auth.js';
 import apiRoutes from './routes.js';
 import { EXTERNAL_API_CODES, externalApiFailure } from './external-api-response.js';
+import { PUSH_TYPE_DEFINITIONS } from '../constants/push-types.js';
 
 const log = logger.child({ module: 'web-server' });
 
@@ -116,6 +117,7 @@ export function createApp(): express.Express {
     res.render('settings', {
       pageTitle: 'Settings - LIS-RSS Literature Tracker',
       user: req.user,
+      pushTypes: PUSH_TYPE_DEFINITIONS,
     });
   });
 

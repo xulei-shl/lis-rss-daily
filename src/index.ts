@@ -15,6 +15,7 @@ import { initJournalScheduler } from './journal-scheduler.js';
 import { initKeywordScheduler } from './keyword-scheduler.js';
 import { initDailySummaryScheduler } from './daily-summary-scheduler.js';
 import { initInsightsScheduler } from './insights-scheduler.js';
+import { initTopicClusterScheduler } from './topic-cluster-scheduler.js';
 import { initTelegramBotManager } from './telegram/bot-manager.js';
 import { initGmailScheduler } from './gmail-scheduler.js';
 import { initWebScheduler } from './web-scheduler.js';
@@ -140,6 +141,15 @@ async function main() {
     log.info('💡 Insights scheduler disabled');
   }
 
+  // Initialize and start Topic Cluster scheduler
+  const topicClusterScheduler = initTopicClusterScheduler();
+  if (topicClusterScheduler.isEnabled) {
+    topicClusterScheduler.start();
+    log.info(`🔭 Topic cluster scheduler started (schedule: ${config.clusterSchedule})`);
+  } else {
+    log.info('🔭 Topic cluster scheduler disabled');
+  }
+
   // Initialize and start Rejected Article Cleanup Scheduler
   const rejectedCleanupScheduler = initRejectedCleanupScheduler();
   if (config.rejectedCleanupEnabled) {
@@ -214,6 +224,10 @@ async function main() {
     // Stop insights scheduler
     await insightsScheduler.stop();
     log.info('💡 Insights scheduler stopped');
+
+    // Stop topic cluster scheduler
+    await topicClusterScheduler.stop();
+    log.info('🔭 Topic cluster scheduler stopped');
 
     // Stop rejected cleanup scheduler
     await rejectedCleanupScheduler.stop();

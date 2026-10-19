@@ -13,6 +13,7 @@ import {
   formatJournalAllSummary,
   formatNewArticle,
   formatPdfSummary,
+  formatHealthAlert,
   formatTestMessage,
   type WeChatDailySummaryData,
   type JournalAllSummaryData,
@@ -28,6 +29,7 @@ import {
   type WeChatWebhook,
 } from '../config/wechat-config.js';
 import type { SummaryType, DailySummaryArticle } from '../api/daily-summary.js';
+import type { HealthAlertNotificationData } from '../notifications/types.js';
 
 const log = logger.child({ module: 'wechat-notifier' });
 
@@ -173,6 +175,16 @@ class WeChatNotifier {
     return this.sendByPushType('pdf_summary', userId, formatPdfSummary, data, {
       logLabel: 'PDF summary',
       logContext: { userId, articleId: data.articleId, title: data.title },
+    });
+  }
+
+  /**
+   * 发送服务器健康告警到所有订阅了 health_alert 的 webhook
+   */
+  async sendHealthAlert(data: HealthAlertNotificationData): Promise<boolean> {
+    return this.sendByPushType('health_alert', 0, formatHealthAlert, data, {
+      logLabel: 'Health alert',
+      logContext: { title: data.title, sourceName: data.sourceName },
     });
   }
 

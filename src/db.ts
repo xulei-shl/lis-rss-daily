@@ -55,6 +55,15 @@ export interface DatabaseTable {
   rejected_cleanup_stats: RejectedCleanupStatsTable;
   rejected_cleanup_logs: RejectedCleanupLogsTable;
   user_daily_scores: UserDailyScoresTable;
+  cluster_topic_sets: ClusterTopicSetsTable;
+  cluster_topics: ClusterTopicsTable;
+  article_cluster_facets: ArticleClusterFacetsTable;
+  article_topic_links: ArticleTopicLinksTable;
+  cluster_topic_remap: ClusterTopicRemapTable;
+  topic_threads: TopicThreadsTable;
+  thread_articles: ThreadArticlesTable;
+  topic_metrics_period: TopicMetricsPeriodTable;
+  cluster_topic_analysis: ClusterTopicAnalysisTable;
 }
 
 export interface UsersTable {
@@ -318,6 +327,7 @@ export interface TelegramChatsTable {
   new_articles: number;
   insights: number;
   pdf_summary: number;
+  health_alert: number;
   is_active: number;
   created_at: Generated<string>;
   updated_at: string;
@@ -473,6 +483,137 @@ export interface DeepSearchTasksTable {
   completed_at: string | null;
 }
 
+/* ── 主题聚类与多维分析模块（sql/045）── */
+
+/** 主题集合版本（同时充当重建触发器快照） */
+export interface ClusterTopicSetsTable {
+  version: number;
+  status: 'active' | 'archived';
+  trigger_reason: string | null;
+  embedding_model: string | null;
+  embedding_dim: number | null;
+  facet_contract_version: string | null;
+  init_threshold: number | null;
+  note: string | null;
+  created_at: Generated<string>;
+  archived_at: string | null;
+}
+
+/** 主题（一个版本内的一个语义聚类中心） */
+export interface ClusterTopicsTable {
+  id: Generated<number>;
+  user_id: number;
+  set_version: number;
+  slug: string;
+  name: string;
+  keywords: string | null;
+  status: 'NEW' | 'ACTIVE' | 'DORMANT' | 'ARCHIVED';
+  centroid: Buffer | null;
+  centroid_dim: number | null;
+  linked_count: Generated<number>;
+  primary_count: Generated<number>;
+  period_added_count: Generated<number>;
+  first_event_date: string | null;
+  last_event_date: string | null;
+  is_dirty: Generated<number>;
+  last_analyzed_at: string | null;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
+}
+
+/** 单篇切面 + 切面向量（不存放归属关系） */
+export interface ArticleClusterFacetsTable {
+  article_id: number;
+  user_id: number;
+  facet_json: string;
+  facet_text: string;
+  facet_contract_version: Generated<string>;
+  embedding: Buffer;
+  embedding_model: string | null;
+  embedding_dim: number;
+  event_date: string | null;
+  date_precision: 'day' | 'year' | 'ingest' | null;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
+}
+
+/** 文章 ↔ 主题（多归属链接） */
+export interface ArticleTopicLinksTable {
+  article_id: number;
+  topic_id: number;
+  set_version: number;
+  similarity: number;
+  is_primary: Generated<number>;
+  link_rank: Generated<number>;
+  assign_method: 'init' | 'centroid' | 'incubation' | 'reclaim';
+  assigned_at: string | null;
+}
+
+/** 跨版本重定向（旧 URL 不失效） */
+export interface ClusterTopicRemapTable {
+  old_topic_id: number;
+  new_topic_id: number;
+  similarity: number;
+  from_version: number;
+  to_version: number;
+  created_at: Generated<string>;
+}
+
+/** 簇内研究脉络（角度 + 时间链） */
+export interface TopicThreadsTable {
+  id: Generated<number>;
+  topic_id: number;
+  angle_key: string;
+  angle_label: string | null;
+  article_count: Generated<number>;
+  period_start: string | null;
+  period_end: string | null;
+  status: Generated<'ACTIVE' | 'DORMANT'>;
+  trend: 'up' | 'flat' | 'down' | null;
+  summary: string | null;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
+}
+
+/** 脉络内的文章序列 */
+export interface ThreadArticlesTable {
+  thread_id: number;
+  article_id: number;
+  seq: number;
+  relation: 'origin' | 'continue' | 'shift' | 'refute' | null;
+  similarity_to_prev: number | null;
+  shared_method: Generated<number>;
+  shared_object: Generated<number>;
+}
+
+/** 周期指标（规则计算） */
+export interface TopicMetricsPeriodTable {
+  topic_id: number;
+  period: string;
+  added_linked_count: Generated<number>;
+  added_primary_count: Generated<number>;
+  cumulative_linked_count: Generated<number>;
+  cumulative_primary_count: Generated<number>;
+  active_angle_count: number | null;
+  avg_similarity: number | null;
+  centroid_drift: number | null;
+  method_entropy: number | null;
+  object_entropy: number | null;
+}
+
+/** 多维分析缓存（脏标记增量更新） */
+export interface ClusterTopicAnalysisTable {
+  topic_id: number;
+  analysis_json: string;
+  matrix_json: string | null;
+  input_hash: string | null;
+  linked_count: number;
+  contract_version: string | null;
+  status: Generated<'ok' | 'insufficient_data' | 'failed'>;
+  error_message: string | null;
+  analyzed_at: string | null;
+}
+
 export type DB = Kysely<DatabaseTable>;
 
 // Selection result types (unwraps Generated<T> to T)
@@ -496,6 +637,15 @@ export type WebSourcesSelection = SelectionType<WebSourcesTable>;
 export type WebFetchLogsSelection = SelectionType<WebFetchLogsTable>;
 export type RejectedArticlesSelection = SelectionType<RejectedArticlesTable>;
 export type UserDailyScoresSelection = SelectionType<UserDailyScoresTable>;
+export type ClusterTopicSetsSelection = SelectionType<ClusterTopicSetsTable>;
+export type ClusterTopicsSelection = SelectionType<ClusterTopicsTable>;
+export type ArticleClusterFacetsSelection = SelectionType<ArticleClusterFacetsTable>;
+export type ArticleTopicLinksSelection = SelectionType<ArticleTopicLinksTable>;
+export type ClusterTopicRemapSelection = SelectionType<ClusterTopicRemapTable>;
+export type TopicThreadsSelection = SelectionType<TopicThreadsTable>;
+export type ThreadArticlesSelection = SelectionType<ThreadArticlesTable>;
+export type TopicMetricsPeriodSelection = SelectionType<TopicMetricsPeriodTable>;
+export type ClusterTopicAnalysisSelection = SelectionType<ClusterTopicAnalysisTable>;
 
 let _db: DB | null = null;
 

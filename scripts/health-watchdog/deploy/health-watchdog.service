@@ -1,0 +1,7 @@
+[Unit]
+Description=Machine health watchdog (disk I/O errors, cron liveness, key services)
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/lis-rss-daily/scripts/health-watchdog/health-check.sh

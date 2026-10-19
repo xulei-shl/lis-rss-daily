@@ -8,17 +8,19 @@
 
 import { logger } from '../logger.js';
 import { TelegramClient } from './client.js';
-import { formatDailySummary, formatNewArticle, formatPdfSummary, createArticleKeyboard } from './formatters.js';
+import {
+  formatDailySummary,
+  formatNewArticle,
+  formatPdfSummary,
+  formatHealthAlert,
+  createArticleKeyboard,
+} from './formatters.js';
 import type { TelegramConfig, DailySummaryData, PdfSummaryNotificationData, TelegramMessageResponse, InlineKeyboardMarkup } from './types.js';
+import type { HealthAlertNotificationData } from '../notifications/types.js';
 import { getUserSettings } from '../api/settings.js';
 import type { ArticleWithSource } from '../api/articles.js';
 import {
-  getDailySummaryJournalChats,
-  getDailySummaryBlogNewsChats,
-  getJournalAllChats,
-  getNewArticlesChats,
-  getInsightsChats,
-  getPdfSummaryChats,
+  getTelegramChatsForPushType,
   getActiveTelegramChats,
   hasTelegramChats,
   type TelegramChatConfig
@@ -93,15 +95,15 @@ class TelegramNotifier {
 
   private async getDailySummaryChatsByType(userId: number, type: DailySummaryData['type']): Promise<TelegramChatConfig[]> {
     if (type === 'journal') {
-      return getDailySummaryJournalChats(userId);
+      return getTelegramChatsForPushType(userId, 'daily_summary_journal');
     }
     if (type === 'blog_news') {
-      return getDailySummaryBlogNewsChats(userId);
+      return getTelegramChatsForPushType(userId, 'daily_summary_blog_news');
     }
     if (type === 'all') {
       const [journalChats, blogNewsChats] = await Promise.all([
-        getDailySummaryJournalChats(userId),
-        getDailySummaryBlogNewsChats(userId),
+        getTelegramChatsForPushType(userId, 'daily_summary_journal'),
+        getTelegramChatsForPushType(userId, 'daily_summary_blog_news'),
       ]);
       const chatMap = new Map<number, TelegramChatConfig>();
       for (const chat of [...journalChats, ...blogNewsChats]) {
@@ -149,7 +151,7 @@ class TelegramNotifier {
     const config = await loadTelegramConfig(userId);
     if (!config) return false;
 
-    const chats = await getJournalAllChats(userId);
+    const chats = await getTelegramChatsForPushType(userId, 'journal_all');
     if (chats.length === 0) return false;
 
     const message = formatDailySummary({
@@ -180,7 +182,7 @@ class TelegramNotifier {
     const config = await loadTelegramConfig(userId);
     if (!config) return false;
 
-    const chats = await getInsightsChats(userId);
+    const chats = await getTelegramChatsForPushType(userId, 'insights');
     if (chats.length === 0) return false;
 
     const message = formatDailySummary({
@@ -278,7 +280,7 @@ class TelegramNotifier {
     const config = await loadTelegramConfig(userId);
     if (!config) return false;
 
-    const chats = await getNewArticlesChats(userId);
+    const chats = await getTelegramChatsForPushType(userId, 'new_articles');
     if (chats.length === 0) return false;
 
     // Build summary from article
@@ -318,13 +320,31 @@ class TelegramNotifier {
     const config = await loadTelegramConfig(userId);
     if (!config) return false;
 
-    const chats = await getPdfSummaryChats(userId);
+    const chats = await getTelegramChatsForPushType(userId, 'pdf_summary');
     if (chats.length === 0) return false;
 
     const message = formatPdfSummary(data);
     return this.sendToChats(userId, config, chats, message, {
       logLabel: 'PDF summary',
       logContext: { articleId: data.articleId, title: data.title },
+    });
+  }
+
+  /**
+   * Send server health alert to all chats subscribed to health_alert
+   */
+  async sendHealthAlert(userId: number, data: HealthAlertNotificationData): Promise<boolean> {
+    const config = await loadTelegramConfig(userId);
+    if (!config) return false;
+
+    const chats = await getTelegramChatsForPushType(userId, 'health_alert');
+    if (chats.length === 0) return false;
+
+    const message = formatHealthAlert(data);
+    return this.sendToChats(userId, config, chats, message, {
+      parseMode: 'HTML',
+      logLabel: 'Health alert',
+      logContext: { title: data.title, sourceName: data.sourceName },
     });
   }
 

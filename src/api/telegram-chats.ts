@@ -6,70 +6,61 @@
 
 import { getDb, type TelegramChatsSelection } from '../db.js';
 import { logger } from '../logger.js';
-import type { Generated } from 'kysely';
+import {
+  PUSH_TYPE_DEFINITIONS,
+  getPushType,
+  type PushType,
+  type TelegramPushField,
+} from '../constants/push-types.js';
 
 const log = logger.child({ module: 'telegram-chats-service' });
 
 export type TelegramChatRole = 'admin' | 'viewer';
 
-export interface TelegramChatConfig {
+export type TelegramPushFlags = { [K in TelegramPushField]: boolean };
+
+export type TelegramChatConfig = TelegramPushFlags & {
   id: number;
   userId: number;
   chatId: string;
   chatName: string | null;
   role: TelegramChatRole;
-  dailySummaryJournal: boolean;
-  dailySummaryBlogNews: boolean;
-  journalAll: boolean;
-  insights: boolean;
-  newArticles: boolean;
-  pdfSummary: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-}
+};
 
-export interface CreateTelegramChatInput {
+export type CreateTelegramChatInput = Partial<TelegramPushFlags> & {
   chatId: string;
   chatName?: string;
   role?: TelegramChatRole;
-  dailySummaryJournal?: boolean;
-  dailySummaryBlogNews?: boolean;
-  journalAll?: boolean;
-  insights?: boolean;
-  newArticles?: boolean;
-  pdfSummary?: boolean;
   isActive?: boolean;
-}
+};
 
-export interface UpdateTelegramChatInput {
+export type UpdateTelegramChatInput = Partial<TelegramPushFlags> & {
   chatName?: string;
   role?: TelegramChatRole;
-  dailySummaryJournal?: boolean;
-  dailySummaryBlogNews?: boolean;
-  journalAll?: boolean;
-  insights?: boolean;
-  newArticles?: boolean;
-  pdfSummary?: boolean;
   isActive?: boolean;
-}
+};
 
 /**
  * Convert database row to config object
  */
 function rowToConfig(row: TelegramChatsSelection): TelegramChatConfig {
+  const raw = row as unknown as Record<string, unknown>;
+  const pushFlags = {} as TelegramPushFlags;
+
+  for (const type of PUSH_TYPE_DEFINITIONS) {
+    pushFlags[type.telegramKey] = raw[type.column] === 1;
+  }
+
   return {
     id: row.id,
     userId: row.user_id,
     chatId: row.chat_id,
     chatName: row.chat_name,
     role: row.role,
-    dailySummaryJournal: (row as any).daily_summary_journal === 1,
-    dailySummaryBlogNews: (row as any).daily_summary_blog_news === 1,
-    journalAll: row.journal_all === 1,
-    insights: (row as any).insights === 1,
-    newArticles: row.new_articles === 1,
-    pdfSummary: (row as any).pdf_summary === 1,
+    ...pushFlags,
     isActive: row.is_active === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -148,22 +139,25 @@ export async function addTelegramChat(userId: number, input: CreateTelegramChatI
   const db = getDb();
   const now = new Date().toISOString();
 
+  const values: Record<string, unknown> = {
+    user_id: userId,
+    chat_id: input.chatId.trim(),
+    chat_name: input.chatName?.trim() || null,
+    role: input.role || 'viewer',
+    is_active: input.isActive !== false ? 1 : 0,
+    updated_at: now,
+  };
+
+  for (const type of PUSH_TYPE_DEFINITIONS) {
+    const provided = input[type.telegramKey];
+    values[type.column] = provided !== undefined
+      ? (provided ? 1 : 0)
+      : (type.defaultEnabled ? 1 : 0);
+  }
+
   const result = await db
     .insertInto('telegram_chats')
-    .values({
-      user_id: userId,
-      chat_id: input.chatId.trim(),
-      chat_name: input.chatName?.trim() || null,
-      role: input.role || 'viewer',
-      daily_summary_journal: input.dailySummaryJournal !== false ? 1 : 0,
-      daily_summary_blog_news: input.dailySummaryBlogNews !== false ? 1 : 0,
-      journal_all: input.journalAll !== false ? 1 : 0,
-      insights: input.insights !== false ? 1 : 0,
-      new_articles: input.newArticles !== false ? 1 : 0,
-      pdf_summary: input.pdfSummary !== false ? 1 : 0,
-      is_active: input.isActive !== false ? 1 : 0,
-      updated_at: now,
-    } as any)
+    .values(values as any)
     .returningAll()
     .executeTakeFirstOrThrow();
 
@@ -192,26 +186,15 @@ export async function updateTelegramChat(
   if (input.role !== undefined) {
     updates.role = input.role;
   }
-  if (input.dailySummaryJournal !== undefined) {
-    updates.daily_summary_journal = input.dailySummaryJournal ? 1 : 0;
-  }
-  if (input.dailySummaryBlogNews !== undefined) {
-    updates.daily_summary_blog_news = input.dailySummaryBlogNews ? 1 : 0;
-  }
-  if (input.insights !== undefined) {
-    updates.insights = input.insights ? 1 : 0;
-  }
-  if (input.journalAll !== undefined) {
-    updates.journal_all = input.journalAll ? 1 : 0;
-  }
-  if (input.newArticles !== undefined) {
-    updates.new_articles = input.newArticles ? 1 : 0;
-  }
-  if (input.pdfSummary !== undefined) {
-    updates.pdf_summary = input.pdfSummary ? 1 : 0;
-  }
   if (input.isActive !== undefined) {
     updates.is_active = input.isActive ? 1 : 0;
+  }
+
+  for (const type of PUSH_TYPE_DEFINITIONS) {
+    const value = input[type.telegramKey];
+    if (value !== undefined) {
+      updates[type.column] = value ? 1 : 0;
+    }
   }
 
   const result = await db
@@ -322,106 +305,20 @@ export async function hasTelegramChats(userId: number): Promise<boolean> {
 }
 
 /**
- * Get chats that should receive daily summary
+ * Get active chats subscribed to a specific push type
  */
-export async function getDailySummaryJournalChats(userId: number): Promise<TelegramChatConfig[]> {
+export async function getTelegramChatsForPushType(
+  userId: number,
+  pushType: PushType
+): Promise<TelegramChatConfig[]> {
+  const definition = getPushType(pushType);
   const db = getDb();
 
   const rows = await db
     .selectFrom('telegram_chats')
     .where('user_id', '=', userId)
     .where('is_active', '=', 1)
-    .where('daily_summary_journal', '=', 1)
-    .orderBy('created_at', 'asc')
-    .selectAll()
-    .execute();
-
-  return rows.map(rowToConfig);
-}
-
-/**
- * Get chats that should receive blog/news daily summary
- */
-export async function getDailySummaryBlogNewsChats(userId: number): Promise<TelegramChatConfig[]> {
-  const db = getDb();
-
-  const rows = await db
-    .selectFrom('telegram_chats')
-    .where('user_id', '=', userId)
-    .where('is_active', '=', 1)
-    .where('daily_summary_blog_news', '=', 1)
-    .orderBy('created_at', 'asc')
-    .selectAll()
-    .execute();
-
-  return rows.map(rowToConfig);
-}
-
-/**
- * Get chats that should receive new articles
- */
-export async function getNewArticlesChats(userId: number): Promise<TelegramChatConfig[]> {
-  const db = getDb();
-
-  const rows = await db
-    .selectFrom('telegram_chats')
-    .where('user_id', '=', userId)
-    .where('is_active', '=', 1)
-    .where('new_articles', '=', 1)
-    .orderBy('created_at', 'asc')
-    .selectAll()
-    .execute();
-
-  return rows.map(rowToConfig);
-}
-
-/**
- * Get chats that should receive journal all summary
- */
-export async function getJournalAllChats(userId: number): Promise<TelegramChatConfig[]> {
-  const db = getDb();
-
-  const rows = await db
-    .selectFrom('telegram_chats')
-    .where('user_id', '=', userId)
-    .where('is_active', '=', 1)
-    .where('journal_all', '=', 1)
-    .orderBy('created_at', 'asc')
-    .selectAll()
-    .execute();
-
-  return rows.map(rowToConfig);
-}
-
-/**
- * Get chats that should receive insights summary
- */
-export async function getInsightsChats(userId: number): Promise<TelegramChatConfig[]> {
-  const db = getDb();
-
-  const rows = await db
-    .selectFrom('telegram_chats')
-    .where('user_id', '=', userId)
-    .where('is_active', '=', 1)
-    .where('insights', '=', 1)
-    .orderBy('created_at', 'asc')
-    .selectAll()
-    .execute();
-
-  return rows.map(rowToConfig);
-}
-
-/**
- * Get chats that should receive PDF summary
- */
-export async function getPdfSummaryChats(userId: number): Promise<TelegramChatConfig[]> {
-  const db = getDb();
-
-  const rows = await db
-    .selectFrom('telegram_chats')
-    .where('user_id', '=', userId)
-    .where('is_active', '=', 1)
-    .where('pdf_summary', '=', 1)
+    .where(definition.column as any, '=', 1 as any)
     .orderBy('created_at', 'asc')
     .selectAll()
     .execute();

@@ -10,12 +10,24 @@ import {
   type CreateTelegramChatInput,
   type UpdateTelegramChatInput,
   type TelegramChatRole,
+  type TelegramPushFlags,
 } from '../telegram-chats.js';
+import { PUSH_TYPE_DEFINITIONS } from '../../constants/push-types.js';
 import { logger } from '../../logger.js';
 
 const log = logger.child({ module: 'api-routes/telegram-chats' });
 
 const router = express.Router();
+
+function readPushFlags(body: Record<string, any>): Partial<TelegramPushFlags> {
+  const flags: Partial<TelegramPushFlags> = {};
+  for (const type of PUSH_TYPE_DEFINITIONS) {
+    if (body[type.telegramKey] !== undefined) {
+      flags[type.telegramKey] = body[type.telegramKey] !== false;
+    }
+  }
+  return flags;
+}
 
 /**
  * GET /api/telegram-chats
@@ -37,18 +49,7 @@ router.get('/telegram-chats', requireAuth, async (req: AuthRequest, res) => {
  */
 router.post('/telegram-chats', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const {
-      chatId,
-      chatName,
-      role,
-      dailySummaryJournal,
-      dailySummaryBlogNews,
-      journalAll,
-      newArticles,
-      insights,
-      pdfSummary,
-      isActive
-    } = req.body || {};
+    const { chatId, chatName, role, isActive } = req.body || {};
 
     // Validate chatId
     if (!chatId || typeof chatId !== 'string') {
@@ -74,13 +75,8 @@ router.post('/telegram-chats', requireAuth, requireAdmin, async (req: AuthReques
       chatId: trimmedChatId,
       chatName,
       role: role as TelegramChatRole | undefined,
-      dailySummaryJournal,
-      dailySummaryBlogNews,
-      journalAll,
-      newArticles,
-      insights,
-      pdfSummary,
       isActive,
+      ...readPushFlags(req.body || {}),
     };
 
     const chat = await addTelegramChat(req.userId!, input);
@@ -106,17 +102,7 @@ router.put('/telegram-chats/:id', requireAuth, requireAdmin, async (req: AuthReq
       return res.status(400).json({ error: '无效的 ID' });
     }
 
-    const {
-      chatName,
-      role,
-      dailySummaryJournal,
-      dailySummaryBlogNews,
-      journalAll,
-      newArticles,
-      insights,
-      pdfSummary,
-      isActive
-    } = req.body || {};
+    const { chatName, role, isActive } = req.body || {};
 
     // Validate role
     if (role !== undefined && !['admin', 'viewer'].includes(role)) {
@@ -126,13 +112,8 @@ router.put('/telegram-chats/:id', requireAuth, requireAdmin, async (req: AuthReq
     const input: UpdateTelegramChatInput = {
       chatName,
       role: role as TelegramChatRole | undefined,
-      dailySummaryJournal,
-      dailySummaryBlogNews,
-      journalAll,
-      newArticles,
-      insights,
-      pdfSummary,
       isActive,
+      ...readPushFlags(req.body || {}),
     };
 
     const chat = await updateTelegramChat(req.userId!, id, input);

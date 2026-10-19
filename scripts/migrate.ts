@@ -674,6 +674,21 @@ CREATE TABLE IF NOT EXISTS telegram_chats (
       }
 
       // ============================================================
+      // 046: 添加 health_alert 字段到 telegram_chats 表
+      // ============================================================
+      if (file === '046_telegram_health_alert.sql') {
+        const hasHealthAlert = hasColumn(db, 'telegram_chats', 'health_alert');
+        if (!hasHealthAlert) {
+          db.exec('ALTER TABLE telegram_chats ADD COLUMN health_alert INTEGER DEFAULT 0;');
+          db.exec('UPDATE telegram_chats SET health_alert = pdf_summary;');
+          console.log('      → Added health_alert column and backfilled from pdf_summary');
+        } else {
+          console.log('      → Skipped (health_alert column already exists)');
+        }
+        continue;
+      }
+
+      // ============================================================
       // 028: 添加 deepsearch_tasks 表
       // ============================================================
       if (file === '028_add_deepsearch_tasks.sql') {
@@ -985,6 +1000,24 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
           console.log('      → Executed 044 migration: updated users role & created user_daily_scores table');
         } else {
           console.log('      → Skipped (user role and user_daily_scores already present)');
+        }
+        continue;
+      }
+
+      // ============================================================
+      // 045: 主题聚类与多维分析模块（9 张新表，不改既有表）
+      // ============================================================
+      if (file === '045_add_topic_cluster.sql') {
+        const hasClusterTopics = hasTable(db, 'cluster_topics');
+
+        if (!hasClusterTopics) {
+          const sql = fs.readFileSync(fullPath, 'utf-8');
+          db.exec(sql);
+          console.log(
+            '      → Created cluster tables (sets/topics/facets/links/remap/threads/metrics/analysis)'
+          );
+        } else {
+          console.log('      → Skipped (cluster tables already exist)');
         }
         continue;
       }

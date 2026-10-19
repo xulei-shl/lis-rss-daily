@@ -5,6 +5,7 @@
  */
 
 import type { DailySummaryData, InlineKeyboardMarkup, PdfSummaryNotificationData } from './types.js';
+import type { HealthAlertNotificationData } from '../notifications/types.js';
 
 const MAX_MESSAGE_LENGTH = 4096;
 const MAX_SUMMARY_LENGTH = 3500; // Leave room for header and footer
@@ -193,6 +194,30 @@ export function formatPdfSummary(data: PdfSummaryNotificationData): string {
   }
 
   return lines.join('\n');
+}
+
+/**
+ * Format server health alert for Telegram
+ */
+export function formatHealthAlert(data: HealthAlertNotificationData): string {
+  const lines: string[] = [
+    '🚨 <b>服务器健康告警</b>',
+    '',
+    `来源: ${escapeHtml(data.sourceName)}`,
+  ];
+
+  if (data.title && data.title !== '服务器健康告警') {
+    lines.push(`标题: ${escapeHtml(data.title)}`);
+  }
+
+  lines.push('', escapeHtml(data.summary));
+
+  let message = lines.join('\n');
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    message = message.substring(0, MAX_MESSAGE_LENGTH - 3) + '...';
+  }
+
+  return message;
 }
 
 /**

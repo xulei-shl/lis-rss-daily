@@ -51,6 +51,7 @@
 <%- include('panel-users') %>
 <%- include('modals') %>
 
+<script>window.PUSH_TYPES = <%- JSON.stringify(pushTypes || []) %>;</script>
 <script src="/js/settings.js"></script>
 <script src="/js/wechat-settings.js"></script>
 <script>

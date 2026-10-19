@@ -5,6 +5,7 @@
  */
 
 import type { SummaryType, DailySummaryArticle } from '../api/daily-summary.js';
+import type { HealthAlertNotificationData } from '../notifications/types.js';
 
 // 注意：现在 client.ts 会自动处理超长消息分条发送
 // 这里不再需要截断逻辑，保持消息完整即可
@@ -218,6 +219,22 @@ export function formatPdfSummary(data: PdfSummaryData): string {
   } else {
     message += `**失败原因：** ${data.reason || '未知错误'}\n`;
   }
+
+  return message;
+}
+
+/**
+ * 格式化服务器健康告警
+ */
+export function formatHealthAlert(data: HealthAlertNotificationData): string {
+  let message = '# 🚨 服务器健康告警\n\n';
+  message += `**来源：** ${data.sourceName}\n\n`;
+
+  if (data.title && data.title !== '服务器健康告警') {
+    message += `**标题：** ${data.title}\n\n`;
+  }
+
+  message += convertToWeChatMarkdown(data.summary);
 
   return message;
 }

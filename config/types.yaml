@@ -84,6 +84,30 @@ task_types:
     description: "从邮件内容中提取多篇文章的结构化信息"
     priority: 8
     enabled: true
+  cluster_facet:
+    code: "cluster_facet"
+    label: "主题聚类-切面抽取"
+    label_en: "Cluster Facet Extraction"
+    description: "从全文总结中抽取研究问题/方法/对象/发现等切面（主题聚类模块）"
+    priority: 11
+    enabled: true
+
+  cluster_analysis:
+    code: "cluster_analysis"
+    label: "主题聚类-多维分析"
+    label_en: "Cluster Multi-Dimension Analysis"
+    description: "对单个主题生成研究脉络/趋势/空白等多维分析（主题聚类模块）"
+    priority: 12
+    enabled: true
+
+  cluster_naming:
+    code: "cluster_naming"
+    label: "主题聚类-主题命名"
+    label_en: "Cluster Topic Naming"
+    description: "为新增主题生成名称与关键词（主题聚类模块）"
+    priority: 13
+    enabled: true
+
 source_types:
   journal:
     code: "journal"

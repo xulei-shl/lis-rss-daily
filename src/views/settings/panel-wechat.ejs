@@ -75,30 +75,12 @@
       <div class="form-group">
         <label>推送类型</label>
         <div class="checkbox-group">
-          <label>
-            <input type="checkbox" id="wechatWebhookDailySummaryJournal" name="daily_summary_journal" checked>
-            接收通过期刊总结
-          </label>
-          <label>
-            <input type="checkbox" id="wechatWebhookDailySummaryBlogNews" name="daily_summary_blog_news" checked>
-            接收通过资讯总结
-          </label>
-          <label>
-            <input type="checkbox" id="wechatWebhookJournalAll" name="journal_all" checked>
-            接收全部期刊总结（包含未通过的）
-          </label>
-          <label>
-            <input type="checkbox" id="wechatWebhookNewArticles" name="new_articles" checked>
-            接收新增文章
-          </label>
-          <label>
-            <input type="checkbox" id="wechatWebhookInsights" name="insights" checked>
-            接收洞察报告（15天周期）
-          </label>
-          <label>
-            <input type="checkbox" id="wechatWebhookPdfSummary" name="pdf_summary" checked>
-            接收 PDF 全文总结
-          </label>
+          <% (pushTypes || []).forEach(function(type) { %>
+            <label>
+              <input type="checkbox" data-push-type="<%= type.key %>" <%= type.defaultEnabled ? 'checked' : '' %>>
+              接收<%= type.label %>
+            </label>
+          <% }); %>
         </div>
       </div>
 
