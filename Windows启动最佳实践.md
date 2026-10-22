@@ -7,6 +7,22 @@
 > **实测结论**：`pnpm install` 后执行 `pnpm run dev`，`http://localhost:8007` 返回 HTTP 200。
 > **可选组件**：ChromaDB 向量库未启动时主程序仍可正常启动（见 [7. ChromaDB（可选）](#7-chromadb可选)）。
 
+
+---
+
+## 快速启动（开发测试）
+
+仅需主程序能启动并打开页面，ChromaDB / Telegram / 各类爬虫等可选功能不必启用。首次或依赖、迁移变更后执行对应步骤即可。
+
+```powershell
+Set-Location F:\Github\lis-rss-daily
+pnpm install            # 首次或依赖变更后
+pnpm run db:migrate     # 首次或新增迁移后
+pnpm run dev            # 启动，浏览器打开 http://localhost:8007
+```
+
+默认账号 `admin` / `yfzjlxy0527`，登录后立即修改密码。端口以 `.env` 中 `PORT` 为准（默认 `8007`，不是 `3000`）。
+
 ---
 
 ## 0. 服务与端口一览

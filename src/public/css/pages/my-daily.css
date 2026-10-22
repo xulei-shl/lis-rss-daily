@@ -635,8 +635,8 @@
 
 /* 栏 1: 遥测卡片 (Telemetry) */
 .jev-telemetry-metrics {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-2);
 }
 
@@ -647,24 +647,35 @@
   padding: var(--space-2) var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
+}
+
+.jev-metric-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 18px;
 }
 
 .jev-metric-label {
   font-size: 11px;
   color: var(--text-tertiary);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .jev-metric-val-row {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-1);
 }
 
 .jev-metric-num {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 700;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
 }
@@ -682,16 +693,28 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--accent-primary);
+  white-space: nowrap;
+}
+
+.jev-metric-sub-tags {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .jev-metric-badge-tag {
   font-size: 10px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--border) 40%, transparent);
+  padding: 1px 4px;
+  border-radius: var(--radius-xs, 3px);
 }
 
 .jev-metric-badge-tag strong {
   color: var(--text-primary);
+  font-weight: 600;
 }
 
 /* 延迟分布散点条带 (0 ~ 120ms 贴合量程) */

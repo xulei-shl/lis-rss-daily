@@ -87,19 +87,25 @@
           
           <div class="jev-telemetry-metrics">
             <div class="jev-metric-card">
-              <span class="jev-metric-label">总耗时 / 速率</span>
+              <div class="jev-metric-header">
+                <span class="jev-metric-label">总耗时 / 速率</span>
+                <span id="jevMetricSpeed" class="jev-metric-rate">0.0<small>篇/s</small></span>
+              </div>
               <div class="jev-metric-val-row">
                 <span id="jevMetricDuration" class="jev-metric-num">0.0<small>s</small></span>
-                <span id="jevMetricSpeed" class="jev-metric-rate">0.0<small>篇/s</small></span>
               </div>
             </div>
 
             <div class="jev-metric-card">
-              <span class="jev-metric-label">平均延迟 (Latency)</span>
+              <div class="jev-metric-header">
+                <span class="jev-metric-label">平均延迟</span>
+                <div class="jev-metric-sub-tags">
+                  <span class="jev-metric-badge-tag">p50: <strong id="jevMetricP50">--</strong></span>
+                  <span class="jev-metric-badge-tag">p95: <strong id="jevMetricP95">--</strong></span>
+                </div>
+              </div>
               <div class="jev-metric-val-row">
                 <span id="jevMetricAvgLatency" class="jev-metric-num">--<small>ms</small></span>
-                <span class="jev-metric-badge-tag">p50: <strong id="jevMetricP50">--</strong></span>
-                <span class="jev-metric-badge-tag">p95: <strong id="jevMetricP95">--</strong></span>
               </div>
             </div>
           </div>
