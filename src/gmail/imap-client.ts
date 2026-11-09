@@ -6,12 +6,17 @@ import type { ParsedEmail } from './types.js';
 const log = logger.child({ module: 'gmail-imap' });
 
 const TLS_ERROR_MSG = 'Client network socket disconnected before secure TLS connection was established';
+const PROXY_SETUP_ERROR_MSG = 'Failed to setup proxy connection';
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MIN = 60_000;
 const RETRY_DELAY_MAX = 180_000;
 
 function isTlsError(err: any): boolean {
   return err?.message?.includes(TLS_ERROR_MSG) === true;
+}
+
+function isProxyError(err: any): boolean {
+  return err?.message?.includes(PROXY_SETUP_ERROR_MSG) === true;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -22,7 +27,11 @@ function randomDelay(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  isRetryable: (err: any) => boolean = () => true
+): Promise<T> {
   let lastErr: any;
   for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
     try {
@@ -33,7 +42,7 @@ async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
       return result;
     } catch (err: any) {
       lastErr = err;
-      if (attempt > MAX_RETRIES) {
+      if (attempt > MAX_RETRIES || !isRetryable(err)) {
         log.error({ attempt, label, error: err.message }, `${label} failed after ${attempt} attempt(s)`);
         throw err;
       }
@@ -54,8 +63,14 @@ async function withProxyFallback<T>(
     return withRetry(() => fn(undefined), label);
   }
   try {
-    return await withRetry(() => fn(proxyUrl), label);
+    // A proxy that cannot be reached is a configuration/network problem: retrying it for minutes
+    // only delays the failure, so proxy setup errors are not retried before falling back.
+    return await withRetry(() => fn(proxyUrl), label, (err) => !isProxyError(err));
   } catch (err: any) {
+    if (isProxyError(err)) {
+      log.warn({ label, error: err.message }, `${label}: proxy unavailable, falling back to direct connection`);
+      return withRetry(() => fn(undefined), `${label} (direct fallback)`);
+    }
     if (!isTlsError(err)) throw err;
     log.warn({ label }, `${label}: TLS error with proxy, falling back to direct connection`);
     return withRetry(() => fn(undefined), `${label} (direct fallback)`);
