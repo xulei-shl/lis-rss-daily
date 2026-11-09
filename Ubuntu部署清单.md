@@ -27,7 +27,8 @@ systemctl list-units --type=service --all | grep -E 'lis-rss|chroma|deepsearch|p
 - Node 使用 20+ 均可；本次实测 `v22.22.1` + `pnpm 9.15.9`。若 `pnpm` 不可用，`npm install -g pnpm` 后用 `corepack enable && corepack prepare pnpm@<lockfile版本> --activate`（或直接使用 `/usr/bin/pnpm`）。
 - `pnpm install`（根目录）+ `pnpm rebuild better-sqlite3`；安装 `scripts/paper-pdf-summary/telegram-bot` 的 Node 依赖（`pnpm install`）。启动前可验证：`node -e "require('better-sqlite3'); console.log('ok')"`.
 - Python venv 分离：`lis-rss`（主用，含 Chroma/Paper-PDF 相关依赖）、`lis-rss-deepsearch`。Chroma 服务使用 `lis-rss` venv 的 `chroma` CLI；确保完整依赖已安装（`pip install chromadb` 可能因网络/体积中断，需重试直到 `/opt/lis-rss-daily/lis-rss/bin/chroma --help` 可用）。
-- 系统依赖：`xvfb`（Paper PDF 无头浏览器）、`build-essential python3`（better-sqlite3 源码编译备用）、`sqlite3` CLI（排障用）。
+- 系统依赖：`xvfb`、`xclip`（Paper PDF 无头浏览器/剪贴板）、`build-essential python3`（better-sqlite3 源码编译备用）、`sqlite3` CLI（排障用）。
+- **Paper PDF 必须安装两套浏览器**（本次故障根因）：`/opt/lis-rss-daily/lis-rss/bin/python3 -m playwright install chromium chromium-headless-shell`（HiAgent 摘要/知识库上传）与 `/opt/lis-rss-daily/lis-rss/bin/camoufox fetch`（PDF 下载，约 1.3GB）。必须用 `paper-pdf-api` 的**运行用户**执行；当前 unit 为 `User=root`，缓存落在 `/root/.cache`；若改为 `xulei`，需用 `sudo -u xulei HOME=/home/xulei ...` 安装并在 unit 中设置 `Environment="HOME=/home/xulei"`。缺失时的典型报错：`403 rate limit exceeded ... api.github.com/repos/camoufox/camoufox/releases`、`Executable doesn't exist ... chromium_headless_shell-1234`。详见「7.1 Paper PDF 系统、浏览器与凭据验收」。
 
 ### systemd 与自启动（完整服务集）
 
@@ -58,6 +59,7 @@ systemctl is-enabled chromadb lis-rss deepsearch-api paper-pdf-api paper-pdf-sum
 ss -lntp | grep -E ':8000|:8007|:8081|:8082'
 curl -s http://127.0.0.1:8000/api/v2/heartbeat
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8007/
+curl -s http://127.0.0.1:8081/health
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8081/docs
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8082/docs
 systemctl --failed --no-pager
@@ -178,7 +180,7 @@ python3 -m venv lis-rss
 /opt/lis-rss-daily/lis-rss/bin/pip install chromadb
 
 # 安装 Paper PDF / 通用依赖（按实际需求）
-/opt/lis-rss-daily/lis-rss/bin/pip install fastapi "uvicorn[standard]" pydantic python-telegram-bot httpx PyYAML aiohttp camoufox
+/opt/lis-rss-daily/lis-rss/bin/pip install fastapi "uvicorn[standard]" pydantic python-telegram-bot httpx PyYAML aiohttp camoufox pyperclip pymupdf
 if [ -f scripts/paper-pdf-summary/requirements_api.txt ]; then
   /opt/lis-rss-daily/lis-rss/bin/pip install -r scripts/paper-pdf-summary/requirements_api.txt
 fi
@@ -188,16 +190,54 @@ fi
 /opt/lis-rss-daily/lis-rss/bin/python3 -c "import chromadb; print(chromadb.__version__)"
 ```
 
-### 7.1 安装系统依赖
+### 7.1 Paper PDF 系统、浏览器与凭据验收
+
+`paper-pdf-api` 使用 `/opt/lis-rss-daily/lis-rss` 这个 venv（不是 README 里历史示例的 `env_camoufox`），下载/总结子进程也复用同一解释器。
 
 ```bash
-# 安装 xvfb（用于无头浏览器 PDF 下载）
+# 系统依赖：xvfb 用于无头浏览器，xclip 供 pyperclip 在 Linux 下读写剪贴板
 sudo apt-get update
-sudo apt-get install -y xvfb
+sudo apt-get install -y xvfb xclip
 
-# 验证安装
+# 验证
 xvfb-run --version
+which xclip
+
+# Playwright Chromium（HiAgent 摘要 + RAG 上传）
+/opt/lis-rss-daily/lis-rss/bin/python3 -m playwright install chromium chromium-headless-shell
+
+# Camoufox 浏览器（PDF 下载，约 1.3GB；GitHub API 限流时重试）
+/opt/lis-rss-daily/lis-rss/bin/camoufox fetch
+
+# 验证：Installed 必须为 Yes
+/opt/lis-rss-daily/lis-rss/bin/camoufox version
+/opt/lis-rss-daily/lis-rss/bin/python3 -m playwright install --dry-run | head
 ```
+
+> **运行用户必须一致**：`paper-pdf-api.service` 当前是 `User=root`，所以浏览器装在 `/root/.cache/camoufox`、`/root/.cache/ms-playwright`。如果改用 `xulei`，请用 `sudo -u xulei HOME=/home/xulei ...` 重新执行上述安装，并在 unit 中加 `Environment="HOME=/home/xulei"`；否则服务启动时会尝试联网下载 Camoufox，常见报错为 `403 rate limit exceeded ...`。
+
+**凭据检查**（`scripts/paper-pdf-summary/.env`，先在当前 shell 导出对应变量）：
+- `LIS_RSS_USERNAME=admin`、`LIS_RSS_PASSWORD=yfzjlxy0527`（`admin123` 是过期值，会 401）。
+- `MEMOS_ACCESS_TOKEN` 必须有效；请求 Memos `GET /api/v1/memos` 返回 401 即 token 过期。
+- `PDF_SUMMARY_API_URL`（主项目侧）应指向 `http://<本机>:8081`。
+
+```bash
+curl -sS -o /dev/null -w 'LIS-RSS login: %{http_code}\n' \
+  -X POST "$LIS_RSS_API_URL/login" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$LIS_RSS_USERNAME\",\"password\":\"$LIS_RSS_PASSWORD\"}"
+
+curl -sS -o /dev/null -w 'Memos: %{http_code}\n' \
+  -H "Authorization: Bearer $MEMOS_ACCESS_TOKEN" "$MEMOS_BASE_URL/api/v1/memos"
+```
+
+**重启与验收**：
+
+```bash
+systemctl restart paper-pdf-api
+curl -s http://127.0.0.1:8081/health
+```
+
+> 本次实测（2026-11-09）：论文《面向学科服务的高校图书馆可信AI知识合成机制构建与应用验证》通过 `/process` 完成，耗时 178.6 秒；PDF 来自 CNKI（哲社科/万方无结果），摘要约 4.5K 字；HiAgent RAG、企业微信成功；LIS-RSS 因旧密码 401（已修正）、Memos token 401（需更新）。`success=true` 只表示下载/验证/摘要成功，推送成败看 `distribution`。
 
 ### 7.2 安装 DeepSearch API 虚拟环境
 
@@ -423,6 +463,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8007
 curl -s http://127.0.0.1:8000/api/v2/heartbeat || curl -s http://127.0.0.1:8000/api/v1/heartbeat
 
 # 检查附属 API
+curl -s http://127.0.0.1:8081/health
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8081/docs
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8082/docs
 
@@ -438,6 +479,16 @@ curl -sS -X POST "http://localhost:8007/api/external/search" \
   -H "Content-Type: application/json" \
   -H "x-api-key: $KEY" \
   -d '{"userId":1,"mode":"hybrid","query":"library science","limit":2}'
+
+# Paper PDF 单篇端到端冒烟测试（会真实下载、生成摘要并推送，按需执行）
+# 先异步提交，避免 curl 长时间阻塞；随后轮询状态，终态再取完整结果
+TASK=$(curl -sS -X POST http://127.0.0.1:8081/process \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"测试论文标题","wait":false}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["task_id"])')
+curl -sS "http://127.0.0.1:8081/process/status/$TASK?include=meta"
+curl -sS "http://127.0.0.1:8081/process/status/$TASK"
+# success=true 只代表 PDF 下载/验证/摘要成功；推送结果看 distribution.ok/failed/skipped
 
 # 手动触发一次洞察报告 / 调度回归检查（按需）
 pnpm run trigger-insights
@@ -731,11 +782,14 @@ After=network.target
 [Service]
 Type=simple
 User=root
+# 浏览器缓存按运行用户隔离；改为 xulei 时同步设置 HOME=/home/xulei，并用该用户安装 Camoufox/Playwright
 WorkingDirectory=/opt/lis-rss-daily/scripts/paper-pdf-summary
 ExecStart=/opt/lis-rss-daily/lis-rss/bin/uvicorn api:app --host 0.0.0.0 --port 8081
 Restart=always
 RestartSec=5
 Environment="PATH=/opt/lis-rss-daily/lis-rss/bin:/usr/bin:/usr/local/bin"
+# LIS-RSS / Memos / HiAgent / Telegram 等配置
+EnvironmentFile=/opt/lis-rss-daily/scripts/paper-pdf-summary/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -1416,18 +1470,32 @@ systemctl restart paper-pdf-summary-telegram
 journalctl -u paper-pdf-summary-telegram -n 30 --no-pager
 ```
 
-### PDF 下载失败
+### Paper PDF 下载/上传失败
 
-**症状**：日志显示 `No such file or directory: 'xvfb-run'`
+按日志报错分五类处理：
 
-**原因**：未安装 `xvfb` 系统依赖
-
-**解决**：
-```bash
-sudo apt-get update
-sudo apt-get install -y xvfb
-systemctl restart paper-pdf-api
-```
+1. **`No such file or directory: 'xvfb-run'`**：未安装 xvfb。
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y xvfb
+   systemctl restart paper-pdf-api
+   ```
+2. **`403 Client Error: rate limit exceeded ... api.github.com/repos/camoufox/camoufox/releases` / `CamoufoxNotInstalled`**：Camoufox 浏览器未安装，或装到了别的用户缓存目录。
+   ```bash
+   /opt/lis-rss-daily/lis-rss/bin/camoufox version   # Installed 应为 Yes
+   /opt/lis-rss-daily/lis-rss/bin/camoufox fetch     # 约 1.3GB，失败重试
+   ```
+   若 `paper-pdf-api` 不是以 root 运行，必须用该用户及其 `HOME` 执行；否则服务启动时仍会联网下载。
+3. **`Executable doesn't exist at .../chromium_headless_shell-1234/...`**：Playwright 浏览器缺失。
+   ```bash
+   /opt/lis-rss-daily/lis-rss/bin/python3 -m playwright install chromium chromium-headless-shell
+   ```
+4. **`No module named 'pyperclip'` / `[WARN] PyMuPDF未安装`**：Python 依赖缺失。
+   ```bash
+   /opt/lis-rss-daily/lis-rss/bin/pip install pyperclip pymupdf
+   systemctl restart paper-pdf-api
+   ```
+5. **`LIS-RSS 401` / `Memos 401`**：凭据问题，不是 API 服务问题。LIS-RSS 当前默认密码是 `yfzjlxy0527`（`admin123` 会 401）；Memos 需更新 `MEMOS_ACCESS_TOKEN`。检查命令见「7.1 Paper PDF 系统、浏览器与凭据验收」。
 
 ### tsx 路径问题（systemd）
 
