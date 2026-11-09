@@ -4,6 +4,67 @@
 
 ---
 
+## 实测部署最佳实践（2026-11-09）
+
+本次在 `/opt/lis-rss-daily` 完整重装/重启并恢复向量库，确认以下实践可减少返工：
+
+### 部署前检查（先做）
+
+```bash
+cd /opt/lis-rss-daily
+whoami; node -v; python3 --version
+which pnpm || echo "pnpm missing"
+test -f .env && echo ".env ok"; test -f scripts/paper-pdf-summary/.env && echo "paper-pdf .env ok"
+ls data/rss-tracker.db data/vector/ 2>&1 | head
+systemctl list-units --type=service --all | grep -E 'lis-rss|chroma|deepsearch|paper-pdf|health' || true
+```
+
+- **先确认网络是否需要代理**：`curl -I --max-time 8 https://www.google.com`、`curl -I --max-time 8 https://api.telegram.org`。若直连可用，注释/移除 `HTTP_PROXY/HTTPS_PROXY/ALL_PROXY`（主 `.env` 与 `scripts/paper-pdf-summary/.env`），避免依赖本地不存在的代理端口。
+- **先确认主库与向量库状态**：`sqlite3 data/rss-tracker.db "SELECT count(*) FROM articles;"`；检查 `data/vector/chroma/chroma.sqlite3` 大小/`embeddings` 数。主库完整但向量库空/不一致时，优先修复服务后再做向量重建（见下文）。
+
+### 依赖与环境
+
+- Node 使用 20+ 均可；本次实测 `v22.22.1` + `pnpm 9.15.9`。若 `pnpm` 不可用，`npm install -g pnpm` 后用 `corepack enable && corepack prepare pnpm@<lockfile版本> --activate`（或直接使用 `/usr/bin/pnpm`）。
+- `pnpm install`（根目录）+ `pnpm rebuild better-sqlite3`；安装 `scripts/paper-pdf-summary/telegram-bot` 的 Node 依赖（`pnpm install`）。启动前可验证：`node -e "require('better-sqlite3'); console.log('ok')"`.
+- Python venv 分离：`lis-rss`（主用，含 Chroma/Paper-PDF 相关依赖）、`lis-rss-deepsearch`。Chroma 服务使用 `lis-rss` venv 的 `chroma` CLI；确保完整依赖已安装（`pip install chromadb` 可能因网络/体积中断，需重试直到 `/opt/lis-rss-daily/lis-rss/bin/chroma --help` 可用）。
+- 系统依赖：`xvfb`（Paper PDF 无头浏览器）、`build-essential python3`（better-sqlite3 源码编译备用）、`sqlite3` CLI（排障用）。
+
+### systemd 与自启动（完整服务集）
+
+必须 `systemctl enable` 并确认 `active`：`chromadb`、`lis-rss`、`deepsearch-api`、`paper-pdf-api`、`paper-pdf-summary-telegram`、`health-watchdog.timer`（触发 `health-watchdog.service`）。
+
+- **路径以本机为准**：`which node`/`which pnpm`/venv 路径可能与文档示例不同（`/usr/bin/*`、`/usr/local/bin/*`、nvm 路径均可能）。本次 root+系统 Node 使用 `/usr/bin/node`、`/usr/bin/pnpm`。
+- **tsx 在 systemd 下的稳定写法**：避免 `node_modules/.bin/tsx` 的 pnpm shim 在部分 Node 版本下报 `SyntaxError`。`paper-pdf-summary-telegram` 使用：`/usr/bin/node <项目>/node_modules/.pnpm/tsx@<version>/node_modules/tsx/dist/cli.mjs <entry.ts>`（按实际 pnpm 虚拟存储路径）。
+- **Telegram Bot 独立 env**：`telegram-bot/index.ts` 需要 `TELEGRAM_BOT_TOKEN`（可选 `TELEGRAM_USER_ID`、`TELEGRAM_API_URL`）。配置在 `scripts/paper-pdf-summary/.env` 并由服务 `EnvironmentFile` 加载；缺失会导致服务反复重启/`exit-code`。
+- **health-watchdog**：从 `scripts/health-watchdog/deploy/` 安装 `.service/.timer`，并用 `Environment="HEALTH_SERVICES=..."` 覆盖为**实际服务名**（本次：`lis-rss.service chromadb.service deepsearch-api.service paper-pdf-api.service paper-pdf-summary-telegram.service`）。旧模板中的 `paper-pdf-summary-api.service` 名不一致会误报。
+- **Chroma 数据路径必须一致**：服务 `--path /opt/lis-rss-daily/data/vector/chroma`（目录）。若历史 `chroma.sqlite3` 位于 `data/vector/chroma.sqlite3`，迁移前先停 Chroma，再移动到 `data/vector/chroma/chroma.sqlite3` 或按下述重建流程处理；避免“服务能起但向量库与预期不一致”。
+
+### Chroma/向量库恢复（主库完整、向量库不全/对不上）
+
+1. **判定**：`sqlite3 data/rss-tracker.db "SELECT count(*) FROM articles;"`；`curl http://127.0.0.1:8000/api/v2/heartbeat`；检查 `GET /api/v2/.../collections` 或 `GET /api/articles/vector-check`（需登录）。`embeddings=0`/collection 空/维度或内容不可信时考虑重建。
+2. **备份**：`tar -czf backup-vector-$(date +%F).tar.gz data/rss-tracker.db data/vector/`。
+3. **彻底重建（推荐，适用于“对不上”）**：`systemctl stop chromadb` → 清空 `data/vector/chroma/*` → `mkdir -p data/vector/chroma` → `systemctl start chromadb` → 验证 heartbeat。不要在服务运行中手工破坏 Chroma SQLite；重建后首次写入应无 `readonly database`。
+4. **从主库回填**（幂等 upsert，按用户+文章 ID）：复用现有 embedding 配置（Web「设置 → LLM 配置」中的 `embedding`）与 `src/vector/*` 逻辑。可使用项目脚本：
+   - `pnpm exec tsx scripts/backfill-vectors.ts --dry-run --limit 20`（预检）
+   - `pnpm exec tsx scripts/backfill-vectors.ts --batch-size 16`（全量）
+   - 补漏：`pnpm exec tsx scripts/backfill-missing-vectors.ts`
+5. **验收**：collection count ≈ 可解析归属的文章数；`POST /api/external/search`（`x-api-key`，`CLI_API_KEY`）`mode=keyword/hybrid` 返回 200，hybrid 出现语义/混排结果。
+
+### 最终验收
+
+```bash
+systemctl is-active chromadb lis-rss deepsearch-api paper-pdf-api paper-pdf-summary-telegram
+systemctl is-enabled chromadb lis-rss deepsearch-api paper-pdf-api paper-pdf-summary-telegram health-watchdog.timer
+ss -lntp | grep -E ':8000|:8007|:8081|:8082'
+curl -s http://127.0.0.1:8000/api/v2/heartbeat
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8007/
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8081/docs
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8082/docs
+systemctl --failed --no-pager
+```
+
+---
+
 ## 前置要求
 
 - 操作系统：Ubuntu 22.04 LTS (GNU/Linux 5.15.0-107-generic x86_64)
@@ -50,7 +111,12 @@ npm -v
 # 使用 npm 全局安装 pnpm
 npm install -g pnpm
 
-# 验证安装
+# 或用 corepack 激活与 lockfile 匹配的版本
+corepack enable
+# corepack prepare pnpm@<version> --activate
+
+# 验证安装（确认 systemd 实际使用的路径）
+which pnpm
 pnpm -v
 ```
 
@@ -102,21 +168,24 @@ pnpm install --force
 ### 7. 安装 ChromaDB 和 Python 依赖
 
 ```bash
-# 创建虚拟环境
+cd /opt/lis-rss-daily
+
+# 创建主虚拟环境（ChromaDB + Paper PDF API 运行环境）
 python3 -m venv lis-rss
-source lis-rss/bin/activate
+/opt/lis-rss-daily/lis-rss/bin/pip install --upgrade pip
 
-# 使用 pip 安装 ChromaDB
-pip3 install chromadb
+# 安装 ChromaDB（体积较大，网络中断时需重试，直到 chroma CLI 可用）
+/opt/lis-rss-daily/lis-rss/bin/pip install chromadb
 
-# 安装 Paper PDF API 和 DeepSearch API 所需依赖
-pip3 install fastapi "uvicorn[standard]" pydantic python-telegram-bot httpx PyYAML aiohttp
-
-# 安装 PDF 下载所需依赖（Camoufox 浏览器）
-pip3 install camoufox
+# 安装 Paper PDF / 通用依赖（按实际需求）
+/opt/lis-rss-daily/lis-rss/bin/pip install fastapi "uvicorn[standard]" pydantic python-telegram-bot httpx PyYAML aiohttp camoufox
+if [ -f scripts/paper-pdf-summary/requirements_api.txt ]; then
+  /opt/lis-rss-daily/lis-rss/bin/pip install -r scripts/paper-pdf-summary/requirements_api.txt
+fi
 
 # 验证安装
-chroma --version
+/opt/lis-rss-daily/lis-rss/bin/chroma --help | head -5
+/opt/lis-rss-daily/lis-rss/bin/python3 -c "import chromadb; print(chromadb.__version__)"
 ```
 
 ### 7.1 安装系统依赖
@@ -314,11 +383,13 @@ pnpm run db:migrate
 ### 11. 测试 ChromaDB 连接
 
 ```bash
-# 启动 ChromaDB 测试连接
-chroma run --host 127.0.0.1 --port 8000 --path ./data/vector/chroma
+cd /opt/lis-rss-daily
+mkdir -p data/vector/chroma
+# 使用与 systemd 一致的 --path（目录）
+/opt/lis-rss-daily/lis-rss/bin/chroma run --host 127.0.0.1 --port 8000 --path ./data/vector/chroma
 ```
 
-按 `Ctrl+C` 停止测试。
+按 `Ctrl+C` 停止测试。若存在历史 `data/vector/chroma.sqlite3` 且与当前 Chroma 版本/`--path` 不一致，服务可能“能启动但无可用向量”；主库完整时按“Chroma/向量库恢复”重建更稳妥。
 
 ### 12. 启动应用
 
@@ -346,21 +417,30 @@ pnpm run dev
 
 ```bash
 # 检查应用是否运行
-curl http://localhost:8007
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8007
 
-# 检查 ChromaDB 是否运行
-curl http://127.0.0.1:8000/api/v1/heartbeat
+# 检查 ChromaDB 是否运行（优先 v2 heartbeat）
+curl -s http://127.0.0.1:8000/api/v2/heartbeat || curl -s http://127.0.0.1:8000/api/v1/heartbeat
 
-# 检查统一检索外部 API（需要先在 .env 中配置 CLI_API_KEY）
-curl -X POST "http://localhost:8007/api/external/search" \
+# 检查附属 API
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8081/docs
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8082/docs
+
+# 检查统一检索外部 API（需要先在 .env 中配置 CLI_API_KEY；keyword 不强依赖向量）
+KEY=$(grep '^CLI_API_KEY=' .env | head -1 | cut -d= -f2- | tr -d '\r\n')
+curl -sS -X POST "http://localhost:8007/api/external/search" \
   -H "Content-Type: application/json" \
-  -H "x-api-key: your-cli-api-key-here" \
-  -d '{"userId":1,"mode":"hybrid","query":"machine learning","limit":3}'
+  -H "x-api-key: $KEY" \
+  -d '{"userId":1,"mode":"keyword","query":"library","limit":1}'
 
-# 手动触发一次洞察报告
+# 向量重建后可验证 hybrid（依赖 Chroma + embedding 配置）
+curl -sS -X POST "http://localhost:8007/api/external/search" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $KEY" \
+  -d '{"userId":1,"mode":"hybrid","query":"library science","limit":2}'
+
+# 手动触发一次洞察报告 / 调度回归检查（按需）
 pnpm run trigger-insights
-
-# 运行洞察调度回归检查
 pnpm run test:insights-scheduler
 ```
 
@@ -659,7 +739,7 @@ Environment="PATH=/opt/lis-rss-daily/lis-rss/bin:/usr/bin:/usr/local/bin"
 WantedBy=multi-user.target
 EOF
 
-# 5. Paper PDF Telegram Bot 服务
+# 5. Paper PDF Telegram Bot 服务（注意 tsx 路径与独立 env）
 cat > /etc/systemd/system/paper-pdf-summary-telegram.service << 'EOF'
 [Unit]
 Description=Paper PDF Summary Telegram Bot
@@ -669,10 +749,12 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot
-ExecStart=/usr/local/bin/node /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/cli.mjs /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot/index.ts
+# 推荐：直接执行 tsx dist/cli.mjs，避免 pnpm shim 在部分 Node 版本下报 SyntaxError
+ExecStart=/usr/bin/node /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/cli.mjs /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot/index.ts
 Restart=always
 RestartSec=5
-Environment="PATH=/usr/local/bin:/usr/bin"
+Environment="PATH=/usr/bin:/usr/local/bin"
+# telegram-bot 依赖 TELEGRAM_BOT_TOKEN 等，使用 paper-pdf-summary/.env
 EnvironmentFile=/opt/lis-rss-daily/scripts/paper-pdf-summary/.env
 
 [Install]
@@ -680,14 +762,29 @@ WantedBy=multi-user.target
 EOF
 ```
 
-### 启动所有服务
+# 6. 健康看门狗（定时检查磁盘 I/O / cron / 关键服务）
+cp /opt/lis-rss-daily/scripts/health-watchdog/deploy/health-watchdog.service /etc/systemd/system/
+cp /opt/lis-rss-daily/scripts/health-watchdog/deploy/health-watchdog.timer /etc/systemd/system/
+# 覆盖为实际服务名（避免旧模板 paper-pdf-summary-api.service 误报）
+cat > /etc/systemd/system/health-watchdog.service << 'EOF'
+[Unit]
+Description=Machine health watchdog (disk I/O errors, cron liveness, key services)
+After=network.target
+
+[Service]
+Type=oneshot
+Environment="HEALTH_SERVICES=lis-rss.service chromadb.service deepsearch-api.service paper-pdf-api.service paper-pdf-summary-telegram.service"
+ExecStart=/opt/lis-rss-daily/scripts/health-watchdog/health-check.sh
+EOF
+```
 
 ```bash
 # 重新加载 systemd
 systemctl daemon-reload
 
-# 启用所有服务
+# 启用所有服务（含 health-watchdog 定时器）并设置自启动
 systemctl enable chromadb lis-rss deepsearch-api paper-pdf-api paper-pdf-summary-telegram
+systemctl enable --now health-watchdog.timer
 
 # 按依赖顺序启动
 systemctl start chromadb
@@ -697,19 +794,23 @@ systemctl start deepsearch-api
 systemctl start paper-pdf-api
 systemctl start paper-pdf-summary-telegram
 
-# 验证所有服务状态
-systemctl status chromadb lis-rss deepsearch-api paper-pdf-api paper-pdf-summary-telegram
+# 验证所有服务状态（含 timer）
+systemctl status chromadb lis-rss deepsearch-api paper-pdf-api paper-pdf-summary-telegram --no-pager
+systemctl is-enabled chromadb lis-rss deepsearch-api paper-pdf-api paper-pdf-summary-telegram health-watchdog.timer
+systemctl list-timers health-watchdog.timer --no-pager
+systemctl --failed --no-pager
 ```
 
 ### 服务端口一览
 
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| ChromaDB | 8000 | 向量数据库 |
-| LIS-RSS | 8007 | 主应用 Web UI |
-| DeepSearch API | 8082 | 深度检索 API |
-| Paper PDF API | 8081 | PDF 处理 API |
-| Paper PDF Telegram Bot | - | Telegram 机器人（无端口）|
+| 服务 | 端口 | 说明 | 自启动 |
+|------|------|------|--------|
+| ChromaDB | 8000 | 向量数据库 | `chromadb.service` |
+| LIS-RSS | 8007 | 主应用 Web UI / 外部检索 API | `lis-rss.service` |
+| DeepSearch API | 8082 | 深度检索 API | `deepsearch-api.service` |
+| Paper PDF API | 8081 | PDF 处理 API | `paper-pdf-api.service` |
+| Paper PDF Telegram Bot | - | Telegram 机器人（无端口）| `paper-pdf-summary-telegram.service` |
+| Health Watchdog | - | 定时健康检查（磁盘/cron/服务） | `health-watchdog.timer` |
 
 ### Paper PDF 相关服务职责与重启对照
 
@@ -798,18 +899,31 @@ sudo systemctl status lis-rss --no-pager
 > # 期望输出：ELF 64-bit LSB shared object, x86-64
 > ```
 
-### ChromaDB 连接失败
+### ChromaDB 连接失败 / 向量库不全
 
 ```bash
-# 检查服务状态
-sudo systemctl status chromadb
+# 检查服务状态与日志
+sudo systemctl status chromadb --no-pager
+sudo journalctl -u chromadb -n 100 --no-pager
 
-# 查看日志
-sudo journalctl -u chromadb -f
-
-# 手动测试
-curl http://127.0.0.1:8000/api/v1/heartbeat
+# 心跳测试（优先 v2）
+curl -s http://127.0.0.1:8000/api/v2/heartbeat || curl -s http://127.0.0.1:8000/api/v1/heartbeat
 ```
+
+**常见原因与处理**：
+
+1. **`--path` 与实际数据不一致**：`chromadb.service` 使用 `--path /opt/lis-rss-daily/data/vector/chroma`（目录）。若历史 `chroma.sqlite3` 在 `data/vector/chroma.sqlite3`，服务可能启动但读不到预期向量；先停服再迁移/重建。
+2. **`attempt to write a readonly database`（500）**：多见于清理/重建后目录权限或残留状态异常。处理：`systemctl stop chromadb` → 清空 `data/vector/chroma/*`（确认已备份）→ `mkdir -p data/vector/chroma` → `systemctl start chromadb` → 复测 heartbeat/upsert。
+3. **主库完整、向量库空/对不上**（`collections/embeddings` 为 0 或语义检索异常）：在 Chroma 正常、LLM `embedding` 配置可用（Web「设置 → LLM 配置」）后，从 `rss-tracker.db` 幂等重建：
+   ```bash
+   cd /opt/lis-rss-daily
+   tar -czf backup-vector-$(date +%F).tar.gz data/rss-tracker.db data/vector/
+   pnpm exec tsx scripts/backfill-vectors.ts --dry-run --limit 20
+   pnpm exec tsx scripts/backfill-vectors.ts --batch-size 16
+   pnpm exec tsx scripts/backfill-missing-vectors.ts   # 补漏
+   ```
+   验收：`/api/articles/vector-check` ready（需登录），或 `POST /api/external/search` `mode=hybrid` 返回 200 且含语义/混排结果。
+4. **依赖缺失导致 Chroma 启动报错**：`/opt/lis-rss-daily/lis-rss/bin/pip check`、`/opt/lis-rss-daily/lis-rss/bin/chroma --help`；缺依赖时 `pip install chromadb`（必要时重试）后重启服务。
 
 ### 应用无法启动
 
@@ -1113,15 +1227,18 @@ sudo ufw allow 8007/tcp
 sudo ufw status
 ```
 
-### 备份数据库
+### 备份数据库/向量库
 
 ```bash
-# 备份 SQLite 数据库
+cd /opt/lis-rss-daily
+# 备份 SQLite 主库
 cp data/rss-tracker.db data/rss-tracker.db.backup.$(date +%Y%m%d)
 
-# 或使用自动化脚本
-tar -czf backup-$(date +%Y%m%d).tar.gz data/
+# 备份主库 + 向量库（向量重建前推荐）
+tar -czf backup-$(date +%Y%m%d).tar.gz data/rss-tracker.db data/vector/
 ```
+
+> 向量库可从主库+embedding 配置重建，但会消耗 embedding API 调用与时间；重建前仍建议备份 `data/vector/`。
 
 ### 查看日志
 
@@ -1280,20 +1397,21 @@ systemctl restart lis-rss
 
 **症状**：日志显示 `TELEGRAM_BOT_TOKEN environment variable is not set`
 
-**原因**：`.env` 文件中未配置 `TELEGRAM_BOT_TOKEN`
+**原因**：`scripts/paper-pdf-summary/.env` 未配置 `TELEGRAM_BOT_TOKEN`（`telegram-bot/index.ts` 启动校验必需）。
 
-**解决**：在 `scripts/paper-pdf-summary/.env` 中添加：
+**解决**：在 `scripts/paper-pdf-summary/.env` 中添加（`HTTP_PROXY` 仅在本机确实需要代理且代理可用时设置；直连可用时不要配置）：
 
 ```env
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 TELEGRAM_USER_ID=your_user_id
 TELEGRAM_API_URL=http://localhost:8081
-HTTP_PROXY=http://127.0.0.1:7890
+# HTTP_PROXY=http://127.0.0.1:7890
 ```
 
 然后重启服务：
 ```bash
 systemctl restart paper-pdf-summary-telegram
+journalctl -u paper-pdf-summary-telegram -n 30 --no-pager
 ```
 
 ### PDF 下载失败
@@ -1309,17 +1427,20 @@ sudo apt-get install -y xvfb
 systemctl restart paper-pdf-api
 ```
 
-### tsx 路径问题
+### tsx 路径问题（systemd）
 
-**症状**：`SyntaxError: missing ) after argument list` 在调用 `node_modules/.bin/tsx` 时
+**症状**：`SyntaxError: missing ) after argument list`，或在 systemd 中调用 `node_modules/.bin/tsx` 失败。
 
-**原因**：pnpm 的 shim 脚本在 Node.js 24 下有问题
+**原因**：pnpm shim 脚本在部分 Node 版本/执行方式下不兼容。
 
-**解决**：直接使用 tsx 的完整路径：
+**解决**：直接执行 tsx 的 `dist/cli.mjs`（版本按实际 `pnpm` 虚拟存储路径调整）：
+
 ```bash
-# 替换 ExecStart 中的路径
-ExecStart=/usr/local/bin/node /path/to/project/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/cli.mjs /path/to/project/index.ts
+# 示例（paper-pdf-summary-telegram）
+ExecStart=/usr/bin/node /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/cli.mjs /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot/index.ts
 ```
+
+> `lis-rss` 主服务若使用 `pnpm dev`/`tsx`，请确保 `PATH` 指向正确的 `node/pnpm`，并在 `pnpm install` 后验证 `node_modules/.bin/tsx` 或 `pnpm exec tsx --version`。
 
 ### DeepSearch API 导入错误
 
@@ -1338,5 +1459,5 @@ ExecStart=/usr/local/bin/node /path/to/project/node_modules/.pnpm/tsx@4.21.0/nod
 3. **修改 LLM_ENCRYPTION_KEY**：生成 32 字节随机密钥
 4. **配置防火墙**：仅开放必要端口
 5. **使用 HTTPS**：生产环境配置 SSL 证书（Let's Encrypt）
-6. **定期备份**：设置定时任务自动备份数据库
+6. **定期备份**：设置定时任务自动备份 `data/rss-tracker.db` 与 `data/vector/`（向量可重建但重建有成本）
 7. **更新依赖**：定期运行 `pnpm update` 检查安全更新
