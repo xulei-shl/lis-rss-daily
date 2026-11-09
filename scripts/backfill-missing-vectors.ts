@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { sql } from 'kysely';
 import { initDb } from '../src/db.js';
 import { buildVectorText } from '../src/vector/text-builder.js';
 import { getEmbeddingsBatch } from '../src/vector/embedding-client.js';
@@ -6,9 +7,10 @@ import { upsert, buildVectorId } from '../src/vector/vector-store.js';
 import { getCollection } from '../src/vector/chroma-client.js';
 
 async function loadChromaIds() {
-  const { ChromaClient } = await import('chromadb');
+  const { ChromaClient, DefaultEmbeddingFunction } = await import('chromadb');
   const c = new ChromaClient({ path: 'http://127.0.0.1:8000' });
-  const col = await c.getCollection({ name: 'articles' });
+  // chromadb 1.10 types require embeddingFunction on getCollection; it is unused for reads
+  const col = await c.getCollection({ name: 'articles', embeddingFunction: new DefaultEmbeddingFunction() });
   const ids = new Set<number>();
   let offset = 0;
   while (true) {
@@ -29,7 +31,7 @@ async function main() {
     .leftJoin('journals as j', 'j.id', 'a.journal_id')
     .leftJoin('email_sources as e', 'e.id', 'a.email_source_id')
     .leftJoin('web_sources as w', 'w.id', 'a.web_source_id')
-    .select(['a.id as id', db.fn.coalesce('r.user_id', db.fn.coalesce('k.user_id', db.fn.coalesce('j.user_id', db.fn.coalesce('e.user_id', 'w.user_id')))).as('uid')] as any)
+    .select(['a.id as id', sql<number>`coalesce(r.user_id, k.user_id, j.user_id, e.user_id, w.user_id)`.as('uid')] as any)
     .where((eb: any) => eb.or([eb('r.user_id','is not',null),eb('k.user_id','is not',null),eb('j.user_id','is not',null),eb('e.user_id','is not',null),eb('w.user_id','is not',null)]))
     .orderBy('a.id', 'asc').execute();
   const candidates = rows.map((r: any) => ({ id: Number(r.id), uid: Number(r.uid) })).filter(r => r.id > 0 && r.uid > 0);

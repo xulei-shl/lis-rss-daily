@@ -3,6 +3,7 @@
  * Usage: pnpm exec tsx scripts/backfill-vectors.ts [--user-id N] [--limit N] [--offset N] [--batch-size 16] [--dry-run]
  */
 import 'dotenv/config';
+import { sql } from 'kysely';
 import { initDb } from '../src/db.js';
 import { logger } from '../src/logger.js';
 import { buildVectorText } from '../src/vector/text-builder.js';
@@ -40,7 +41,7 @@ async function loadCandidates(opts: Opts): Promise<Candidate[]> {
     .leftJoin('journals as j', 'j.id', 'a.journal_id')
     .leftJoin('email_sources as e', 'e.id', 'a.email_source_id')
     .leftJoin('web_sources as w', 'w.id', 'a.web_source_id')
-    .select(['a.id as id', db.fn.coalesce('r.user_id', db.fn.coalesce('k.user_id', db.fn.coalesce('j.user_id', db.fn.coalesce('e.user_id', 'w.user_id')))).as('uid')] as any)
+    .select(['a.id as id', sql<number>`coalesce(r.user_id, k.user_id, j.user_id, e.user_id, w.user_id)`.as('uid')] as any)
     .where((eb: any) => eb.or([eb('r.user_id','is not',null),eb('k.user_id','is not',null),eb('j.user_id','is not',null),eb('e.user_id','is not',null),eb('w.user_id','is not',null)]))
     .orderBy('a.id', 'asc');
   if (opts.userId) q = q.where((eb: any) => eb.or([eb('r.user_id','=',opts.userId),eb('k.user_id','=',opts.userId),eb('j.user_id','=',opts.userId),eb('e.user_id','=',opts.userId),eb('w.user_id','=',opts.userId)]));
