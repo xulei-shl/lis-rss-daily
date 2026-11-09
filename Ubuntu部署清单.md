@@ -386,7 +386,7 @@ pnpm run db:migrate
 cd /opt/lis-rss-daily
 mkdir -p data/vector/chroma
 # 使用与 systemd 一致的 --path（目录）
-/opt/lis-rss-daily/lis-rss/bin/chroma run --host 127.0.0.1 --port 8000 --path ./data/vector/chroma
+/opt/lis-rss-daily/lis-rss/bin/chroma run --host 0.0.0.0 --port 8000 --path ./data/vector/chroma
 ```
 
 按 `Ctrl+C` 停止测试。若存在历史 `data/vector/chroma.sqlite3` 且与当前 Chroma 版本/`--path` 不一致，服务可能“能启动但无可用向量”；主库完整时按“Chroma/向量库恢复”重建更稳妥。
@@ -407,7 +407,7 @@ bash scripts/start.sh
 
 ```bash
 # 终端1：启动 ChromaDB
-chroma run --host 127.0.0.1 --port 8000 --path ./data/vector/chroma > logs/chroma.log 2>&1 &
+chroma run --host 0.0.0.0 --port 8000 --path ./data/vector/chroma > logs/chroma.log 2>&1 &
 
 # 终端2：启动应用
 pnpm run dev
@@ -487,7 +487,7 @@ User=root
 WorkingDirectory=/opt/lis-rss-daily
 # PATH 包含 Python 虚拟环境的 bin 目录
 Environment="PATH=/opt/lis-rss-daily/lis-rss/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=/opt/lis-rss-daily/lis-rss/bin/chroma run --host 127.0.0.1 --port 8000 --path /opt/lis-rss-daily/data/vector/chroma
+ExecStart=/opt/lis-rss-daily/lis-rss/bin/chroma run --host 0.0.0.0 --port 8000 --path /opt/lis-rss-daily/data/vector/chroma
 Restart=always
 RestartSec=10
 
@@ -560,7 +560,7 @@ User=your-username
 WorkingDirectory=/opt/lis-rss-daily
 # PATH 包含 Python 虚拟环境的 bin 目录
 Environment="PATH=/opt/lis-rss-daily/lis-rss/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=/opt/lis-rss-daily/lis-rss/bin/chroma run --host 127.0.0.1 --port 8000 --path /opt/lis-rss-daily/data/vector/chroma
+ExecStart=/opt/lis-rss-daily/lis-rss/bin/chroma run --host 0.0.0.0 --port 8000 --path /opt/lis-rss-daily/data/vector/chroma
 Restart=always
 RestartSec=10
 
@@ -626,25 +626,27 @@ sudo systemctl status lis-rss
 
 ---
 
-## 防火墙配置
+## 防火墙配置（UFW，局域网可访问）
 
 ```bash
-# 允许 HTTP/HTTPS
+# 允许 HTTP/HTTPS（按需）
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 
-# 允许应用端口（主应用 + 附属服务）
-sudo ufw allow 8007/tcp  # LIS-RSS 主应用
-sudo ufw allow 8000/tcp  # ChromaDB
-sudo ufw allow 8081/tcp # Paper PDF API
-sudo ufw allow 8082/tcp # DeepSearch API
+# 放行本项目全部服务端口（确保局域网可访问）
+sudo ufw allow 8000/tcp comment 'ChromaDB'
+sudo ufw allow 8007/tcp comment 'LIS-RSS'
+sudo ufw allow 8081/tcp comment 'Paper PDF API'
+sudo ufw allow 8082/tcp comment 'DeepSearch API'
 
 # 启用防火墙
 sudo ufw enable
 
 # 查看状态
-sudo ufw status
+sudo ufw status verbose
 ```
+
+> **注意**：仅放行 UFW 不够，服务还必须监听局域网地址。`lis-rss` 默认 `0.0.0.0:8007`，`deepsearch-api`/`paper-pdf-api` 使用 `--host 0.0.0.0`；`chromadb.service` 需使用 `--host 0.0.0.0`（否则仅 `127.0.0.1`，局域网不可达）。ChromaDB 暴露到局域网时请结合网络边界/访问控制评估风险。
 
 ---
 
@@ -664,7 +666,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/lis-rss-daily
 Environment="PATH=/opt/lis-rss-daily/lis-rss/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=/opt/lis-rss-daily/lis-rss/bin/chroma run --host 127.0.0.1 --port 8000 --path /opt/lis-rss-daily/data/vector/chroma
+ExecStart=/opt/lis-rss-daily/lis-rss/bin/chroma run --host 0.0.0.0 --port 8000 --path /opt/lis-rss-daily/data/vector/chroma
 Restart=always
 RestartSec=10
 
@@ -805,7 +807,7 @@ systemctl --failed --no-pager
 
 | 服务 | 端口 | 说明 | 自启动 |
 |------|------|------|--------|
-| ChromaDB | 8000 | 向量数据库 | `chromadb.service` |
+| ChromaDB | 8000 | 向量数据库（语义检索/混合检索依赖；局域网访问需 `--host 0.0.0.0` + UFW 放行） | `chromadb.service` |
 | LIS-RSS | 8007 | 主应用 Web UI / 外部检索 API | `lis-rss.service` |
 | DeepSearch API | 8082 | 深度检索 API | `deepsearch-api.service` |
 | Paper PDF API | 8081 | PDF 处理 API | `paper-pdf-api.service` |
