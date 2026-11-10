@@ -4,12 +4,13 @@ After=network.target
 
 [Service]
 Type=simple
-User=xulei
+User=root
 WorkingDirectory=/opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot
-ExecStart=/home/xulei/.nvm/versions/node/v24.14.0/bin/node /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot/node_modules/.bin/tsx /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot/index.ts
+# 直接执行 tsx cli.mjs，避免 pnpm shim 在部分 Node 版本下报 SyntaxError
+ExecStart=/usr/bin/node /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/cli.mjs /opt/lis-rss-daily/scripts/paper-pdf-summary/telegram-bot/index.ts
 Restart=always
 RestartSec=5
-Environment="PATH=/home/xulei/.nvm/versions/node/v24.14.0/bin"
+Environment="PATH=/usr/bin:/usr/local/bin"
 EnvironmentFile=/opt/lis-rss-daily/scripts/paper-pdf-summary/.env
 
 [Install]

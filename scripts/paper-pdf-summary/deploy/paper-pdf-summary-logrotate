@@ -10,5 +10,5 @@
     missingok
     notifempty
     compress
-    create 0664 xulei xulei
+    create 0664 root root
 }

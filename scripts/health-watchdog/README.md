@@ -8,7 +8,7 @@
 |------|---------|---------|
 | 磁盘 I/O | 内核日志出现 `I/O error, dev sd` 或 `ataX.00 ... exception/frozen` | 最近 6 小时 |
 | cron 活性 | 最近没有任何 cron 作业的 `(用户) CMD` 记录 | 180 分钟 |
-| 关键服务 | 已启用（`is-enabled` ≠ `disabled`）的服务状态不是 `active` | lis-rss / paper-pdf-summary-api / paper-pdf-summary-telegram |
+| 关键服务 | 已启用（`is-enabled` ≠ `disabled`）的服务状态不是 `active` | lis-rss / chromadb / deepsearch-api / paper-pdf-api / paper-pdf-summary-telegram |
 
 > 本机这块盘（桥接为 SATA 的 NVMe）**不支持 SMART**（`smartctl -a` 报 "device lacks SMART capability"），因此磁盘健康只能依据内核 I/O 错误日志判断。
 
@@ -45,7 +45,7 @@ journalctl -u health-watchdog.service --since today
 |------|------|------|
 | `HEALTH_WINDOW_HOURS` | 磁盘 I/O 错误统计窗口 | `6` |
 | `HEALTH_CRON_STALE_MINUTES` | cron 停摆判定阈值 | `180` |
-| `HEALTH_SERVICES` | 需要检查的服务列表（空格分隔） | lis-rss 等三个 |
+| `HEALTH_SERVICES` | 需要检查的服务列表（空格分隔） | 上面五个服务 |
 | `HEALTH_COOLDOWN_SECONDS` | 同类告警推送冷却时间（磁盘/cron/服务各自独立计时）| `21600`（6 小时）|
 | `HEALTH_STATE_DIR` | 冷却状态目录 | `/var/lib/health-watchdog` |
 | `HEALTH_ENV_FILE` | 推送配置来源的 .env 路径 | `scripts/paper-pdf-summary/.env` |
@@ -61,7 +61,7 @@ journalctl -u health-watchdog.service --since today
 - 冷却状态写在 `HEALTH_STATE_DIR` 下的 `last-sent-<类别>` 文件，三类问题互不影响。
 - 推送配置从 `.env` **按键读取**（该文件里混有注释与分隔行，直接 `source` 会执行到非法命令）。
 - 健康告警使用独立的 `health_alert` 推送类型，不会混入 PDF 总结订阅者。
-- `disabled` 的服务（如 `paper-pdf-summary-api.service`，按需手动启动）不会告警。
+- `disabled` 的服务不会告警（视为按需手动启动）。
 
 ## 局限
 

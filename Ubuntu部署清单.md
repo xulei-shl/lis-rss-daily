@@ -37,7 +37,7 @@ systemctl list-units --type=service --all | grep -E 'lis-rss|chroma|deepsearch|p
 - **路径以本机为准**：`which node`/`which pnpm`/venv 路径可能与文档示例不同（`/usr/bin/*`、`/usr/local/bin/*`、nvm 路径均可能）。本次 root+系统 Node 使用 `/usr/bin/node`、`/usr/bin/pnpm`。
 - **tsx 在 systemd 下的稳定写法**：避免 `node_modules/.bin/tsx` 的 pnpm shim 在部分 Node 版本下报 `SyntaxError`。`paper-pdf-summary-telegram` 使用：`/usr/bin/node <项目>/node_modules/.pnpm/tsx@<version>/node_modules/tsx/dist/cli.mjs <entry.ts>`（按实际 pnpm 虚拟存储路径）。
 - **Telegram Bot 独立 env**：`telegram-bot/index.ts` 需要 `TELEGRAM_BOT_TOKEN`（可选 `TELEGRAM_USER_ID`、`TELEGRAM_API_URL`）。配置在 `scripts/paper-pdf-summary/.env` 并由服务 `EnvironmentFile` 加载；缺失会导致服务反复重启/`exit-code`。
-- **health-watchdog**：从 `scripts/health-watchdog/deploy/` 安装 `.service/.timer`，并用 `Environment="HEALTH_SERVICES=..."` 覆盖为**实际服务名**（本次：`lis-rss.service chromadb.service deepsearch-api.service paper-pdf-api.service paper-pdf-summary-telegram.service`）。旧模板中的 `paper-pdf-summary-api.service` 名不一致会误报。
+- **health-watchdog**：从 `scripts/health-watchdog/deploy/` 安装 `.service/.timer`，并用 `Environment="HEALTH_SERVICES=..."` 覆盖为**实际服务名**（本次：`lis-rss.service chromadb.service deepsearch-api.service paper-pdf-api.service paper-pdf-summary-telegram.service`）。旧模板中的 `paper-pdf-summary-api.service` 名不一致会误报，该过期模板已从 `deploy/` 删除（实际 unit 名为 `paper-pdf-api.service`）。
 - **Chroma 数据路径必须一致**：服务 `--path /opt/lis-rss-daily/data/vector/chroma`（目录）。若历史 `chroma.sqlite3` 位于 `data/vector/chroma.sqlite3`，迁移前先停 Chroma，再移动到 `data/vector/chroma/chroma.sqlite3` 或按下述重建流程处理；避免“服务能起但向量库与预期不一致”。
 
 ### Chroma/向量库恢复（主库完整、向量库不全/对不上）
@@ -63,6 +63,8 @@ curl -s http://127.0.0.1:8081/health
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8081/docs
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8082/docs
 systemctl --failed --no-pager
+crontab -l | grep paper-pdf-summary
+ls -l /etc/logrotate.d/paper-pdf-summary
 ```
 
 ---
@@ -821,7 +823,7 @@ EOF
 # 6. 健康看门狗（定时检查磁盘 I/O / cron / 关键服务）
 cp /opt/lis-rss-daily/scripts/health-watchdog/deploy/health-watchdog.service /etc/systemd/system/
 cp /opt/lis-rss-daily/scripts/health-watchdog/deploy/health-watchdog.timer /etc/systemd/system/
-# 覆盖为实际服务名（避免旧模板 paper-pdf-summary-api.service 误报）
+# 显式写出实际服务名（health-watchdog 默认列表已同步为同一组）
 cat > /etc/systemd/system/health-watchdog.service << 'EOF'
 [Unit]
 Description=Machine health watchdog (disk I/O errors, cron liveness, key services)
@@ -887,6 +889,31 @@ systemctl --failed --no-pager
 sudo systemctl restart paper-pdf-api
 sudo systemctl restart paper-pdf-summary-telegram
 ```
+
+### Paper PDF 每日全文总结定时任务（cron + logrotate）
+
+每日 07:00 的全文总结由 **root 用户的 crontab** 拉起，不是 systemd timer，也不是应用内置调度器：
+
+```bash
+# 安装/覆盖条目（重复执行不会产生重复行）
+( crontab -l 2>/dev/null | grep -v 'paper-pdf-summary' ; \
+  echo '0 7 * * * cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /opt/lis-rss-daily/lis-rss/bin/python main.py >> /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/cron.log 2>&1' ) | crontab -
+
+# 确认
+crontab -l | grep paper-pdf-summary
+```
+
+- 运行用户 root（项目目录属 `root:root`），解释器复用 `/opt/lis-rss-daily/lis-rss`，不要写 `/home/xulei/.pyenvs/env_camoufox`（该路径在本机不存在）。
+- 凭证由脚本内部 `load_dotenv` 读取 `scripts/paper-pdf-summary/.env`，因此不依赖 cron 的精简环境变量；Camoufox/Playwright 缓存落在 `HOME=/root` 下的 `/root/.cache`。
+- 日志轮转（`cron.log` 每天最大 20M，保留 14 份并压缩）：
+
+```bash
+cp /opt/lis-rss-daily/scripts/paper-pdf-summary/deploy/paper-pdf-summary-logrotate /etc/logrotate.d/paper-pdf-summary
+logrotate -d /etc/logrotate.d/paper-pdf-summary   # 干跑校验
+```
+
+- **重装或迁移主机后必须重新安装 crontab**；漏装时的典型现象是当天没有 `logs/<日期>.md`、也没有 `logs/cron.log`（cron 服务本身是正常的）。
+- 验收：次日 07:00 后 `tail -n 30 logs/cron.log` 有当天输出，且 `ls logs/$(date +%F).md` 存在。
 
 ### 统一检索外部 API 部署说明
 

@@ -48,7 +48,9 @@ paper-pdf-summary/
 ├── logs/                     # 每日日志目录
 ├── docs/
 ├── deploy/                   # 部署配置文件
-│   └── paper-pdf-summary-telegram.service  # systemd 服务配置
+│   ├── paper-pdf-api.service              # systemd 服务配置（API）
+│   ├── paper-pdf-summary-telegram.service # systemd 服务配置（Telegram Bot）
+│   └── paper-pdf-summary-logrotate        # cron.log 日志轮转配置
 ├── main.py                   # 主入口脚本
 ├── start_telegram_bot.sh     # Telegram Bot 启动脚本
 ├── .env.example              # 环境变量模板
@@ -123,8 +125,8 @@ WECHAT_WEBHOOK_KEY=your_wechat_webhook_key_here
 ### 3. 配置虚拟环境
 
 ```bash
-# 使用已有的虚拟环境
-export PYTHONPATH=/home/xulei/.pyenvs/env_camoufox/bin/python
+# 本项目直接复用主项目虚拟环境（Python 3.14）
+/opt/lis-rss-daily/lis-rss/bin/python --version
 ```
 
 ### 4. 安装依赖
@@ -148,11 +150,11 @@ apt-get install xclip
 首次部署或切换运行用户后，必须修复目录权限：
 
 ```bash
-# 修复所有需要写入的目录权限（假设运行用户为 xulei）
-chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/download/
-chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/
-chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/pdf-download/cnki_session/
-chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/
+# 当前部署以 root 运行，修复所有需要写入的目录权限
+chown -R root:root /opt/lis-rss-daily/scripts/paper-pdf-summary/download/
+chown -R root:root /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/
+chown -R root:root /opt/lis-rss-daily/scripts/paper-pdf-summary/pdf-download/cnki_session/
+chown -R root:root /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/
 ```
 
 ### 6. Camoufox 浏览器初始化
@@ -161,12 +163,12 @@ chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update
 
 ```bash
 # 以运行用户身份执行（关键：设置正确的 HOME 环境变量）
-sudo -u xulei bash -c "HOME=/home/xulei /home/xulei/.pyenvs/env_camoufox/bin/python -c 'from camoufox.sync_api import Camoufox; from camoufox.addons import DefaultAddons; Camoufox(headless=True, geoip=False, exclude_addons=[DefaultAddons.UBO])'"
+HOME=/root /opt/lis-rss-daily/lis-rss/bin/python -c 'from camoufox.sync_api import Camoufox; from camoufox.addons import DefaultAddons; Camoufox(headless=True, geoip=False, exclude_addons=[DefaultAddons.UBO])'
 ```
 
 > **注意**：Camoufox 默认会尝试下载 UBO 插件，但国内网络可能导致下载失败。上述命令会初始化浏览器并跳过 UBO 插件。如果后续运行仍遇到 `InvalidAddonPath: manifest.json is missing` 错误，手动删除损坏的插件目录：
 > ```bash
-> rm -rf /home/xulei/.cache/camoufox/addons/UBO
+> rm -rf /root/.cache/camoufox/addons/UBO
 > ```
 
 ## 配置说明
@@ -254,8 +256,8 @@ PDF_SUMMARY_NOTIFY_USER_ID=1
 ### 完整工作流（数据库模式）
 
 ```bash
-# 使用 xulei 用户运行（推荐）
-sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/xulei/.pyenvs/env_camoufox/bin/python main.py"
+# 以 root 运行（当前部署方式，cron 也以 root 执行）
+cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /opt/lis-rss-daily/lis-rss/bin/python main.py
 ```
 
 ### 直接处理指定论文
@@ -264,19 +266,19 @@ sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/
 
 ```bash
 # 带文章ID：包含 LIS-RSS API 调用
-sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/xulei/.pyenvs/env_camoufox/bin/python main.py --title '论文题名' --id 1984"
+cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /opt/lis-rss-daily/lis-rss/bin/python main.py --title '论文题名' --id 1984
 
 # 不带文章ID：跳过 LIS-RSS API 调用
-sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/xulei/.pyenvs/env_camoufox/bin/python main.py --title '论文题名'"
+cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /opt/lis-rss-daily/lis-rss/bin/python main.py --title '论文题名'
 ```
 
 ```bash
 # ssh远程使用时
 # 带文章ID：包含 LIS-RSS API 调用
-sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && xvfb-run -a /home/xulei/.pyenvs/env_camoufox/bin/python main.py --title '论文题名' --id 1984"
+cd /opt/lis-rss-daily/scripts/paper-pdf-summary && xvfb-run -a /opt/lis-rss-daily/lis-rss/bin/python main.py --title '论文题名' --id 1984
 
 # 不带文章ID：跳过 LIS-RSS API 调用
-sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && xvfb-run -a /home/xulei/.pyenvs/env_camoufox/bin/python main.py --title '论文题名'"
+cd /opt/lis-rss-daily/scripts/paper-pdf-summary && xvfb-run -a /opt/lis-rss-daily/lis-rss/bin/python main.py --title '论文题名'
 ```
 
 **参数说明**：
@@ -289,31 +291,33 @@ sudo -u xulei bash -c "cd /opt/lis-rss-daily/scripts/paper-pdf-summary && xvfb-r
 
 ### 定时任务配置
 
-系统已配置为每天早上 7:00 自动执行脚本，使用 xulei 用户的 crontab。
+系统已配置为每天早上 7:00 自动执行脚本，使用 **root 用户的 crontab**（当前部署以 root 运行，虚拟环境复用主项目的 `/opt/lis-rss-daily/lis-rss`）。
 
 **当前配置：**
 - 执行时间：每天早上 7:00
-- 执行用户：xulei
-- 虚拟环境：`/home/xulei/.pyenvs/env_camoufox/bin/python`
+- 执行用户：root
+- 虚拟环境：`/opt/lis-rss-daily/lis-rss/bin/python`
 - 脚本：`main.py`
 - 日志：`/opt/lis-rss-daily/scripts/paper-pdf-summary/logs/cron.log`
 - 推送方式：调用主项目统一推送渠道（Telegram / 企业微信）
 
 **Crontab 条目：**
 ```cron
-0 7 * * * cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/xulei/.pyenvs/env_camoufox/bin/python main.py >> /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/cron.log 2>&1
+0 7 * * * cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /opt/lis-rss-daily/lis-rss/bin/python main.py >> /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/cron.log 2>&1
 ```
+
+> 重新部署或迁移主机后必须重新安装这个条目，否则任务不会被拉起（表现为当天没有报告、也没有 `logs/cron.log`）。
 
 **常用操作：**
 ```bash
 # 查定时任务
-sudo -u xulei crontab -l
+crontab -l
 
 # 编辑定时任务
-sudo -u xulei crontab -e
+crontab -e
 
 # 删除定时任务（小心！）
-sudo -u xulei crontab -r
+crontab -r
 
 # 查看执行日志
 tail -f /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/cron.log
@@ -469,7 +473,7 @@ Bot 日志保存在 `logs/telegram-node.log`
 rm -rf ~/.cache/camoufox/addons/UBO
 
 # 2. 重新初始化（跳过 UBO 插件）
-sudo -u xulei bash -c "HOME=/home/xulei /home/xulei/.pyenvs/env_camoufox/bin/python -c 'from camoufox.sync_api import Camoufox; from camoufox.addons import DefaultAddons; Camoufox(headless=True, geoip=False, exclude_addons=[DefaultAddons.UBO])'"
+HOME=/root /opt/lis-rss-daily/lis-rss/bin/python -c 'from camoufox.sync_api import Camoufox; from camoufox.addons import DefaultAddons; Camoufox(headless=True, geoip=False, exclude_addons=[DefaultAddons.UBO])'
 ```
 
 ### Playwright 浏览器未安装
@@ -479,7 +483,7 @@ sudo -u xulei bash -c "HOME=/home/xulei /home/xulei/.pyenvs/env_camoufox/bin/pyt
 **解决方案**：
 ```bash
 # 必须为运行用户安装 Playwright 浏览器
-sudo -u xulei bash -c "HOME=/home/xulei /home/xulei/.pyenvs/env_camoufox/bin/python -m playwright install chromium"
+HOME=/root /opt/lis-rss-daily/lis-rss/bin/python -m playwright install chromium
 ```
 
 ### pyperclip 复制机制缺失
@@ -497,10 +501,10 @@ apt-get install xclip
 
 **解决方案**：
 ```bash
-chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/download/
-chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/
-chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/pdf-download/cnki_session/
-chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/
+chown -R root:root /opt/lis-rss-daily/scripts/paper-pdf-summary/download/
+chown -R root:root /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/
+chown -R root:root /opt/lis-rss-daily/scripts/paper-pdf-summary/pdf-download/cnki_session/
+chown -R root:root /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/
 ```
 
 ### PDF 验证失败
@@ -540,7 +544,7 @@ ls -la logs/cron.log logs/$(date +%F).md download/$(date +%F)/
 **2. 确认 crontab 与 cron 服务状态**
 
 ```bash
-sudo -u xulei crontab -l
+crontab -l
 systemctl status cron --no-pager
 ```
 
@@ -607,15 +611,15 @@ systemctl status cron --no-pager | sed -n '/CGroup/,$p'
 ### 1. 环境检查
 ```bash
 # 确认虚拟环境存在
-ls -la /home/xulei/.pyenvs/env_camoufox/bin/python
+ls -la /opt/lis-rss-daily/lis-rss/bin/python
 
 # 确认 Python 版本
-/home/xulei/.pyenvs/env_camoufox/bin/python --version
+/opt/lis-rss-daily/lis-rss/bin/python --version
 ```
 
 ### 2. 安装 Python 依赖
 ```bash
-/home/xulei/.pyenvs/env_camoufox/bin/pip install camoufox[geoip] pymupdf pyperclip aiohttp
+/opt/lis-rss-daily/lis-rss/bin/pip install camoufox[geoip] pymupdf pyperclip aiohttp
 ```
 
 ### 3. 安装系统依赖
@@ -626,27 +630,34 @@ apt-get install xclip
 ### 4. 为运行用户安装浏览器
 ```bash
 # 安装 Playwright 浏览器
-sudo -u xulei bash -c "HOME=/home/xulei /home/xulei/.pyenvs/env_camoufox/bin/python -m playwright install chromium"
+HOME=/root /opt/lis-rss-daily/lis-rss/bin/python -m playwright install chromium
 
 # 初始化 Camoufox 浏览器（跳过 UBO 插件）
-sudo -u xulei bash -c "HOME=/home/xulei /home/xulei/.pyenvs/env_camoufox/bin/python -c 'from camoufox.sync_api import Camoufox; from camoufox.addons import DefaultAddons; Camoufox(headless=True, geoip=False, exclude_addons=[DefaultAddons.UBO])'"
+HOME=/root /opt/lis-rss-daily/lis-rss/bin/python -c 'from camoufox.sync_api import Camoufox; from camoufox.addons import DefaultAddons; Camoufox(headless=True, geoip=False, exclude_addons=[DefaultAddons.UBO])'
 ```
 
 ### 5. 修复目录权限
 ```bash
-chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/download/
-chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/
-chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/pdf-download/cnki_session/
-chown -R xulei:xulei /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/
+chown -R root:root /opt/lis-rss-daily/scripts/paper-pdf-summary/download/
+chown -R root:root /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/
+chown -R root:root /opt/lis-rss-daily/scripts/paper-pdf-summary/pdf-download/cnki_session/
+chown -R root:root /opt/lis-rss-daily/scripts/paper-pdf-summary/summary-update/hiagent-rag-upload/
 ```
 
-### 6. 测试运行
+### 6. 安装 cron 定时任务
+```bash
+# 重复执行不会产生重复行
+( crontab -l 2>/dev/null | grep -v 'paper-pdf-summary' ; echo '0 7 * * * cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /opt/lis-rss-daily/lis-rss/bin/python main.py >> /opt/lis-rss-daily/scripts/paper-pdf-summary/logs/cron.log 2>&1' ) | crontab -
+crontab -l
+```
+
+### 7. 测试运行
 ```bash
 # 测试单篇论文处理
-sudo -u xulei bash -c "HOME=/home/xulei cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /home/xulei/.pyenvs/env_camoufox/bin/python main.py --title '测试论文标题'"
+cd /opt/lis-rss-daily/scripts/paper-pdf-summary && /opt/lis-rss-daily/lis-rss/bin/python main.py --title '测试论文标题'
 ```
 
-### 7. 验证结果
+### 8. 验证结果
 - 检查 `download/` 目录是否有 PDF 文件
 - 检查 `logs/` 目录是否有当日日志
 - 检查 LIS-RSS 系统是否有 AI 总结更新
@@ -709,6 +720,6 @@ sudo logrotate -d /etc/logrotate.d/paper-pdf-summary
 sudo logrotate -f /etc/logrotate.d/paper-pdf-summary
 ```
 
-- 轮转生成的新日志为 `0664 xulei:xulei`，cron 作业（xulei 用户）可直接写入
+- 轮转生成的新日志为 `0664 root:root`，cron 作业（root 用户）可直接写入
 - 归档文件为 `logs/cron.log.N.gz`，编号越大越旧；`logs/` 下的每日报告（`*.md` / `*.json`）不参与轮转，按需用上面的「清理旧日志」命令处理
 - 依赖系统 `logrotate.timer`，可用 `systemctl status logrotate.timer` 查看下次执行时间

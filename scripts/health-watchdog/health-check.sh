@@ -19,7 +19,7 @@ set -uo pipefail
 WINDOW_HOURS="${HEALTH_WINDOW_HOURS:-6}"
 CRON_STALE_MINUTES="${HEALTH_CRON_STALE_MINUTES:-180}"
 COOLDOWN_SECONDS="${HEALTH_COOLDOWN_SECONDS:-21600}"
-SERVICES="${HEALTH_SERVICES:-lis-rss.service paper-pdf-summary-api.service paper-pdf-summary-telegram.service}"
+SERVICES="${HEALTH_SERVICES:-lis-rss.service chromadb.service deepsearch-api.service paper-pdf-api.service paper-pdf-summary-telegram.service}"
 STATE_DIR="${HEALTH_STATE_DIR:-/var/lib/health-watchdog}"
 ENV_FILE="${HEALTH_ENV_FILE:-/opt/lis-rss-daily/scripts/paper-pdf-summary/.env}"
 
