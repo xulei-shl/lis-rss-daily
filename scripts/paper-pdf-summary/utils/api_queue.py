@@ -1,6 +1,5 @@
 import asyncio
 import json
-import re
 import time
 import uuid
 from datetime import datetime
@@ -13,6 +12,7 @@ from utils.pdf_downloader import load_config, create_download_directory, downloa
 from utils.pdf_validator import validate_and_cleanup
 from utils.pdf_summarizer import summarize_pdf
 from utils.summary_uploader import upload_all as parallel_upload, get_env_bool
+from utils.summary_error import contains_summary_error
 from utils.logger import DailyLogger
 import yaml
 
@@ -398,25 +398,7 @@ class QueueManager:
         if Path(md_path).exists():
             md_content = Path(md_path).read_text(encoding='utf-8')
 
-        error_patterns = [
-            r'无法完成',
-            r'无法正常',
-            r'No /Root object',
-            r'Is this really a PDF',
-            r'^文件链接无法正常访问',
-            r'^文件格式异常',
-            r'^链接无效',
-            r'^格式异常',
-            r'PDF.*?异常',
-            r'处理失败',
-            r'调用失败',
-            r'抱歉.*?无法.*?',
-            r'对不起.*?无法.*?',
-            r'请求异常',
-            r'稍后重试',
-            r'请稍后重试'
-        ]
-        has_error = any(re.search(p, md_content, re.IGNORECASE) for p in error_patterns)
+        has_error = contains_summary_error(md_content)
         if has_error:
             reason = "PDF总结失败（生成的摘要包含错误信息，可能是PDF损坏或无法读取）"
             print(f"[失败] {reason}")

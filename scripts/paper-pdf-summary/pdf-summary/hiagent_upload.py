@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import sys
 import json
+import re
 import pyperclip
 from pathlib import Path
 
@@ -14,7 +15,16 @@ load_dotenv()
 URL = os.getenv("HIAGENT_PDF_URL")
 ERROR_KEYWORDS = ["无法访问", "无法生成", "抱歉，", "出错了", "请求异常，请稍后重试", "请求异常"]
 # 错误消息前缀模式：只匹配以这些词开头的短消息（<200字），避免误杀正常摘要中的用词
-ERROR_PREFIX_PATTERNS = ["无法访问", "无法生成", "抱歉，", "出错了", "请求异常"]
+ERROR_PREFIX_PATTERNS = [
+    r"无法访问",
+    r"无法生成",
+    r"抱歉，",
+    r"出错了",
+    r"请求异常",
+    # HiAgent agent 本身执行失败（工具未授权 / 入参错误 / 网络异常），返回的不是摘要
+    r"agent\s*执行出错",
+    r"执行出错.*(?:工具未授权|入参错误|网络异常)",
+]
 COPY_ICON_SEL = "svg.hiagent-icon-copy-areality, svg.copy-icon"
 RESULT_SELECTORS = [
     '.message-content',
@@ -180,7 +190,7 @@ async def main(pdf_path: str, md_path: str = None, headless: bool = True, delete
             has_error = (
                 result
                 and result_length < 200
-                and any(result.startswith(kw) for kw in ERROR_PREFIX_PATTERNS)
+                and any(re.match(p, result.strip(), re.IGNORECASE) for p in ERROR_PREFIX_PATTERNS)
             )
             if has_error:
                 error_msg = "检测到错误内容"
