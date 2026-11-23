@@ -60,6 +60,7 @@ export interface DatabaseTable {
   article_cluster_facets: ArticleClusterFacetsTable;
   article_topic_links: ArticleTopicLinksTable;
   cluster_topic_remap: ClusterTopicRemapTable;
+  cluster_topic_merge_remap: ClusterTopicMergeRemapTable;
   topic_threads: TopicThreadsTable;
   thread_articles: ThreadArticlesTable;
   topic_metrics_period: TopicMetricsPeriodTable;
@@ -556,6 +557,16 @@ export interface ClusterTopicRemapTable {
   similarity: number;
   from_version: number;
   to_version: number;
+  created_at: Generated<string>;
+}
+
+/** 同版本内微主题整合的旧主题重定向（不随旧主题删除而级联） */
+export interface ClusterTopicMergeRemapTable {
+  old_topic_id: number;
+  old_slug: string;
+  new_topic_id: number;
+  similarity: number;
+  set_version: number;
   created_at: Generated<string>;
 }
 

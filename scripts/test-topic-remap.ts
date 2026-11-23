@@ -17,11 +17,15 @@ process.env.DATABASE_PATH = dbPath;
 let closeDb: (() => Promise<void>) | null = null;
 
 async function main(): Promise<void> {
-  const sql = await import('node:fs').then((fs) =>
-    fs.readFileSync(path.join(process.cwd(), 'sql/045_add_topic_cluster.sql'), 'utf8')
+  const fs = await import('node:fs');
+  const sql = fs.readFileSync(path.join(process.cwd(), 'sql/045_add_topic_cluster.sql'), 'utf8');
+  const mergeSql = fs.readFileSync(
+    path.join(process.cwd(), 'sql/049_topic_merge_remap.sql'),
+    'utf8'
   );
   const bootstrap = new Database(dbPath);
   bootstrap.exec(sql);
+  bootstrap.exec(mergeSql);
   bootstrap.exec('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY); INSERT INTO users (id) VALUES (1);');
   bootstrap.close();
 

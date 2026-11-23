@@ -1072,6 +1072,19 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
         continue;
       }
 
+      // ============================================================
+      // 049: 微主题整合重定向（同版本合并，旧 URL 不失效）
+      // ============================================================
+      if (file === '049_topic_merge_remap.sql') {
+        if (hasTable(db, 'cluster_topic_merge_remap')) {
+          console.log('      → Skipped (cluster_topic_merge_remap already exists)');
+        } else {
+          db.exec(fs.readFileSync(fullPath, 'utf-8'));
+          console.log('      → Created cluster_topic_merge_remap');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

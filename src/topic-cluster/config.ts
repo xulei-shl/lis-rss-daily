@@ -86,6 +86,10 @@ export const CLUSTER_LIMITS = Object.freeze({
   minContinuityRatio: 0.5,
   /** 低于此文章数不生成多维分析（走 insufficient_data 降级） */
   minArticlesForAnalysis: 6,
+  /** 微主题整合：小主题两两合并时的平均连接阈值 */
+  smallTopicMergeThreshold: 0.8,
+  /** 微主题整合：小主题被正式主题吸收时的相似度阈值 */
+  smallTopicAbsorbThreshold: 0.82,
   /** 单次多维分析输入的最大篇数（防 prompt 过大） */
   maxArticlesPerAnalysisInput: 40,
   /** 对比矩阵中方法/对象各自的最低出现次数（低于此视为长尾噪声，不进矩阵） */

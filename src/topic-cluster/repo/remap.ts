@@ -87,6 +87,28 @@ export function pickBestTopic(
   return best && best.similarity >= threshold ? best : null;
 }
 
+/** 同版本整合同步写入的旧 slug → 新主题；用于被删除微主题的旧 URL 跳转。 */
+export async function getMergedTopicIdBySlug(slug: string): Promise<number | null> {
+  const row = await getDb()
+    .selectFrom('cluster_topic_merge_remap')
+    .select('new_topic_id')
+    .where('old_slug', '=', slug)
+    .orderBy('set_version', 'desc')
+    .executeTakeFirst();
+  return row ? Number(row.new_topic_id) : null;
+}
+
+/** 同版本整合同步写入的旧 topic id → 新主题。 */
+export async function getMergedTopicIdById(oldTopicId: number): Promise<number | null> {
+  const row = await getDb()
+    .selectFrom('cluster_topic_merge_remap')
+    .select('new_topic_id')
+    .where('old_topic_id', '=', oldTopicId)
+    .orderBy('set_version', 'desc')
+    .executeTakeFirst();
+  return row ? Number(row.new_topic_id) : null;
+}
+
 /** 旧主题 → 新主题（若有 remap） */
 export async function getRemappedTopicId(oldTopicId: number): Promise<number | null> {
   const row = await getDb()

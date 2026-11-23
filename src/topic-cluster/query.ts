@@ -19,7 +19,12 @@ import { listTopicMetrics, type MetricRow } from './repo/metrics.js';
 import { listThreads, listThreadArticles } from './repo/threads.js';
 import { getActiveSet } from './repo/sets.js';
 import { getTopicById, getTopicBySlug, listTopicsByVersion } from './repo/topics.js';
-import { findTopicIdBySlugAnyVersion, getRemappedTopicId } from './repo/remap.js';
+import {
+  findTopicIdBySlugAnyVersion,
+  getMergedTopicIdById,
+  getMergedTopicIdBySlug,
+  getRemappedTopicId,
+} from './repo/remap.js';
 import { listFacetsByArticleIds } from './repo/facets.js';
 import { parseFacetFields, type DatePrecision, type FacetFields } from './domain/facet.js';
 import { normalizeMethodKeys, normalizeObjectKeys } from './domain/vocab.js';
@@ -511,12 +516,18 @@ export async function resolveTopic(slugOrId: string) {
       .where('id', '=', numeric)
       .executeTakeFirst();
     if (row) return row;
+    const merged = await getMergedTopicIdById(numeric);
+    if (merged) return getTopicById(merged);
   }
   const active = await getActiveSet(CLUSTER_CONFIG.userId);
   if (!active) return undefined;
 
   const current = await getTopicBySlug(active.version, slugOrId);
   if (current) return current;
+
+  // 同版本微主题整合：被合并的旧 slug 直接跳到吸收它的主题。
+  const mergedTopicId = await getMergedTopicIdBySlug(slugOrId);
+  if (mergedTopicId) return getTopicById(mergedTopicId);
 
   // 旧版本 slug：按 remap 跳到新主题（重建后旧 URL 不 404）。
   const oldTopicId = await findTopicIdBySlugAnyVersion(slugOrId);

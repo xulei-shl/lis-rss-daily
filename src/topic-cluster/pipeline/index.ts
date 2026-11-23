@@ -17,7 +17,8 @@ import { logger } from '../../logger.js';
 import { CLUSTER_CONFIG } from '../config.js';
 import { currentModel } from '../embedding.js';
 import { refreshTopicCounts } from '../repo/links.js';
-import { markTopicDirty, resetPeriodAddedCount } from '../repo/topics.js';
+import { getTopicById, markTopicDirty, resetPeriodAddedCount } from '../repo/topics.js';
+import { consolidateSmallTopics, type ConsolidationResult } from '../service/consolidation.js';
 import {
   archiveSet,
   createSet,
@@ -49,6 +50,7 @@ export interface ClusterRunSummary {
   facets: FacetStepSummary;
   routing: RouteResult;
   incubation: IncubationResult;
+  consolidation: ConsolidationResult;
   reclaim: ReclaimResult;
   derive: DeriveResult;
   analysis: AnalysisStepResult;
@@ -176,19 +178,27 @@ export async function runClusterPipeline(
   const routing = await runIncrementalRouting({ userId: CLUSTER_CONFIG.userId, setVersion });
   const incubation = await runIncubation({ userId: CLUSTER_CONFIG.userId, setVersion });
 
+  // 孵化后先整合样本不足的微主题，避免回捞把它们重新拉成散装主题。
+  const consolidation = await consolidateSmallTopics(setVersion);
+
+  // 新主题在孵化时只是 NEW 且无计数，这里统一补齐计数与脏标记；
+  // 若某个新主题在整合中被并入其他主题，则不再刷新已删除主题。
+  for (const topicId of incubation.createdTopicIds) {
+    const topic = await getTopicById(topicId);
+    if (!topic) continue;
+    await refreshTopicCounts(topicId);
+    await markTopicDirty(topicId);
+  }
+
   const reclaim = options.skipReclaim
     ? emptyReclaimResult()
     : await runReclaim({
         userId: CLUSTER_CONFIG.userId,
         setVersion,
-        newTopicIds: incubation.createdTopicIds,
+        newTopicIds: incubation.createdTopicIds.filter(
+          (topicId) => consolidation.removedTopicIds.indexOf(topicId) === -1
+        ),
       });
-
-  // 新主题在孵化时只是 NEW 且无计数，这里统一补齐计数与脏标记
-  for (const topicId of incubation.createdTopicIds) {
-    await refreshTopicCounts(topicId);
-    await markTopicDirty(topicId);
-  }
 
   const derive = await runDeriveForDirtyTopics(setVersion);
 
@@ -199,7 +209,7 @@ export async function runClusterPipeline(
         force: options.forceAnalysis,
       });
 
-  const summary: ClusterRunSummary = { setVersion, drift, facets, routing, incubation, reclaim, derive, analysis };
+  const summary: ClusterRunSummary = { setVersion, drift, facets, routing, incubation, consolidation, reclaim, derive, analysis };
 
   log.info(
     {
@@ -239,9 +249,13 @@ export async function runColdStart(
   const incubation = await runIncubation({ userId: CLUSTER_CONFIG.userId, setVersion });
 
   for (const topicId of incubation.createdTopicIds) {
+    const topic = await getTopicById(topicId);
+    if (!topic) continue;
     await refreshTopicCounts(topicId);
     await markTopicDirty(topicId);
   }
+
+  const consolidation = await consolidateSmallTopics(setVersion);
 
   const derive = await runDeriveForDirtyTopics(setVersion);
   // 跳过分析时保留 is_dirty，之后跑一次每日流水线或重新执行冷启动即可补齐
@@ -269,6 +283,7 @@ export async function runColdStart(
     facets,
     routing,
     incubation,
+    consolidation,
     reclaim: emptyReclaimResult(),
     derive,
     analysis,
