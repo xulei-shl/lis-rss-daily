@@ -10,10 +10,31 @@
 
 import { config as appConfig } from '../config.js';
 
+/**
+ * 字符/token 的保守换算。中文 1 字通常 1~1.5 token，这里按 1 token≈0.8 字
+ * 预留安全余量，避免输入估算过小导致 context 超限。
+ */
+const CHARS_PER_TOKEN = 0.8;
+/** Prompt 模板、JSON 包装与角色说明的固定开销 */
+const PROMPT_OVERHEAD_TOKENS = 2_000;
+
+const analysisContextTokens = appConfig.clusterAnalysisContextTokens;
+const analysisOutputTokens = Math.min(
+  appConfig.clusterAnalysisOutputTokens,
+  Math.max(analysisContextTokens - PROMPT_OVERHEAD_TOKENS, 1_024)
+);
+const computedInputChars = Math.floor(
+  Math.max(analysisContextTokens - analysisOutputTokens - PROMPT_OVERHEAD_TOKENS, 1_024) *
+    CHARS_PER_TOKEN
+);
+const analysisInputCharBudget =
+  appConfig.clusterAnalysisInputChars ?? computedInputChars;
+
 /** 环境变量驱动的配置（只读快照） */
 export const CLUSTER_CONFIG = Object.freeze({
   enabled: appConfig.clusterEnabled,
   schedule: appConfig.clusterSchedule,
+  analysisSchedule: appConfig.clusterAnalysisSchedule,
   userId: appConfig.clusterUserId,
   scope: appConfig.clusterScope,
 
@@ -32,6 +53,12 @@ export const CLUSTER_CONFIG = Object.freeze({
   llmConcurrency: appConfig.clusterLlmConcurrency,
   embeddingDim: appConfig.clusterEmbeddingDim,
   facetContractVersion: appConfig.clusterFacetContractVersion,
+
+  /** 分析输入字符预算：由上下文窗口 - 输出上限 - Prompt 开销换算 */
+  analysisInputCharBudget,
+  /** 阶段 A 输出上限；阶段 B 用完整输出预算 */
+  analysisPhaseATokens: Math.min(8_192, analysisOutputTokens),
+  analysisPhaseBTokens: analysisOutputTokens,
 });
 
 /**
@@ -47,15 +74,13 @@ export const CLUSTER_TASKS = Object.freeze({
 });
 
 /** 多维分析落库状态（设计文档 §7.7） */
-export type AnalysisStatus = 'ok' | 'insufficient_data' | 'failed';
+export type AnalysisStatus = 'ok' | 'partial' | 'insufficient_data' | 'failed';
 
 /** 模块内部规则常量（规则层调优，不暴露为环境变量） */
 export const CLUSTER_LIMITS = Object.freeze({
-  /** 单主题最多角度数，超出后合并最相近角度 */
-  maxAngleCount: 6,
-  /** 角度内至少 2 篇才算一个独立角度 */
-  minAngleSize: 2,
-  /** 脉络最少篇数，低于此归入「零散研究」，不生成叙述 */
+  /** 单主题最多角度数（K_target 上限），超出后合并最相近角度 */
+  maxAngleCount: 10,
+  /** 脉络最少篇数，低于此标记为发散子域，不生成时间演进 */
   minThreadLength: 3,
   /** 相邻承接率下限，低于此该角度降级为零散研究（避免把「只是语义相近」当演进） */
   minContinuityRatio: 0.5,

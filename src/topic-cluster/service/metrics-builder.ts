@@ -9,7 +9,7 @@
  */
 
 import { CLUSTER_CONFIG, CLUSTER_LIMITS } from '../config.js';
-import { centroidDrift, entropy, monthsBetween, toPeriod } from '../domain/metrics.js';
+import { addMonths, centroidDrift, entropy, monthsBetween, toPeriod } from '../domain/metrics.js';
 import { centroidOf } from '../domain/vector.js';
 import { replaceTopicMetrics, type MetricRow } from '../repo/metrics.js';
 import { getArticleAngleMap } from '../repo/threads.js';
@@ -24,7 +24,7 @@ export interface PeriodPoint {
   period: string;
   articleIds: number[];
   primaryCount: number;
-  avgSimilarity: number;
+  avgSimilarity: number | null;
   /** 该周期内全部成员向量（累计质心由调用方拼接后重算） */
   vectors: Float32Array[];
   methodKeys: string[];
@@ -34,28 +34,38 @@ export interface PeriodPoint {
 /** 重建某主题的周期指标（整体替换） */
 export async function rebuildTopicMetrics(topicId: number): Promise<MetricsBuildResult> {
   const { members } = await loadTopicMembers(topicId);
-  const points = groupByPeriod(members);
+  const dataPoints = groupByPeriod(members);
 
-  if (points.length === 0) {
+  if (dataPoints.length === 0) {
     await replaceTopicMetrics(topicId, []);
     return { periods: 0, insufficient: true };
   }
 
+  // 补齐自然月：没有新增的月份也落一行，避免前端 X 轴把缺月抹去。
+  const points = fillMissingMonths(dataPoints);
   const angleMap = await getArticleAngleMap(topicId);
   const rows: MetricRow[] = [];
 
   let cumulativeLinked = 0;
   let cumulativePrimary = 0;
-  let prevCumulativeVector: Float32Array | null = null;
-  // 累计质心：用全部历史成员向量重算，而不是逐月平均（避免误差累积）
+  // 累计质心仍用全部历史成员向量重算，而不是逐月平均（避免误差累积）
   const cumulativeVectors: Float32Array[] = [];
 
-  for (const point of points) {
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index];
+    const vectors = dataPoints.find((candidate) => candidate.period === point.period)?.vectors ?? [];
+
     cumulativeLinked += point.articleIds.length;
     cumulativePrimary += point.primaryCount;
-    cumulativeVectors.push(...point.vectors);
+    cumulativeVectors.push(...vectors);
 
-    const cumulativeVector = centroidOf(cumulativeVectors);
+    // 窗口漂移：最近 12 个月（含当月）vs 上一期最近 12 个月，避免累计质心随样本增大而机械趋近 0。
+    const currentWindow = points.slice(Math.max(0, index - 11), index + 1).flatMap((item) => item.vectors);
+    const prevWindow = points.slice(Math.max(0, index - 12), index).flatMap((item) => item.vectors);
+    const centroidDriftValue =
+      currentWindow.length > 0 && prevWindow.length > 0
+        ? centroidDrift(centroidOf(prevWindow), centroidOf(currentWindow))
+        : null;
 
     rows.push({
       topicId,
@@ -66,22 +76,18 @@ export async function rebuildTopicMetrics(topicId: number): Promise<MetricsBuild
       cumulativePrimaryCount: cumulativePrimary,
       activeAngleCount: countActiveAngles(point.articleIds, angleMap),
       avgSimilarity: point.avgSimilarity,
-      centroidDrift: prevCumulativeVector
-        ? centroidDrift(prevCumulativeVector, cumulativeVector)
-        : null,
+      centroidDrift: centroidDriftValue,
       methodEntropy: point.methodKeys.length > 0 ? entropy(countKeyCounts(point.methodKeys)) : null,
       objectEntropy: point.objectKeys.length > 0 ? entropy(countKeyCounts(point.objectKeys)) : null,
     });
-
-    prevCumulativeVector = cumulativeVector;
   }
 
   await replaceTopicMetrics(topicId, rows);
 
   return {
     periods: rows.length,
-    // 周期数少于 3 或总篇数低于阈值 → 不足以谈趋势（前端显示「样本不足」）
-    insufficient: rows.length < CLUSTER_LIMITS_MIN_PERIODS || points.length === 0,
+    // 有数据月份少于 3 才叫样本不足；补齐出来的空月不计入。
+    insufficient: dataPoints.length < CLUSTER_LIMITS_MIN_PERIODS,
   };
 }
 
@@ -113,6 +119,34 @@ function groupByPeriod(members: Awaited<ReturnType<typeof loadTopicMembers>>['me
     }));
 }
 
+/** 在首尾有数据的月份之间补出连续的 'YYYY-MM'；空月保留零新增与 null 指标。 */
+export function fillMissingMonths(points: PeriodPoint[]): PeriodPoint[] {
+  if (points.length === 0) return points;
+  const byPeriod = new Map(points.map((point) => [point.period, point]));
+  const first = points[0].period;
+  const last = points[points.length - 1].period;
+  const span = monthsBetween(first, last);
+  if (span === null) return points;
+
+  const filled: PeriodPoint[] = [];
+  for (let offset = 0; offset <= span; offset += 1) {
+    const period = addMonths(first, offset);
+    if (!period) continue;
+    filled.push(
+      byPeriod.get(period) ?? {
+        period,
+        articleIds: [],
+        primaryCount: 0,
+        avgSimilarity: null,
+        vectors: [],
+        methodKeys: [],
+        objectKeys: [],
+      }
+    );
+  }
+  return filled;
+}
+
 function countActiveAngles(articleIds: number[], angleMap: Map<number, string>): number {
   const angles = new Set<string>();
   for (const articleId of articleIds) {
@@ -136,12 +170,14 @@ function mean(values: number[]): number {
 /** 供 analysis-runner 渲染统计文本 */
 export function renderMetricsSummary(
   rows: MetricRow[],
-  thresholds: { minSamples: number } = { minSamples: CLUSTER_CONFIG.minTrendSamples }
+  thresholds: { minSamples?: number; maxMonths?: number } = {}
 ): string {
+  const minSamples = thresholds.minSamples ?? CLUSTER_CONFIG.minTrendSamples;
+  const maxMonths = thresholds.maxMonths ?? 12;
   const lines: string[] = [];
-  const recent = rows.slice(-12);
+  const recent = rows.slice(-maxMonths);
 
-  lines.push(`【月度序列（最多近 12 个月）】`);
+  lines.push(`【月度序列（最多近 ${maxMonths} 个月）】`);
   if (recent.length === 0) {
     lines.push('（无可用时间戳，无法给出趋势）');
   } else {
@@ -156,7 +192,7 @@ export function renderMetricsSummary(
   }
 
   const totalArticles = rows.length > 0 ? rows[rows.length - 1].cumulativeLinkedCount : 0;
-  lines.push(`【样本充足性】${sufficiencyNote(totalArticles, recent.length, thresholds.minSamples)}`);
+  lines.push(`【样本充足性】${sufficiencyNote(totalArticles, recent.length, minSamples)}`);
 
   const staleness = renderStaleness(recent);
   if (staleness) {

@@ -54,6 +54,13 @@ export interface CohesionOptions {
   minSize: number;
   /** 默认 'average' */
   linkage?: Linkage;
+  /**
+   * 目标簇数（仅平均连接生效）：达到该数量即停止合并。
+   * 它是护栏而不是唯一判据——若下一次合并已低于 cutSimilarityFloor，仍应停止。
+   */
+  targetCount?: number;
+  /** 合并的平均相似度下限；默认等于 threshold */
+  cutSimilarityFloor?: number;
   /** 相似度矩阵构建进度回调（凝聚阶段不再回调） */
   onProgress?: (done: number, total: number) => void;
 }
@@ -79,7 +86,7 @@ export function cohesionClusters(
   const groups =
     (options.linkage ?? 'average') === 'single'
       ? mergeBySingleLink(sim, n, threshold)
-      : mergeByAverageLink(sim, n, threshold);
+      : mergeByAverageLink(sim, n, threshold, options.targetCount, options.cutSimilarityFloor);
 
   return toResult(groups, items, options.minSize);
 }
@@ -114,13 +121,22 @@ function buildSimilarityMatrix(items: ClusterItem[], onProgress?: CohesionOption
  *
  * 合并写回槽位 A、停用槽位 B，因此不需要重建矩阵。
  */
-function mergeByAverageLink(sim: Float32Array, n: number, threshold: number): number[][] {
+function mergeByAverageLink(
+  sim: Float32Array,
+  n: number,
+  threshold: number,
+  targetCount?: number,
+  cutSimilarityFloor?: number
+): number[][] {
   const active = new Uint8Array(n).fill(1);
   const size = new Int32Array(n).fill(1);
   const members: number[][] = Array.from({ length: n }, (_, index) => [index]);
   let activeCount = n;
+  const floor = Math.max(threshold, cutSimilarityFloor ?? threshold);
 
   while (activeCount > 1) {
+    if (targetCount !== undefined && activeCount <= targetCount) break;
+
     let bestA = -1;
     let bestB = -1;
     let best = Number.NEGATIVE_INFINITY;
@@ -139,8 +155,8 @@ function mergeByAverageLink(sim: Float32Array, n: number, threshold: number): nu
       }
     }
 
-    // 没有任何一对达到阈值 → 收敛
-    if (bestA === -1 || best < threshold) break;
+    // 没有任何一对达到阈值（或低于停止下限）→ 收敛
+    if (bestA === -1 || best < floor) break;
 
     const sizeA = size[bestA];
     const sizeB = size[bestB];

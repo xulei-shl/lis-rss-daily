@@ -103,7 +103,7 @@ export function buildMatrix(
  * 生成给 LLM 的矩阵摘要文本。
  * 只喂「已有格 + 高分空缺格」，控制输入体量。
  */
-export function renderMatrixSummary(matrix: MatrixResult, maxCells = 25): string {
+export function renderMatrixSummary(matrix: MatrixResult, maxCells = 25, maxHoles = 12): string {
   const lines: string[] = [];
 
   lines.push(`【方法分布】${matrix.methods.length > 0 ? matrix.methods.join('、') : '样本不足'}`);
@@ -123,7 +123,7 @@ export function renderMatrixSummary(matrix: MatrixResult, maxCells = 25): string
   if (matrix.holes.length === 0) {
     lines.push('（无明显空缺）');
   } else {
-    for (const hole of matrix.holes) {
+    for (const hole of matrix.holes.slice(0, maxHoles)) {
       lines.push(
         `- ${hole.method} × ${hole.object} → 空缺（该方法出现 ${hole.methodCount} 次，该对象出现 ${hole.objectCount} 次）`
       );

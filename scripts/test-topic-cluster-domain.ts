@@ -11,7 +11,19 @@
 
 import assert from 'node:assert/strict';
 
+import {
+  buildThreads,
+  groupAngles,
+  type AngleGroup,
+  type ChainItem,
+} from '../src/topic-cluster/domain/chaining.js';
 import { cohesionClusters, type ClusterItem } from '../src/topic-cluster/domain/clustering.js';
+import { buildParadigmDomains } from '../src/topic-cluster/service/paradigm.js';
+import type { TopicMemberView } from '../src/topic-cluster/service/member-view.js';
+import type { MatrixResult } from '../src/topic-cluster/service/matrix.js';
+import { addMonths } from '../src/topic-cluster/domain/metrics.js';
+import { fillMissingMonths, type PeriodPoint } from '../src/topic-cluster/service/metrics-builder.js';
+import { pickBestTopic } from '../src/topic-cluster/repo/remap.js';
 import { splitKeys } from '../src/topic-cluster/domain/facet.js';
 import { ClusterSchemaError, isPlaceholder, requireText } from '../src/topic-cluster/llm/schema.js';
 import {
@@ -340,6 +352,278 @@ for (const testCase of PLACEHOLDER_CASES) {
 check('requireText 对占位符抛 ClusterSchemaError、对合法值返回原文', () => {
   assert.throws(() => requireText('未明确说明', 'method', 2), ClusterSchemaError);
   assert.equal(requireText(' 内容分析 ', 'method', 2), '内容分析');
+});
+
+/* ── ④ 脉络：发散保留、角色、angle_key ── */
+
+console.log('\n④ 脉络与角度身份');
+
+function chainItem(
+  articleId: number,
+  angleDeg: number,
+  eventDate: string,
+  method = '实验研究',
+  object = '高校图书馆'
+): ChainItem {
+  return {
+    articleId,
+    vector: unitVector(angleDeg),
+    eventDate,
+    precision: 'day',
+    methodKeys: [method],
+    objectKeys: [object],
+  };
+}
+
+function angleOf(items: ChainItem[], angleKey = 'a-test'): AngleGroup {
+  const centroid = normalize(
+    items.reduce((sum, item) => {
+      for (let i = 0; i < item.vector.length; i += 1) sum[i] += item.vector[i];
+      return sum;
+    }, new Float32Array(items[0].vector.length))
+  );
+  return { angleKey, angleLabel: null, members: items, centroid };
+}
+
+const threadOptions = {
+  minThreadLength: 3,
+  strongThreshold: 0.88,
+  chainThreshold: 0.78,
+  minContinuityRatio: 0.5,
+};
+
+check('低承接角度保留为 divergent，成员不再进入 loose', () => {
+  // 相邻 cos47°≈0.68 < 0.78，连续性为 0；但角度仍必须保留全部 8 篇
+  const items = Array.from({ length: 8 }, (_, index) =>
+    chainItem(index + 1, index * 47, `2025-0${(index % 9) + 1}-01`)
+  );
+  const { threads, loose } = buildThreads([angleOf(items)], threadOptions);
+
+  assert.equal(loose.length, 0);
+  assert.equal(threads.length, 1);
+  assert.equal(threads[0].patternType, 'divergent');
+  assert.equal(threads[0].steps.length, 8);
+  assert.ok(threads[0].representatives.length >= 1 && threads[0].representatives.length <= 4);
+  assert.ok(threads[0].steps.every((step) => Boolean(step.academicRole)));
+});
+
+check('高承接角度保留为 linear，成员全部是 backbone', () => {
+  const items = Array.from({ length: 5 }, (_, index) =>
+    chainItem(index + 1, 0, `2025-0${index + 1}-01`)
+  );
+  const { threads } = buildThreads([angleOf(items)], threadOptions);
+
+  assert.equal(threads[0].patternType, 'linear');
+  assert.equal(threads[0].representatives.length, 0);
+  assert.ok(threads[0].steps.every((step) => step.academicRole === 'backbone'));
+});
+
+check('同签名角度追加冲突后缀，angle_key 全局唯一', () => {
+  // 两组向量相距 180°，但方法/对象完全相同 → buildAngleKey 同签名
+  const items = [
+    ...Array.from({ length: 6 }, (_, index) => chainItem(index + 1, 0, `2025-01-0${index + 1}`)),
+    ...Array.from({ length: 6 }, (_, index) =>
+      chainItem(index + 7, 180, `2025-02-0${index + 1}`)
+    ),
+  ];
+  const angles = groupAngles(items, 0.82, { maxAngleCount: 10 });
+  const keys = angles.map((angle) => angle.angleKey);
+
+  assert.equal(angles.length, 2);
+  assert.equal(new Set(keys).size, keys.length);
+  assert.ok(keys.some((key) => /-\d+$/.test(key)), '第二个同签名角度应带 -2 后缀');
+});
+
+check('成员小幅变动时复用旧 angle_key，避免身份漂移', () => {
+  const base = [
+    ...Array.from({ length: 6 }, (_, index) => chainItem(index + 1, 0, `2025-01-0${index + 1}`)),
+    ...Array.from({ length: 6 }, (_, index) =>
+      chainItem(index + 7, 180, `2025-02-0${index + 1}`)
+    ),
+  ];
+  const first = groupAngles(base, 0.82, { maxAngleCount: 10 });
+  const previous = first.map((angle) => ({
+    angleKey: angle.angleKey,
+    angleLabel: '旧标签',
+    articleIds: angle.members.map((member) => member.articleId),
+  }));
+
+  const withNewMember = [...base, chainItem(99, 5, '2025-03-01')];
+  const second = groupAngles(withNewMember, 0.82, {
+    maxAngleCount: 10,
+    previous,
+  });
+
+  const oldKey = first.find((angle) =>
+    angle.members.some((member) => member.articleId === 1)
+  )?.angleKey;
+  const newKey = second.find((angle) =>
+    angle.members.some((member) => member.articleId === 1)
+  )?.angleKey;
+
+  assert.ok(oldKey);
+  assert.equal(newKey, oldKey);
+  assert.equal(
+    second.find((angle) => angle.angleKey === oldKey)?.angleLabel,
+    '旧标签'
+  );
+});
+
+check('243 篇压力用例：角度 3~10、成员不丢、angle_key 唯一、loose=0', () => {
+  const items = Array.from({ length: 243 }, (_, index) =>
+    chainItem(
+      index + 1,
+      (index % 10) * 36 + (index % 5),
+      `2025-${String((index % 12) + 1).padStart(2, '0')}-01`,
+      index % 2 === 0 ? '实验研究' : '问卷调查',
+      index % 2 === 0 ? '高校图书馆' : '公共图书馆'
+    )
+  );
+  const angles = groupAngles(items, 0.72, { maxAngleCount: 10 });
+
+  assert.ok(angles.length >= 3 && angles.length <= 10, `角度数应在 3~10，实际 ${angles.length}`);
+  assert.equal(
+    new Set(angles.flatMap((angle) => angle.members.map((member) => member.articleId))).size,
+    243
+  );
+  assert.equal(new Set(angles.map((angle) => angle.angleKey)).size, angles.length);
+
+  const { threads, loose } = buildThreads(angles, threadOptions);
+  assert.equal(loose.length, 0);
+  assert.equal(
+    new Set(threads.flatMap((thread) => thread.steps.map((step) => step.articleId))).size,
+    243
+  );
+});
+
+/* ── ⑤ 范式域聚合 ── */
+
+console.log('\n⑤ 范式域聚合');
+
+check('6 个高频格聚成 3~5 个范式域，每域代表 ≤7 篇', () => {
+  const members: TopicMemberView[] = [];
+  const cells: MatrixResult['cells'] = [];
+  const methods = ['实验研究', '问卷调查', '案例研究'];
+  const objects = ['高校图书馆', '公共图书馆'];
+  let id = 1;
+
+  for (let m = 0; m < methods.length; m += 1) {
+    for (let o = 0; o < objects.length; o += 1) {
+      const articleIds: number[] = [];
+      for (let k = 0; k < 3; k += 1) {
+        const articleId = id++;
+        articleIds.push(articleId);
+        members.push({
+          articleId,
+          vector: unitVector(m * 60 + o * 20 + k * 2),
+          eventDate: `2024-0${(k % 9) + 1}-01`,
+          precision: 'day',
+          methodKeys: [methods[m]],
+          objectKeys: [objects[o]],
+          similarity: 0.8,
+          isPrimary: true,
+          rank: articleId,
+          facet: {
+            research_question: `问题 ${articleId}`,
+            method: methods[m],
+            study_object: objects[o],
+            core_finding: `发现 ${articleId}`,
+          },
+        });
+      }
+      cells.push({ method: methods[m], object: objects[o], count: 3, articleIds });
+    }
+  }
+
+  const matrix: MatrixResult = {
+    methods,
+    objects,
+    cells,
+    holes: [],
+  };
+  const { domains, sparseArticleIds } = buildParadigmDomains(matrix, members);
+
+  assert.ok(domains.length >= 3 && domains.length <= 5, `域数 ${domains.length}`);
+  assert.equal(sparseArticleIds.length, 0);
+  for (const domain of domains) {
+    assert.ok(domain.representativeIds.length <= 7);
+    assert.ok(domain.articleCount >= domain.representativeIds.length);
+  }
+  assert.equal(
+    new Set(domains.flatMap((domain) => domain.representativeIds)).size,
+    domains.flatMap((domain) => domain.representativeIds).length
+  );
+});
+
+/* ── ⑥ 周期指标月份补齐 ── */
+
+console.log('\n⑥ 周期指标月份补齐');
+
+check('addMonths 处理跨年与负偏移', () => {
+  assert.equal(addMonths('2026-01', 1), '2026-02');
+  assert.equal(addMonths('2026-12', 1), '2027-01');
+  assert.equal(addMonths('2026-01', -1), '2025-12');
+  assert.equal(addMonths('2026-01', 12), '2027-01');
+});
+
+check('首尾之间的空月补成 added=0、指标 null 的连续月', () => {
+  const point = (period: string, articleId: number): PeriodPoint => ({
+    period,
+    articleIds: [articleId],
+    primaryCount: 1,
+    avgSimilarity: 0.8,
+    vectors: [unitVector(10)],
+    methodKeys: ['实验研究'],
+    objectKeys: ['高校图书馆'],
+  });
+
+  const filled = fillMissingMonths([point('2025-11', 1), point('2026-02', 2)]);
+  assert.deepEqual(
+    filled.map((item) => item.period),
+    ['2025-11', '2025-12', '2026-01', '2026-02']
+  );
+  assert.equal(filled[0].articleIds.length, 1);
+  assert.equal(filled[1].articleIds.length, 0);
+  assert.equal(filled[1].primaryCount, 0);
+  assert.equal(filled[1].avgSimilarity, null);
+  assert.deepEqual(filled[1].vectors, []);
+  assert.equal(filled[3].articleIds.length, 1);
+});
+
+check('单月与空输入不额外补齐', () => {
+  assert.deepEqual(fillMissingMonths([]), []);
+  const single = fillMissingMonths([
+    {
+      period: '2026-03',
+      articleIds: [1],
+      primaryCount: 1,
+      avgSimilarity: 0.7,
+      vectors: [],
+      methodKeys: [],
+      objectKeys: [],
+    },
+  ]);
+  assert.equal(single.length, 1);
+});
+
+/* ── ⑦ 跨版本 remap 选择 ── */
+
+console.log('\n⑦ 跨版本 remap 选择');
+
+check('选质心最相似的新主题，低于 0.72 不重定向', () => {
+  const oldVector = unitVector(0);
+  const best = pickBestTopic(oldVector, [
+    { topicId: 10, vector: unitVector(20) },
+    { topicId: 11, vector: unitVector(5) },
+    { topicId: 12, vector: unitVector(40) },
+  ]);
+  assert.equal(best?.topicId, 11);
+  assert.ok((best?.similarity ?? 0) >= 0.72);
+
+  assert.equal(
+    pickBestTopic(oldVector, [{ topicId: 20, vector: unitVector(90) }]),
+    null
+  );
 });
 
 console.log(`\n全部通过：${passed} 项`);

@@ -58,6 +58,14 @@ const DEFAULT_PROMPT_CONFIG: Record<
   email_parse: { fileName: 'email_parse.md', name: '默认邮件文章解析提示词' },
   cluster_facet: { fileName: 'cluster_facet.md', name: '默认主题聚类切面抽取提示词' },
   cluster_analysis: { fileName: 'cluster_analysis.md', name: '默认主题聚类多维分析提示词' },
+  cluster_analysis_synthesis: {
+    fileName: 'cluster_analysis_synthesis.md',
+    name: '主题聚类分析阶段 A（综述与角度）',
+  },
+  cluster_analysis_paradigm: {
+    fileName: 'cluster_analysis_paradigm.md',
+    name: '主题聚类分析阶段 B（范式、前沿、计量与空白）',
+  },
   cluster_naming: { fileName: 'cluster_naming.md', name: '默认主题聚类主题命名提示词' },
 };
 

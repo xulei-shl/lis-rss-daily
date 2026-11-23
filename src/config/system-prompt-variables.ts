@@ -280,6 +280,78 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
   },
 
   /**
+   * cluster_analysis_synthesis 类型变量 - 阶段 A
+   */
+  cluster_analysis_synthesis: {
+    TOPIC_NAME: {
+      description: '主题名称',
+      source: 'cluster_topics.name',
+      required: true,
+    },
+    TOPIC_KEYWORDS: {
+      description: '主题关键词（逗号分隔）',
+      source: 'cluster_topics.keywords',
+      required: true,
+    },
+    TOPIC_STATS: {
+      description: '月度序列、漂移、熵与样本充足性',
+      source: '规则计算（周期指标）',
+      required: true,
+    },
+    THREADS_JSON: {
+      description: '角度骨架 + 代表文献证据包',
+      source: '规则计算（分群/串链）+ 切面/全文总结',
+      required: true,
+    },
+    MATRIX_SUMMARY: {
+      description: 'method × study_object 覆盖矩阵与空缺格',
+      source: '规则聚合',
+      required: true,
+    },
+    CHANGE_CONTEXT: {
+      description: '上次综述摘要与本轮新增文献',
+      source: 'cluster_topic_analysis + article_topic_links',
+      required: true,
+    },
+  },
+
+  /**
+   * cluster_analysis_paradigm 类型变量 - 阶段 B
+   */
+  cluster_analysis_paradigm: {
+    TOPIC_NAME: {
+      description: '主题名称',
+      source: 'cluster_topics.name',
+      required: true,
+    },
+    TOPIC_KEYWORDS: {
+      description: '主题关键词（逗号分隔）',
+      source: 'cluster_topics.keywords',
+      required: true,
+    },
+    TOPIC_STATS: {
+      description: '月度序列、漂移、熵与样本充足性',
+      source: '规则计算（周期指标）',
+      required: true,
+    },
+    THREADS_JSON: {
+      description: '角度骨架 + 代表文献证据包',
+      source: '规则计算（分群/串链）+ 切面/全文总结',
+      required: true,
+    },
+    MATRIX_SUMMARY: {
+      description: 'method × study_object 覆盖矩阵与空缺格',
+      source: '规则聚合',
+      required: true,
+    },
+    SYNTHESIS_SUMMARY: {
+      description: '阶段 A 已生成的理论/对象/方法综述摘要',
+      source: '阶段 A 输出',
+      required: true,
+    },
+  },
+
+  /**
    * cluster_naming 类型变量 - 主题命名
    */
   cluster_naming: {

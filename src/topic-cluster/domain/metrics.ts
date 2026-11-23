@@ -74,6 +74,16 @@ export function monthsBetween(fromPeriod: string, toPeriod_: string): number | n
   return (to.year - from.year) * 12 + (to.month - from.month);
 }
 
+/** 在 'YYYY-MM' 上加减自然月；无效输入返回 null */
+export function addMonths(period: string, delta: number): string | null {
+  const parsed = parsePeriod(period);
+  if (!parsed) return null;
+  const total = parsed.year * 12 + (parsed.month - 1) + delta;
+  const year = Math.floor(total / 12);
+  const month = (total % 12) + 1;
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
+}
+
 function parsePeriod(period: string): { year: number; month: number } | null {
   const match = /^(\d{4})-(\d{2})$/.exec(period);
   if (!match) return null;

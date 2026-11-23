@@ -3,6 +3,7 @@
  *
  * 幂等与重试纪律：
  *   - `status='ok'` / `'insufficient_data'` → 清除脏标记，本轮结束；
+ *   - `status='partial'` → 阶段 A 已落库、阶段 B 待重试，**保留脏标记**但不计入 failed；
  *   - `status='failed'` → **保留脏标记**，下一轮自动重试。
  *     这样既不会因一次 LLM 抖动丢数据，也不会把失败静默当成完成。
  *
@@ -18,6 +19,7 @@ const log = logger.child({ module: 'topic-cluster/analyze' });
 export interface AnalysisStepResult {
   attempted: number;
   ok: number;
+  partial: number;
   insufficient: number;
   failed: number;
   failures: Array<{ topicId: number; error: string }>;
@@ -40,6 +42,7 @@ export async function runPendingAnalyses(
   const result: AnalysisStepResult = {
     attempted: topics.length,
     ok: 0,
+    partial: 0,
     insufficient: 0,
     failed: 0,
     failures: [],
@@ -52,6 +55,9 @@ export async function runPendingAnalyses(
     if (outcome.status === 'ok') {
       result.ok += 1;
       await clearTopicDirty(topic.id, new Date().toISOString());
+    } else if (outcome.status === 'partial') {
+      result.partial += 1;
+      // 阶段 A 已落库；保留 is_dirty=1，下一轮只重跑阶段 B
     } else if (outcome.status === 'insufficient_data') {
       result.insufficient += 1;
       // 样本不足不是错误：已写入规则聚合结果，清除脏标记避免每轮重复计算
@@ -64,7 +70,13 @@ export async function runPendingAnalyses(
   }
 
   log.info(
-    { attempted: result.attempted, ok: result.ok, insufficient: result.insufficient, failed: result.failed },
+    {
+      attempted: result.attempted,
+      ok: result.ok,
+      partial: result.partial,
+      insufficient: result.insufficient,
+      failed: result.failed,
+    },
     '多维分析完成'
   );
 

@@ -64,7 +64,8 @@ export class TopicClusterScheduler extends BaseScheduler {
     this.stats.lastRunTime = new Date();
 
     try {
-      const summary = await runClusterPipeline();
+      // 日节奏只做切面/路由/派生；综述由 TopicAnalysisScheduler 每周跑。
+      const summary = await runClusterPipeline({ skipAnalysis: true });
       this.stats.lastRunSummary = summary;
       this.stats.lastRunError = undefined;
     } catch (error) {

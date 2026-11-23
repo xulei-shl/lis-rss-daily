@@ -1,10 +1,11 @@
 /**
- * 多维分析编排。
+ * 多维分析编排（两阶段）。
  *
- * 职责分工（设计文档 §7.7）：
+ * 职责分工（设计文档 v2 §3）：
  *   - **规则层**先把矩阵、周期指标、角度/线索结构算好（零 token）；
- *   - **LLM 层**只把这些结构写成叙述，并强制引用白名单；
- *   - 失败时保留上一次成功结果并标记 status='failed'，**绝不写占位文本**。
+ *   - **LLM 阶段 A** 写 overview / synthesis / 角度叙述；
+ *   - **LLM 阶段 B** 写范式、前沿、计量与空白；
+ *   - 阶段 A 成功即落库为 `partial`，阶段 B 失败可单独重试，**绝不写占位文本**。
  *
  * 调用频率由 is_dirty 决定（实测约 0~3 次/天），页面访问不触发 LLM。
  */
@@ -12,16 +13,26 @@
 import { createHash } from 'node:crypto';
 import { logger } from '../../logger.js';
 import { CLUSTER_CONFIG, CLUSTER_LIMITS, type AnalysisStatus } from '../config.js';
-import type { Trend } from '../domain/metrics.js';
-import { type AnalysisResult, synthesizeAnalysis } from '../llm/analysis.js';
+import {
+  emptyAnalysisResult,
+  mergeAnalysisResult,
+  synthesizeParadigms,
+  synthesizeSynthesis,
+  type AnalysisResult,
+  type AnalysisSynthesis,
+  type PhaseAResult,
+} from '../llm/analysis.js';
 import { ClusterSchemaError } from '../llm/schema.js';
 import { getTopicAnalysis, upsertTopicAnalysis } from '../repo/analysis.js';
 import { listTopicMetrics } from '../repo/metrics.js';
 import { listThreadArticles, listThreads, updateThreadNarrative } from '../repo/threads.js';
 import { getTopicById } from '../repo/topics.js';
-import { buildMatrix, renderMatrixSummary } from './matrix.js';
+import { getArticleBriefs } from '../source.js';
+import { describePackedInput, packAnalysisInput, type PackedAnalysisInput } from './analysis-payload.js';
+import { buildCrossTopicGaps, type CrossTopicGap } from './gap-builder.js';
+import { buildMatrix } from './matrix.js';
 import { loadTopicMembers } from './member-view.js';
-import { renderMetricsSummary } from './metrics-builder.js';
+import { buildParadigmDomains, type ParadigmDomain } from './paradigm.js';
 
 const log = logger.child({ module: 'topic-cluster/analysis-runner' });
 
@@ -64,7 +75,7 @@ export async function runTopicAnalysis(
   if (members.length < CLUSTER_LIMITS.minArticlesForAnalysis) {
     await upsertTopicAnalysis({
       topicId,
-      analysisJson: JSON.stringify(emptyAnalysis()),
+      analysisJson: JSON.stringify(emptyAnalysisResult()),
       matrixJson: JSON.stringify(matrix),
       inputHash: '',
       linkedCount: members.length,
@@ -81,56 +92,177 @@ export async function runTopicAnalysis(
     };
   }
 
-  // 输入指纹：成员集合 + 切面内容 + 角度结构；未变化则跳过
   const metricRows = await listTopicMetrics(topicId);
   const threads = await listThreads(topicId);
   const threadArticleRows = await listThreadArticles(topicId);
+  const briefs = await getArticleBriefs(members.map((member) => member.articleId));
+  const previous = await getTopicAnalysis(topicId);
+  const previousResult = previous ? parseStoredResult(previous.analysis_json) : null;
+
+  const paradigmDomains = buildParadigmDomains(matrix, members).domains;
+  const crossTopicGaps = await buildCrossTopicGaps(topicId, dbTopic.set_version, members);
+
+  const packParams = {
+    topicName: dbTopic.name,
+    topicKeywords: keywords,
+    members,
+    threads,
+    threadArticles: threadArticleRows,
+    matrix,
+    metrics: metricRows,
+    briefs,
+    previousOverview: previousResult?.overview ?? null,
+  };
+  const packed = packAnalysisInput({
+    ...packParams,
+    budget: CLUSTER_CONFIG.analysisInputCharBudget,
+  });
+  // 阶段 B 额外携带范式域与跨主题空白；阶段 A 不付这份 token。
+  const packedB = packAnalysisInput({
+    ...packParams,
+    paradigmDomains,
+    crossTopicGaps,
+    budget: CLUSTER_CONFIG.analysisInputCharBudget,
+  });
+
   const inputHash = computeInputHash({
     topicId,
     name: dbTopic.name,
     memberIds: members.map((member) => member.articleId),
     facetTexts: members.map((member) => buildFacetSignature(member)),
-    angleKeys: threads.map((thread) => thread.angle_key),
+    angleKeys: threads.map((thread) => `${thread.angle_key}:${thread.pattern_type}`),
+    representativeIds: threadArticleRows
+      .filter((row) => row.is_representative === 1)
+      .map((row) => row.article_id),
   });
 
-  if (!options.force) {
-    const existing = await getTopicAnalysis(topicId);
-    if (existing && existing.input_hash === inputHash && existing.status === 'ok') {
+  if (!options.force && previous && previous.input_hash === inputHash) {
+    if (previous.status === 'ok') {
       return { topicId, status: 'ok', angleCount: threads.length, gapCount: 0, error: null };
+    }
+    // 阶段 A 已成功、阶段 B 失败：只重跑 B，不再花一次阶段 A 的 token。
+    if (previous.status === 'partial' && previousResult && previousResult.phaseBStatus !== 'ok') {
+      const phaseA = toPhaseA(previousResult);
+      if (phaseA) {
+        return runPhaseB({
+          topicId,
+          dbTopic,
+          keywords,
+          matrix,
+          packed: packedB,
+          members,
+          threads,
+          inputHash,
+          phaseA,
+          paradigmDomains,
+          crossTopicGaps,
+        });
+      }
     }
   }
 
-  const threadPayload = buildThreadPayload(members, threads, threadArticleRows);
+  log.info(
+    {
+      topicId,
+      chars: packed.chars,
+      evidence: packed.evidenceByArticleId.size,
+      truncated: packed.truncated,
+    },
+    describePackedInput(packed)
+  );
+
   const allowedArticleIds = new Set(members.map((member) => member.articleId));
-  const allowedAngleKeys = new Set(threads.map((thread) => thread.angle_key));
 
   try {
-    const result = await synthesizeAnalysis({
+    const phaseAResult = await synthesizeSynthesis({
       userId: dbTopic.user_id,
       topicName: dbTopic.name,
       topicKeywords: keywords,
-      statsText: renderMetricsSummary(metricRows),
-      threadsJson: JSON.stringify(threadPayload, null, 2),
-      matrixSummary: renderMatrixSummary(matrix),
+      statsText: packed.statsText,
+      threadsJson: packed.threadsJson,
+      matrixSummary: packed.matrixSummary,
+      changeContext: packed.changeContext,
       allowedArticleIds,
-      allowedAngleKeys,
+      evidenceByArticleId: packed.evidenceByArticleId,
+      anglePatterns: packed.anglePatterns,
     });
 
-    await upsertTopicAnalysis({
+    // 阶段 A 立即落库：阶段 B 失败不会让整轮综述白干。
+    let phaseA = phaseAResult;
+    if (!phaseA.overview && previousResult?.overview) {
+      phaseA = { ...phaseA, overview: previousResult.overview };
+    }
+    const partial = mergeAnalysisResult(phaseA, null, 'pending');
+    await persistAnalysis(topicId, members.length, matrix, inputHash, 'partial', null, partial);
+    await applyAngleNarratives(threads, partial);
+
+    return runPhaseB({
       topicId,
-      analysisJson: JSON.stringify(result),
-      matrixJson: JSON.stringify(matrix),
+      dbTopic,
+      keywords,
+      matrix,
+      packed: packedB,
+      members,
+      threads,
       inputHash,
-      linkedCount: members.length,
-      contractVersion: CLUSTER_CONFIG.facetContractVersion,
-      status: 'ok',
-      errorMessage: null,
+      phaseA,
+      paradigmDomains,
+      crossTopicGaps,
+    });
+  } catch (error) {
+    return markFailed(topicId, members.length, matrix, inputHash, previous, error);
+  }
+}
+
+/* ── 阶段 B ── */
+
+async function runPhaseB(args: {
+  topicId: number;
+  dbTopic: NonNullable<Awaited<ReturnType<typeof getTopicById>>>;
+  keywords: string[];
+  matrix: ReturnType<typeof buildMatrix>;
+  packed: PackedAnalysisInput;
+  members: Awaited<ReturnType<typeof loadTopicMembers>>['members'];
+  threads: Awaited<ReturnType<typeof listThreads>>;
+  inputHash: string;
+  phaseA: PhaseAResult;
+  paradigmDomains: ParadigmDomain[];
+  crossTopicGaps: CrossTopicGap[];
+}): Promise<AnalysisRunResult> {
+  try {
+    const phaseB = await synthesizeParadigms({
+      userId: args.dbTopic.user_id,
+      topicName: args.dbTopic.name,
+      topicKeywords: args.keywords,
+      statsText: args.packed.statsText,
+      threadsJson: args.packed.threadsJson,
+      matrixSummary: args.packed.matrixSummary,
+      changeContext: args.packed.changeContext,
+      allowedArticleIds: new Set([
+        ...args.members.map((member) => member.articleId),
+        ...args.crossTopicGaps.flatMap((gap) => gap.evidenceArticleIds),
+      ]),
+      evidenceByArticleId: args.packed.evidenceByArticleId,
+      anglePatterns: args.packed.anglePatterns,
+      synthesis: args.phaseA.synthesis,
+      crossTopicGaps: args.crossTopicGaps,
+      paradigmDomains: args.paradigmDomains,
     });
 
-    await applyAngleNarratives(threads, result);
+    const result = mergeAnalysisResult(args.phaseA, phaseB, 'ok');
+    await persistAnalysis(
+      args.topicId,
+      args.members.length,
+      args.matrix,
+      args.inputHash,
+      'ok',
+      null,
+      result
+    );
+    await applyAngleNarratives(args.threads, result);
 
     return {
-      topicId,
+      topicId: args.topicId,
       status: 'ok',
       angleCount: result.angles.length,
       gapCount: result.gaps.length,
@@ -138,68 +270,115 @@ export async function runTopicAnalysis(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const severity = error instanceof ClusterSchemaError ? '已被 schema 校验拒收' : '调用失败';
-    log.warn({ topicId, error: message }, `主题分析${severity}，保留上一次结果`);
+    const failed = mergeAnalysisResult(args.phaseA, null, 'failed');
+    await persistAnalysis(
+      args.topicId,
+      args.members.length,
+      args.matrix,
+      args.inputHash,
+      'partial',
+      `phase_b: ${message}`,
+      failed
+    );
 
-    // 保留上一次成功结果，仅标记失败（前端据此提示「分析待更新」）
-    const previous = await getTopicAnalysis(topicId);
-    await upsertTopicAnalysis({
-      topicId,
-      analysisJson: previous?.analysis_json ?? JSON.stringify(emptyAnalysis()),
-      matrixJson: JSON.stringify(matrix),
-      inputHash,
-      linkedCount: members.length,
-      contractVersion: CLUSTER_CONFIG.facetContractVersion,
-      status: 'failed',
-      errorMessage: message,
-    });
+    log.warn(
+      { topicId: args.topicId, error: message },
+      '阶段 B 失败，保留阶段 A 综述；下一轮只重跑阶段 B'
+    );
 
-    return { topicId, status: 'failed', angleCount: 0, gapCount: 0, error: message };
+    return {
+      topicId: args.topicId,
+      status: 'partial',
+      angleCount: failed.angles.length,
+      gapCount: 0,
+      error: message,
+    };
   }
 }
 
-/* ── 输入组装 ── */
+/* ── 落库与失败 ── */
 
-/** 把角度/线索结构渲染成给 LLM 的清单（含 article_id 与关系标记） */
-function buildThreadPayload(
-  members: Awaited<ReturnType<typeof loadTopicMembers>>['members'],
-  threads: Awaited<ReturnType<typeof listThreads>>,
-  threadArticles: Awaited<ReturnType<typeof listThreadArticles>>
-): unknown {
-  const memberMap = new Map(members.map((member) => [member.articleId, member]));
-
-  return {
-    angles: threads.map((thread) => ({
-      angle_key: thread.angle_key,
-      article_count: thread.article_count,
-      period_start: thread.period_start,
-      period_end: thread.period_end,
-      trend: thread.trend,
-      articles: threadArticles
-        .filter((row) => row.thread_id === thread.id)
-        .map((row) => {
-          const member = memberMap.get(row.article_id);
-          return {
-            article_id: row.article_id,
-            seq: row.seq,
-            relation: row.relation,
-            similarity_to_prev: row.similarity_to_prev,
-            shared_method: row.shared_method === 1,
-            shared_object: row.shared_object === 1,
-            research_question: member?.facet.research_question ?? '',
-            method: member?.facet.method ?? '',
-            study_object: member?.facet.study_object ?? '',
-            core_finding: member?.facet.core_finding ?? '',
-            limitation: member?.facet.limitation ?? '',
-            event_date: member?.eventDate ?? null,
-            date_precision: member?.precision ?? null,
-          };
-        }),
-    })),
-  };
+async function persistAnalysis(
+  topicId: number,
+  linkedCount: number,
+  matrix: ReturnType<typeof buildMatrix>,
+  inputHash: string,
+  status: AnalysisStatus,
+  errorMessage: string | null,
+  analysis: AnalysisResult
+): Promise<void> {
+  await upsertTopicAnalysis({
+    topicId,
+    analysisJson: JSON.stringify(analysis),
+    matrixJson: JSON.stringify(matrix),
+    inputHash,
+    linkedCount,
+    contractVersion: CLUSTER_CONFIG.facetContractVersion,
+    status,
+    errorMessage,
+  });
 }
 
-/** 把 LLM 产出的角度名与叙述回填到脉络表（按 angle_key 匹配） */
+async function markFailed(
+  topicId: number,
+  linkedCount: number,
+  matrix: ReturnType<typeof buildMatrix>,
+  inputHash: string,
+  previous: Awaited<ReturnType<typeof getTopicAnalysis>>,
+  error: unknown
+): Promise<AnalysisRunResult> {
+  const message = error instanceof Error ? error.message : String(error);
+  const severity = error instanceof ClusterSchemaError ? '已被 schema 校验拒收' : '调用失败';
+  log.warn({ topicId, error: message }, `主题分析${severity}，保留上一次结果`);
+
+  // 阶段 A 失败：保留旧结果，不写空内容。
+  await persistAnalysis(
+    topicId,
+    linkedCount,
+    matrix,
+    inputHash,
+    'failed',
+    message,
+    previous ? parseStoredResult(previous.analysis_json) ?? emptyAnalysisResult() : emptyAnalysisResult()
+  );
+
+  return { topicId, status: 'failed', angleCount: 0, gapCount: 0, error: message };
+}
+
+/* ── 输入指纹与回填 ── */
+
+function computeInputHash(input: {
+  topicId: number;
+  name: string;
+  memberIds: number[];
+  facetTexts: string[];
+  angleKeys: string[];
+  representativeIds: number[];
+}): string {
+  const hash = createHash('sha256');
+  // v2 分析契约上线后旧缓存必须失效，否则会跳过两阶段重算。
+  hash.update(`contract:v2|topic:${input.topicId}|name:${input.name}`);
+  hash.update(`|facet:${CLUSTER_CONFIG.facetContractVersion}`);
+  hash.update(`|members:${input.memberIds.join(',')}`);
+  hash.update(`|angles:${input.angleKeys.join(',')}`);
+  hash.update(`|representatives:${input.representativeIds.join(',')}`);
+  for (const text of input.facetTexts) hash.update(`|${text}`);
+  return hash.digest('hex');
+}
+
+function buildFacetSignature(member: {
+  articleId: number;
+  facet: { research_question: string; method: string; study_object: string; core_finding: string };
+}): string {
+  return [
+    member.articleId,
+    member.facet.research_question,
+    member.facet.method,
+    member.facet.study_object,
+    member.facet.core_finding,
+  ].join('\u0001');
+}
+
 async function applyAngleNarratives(
   threads: Awaited<ReturnType<typeof listThreads>>,
   result: AnalysisResult
@@ -213,31 +392,43 @@ async function applyAngleNarratives(
   }
 }
 
-/* ── 工具 ── */
+/* ── 旧结果读取 ── */
 
-function computeInputHash(input: {
-  topicId: number;
-  name: string;
-  memberIds: number[];
-  facetTexts: string[];
-  angleKeys: string[];
-}): string {
-  const hash = createHash('sha256');
-  hash.update(`topic:${input.topicId}|name:${input.name}|contract:${CLUSTER_CONFIG.facetContractVersion}`);
-  hash.update(`|members:${input.memberIds.join(',')}`);
-  hash.update(`|angles:${input.angleKeys.join(',')}`);
-  for (const text of input.facetTexts) hash.update(`|${text}`);
-  return hash.digest('hex');
+function parseStoredResult(raw: string | null | undefined): AnalysisResult | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<AnalysisResult>;
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (!parsed.synthesis) {
+      // v1 缓存没有 synthesis：保留旧 fields，避免阶段 A 失败时把旧结果覆盖成空。
+      return {
+        ...emptyAnalysisResult(),
+        overview: typeof parsed.overview === 'string' ? parsed.overview : '',
+        angles: Array.isArray(parsed.angles) ? parsed.angles : [],
+        trend: parsed.trend ?? { summary: '', direction: 'flat', evidenceArticleIds: [] },
+        gaps: Array.isArray(parsed.gaps) ? parsed.gaps : [],
+        consensus: Array.isArray(parsed.consensus) ? parsed.consensus : [],
+        controversies: Array.isArray(parsed.controversies) ? parsed.controversies : [],
+        historySummary: typeof parsed.historySummary === 'string' ? parsed.historySummary : null,
+      };
+    }
+    return {
+      ...(parsed as AnalysisResult),
+      phaseBStatus: parsed.phaseBStatus ?? 'pending',
+    };
+  } catch {
+    return null;
+  }
 }
 
-function buildFacetSignature(member: { articleId: number; facet: { research_question: string; method: string; study_object: string; core_finding: string } }): string {
-  return [
-    member.articleId,
-    member.facet.research_question,
-    member.facet.method,
-    member.facet.study_object,
-    member.facet.core_finding,
-  ].join('\u0001');
+function toPhaseA(result: AnalysisResult): PhaseAResult | null {
+  if (!result.synthesis || !Array.isArray(result.angles)) return null;
+  return {
+    overview: result.overview ?? '',
+    synthesis: result.synthesis as AnalysisSynthesis,
+    angles: result.angles,
+    trend: result.trend ?? { summary: '', direction: 'flat', evidenceArticleIds: [] },
+  };
 }
 
 function parseKeywords(raw: string | null): string[] {
@@ -249,28 +440,4 @@ function parseKeywords(raw: string | null): string[] {
     return [];
   }
   return [];
-}
-
-/**
- * 降级/失败时的空分析骨架。
- * 注意：字段为 null / 空数组，前端据此显示「未生成」，而不是展示编造内容。
- */
-function emptyAnalysis(): {
-  overview: string;
-  angles: never[];
-  trend: { summary: string; direction: Trend; evidenceArticleIds: number[] };
-  gaps: never[];
-  consensus: never[];
-  controversies: never[];
-  historySummary: null;
-} {
-  return {
-    overview: '',
-    angles: [],
-    trend: { summary: '', direction: 'flat', evidenceArticleIds: [] },
-    gaps: [],
-    consensus: [],
-    controversies: [],
-    historySummary: null,
-  };
 }

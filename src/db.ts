@@ -569,6 +569,8 @@ export interface TopicThreadsTable {
   period_start: string | null;
   period_end: string | null;
   status: Generated<'ACTIVE' | 'DORMANT'>;
+  /** linear：高承接时序链；divergent：发散子议题 */
+  pattern_type: Generated<'linear' | 'divergent'>;
   trend: 'up' | 'flat' | 'down' | null;
   summary: string | null;
   created_at: Generated<string>;
@@ -580,10 +582,14 @@ export interface ThreadArticlesTable {
   thread_id: number;
   article_id: number;
   seq: number;
-  relation: 'origin' | 'continue' | 'shift' | 'refute' | null;
+  relation: 'origin' | 'continue' | 'shift' | 'refute' | 'satellite' | null;
   similarity_to_prev: number | null;
   shared_method: Generated<number>;
   shared_object: Generated<number>;
+  /** backbone / divergent / satellite / frontier */
+  academic_role: Generated<'backbone' | 'divergent' | 'satellite' | 'frontier'>;
+  /** divergent 角度的代表作标记（3 篇近质心 + 最新 1 篇） */
+  is_representative: Generated<number>;
 }
 
 /** 周期指标（规则计算） */
@@ -609,7 +615,7 @@ export interface ClusterTopicAnalysisTable {
   input_hash: string | null;
   linked_count: number;
   contract_version: string | null;
-  status: Generated<'ok' | 'insufficient_data' | 'failed'>;
+  status: Generated<'ok' | 'partial' | 'insufficient_data' | 'failed'>;
   error_message: string | null;
   analyzed_at: string | null;
 }

@@ -134,6 +134,7 @@
     if (topic.trend === 'up') badges.push(['cluster-badge-rising', '升温']);
     if (topic.trend === 'down') badges.push(['cluster-badge-cooling', '退潮']);
     if (topic.analysisStatus === 'insufficient_data') badges.push(['cluster-badge-insufficient', '样本不足']);
+    if (topic.analysisStatus === 'partial') badges.push(['cluster-badge-partial', '综述部分更新']);
     if (topic.analysisStatus === 'failed') badges.push(['cluster-badge-failed', '分析待更新']);
     if (badges.length === 0) return '';
     return (

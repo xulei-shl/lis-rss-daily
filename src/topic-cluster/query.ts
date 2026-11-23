@@ -13,12 +13,13 @@
 import { getDb, type ThreadArticlesSelection } from '../db.js';
 import type { AnalysisStatus } from './config.js';
 import type { Trend } from './domain/metrics.js';
-import type { AnalysisResult, GapBasis } from './llm/analysis.js';
+import { emptyAnalysisResult, type AnalysisResult, type GapBasis } from './llm/analysis.js';
 import type { MatrixResult } from './service/matrix.js';
 import { listTopicMetrics, type MetricRow } from './repo/metrics.js';
 import { listThreads, listThreadArticles } from './repo/threads.js';
 import { getActiveSet } from './repo/sets.js';
-import { getTopicBySlug, listTopicsByVersion } from './repo/topics.js';
+import { getTopicById, getTopicBySlug, listTopicsByVersion } from './repo/topics.js';
+import { findTopicIdBySlugAnyVersion, getRemappedTopicId } from './repo/remap.js';
 import { listFacetsByArticleIds } from './repo/facets.js';
 import { parseFacetFields, type DatePrecision, type FacetFields } from './domain/facet.js';
 import { normalizeMethodKeys, normalizeObjectKeys } from './domain/vocab.js';
@@ -138,7 +139,8 @@ export async function listTopicCards(params: TopicListParams = {}): Promise<Topi
 export interface TopicArticleStep {
   articleId: number;
   seq: number;
-  relation: string;
+  /** divergent 角度为 null（不构造承接关系） */
+  relation: string | null;
   similarityToPrev: number | null;
   sharedMethod: boolean;
   sharedObject: boolean;
@@ -150,18 +152,36 @@ export interface TopicArticleStep {
   title: string;
   url: string | null;
   facet: FacetFields | null;
+  academicRole: 'backbone' | 'divergent' | 'satellite' | 'frontier';
+  isRepresentative: boolean;
 }
 
 export interface TopicAngle {
   threadId: number;
   angleKey: string;
   angleLabel: string | null;
+  patternType: 'linear' | 'divergent';
   articleCount: number;
   trend: Trend | null;
   narrative: string | null;
   periodStart: string | null;
   periodEnd: string | null;
+  representatives: number[];
   steps: TopicArticleStep[];
+}
+
+export interface TopicArticleItem {
+  id: number;
+  title: string;
+  url: string | null;
+  year: number | null;
+  role: 'backbone' | 'divergent' | 'satellite' | 'frontier';
+  patternType: 'linear' | 'divergent' | null;
+  method: string;
+  object: string;
+  researchQuestion: string;
+  isPrimary: boolean;
+  similarity: number;
 }
 
 export interface TopicDetail {
@@ -180,6 +200,8 @@ export interface TopicDetail {
   analysis: AnalysisResult | null;
   matrix: MatrixResult | null;
   angles: TopicAngle[];
+  /** 全量底册：243 篇一次性返回，前端本地分页（设计文档 v2 §4.4） */
+  allArticles: TopicArticleItem[];
   /** 未构成线索、平铺展示的文章（设计文档 §7.5 的降级路径） */
   looseArticles: TopicArticleStep[];
   metrics: MetricRow[];
@@ -212,7 +234,7 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     return {
       articleId: row.article_id,
       seq: row.seq,
-      relation: row.relation ?? 'continue',
+      relation: row.relation ?? null,
       similarityToPrev: row.similarity_to_prev ?? null,
       sharedMethod: row.shared_method === 1,
       sharedObject: row.shared_object === 1,
@@ -224,6 +246,8 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
       title: brief?.title ?? `#${row.article_id}`,
       url: brief?.url ?? null,
       facet: member?.facet ?? null,
+      academicRole: row.academic_role,
+      isRepresentative: row.is_representative === 1,
     };
   };
 
@@ -240,22 +264,24 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
 
   const threadedIds = new Set(threadArticles.map((row) => row.article_id));
 
-  const angles: TopicAngle[] = threads.map((thread) => ({
-    threadId: thread.id,
-    angleKey: thread.angle_key,
-    angleLabel: thread.angle_label,
-    articleCount: thread.article_count,
-    trend: (thread.trend as Trend | null) ?? null,
-    narrative: thread.summary,
-    periodStart: thread.period_start,
-    periodEnd: thread.period_end,
-    steps: markCrossPrecision(
-      threadArticles
-        .filter((row) => row.thread_id === thread.id)
-        .map(stepOf)
-        .sort((a, b) => a.seq - b.seq)
-    ),
-  }));
+  const angles: TopicAngle[] = threads.map((thread) => {
+    const threadSteps = threadArticles.filter((row) => row.thread_id === thread.id);
+    return {
+      threadId: thread.id,
+      angleKey: thread.angle_key,
+      angleLabel: thread.angle_label,
+      patternType: thread.pattern_type,
+      articleCount: thread.article_count,
+      trend: (thread.trend as Trend | null) ?? null,
+      narrative: thread.summary,
+      periodStart: thread.period_start,
+      periodEnd: thread.period_end,
+      representatives: threadSteps
+        .filter((row) => row.is_representative === 1)
+        .map((row) => row.article_id),
+      steps: markCrossPrecision(threadSteps.map(stepOf).sort((a, b) => a.seq - b.seq)),
+    };
+  });
 
   const looseArticles: TopicArticleStep[] = members
     .filter((member) => !threadedIds.has(member.articleId))
@@ -276,9 +302,36 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
         title: brief?.title ?? `#${member.articleId}`,
         url: brief?.url ?? null,
         facet: member.facet,
+        academicRole: 'divergent' as const,
+        isRepresentative: false,
       };
     })
     .sort((a, b) => (a.eventDate ?? '').localeCompare(b.eventDate ?? ''));
+
+  const threadById = new Map(threads.map((thread) => [thread.id, thread]));
+  const threadRowByArticle = new Map(threadArticles.map((row) => [row.article_id, row]));
+  const allArticles: TopicArticleItem[] = members
+    .map((member) => {
+      const row = threadRowByArticle.get(member.articleId);
+      const thread = row ? threadById.get(row.thread_id) : undefined;
+      const brief = briefs.get(member.articleId);
+      const year = brief?.publishedYear ??
+        (member.eventDate ? Number(member.eventDate.slice(0, 4)) : null);
+      return {
+        id: member.articleId,
+        title: brief?.title ?? `#${member.articleId}`,
+        url: brief?.url ?? null,
+        year: Number.isFinite(year ?? NaN) ? year : null,
+        role: row?.academic_role ?? 'divergent',
+        patternType: thread?.pattern_type ?? null,
+        method: member.facet?.method ?? '',
+        object: member.facet?.study_object ?? '',
+        researchQuestion: member.facet?.research_question ?? '',
+        isPrimary: member.isPrimary,
+        similarity: member.similarity,
+      };
+    })
+    .sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || b.id - a.id);
 
   return {
     id: topic.id,
@@ -296,6 +349,7 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     analysis: parseAnalysis(analysisRow?.analysis_json ?? null),
     matrix: parseMatrix(analysisRow?.matrix_json ?? null),
     angles,
+    allArticles,
     looseArticles,
     metrics,
     adjacent: await findAdjacentTopics(topic.id, topic.set_version, members),
@@ -448,7 +502,7 @@ async function listTopicMembersForQuery(topicId: number): Promise<QueryMember[]>
   });
 }
 
-async function resolveTopic(slugOrId: string) {
+export async function resolveTopic(slugOrId: string) {
   const numeric = Number(slugOrId);
   if (Number.isInteger(numeric) && numeric > 0) {
     const row = await getDb()
@@ -460,7 +514,15 @@ async function resolveTopic(slugOrId: string) {
   }
   const active = await getActiveSet(CLUSTER_CONFIG.userId);
   if (!active) return undefined;
-  return getTopicBySlug(active.version, slugOrId);
+
+  const current = await getTopicBySlug(active.version, slugOrId);
+  if (current) return current;
+
+  // 旧版本 slug：按 remap 跳到新主题（重建后旧 URL 不 404）。
+  const oldTopicId = await findTopicIdBySlugAnyVersion(slugOrId);
+  if (!oldTopicId) return undefined;
+  const newTopicId = await getRemappedTopicId(oldTopicId);
+  return newTopicId ? getTopicById(newTopicId) : undefined;
 }
 
 /**
@@ -567,18 +629,25 @@ function toTopicCard(row: {
 function parseAnalysis(raw: string | null | undefined): AnalysisResult | null {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as AnalysisResult;
+    const parsed = JSON.parse(raw) as Partial<AnalysisResult>;
     if (!parsed || typeof parsed !== 'object') return null;
+    const base = emptyAnalysisResult();
     return {
+      ...base,
       overview: typeof parsed.overview === 'string' ? parsed.overview : '',
+      synthesis: parsed.synthesis ?? base.synthesis,
       angles: Array.isArray(parsed.angles) ? parsed.angles : [],
-      trend: parsed.trend ?? { summary: '', direction: 'flat', evidenceArticleIds: [] },
+      trend: parsed.trend ?? base.trend,
       gaps: Array.isArray(parsed.gaps)
         ? parsed.gaps.map((gap) => ({ ...gap, basis: gap.basis as GapBasis }))
         : [],
       consensus: Array.isArray(parsed.consensus) ? parsed.consensus : [],
       controversies: Array.isArray(parsed.controversies) ? parsed.controversies : [],
       historySummary: typeof parsed.historySummary === 'string' ? parsed.historySummary : null,
+      paradigmReviews: Array.isArray(parsed.paradigmReviews) ? parsed.paradigmReviews : [],
+      frontierInsights: parsed.frontierInsights ?? null,
+      bibliometrics: parsed.bibliometrics ?? null,
+      phaseBStatus: parsed.phaseBStatus ?? 'pending',
     };
   } catch {
     return null;

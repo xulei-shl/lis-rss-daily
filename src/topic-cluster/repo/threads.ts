@@ -6,21 +6,24 @@
  */
 
 import { getDb, type ThreadArticlesSelection, type TopicThreadsSelection } from '../../db.js';
-import type { Relation } from '../domain/chaining.js';
+import type { AcademicRole, AngleIdentity, PatternType, Relation } from '../domain/chaining.js';
 import type { Trend } from '../domain/metrics.js';
 
 export interface ThreadStepRow {
   articleId: number;
   seq: number;
-  relation: Relation;
+  relation: Relation | null;
   similarityToPrev: number | null;
   sharedMethod: boolean;
   sharedObject: boolean;
+  academicRole: AcademicRole;
+  isRepresentative: boolean;
 }
 
 export interface ThreadWriteRow {
   angleKey: string;
   angleLabel: string | null;
+  patternType: PatternType;
   steps: ThreadStepRow[];
   periodStart: string | null;
   periodEnd: string | null;
@@ -36,6 +39,9 @@ export async function replaceTopicThreads(
   const db = getDb();
   const now = new Date().toISOString();
 
+  // fail-fast：撞 UNIQUE(topic_id, angle_key) 会中断整轮 derive，必须在写入前发现。
+  assertUniqueAngleKeys(rows);
+
   await db.transaction().execute(async (trx) => {
     await trx.deleteFrom('topic_threads').where('topic_id', '=', topicId).execute();
 
@@ -46,6 +52,7 @@ export async function replaceTopicThreads(
           topic_id: topicId,
           angle_key: row.angleKey,
           angle_label: row.angleLabel,
+          pattern_type: row.patternType,
           article_count: row.steps.length,
           period_start: row.periodStart,
           period_end: row.periodEnd,
@@ -69,12 +76,45 @@ export async function replaceTopicThreads(
               similarity_to_prev: step.similarityToPrev,
               shared_method: step.sharedMethod ? 1 : 0,
               shared_object: step.sharedObject ? 1 : 0,
+              academic_role: step.academicRole,
+              is_representative: step.isRepresentative ? 1 : 0,
             }))
           )
           .execute();
       }
     }
   });
+}
+
+function assertUniqueAngleKeys(rows: ThreadWriteRow[]): void {
+  const keys = new Set<string>();
+  for (const row of rows) {
+    if (keys.has(row.angleKey)) {
+      throw new Error(`angle_key 重复：${row.angleKey}（写入前必须先消解冲突）`);
+    }
+    keys.add(row.angleKey);
+  }
+}
+
+/** 读取旧脉络身份，供重建时复用 angle_key / angle_label */
+export async function listPreviousThreadIdentities(topicId: number): Promise<AngleIdentity[]> {
+  const [threads, articles] = await Promise.all([
+    listThreads(topicId),
+    listThreadArticles(topicId),
+  ]);
+
+  const byThread = new Map<number, number[]>();
+  for (const row of articles) {
+    const bucket = byThread.get(row.thread_id);
+    if (bucket) bucket.push(row.article_id);
+    else byThread.set(row.thread_id, [row.article_id]);
+  }
+
+  return threads.map((thread) => ({
+    angleKey: thread.angle_key,
+    angleLabel: thread.angle_label,
+    articleIds: byThread.get(thread.id) ?? [],
+  }));
 }
 
 export async function listThreads(topicId: number): Promise<TopicThreadsSelection[]> {

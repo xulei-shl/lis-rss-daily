@@ -109,6 +109,7 @@
 .cluster-badge-rising { background: rgba(2, 136, 209, 0.15); color: #0277bd; }
 .cluster-badge-cooling { background: rgba(120, 120, 120, 0.15); color: var(--text-secondary); }
 .cluster-badge-insufficient { background: rgba(245, 124, 0, 0.15); color: #e65100; }
+.cluster-badge-partial { background: rgba(25, 118, 210, 0.15); color: #1565c0; }
 .cluster-badge-failed { background: rgba(211, 47, 47, 0.15); color: #c62828; }
 .cluster-badge-dormant { background: rgba(120, 120, 120, 0.12); color: var(--text-secondary); }
 
@@ -278,25 +279,76 @@
   font-size: var(--text-sm);
 }
 
-.cluster-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  height: 120px;
+.cluster-chart-wrap {
   padding: var(--space-2) 0;
+  overflow-x: auto;
 }
 
-.cluster-bar {
-  flex: 1;
-  min-width: 8px;
-  background: rgba(2, 136, 209, 0.45);
-  border-radius: 3px 3px 0 0;
-  position: relative;
+.cluster-chart {
+  display: block;
+  width: 100%;
+  min-width: 360px;
+  height: auto;
 }
 
-.cluster-bar-label {
+.cluster-bar-rect {
+  fill: rgba(2, 136, 209, 0.45);
+}
+
+.cluster-line {
+  stroke: var(--accent, #0288d1);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.cluster-area {
+  fill: rgba(2, 136, 209, 0.1);
+}
+
+.cluster-axis {
+  stroke: var(--border, rgba(0, 0, 0, 0.12));
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.cluster-chart-labels {
+  display: grid;
+  min-width: 360px;
+  margin-top: var(--space-1);
   font-size: 10px;
   color: var(--text-secondary);
   text-align: center;
-  margin-top: var(--space-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.cluster-catalog-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  margin-top: var(--space-2);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface, #fff);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.cluster-catalog-more:hover {
+  border-color: var(--accent, #0288d1);
+  color: var(--accent, #0288d1);
+}
+
+.cluster-evidence-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 var(--space-2);
+  border-radius: 999px;
+  background: rgba(2, 136, 209, 0.1);
+  color: var(--accent, #0288d1);
+  font-size: var(--text-xs);
+  text-decoration: none;
 }

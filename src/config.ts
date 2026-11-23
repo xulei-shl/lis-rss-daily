@@ -135,6 +135,7 @@ export interface Config {
   // Topic Cluster（主题聚类与多维分析）
   clusterEnabled: boolean;
   clusterSchedule: string;
+  clusterAnalysisSchedule: string;
   clusterUserId: number;
   clusterScope: 'journal_only' | 'all_summary';
   clusterSimThreshold: number;
@@ -151,6 +152,12 @@ export interface Config {
   clusterLlmConcurrency: number;
   clusterEmbeddingDim: number;
   clusterFacetContractVersion: string;
+  /** 分析模型上下文窗口（token）；用于计算输入预算，默认按 128k 模型 */
+  clusterAnalysisContextTokens: number;
+  /** 分析阶段 B 的输出上限（token） */
+  clusterAnalysisOutputTokens: number;
+  /** 可选：直接覆盖输入字符预算（调优/小模型兜底） */
+  clusterAnalysisInputChars: number | null;
 }
 
 function getConfig(): Config {
@@ -293,6 +300,7 @@ function getConfig(): Config {
     // Topic Cluster（默认值均为初始值，需按设计文档 §14.3 校准后固化）
     clusterEnabled: process.env.CLUSTER_ENABLED !== 'false',
     clusterSchedule: process.env.CLUSTER_SCHEDULE || '30 8 * * *',
+    clusterAnalysisSchedule: process.env.CLUSTER_ANALYSIS_SCHEDULE || '30 9 * * 1',
     clusterUserId: intEnv(process.env.CLUSTER_USER_ID, 1, 1),
     clusterScope: process.env.CLUSTER_SCOPE === 'journal_only' ? 'journal_only' : 'all_summary',
     clusterSimThreshold: floatEnv(process.env.CLUSTER_SIM_THRESHOLD, 0.78, 0),
@@ -315,6 +323,21 @@ function getConfig(): Config {
     // v2：方法/研究对象改为封闭词表（见 topic-cluster/domain/vocab.ts），
     // 契约变更后 v1 切面自动回到「待抽取」，无需手工清库（设计文档 §7.9）
     clusterFacetContractVersion: process.env.CLUSTER_FACET_CONTRACT_VERSION || 'v2',
+    // v2 分析预算：上下文窗口不是目标，但也不能浪费可用窗口。
+    // 128k 上下文、16k 输出是当前主流配置；小模型请显式覆盖这两个值。
+    clusterAnalysisContextTokens: intEnv(
+      process.env.CLUSTER_ANALYSIS_CONTEXT_TOKENS,
+      128_000,
+      8_000
+    ),
+    clusterAnalysisOutputTokens: intEnv(
+      process.env.CLUSTER_ANALYSIS_OUTPUT_TOKENS,
+      16_384,
+      1_024
+    ),
+    clusterAnalysisInputChars: process.env.CLUSTER_ANALYSIS_INPUT_CHARS
+      ? intEnv(process.env.CLUSTER_ANALYSIS_INPUT_CHARS, 24_000, 4_000)
+      : null,
   };
 }
 

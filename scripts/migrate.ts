@@ -1022,6 +1022,56 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
         continue;
       }
 
+      // ============================================================
+      // 047: 主题聚类 v2（脉络类型 + 学术角色，纯加法列）
+      // ============================================================
+      if (file === '047_topic_cluster_v2.sql') {
+        if (!hasTable(db, 'topic_threads') || !hasTable(db, 'thread_articles')) {
+          console.log('      → Skipped (topic cluster tables not found)');
+          continue;
+        }
+
+        const statements = fs
+          .readFileSync(fullPath, 'utf-8')
+          .split(';')
+          .map((statement) => statement.trim())
+          .filter(Boolean);
+
+        let applied = 0;
+        for (const statement of statements) {
+          const match = statement.match(/ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)/i);
+          if (match && hasColumn(db, match[1], match[2])) continue;
+          db.exec(`${statement};`);
+          applied += 1;
+        }
+
+        console.log(
+          applied > 0
+            ? `      → Added ${applied} cluster v2 column(s)`
+            : '      → Skipped (cluster v2 columns already present)'
+        );
+        continue;
+      }
+
+      // ============================================================
+      // 048: 两阶段分析 partial 状态（重建 CHECK）
+      // ============================================================
+      if (file === '048_analysis_partial_status.sql') {
+        const table = db
+          .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='cluster_topic_analysis'")
+          .get() as { sql: string } | undefined;
+
+        if (!table) {
+          console.log('      → Skipped (cluster_topic_analysis not found)');
+        } else if (table.sql.includes("'partial'")) {
+          console.log('      → Skipped (partial status already supported)');
+        } else {
+          db.exec(fs.readFileSync(fullPath, 'utf-8'));
+          console.log('      → Rebuilt cluster_topic_analysis with partial status');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

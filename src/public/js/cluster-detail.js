@@ -13,8 +13,16 @@
     shift: '转向'
   };
 
+  const ROLE_LABELS = {
+    backbone: '演进主干',
+    divergent: '子域成员',
+    satellite: '边际卫星',
+    frontier: '前沿探针'
+  };
+
   const BASIS_LABELS = {
     matrix_hole: '依据：方法×对象覆盖空缺',
+    cross_topic_gap: '依据：邻近主题间的交叉空白',
     adjacent_topic: '依据：邻近主题间的空白',
     staleness: '依据：该方向近期无新增',
     limitation: '依据：文献自陈局限'
@@ -58,9 +66,11 @@
     parts.push(renderConsensus(detail));
     parts.push(renderTrend(detail));
     parts.push(renderAdjacent(detail));
+    parts.push(renderCatalog(detail));
     parts.push(renderLoose(detail));
 
     root.innerHTML = parts.filter(Boolean).join('');
+    bindCatalog();
   }
 
   /* ── 头部 ── */
@@ -106,6 +116,14 @@
       return (
         '<div class="cluster-note cluster-note-warn">' +
         '该主题样本量不足，仅展示规则聚合结果（对比矩阵）。为避免过度解读，未生成脉络、趋势与空白结论。' +
+        '</div>'
+      );
+    }
+    if (detail.analysisStatus === 'partial') {
+      return (
+        '<div class="cluster-note cluster-note-warn">' +
+        '综述与角度已更新，范式/前沿/空白部分待下一轮重试。' +
+        (detail.analysisError ? '<br>原因：' + escapeHtml(detail.analysisError) : '') +
         '</div>'
       );
     }
@@ -163,6 +181,9 @@
           '<span class="cluster-angle-name">' +
           escapeHtml(angle.angleLabel || '未命名角度') +
           '</span>' +
+          (angle.patternType === 'divergent'
+            ? '<span class="cluster-tag">发散子域</span>'
+            : '<span class="cluster-tag">时序脉络</span>') +
           '<span class="cluster-tag">' + angle.articleCount + ' 篇</span>' +
           (angle.trend ? '<span class="cluster-tag">' + trendLabel(angle.trend) + '</span>' : '') +
           '</div>';
@@ -171,13 +192,37 @@
           ? '<div class="cluster-angle-narrative">' + escapeHtml(angle.narrative) + '</div>'
           : '';
 
-        const steps = (angle.steps || []).map((step) => renderStep(step)).join('');
+        const allSteps = angle.steps || [];
+        const representativeSteps =
+          angle.patternType === 'divergent'
+            ? allSteps.filter((step) => step.isRepresentative)
+            : allSteps;
+        const restSteps =
+          angle.patternType === 'divergent'
+            ? allSteps.filter((step) => !step.isRepresentative)
+            : [];
+        const steps = representativeSteps.map((step) => renderStep(step)).join('');
+        const rest =
+          restSteps.length > 0
+            ? '<details class="cluster-details">' +
+              '<summary>其余 ' + restSteps.length + ' 篇子域成员</summary>' +
+              '<ol class="cluster-thread">' +
+              restSteps.map((step) => renderStep(step)).join('') +
+              '</ol>' +
+              '</details>'
+            : '';
+        const divergentNote =
+          angle.patternType === 'divergent'
+            ? '<div class="cluster-note">该子域内部未形成连续演进，先列代表作；其余成员可展开查看，均不代表时间上的承接关系。</div>'
+            : '';
 
         return (
           '<div class="cluster-angle">' +
           head +
           narrative +
+          divergentNote +
           '<ol class="cluster-thread">' + steps + '</ol>' +
+          rest +
           '</div>'
         );
       })
@@ -196,8 +241,14 @@
   }
 
   function renderStep(step) {
-    const relation = step.relation === 'loose' ? 'shift' : step.relation;
+    const relation = step.relation === 'loose' ? 'shift' : step.relation || 'divergent';
     const tags = [];
+    if (step.isRepresentative) {
+      tags.push('<span class="cluster-tag">子域代表</span>');
+    }
+    if (ROLE_LABELS[step.academicRole]) {
+      tags.push('<span class="cluster-tag">' + ROLE_LABELS[step.academicRole] + '</span>');
+    }
     if (RELATION_LABELS[step.relation]) {
       tags.push('<span class="cluster-tag">' + RELATION_LABELS[step.relation] + '</span>');
     }
@@ -231,6 +282,65 @@
   }
 
   /* ── 对比矩阵 ── */
+
+  /* ── 全量底册 ── */
+
+  const CATALOG_PAGE_SIZE = 30;
+
+  function renderCatalog(detail) {
+    const items = detail.allArticles || [];
+    if (items.length === 0) return '';
+
+    const rows = items
+      .map((item, index) => {
+        const role = ROLE_LABELS[item.role] || item.role;
+        const pattern = item.patternType === 'divergent' ? '发散' : item.patternType === 'linear' ? '时序' : '未归链';
+        return (
+          '<li class="cluster-thread-item" data-catalog-item' + (index >= CATALOG_PAGE_SIZE ? ' hidden' : '') + '>' +
+          '<a class="cluster-thread-title" href="/articles/' + item.id + '" target="_blank" rel="noopener">' +
+          escapeHtml(item.title) +
+          '</a>' +
+          '<div class="cluster-thread-sub">' +
+          (item.year ? item.year + ' · ' : '') +
+          escapeHtml(item.method) + ' / ' + escapeHtml(item.object) +
+          '</div>' +
+          '<div class="cluster-thread-sub">' +
+          '<span class="cluster-tag">' + escapeHtml(pattern) + '</span> ' +
+          '<span class="cluster-tag">' + escapeHtml(role) + '</span>' +
+          (item.isPrimary ? ' <span class="cluster-tag">主归属</span>' : '') +
+          '</div>' +
+          '</li>'
+        );
+      })
+      .join('');
+
+    return (
+      '<section class="cluster-section">' +
+      '<details class="cluster-details">' +
+      '<summary><h2 class="cluster-section-title" style="display:inline">📚 全量文献底册（' + items.length + ' 篇）</h2></summary>' +
+      '<ol class="cluster-thread">' + rows + '</ol>' +
+      (items.length > CATALOG_PAGE_SIZE
+        ? '<button type="button" class="cluster-catalog-more" data-catalog-more data-total="' + items.length + '">' +
+          '显示更多（剩余 ' + (items.length - CATALOG_PAGE_SIZE) + ' 篇）</button>'
+        : '') +
+      '</details>' +
+      '</section>'
+    );
+  }
+
+  function bindCatalog() {
+    const button = root.querySelector('[data-catalog-more]');
+    if (!button) return;
+    button.addEventListener('click', () => {
+      const hidden = root.querySelectorAll('[data-catalog-item][hidden]');
+      for (let i = 0; i < hidden.length && i < CATALOG_PAGE_SIZE; i += 1) {
+        hidden[i].removeAttribute('hidden');
+      }
+      const remaining = root.querySelectorAll('[data-catalog-item][hidden]').length;
+      if (remaining === 0) button.remove();
+      else button.textContent = '显示更多（剩余 ' + remaining + ' 篇）';
+    });
+  }
 
   function renderMatrix(detail) {
     const matrix = detail.matrix;
@@ -294,23 +404,24 @@
 
     const items = gaps
       .map((gap) => {
-        const evidence = (gap.evidenceArticleIds || [])
-          .map((id) => {
-            const article = articleIndex[id];
-            const label = article ? article.title : '#' + id;
-            return (
-              '<a class="cluster-tag" href="/articles/' + id + '" target="_blank" rel="noopener">' +
-              escapeHtml(label) +
-              '</a>'
-            );
-          })
-          .join(' ');
+        const evidenceIds = gap.evidenceArticleIds || [];
+        const evidenceTitles = evidenceIds.map((id) => {
+          const article = articleIndex[id];
+          return article ? article.title : '#' + id;
+        });
+        const evidence = evidenceIds.length
+          ? '<a class="cluster-evidence-pill" href="/articles/' + evidenceIds[0] +
+            '" target="_blank" rel="noopener" title="' + escapeHtml(evidenceTitles.join('；')) + '">' +
+            '依据 ' + evidenceIds.length + ' 篇</a>'
+          : '';
 
         return (
           '<div class="cluster-gap">' +
-          '<div class="cluster-gap-basis">' + escapeHtml(BASIS_LABELS[gap.basis] || gap.basis) + '</div>' +
+          '<div class="cluster-gap-basis">' + escapeHtml(BASIS_LABELS[gap.basis] || gap.basis) +
+          (gap.evidenceScope === 'adjacent' ? ' <span class="cluster-tag">跨主题证据</span>' : '') +
+          '</div>' +
           '<div>' + escapeHtml(gap.gap) + '</div>' +
-          (evidence ? '<div class="cluster-evidence">依据文献：' + evidence + '</div>' : '') +
+          (evidence ? '<div class="cluster-evidence">' + evidence + '</div>' : '') +
           '</div>'
         );
       })
@@ -356,19 +467,54 @@
     if (metrics.length === 0) return '';
 
     const maxAdded = Math.max.apply(null, metrics.map((row) => row.addedLinkedCount).concat([1]));
+    const maxCumulative = Math.max.apply(null, metrics.map((row) => row.cumulativeLinkedCount).concat([1]));
+    const width = Math.max(360, metrics.length * 32);
+    const height = 150;
+    const padX = 10;
+    const padTop = 12;
+    const padBottom = 8;
+    const plotW = width - padX * 2;
+    const plotH = height - padTop - padBottom;
+    const step = plotW / metrics.length;
+    const barW = Math.min(18, Math.max(8, step * 0.55));
+    const baseline = padTop + plotH;
+
     const bars = metrics
-      .map((row) => {
-        const height = Math.max(4, Math.round((row.addedLinkedCount / maxAdded) * 100));
+      .map((row, index) => {
+        const barH = (row.addedLinkedCount / maxAdded) * plotH;
+        const x = padX + step * index + (step - barW) / 2;
         return (
-          '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%">' +
-          '<div class="cluster-bar" style="height:' + height + '%;width:100%" title="' +
+          '<rect x="' + x.toFixed(1) + '" y="' + (baseline - barH).toFixed(1) +
+          '" width="' + barW.toFixed(1) + '" height="' + barH.toFixed(1) +
+          '" rx="3" class="cluster-bar-rect"><title>' +
           escapeHtml(row.period + '：新增 ' + row.addedLinkedCount + ' 篇') +
-          '"></div>' +
-          '<div class="cluster-bar-label">' + escapeHtml(row.period.slice(5)) + '</div>' +
-          '</div>'
+          '</title></rect>'
         );
       })
       .join('');
+
+    const points = metrics.map((row, index) => {
+      const x = padX + step * index + step / 2;
+      const y = padTop + plotH - (row.cumulativeLinkedCount / maxCumulative) * plotH;
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    });
+    const line = '<polyline points="' + points.join(' ') + '" class="cluster-line" fill="none" />';
+    const area =
+      '<polygon points="' + padX + ',' + baseline + ' ' + points.join(' ') + ' ' +
+      (padX + plotW).toFixed(1) + ',' + baseline + '" class="cluster-area" />';
+
+    const chart =
+      '<div class="cluster-chart-wrap">' +
+      '<svg class="cluster-chart" viewBox="0 0 ' + width + ' ' + height +
+      '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="月度新增与累计趋势">' +
+      area + line + bars +
+      '<line x1="' + padX + '" y1="' + baseline + '" x2="' + (padX + plotW) +
+      '" y2="' + baseline + '" class="cluster-axis" />' +
+      '</svg>' +
+      '<div class="cluster-chart-labels" style="grid-template-columns:repeat(' + metrics.length + ',1fr)">' +
+      metrics.map((row) => '<span>' + escapeHtml(row.period.slice(5)) + '</span>').join('') +
+      '</div>' +
+      '</div>';
 
     const rows = metrics
       .map(
@@ -384,7 +530,7 @@
       )
       .join('');
 
-    const insufficient = metrics.length < 3;
+    const insufficient = metrics.filter((row) => row.addedLinkedCount > 0).length < 3;
 
     return (
       '<section class="cluster-section">' +
@@ -392,9 +538,9 @@
       (insufficient
         ? '<div class="cluster-note cluster-note-warn">覆盖月份不足 3 个月，样本不足以判断趋势，仅列出原始指标。</div>'
         : '') +
-      '<div class="cluster-chart">' + bars + '</div>' +
+      chart +
       '<div style="overflow-x:auto"><table class="cluster-matrix">' +
-      '<tr><th>月份</th><th>新增</th><th>累计</th><th>平均相似度</th><th>质心漂移</th><th>方法熵</th></tr>' +
+      '<tr><th>月份</th><th>新增</th><th>累计</th><th>平均相似度</th><th>质心漂移（窗口）</th><th>方法熵</th></tr>' +
       rows +
       '</table></div>' +
       '</section>'

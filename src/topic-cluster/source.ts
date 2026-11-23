@@ -28,6 +28,8 @@ export interface ArticleBrief {
   publishedAt: string | null;
   publishedYear: number | null;
   createdAt: string | null;
+  /** 全文总结（证据包用，截断在打包层完成） */
+  aiSummary: string | null;
 }
 
 export interface ListSourceOptions {
@@ -203,6 +205,7 @@ export async function getArticleBriefs(articleIds: number[]): Promise<Map<number
       'published_at as published_at',
       'published_year as published_year',
       'created_at as created_at',
+      'ai_summary as ai_summary',
     ])
     .where('id', 'in', articleIds)
     .execute();
@@ -216,6 +219,7 @@ export async function getArticleBriefs(articleIds: number[]): Promise<Map<number
       publishedAt: row.published_at ?? null,
       publishedYear: row.published_year ?? null,
       createdAt: row.created_at ?? null,
+      aiSummary: row.ai_summary ?? null,
     });
   }
   return map;

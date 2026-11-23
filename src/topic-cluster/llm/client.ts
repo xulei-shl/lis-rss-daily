@@ -62,12 +62,25 @@ export async function runClusterJsonTask<T>(input: ClusterJsonTaskInput<T>): Pro
   });
 
   if (!parsed.success || !parsed.data || typeof parsed.data !== 'object') {
+    // provider 接口目前只返回文本，没有 finish_reason；用长度与结尾形态识别截断，
+    // 并在错误里显式标注，避免「解析失败 → 写空」被静默吞掉。
+    const likelyTruncated = isLikelyTruncated(response, input.maxTokens);
     throw new ClusterSchemaError(
-      `${input.label} 响应不是合法 JSON：${parsed.error ?? '未知原因'}`
+      `${input.label} 响应不是合法 JSON${likelyTruncated ? '（疑似 maxTokens 截断）' : ''}：` +
+        `${parsed.error ?? '未知原因'}；长度 ${response.length}`
     );
   }
 
   return input.validate(parsed.data);
+}
+
+/** 文本长度接近 maxTokens 或不以 JSON 闭合符结尾时，视为疑似截断。 */
+export function isLikelyTruncated(response: string, maxTokens: number): boolean {
+  const trimmed = response.trim();
+  return (
+    response.length >= maxTokens * 4 - 200 ||
+    (!trimmed.endsWith('}') && !trimmed.endsWith('```'))
+  );
 }
 
 /**

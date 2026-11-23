@@ -1,8 +1,9 @@
 /**
  * 多维分析缓存仓储（cluster_topic_analysis）。
  *
- * status 三态（设计文档 §7.7）：
- *   ok                 正常生成
+ * status 四态（设计文档 v2 §3.2）：
+ *   ok                 两阶段均完成
+ *   partial            阶段 A 已落库，阶段 B 失败/待重试（保留 is_dirty）
  *   insufficient_data  样本不足，只输出规则部分（**不是错误**，前端需区分展示）
  *   failed             LLM 调用或 schema 校验失败；**不得写入占位文本**
  */

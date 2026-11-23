@@ -7,14 +7,14 @@
  */
 
 import { logger } from '../../logger.js';
-import { listDirtyTopics } from '../repo/topics.js';
+import { listDirtyTopics, listTopicsByVersion } from '../repo/topics.js';
 import { rebuildTopicMetrics } from '../service/metrics-builder.js';
 import { rebuildTopicThreads } from '../service/thread-builder.js';
 
 const log = logger.child({ module: 'topic-cluster/derive' });
 
 export interface DeriveResult {
-  dirtyTopics: number;
+  processedTopics: number;
   threadsRebuilt: number;
   metricsRebuilt: number;
   threadsTotal: number;
@@ -22,11 +22,16 @@ export interface DeriveResult {
   missingFacetArticleIds: number[];
 }
 
-export async function runDeriveForDirtyTopics(setVersion: number): Promise<DeriveResult> {
-  const topics = await listDirtyTopics(setVersion);
+export async function runDeriveForDirtyTopics(
+  setVersion: number,
+  options: { forceAll?: boolean } = {}
+): Promise<DeriveResult> {
+  const topics = options.forceAll
+    ? await listTopicsByVersion(setVersion)
+    : await listDirtyTopics(setVersion);
 
   const result: DeriveResult = {
-    dirtyTopics: topics.length,
+    processedTopics: topics.length,
     threadsRebuilt: 0,
     metricsRebuilt: 0,
     threadsTotal: 0,

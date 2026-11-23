@@ -663,7 +663,10 @@ function renderLLMTable() {
     'daily_summary': 'daily_summary',
     'daily_summary_journal': 'daily_summary_journal',
     'daily_summary_blog_news': 'daily_summary_blog_news',
-    'analysis': 'analysis'
+    'analysis': 'analysis',
+    'cluster_facet': '切面抽取',
+    'cluster_analysis': '主题综述（A/B）',
+    'cluster_naming': '主题命名'
   };
 
   tbody.innerHTML = llmConfigs.map(function (config) {

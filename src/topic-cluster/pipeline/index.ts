@@ -275,6 +275,26 @@ export async function runColdStart(
   };
 }
 
+/** 日派生：只重算脏主题的脉络与指标，不调用 LLM。forceAll 用于 schema 升级后全量回填。 */
+export async function runScheduledDerive(
+  options: { forceAll?: boolean } = {}
+): Promise<{ setVersion: number; derive: DeriveResult }> {
+  const { setVersion } = await ensureActiveSet();
+  const derive = await runDeriveForDirtyTopics(setVersion, options);
+  return { setVersion, derive };
+}
+
+/** 周分析：只跑脏主题的两阶段综述，不重复日派生。 */
+export async function runScheduledAnalyses(
+  options: { limit?: number; force?: boolean } = {}
+): Promise<AnalysisStepResult> {
+  const { setVersion } = await ensureActiveSet();
+  return runPendingAnalyses(setVersion, {
+    limit: options.limit ?? 200,
+    force: options.force,
+  });
+}
+
 /**
  * 重建主题集合：归档当前版本并创建新版本。
  *
@@ -306,7 +326,7 @@ function emptyReclaimResult(): ReclaimResult {
 }
 
 function emptyAnalysisStepResult(): AnalysisStepResult {
-  return { attempted: 0, ok: 0, insufficient: 0, failed: 0, failures: [] };
+  return { attempted: 0, ok: 0, partial: 0, insufficient: 0, failed: 0, failures: [] };
 }
 
 export function isClusterEnabled(): boolean {
