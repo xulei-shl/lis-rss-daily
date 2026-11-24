@@ -64,9 +64,14 @@ export function trendLabel(trend) {
   return '平稳';
 }
 
-export function formatDateTime(value) {
+export function formatDateTime(value, overrides) {
   if (!value) return '未知';
-  return String(value).replace('T', ' ').slice(0, 16);
+  if (typeof window !== 'undefined' && window.timeUtils && typeof window.timeUtils.formatDateTime === 'function') {
+    return window.timeUtils.formatDateTime(value, overrides);
+  }
+  const str = typeof value === 'string' ? value.trim().replace(' ', 'T') : value;
+  const date = new Date(str);
+  return Number.isNaN(date.getTime()) ? String(value).slice(0, 16) : date.toLocaleString('zh-CN');
 }
 
 export function formatDuration(ms) {

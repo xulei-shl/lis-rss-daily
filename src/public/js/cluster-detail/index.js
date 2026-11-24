@@ -57,17 +57,12 @@ function renderPage(root, detail) {
   parts.push(renderStatusNotice(detail));
 
   // 4. Tab 导航条
-  const reviewsCount = (detail.reviews || []).length;
-  const anglesCount = (detail.angles || []).length;
-  const gapsCount = (detail.analysis && detail.analysis.gaps ? detail.analysis.gaps : []).length;
-  const catalogCount = (detail.allArticles || []).length;
-
   const tabs = [
-    { id: 'synthesis', label: '综述与洞察', icon: '📚', count: reviewsCount },
-    { id: 'evolution', label: '演进脉络', icon: '🧭', count: anglesCount },
-    { id: 'matrix', label: '矩阵与空白', icon: '📊', count: gapsCount },
-    { id: 'trends', label: '演化趋势', icon: '📈' },
-    { id: 'catalog', label: '聚类文献', icon: '📑', count: catalogCount }
+    { id: 'synthesis', label: '综述与洞察' },
+    { id: 'evolution', label: '演进脉络' },
+    { id: 'matrix', label: '矩阵与空白' },
+    { id: 'trends', label: '演化趋势' },
+    { id: 'catalog', label: '聚类文献' }
   ];
 
   parts.push(renderTabBar(tabs));
@@ -133,6 +128,9 @@ function renderPage(root, detail) {
 function renderTabBar(tabs) {
   const tabButtons = tabs
     .map((tab) => {
+      const iconSpan = tab.icon
+        ? '<span class="cluster-tab-icon" aria-hidden="true">' + tab.icon + '</span>'
+        : '';
       const countBadge = typeof tab.count === 'number'
         ? '<span class="cluster-tab-badge tabular-num">' + tab.count + '</span>'
         : '';
@@ -140,7 +138,7 @@ function renderTabBar(tabs) {
       return (
         '<button type="button" class="cluster-tab-btn" id="tab-' + tab.id + '" ' +
           'data-tab="' + tab.id + '" role="tab" aria-selected="false" aria-controls="panel-' + tab.id + '" tabindex="-1">' +
-          '<span class="cluster-tab-icon" aria-hidden="true">' + tab.icon + '</span>' +
+          iconSpan +
           '<span class="cluster-tab-text">' + escapeHtml(tab.label) + '</span>' +
           countBadge +
         '</button>'

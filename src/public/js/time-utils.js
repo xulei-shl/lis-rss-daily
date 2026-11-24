@@ -9,8 +9,10 @@
     if (input instanceof Date) {
       return Number.isNaN(input.getTime()) ? null : input;
     }
-    // 假设输入是 UTC 时间字符串，添加 Z 后缀确保正确解析
-    const date = new Date(input + (input.includes('Z') ? '' : 'Z'));
+    // 兼容 SQLite 空格分隔格式 (YYYY-MM-DD HH:MM:SS) 与已有带时区偏移 (+08:00) 的格式
+    const str = typeof input === 'string' ? input.trim().replace(' ', 'T') : String(input);
+    const hasTz = str.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(str);
+    const date = new Date(str + (hasTz ? '' : 'Z'));
     return Number.isNaN(date.getTime()) ? null : date;
   }
 

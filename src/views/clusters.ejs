@@ -13,7 +13,7 @@
     <div class="cluster-stat"><div class="skeleton-pulse skeleton-line" style="height: 26px;"></div></div>
   </div>
 
-  <div class="filters-bar" role="search" aria-label="主题检索">
+  <div class="filters-bar cluster-filters-bar" role="search" aria-label="主题检索">
     <div class="search-box">
       <svg class="search-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -21,7 +21,7 @@
       <input type="text" id="clusterSearch" class="search-input" placeholder="搜索主题名称、关键词、方法、研究对象..." aria-label="搜索主题">
     </div>
     <div class="filter-group">
-      <span class="filter-label">排序</span>
+      <label for="clusterSort" class="filter-label">排序</label>
       <select id="clusterSort" class="filter-select" aria-label="排序方式">
         <option value="recent">最近更新</option>
         <option value="size">文献最多</option>
