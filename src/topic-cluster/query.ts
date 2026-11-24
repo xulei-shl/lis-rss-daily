@@ -34,6 +34,7 @@ import {
 } from './repo/remap.js';
 import { listFacetsByArticleIds } from './repo/facets.js';
 import { parseFacetFields, type DatePrecision, type FacetFields } from './domain/facet.js';
+import { deriveAngleLabel } from './domain/chaining.js';
 import { normalizeMethodKeys, normalizeObjectKeys } from './domain/vocab.js';
 import { CLUSTER_CONFIG } from './config.js';
 import { getArticleBriefs } from './source.js';
@@ -193,6 +194,9 @@ export interface TopicArticleItem {
   year: number | null;
   role: 'backbone' | 'divergent' | 'satellite' | 'frontier';
   patternType: 'linear' | 'divergent' | null;
+  /** 所属语义子域（topic_threads.angle_key）；未入链时为 null */
+  angleKey: string | null;
+  angleLabel: string | null;
   method: string;
   object: string;
   researchQuestion: string;
@@ -367,12 +371,17 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
 
   const threadedIds = new Set(threadArticles.map((row) => row.article_id));
 
+  const memberById = new Map(members.map((member) => [member.articleId, member]));
   const angles: TopicAngle[] = threads.map((thread) => {
     const threadSteps = threadArticles.filter((row) => row.thread_id === thread.id);
+    const threadMembers = threadSteps
+      .map((row) => memberById.get(row.article_id))
+      .filter((member): member is QueryMember => Boolean(member));
     return {
       threadId: thread.id,
       angleKey: thread.angle_key,
-      angleLabel: thread.angle_label,
+      // 旧数据可能没有 LLM 标签：先用规则侧高频方法/对象生成可读名，避免黑箱。
+      angleLabel: thread.angle_label || deriveAngleLabel(threadMembers),
       patternType: thread.pattern_type,
       articleCount: thread.article_count,
       trend: (thread.trend as Trend | null) ?? null,
@@ -413,6 +422,9 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
 
   const threadById = new Map(threads.map((thread) => [thread.id, thread]));
   const threadRowByArticle = new Map(threadArticles.map((row) => [row.article_id, row]));
+  const angleLabelByKey = new Map(
+    angles.map((angle) => [angle.angleKey, angle.angleLabel])
+  );
   const allArticles: TopicArticleItem[] = members
     .map((member) => {
       const row = threadRowByArticle.get(member.articleId);
@@ -427,6 +439,8 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
         year: Number.isFinite(year ?? NaN) ? year : null,
         role: row?.academic_role ?? 'divergent',
         patternType: thread?.pattern_type ?? null,
+        angleKey: thread?.angle_key ?? null,
+        angleLabel: thread ? angleLabelByKey.get(thread.angle_key) ?? null : null,
         method: member.facet?.method ?? '',
         object: member.facet?.study_object ?? '',
         researchQuestion: member.facet?.research_question ?? '',

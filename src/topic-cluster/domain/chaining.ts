@@ -6,9 +6,12 @@
  *   - **脉络（thread）**：一个角度内按时间排列的承接序列。
  *
  * 重要设计取舍：**一个角度 = 一条脉络**（`topic_threads` 的 UNIQUE(topic_id, angle_key)）。
- * 角度内不再拆多条并行线，以保持 KISS；但「相邻承接率低」不再抹杀整个角度：
- *   - 高承接 → `linear`（时序演进链）；
- *   - 低承接 → `divergent`（发散子议题），保留全部成员并给出代表作。
+ * 角度内不再拆多条并行线，以保持 KISS；但只有「整簇都接不上」才降级：
+ *   - 存在至少 minThreadLength 篇的连续承接段 → `linear`，段内为 backbone；
+ *   - 完全没有这样的连续段 → `divergent`（并列子域），保留全部成员并给出代表作。
+ *
+ * 不能用「全簇相邻承接率」一票否决：20+ 篇的大角度里，一两段局部脉络常被
+ * 跨时期的离群点稀释到阈值以下，导致所有成员都被误标为未形成演进。
  *
  * 诚实边界：系统没有引文数据，「承接」是基于语义 + 方法 + 对象相似度**推断**的，
  * 不是真实学术传承关系，前端必须标注口径。
@@ -83,8 +86,6 @@ export interface ThreadOptions {
   minThreadLength: number;
   strongThreshold: number;
   chainThreshold: number;
-  /** 相邻承接率下限，低于此该角度标记为发散子域（不再丢弃） */
-  minContinuityRatio: number;
 }
 
 /** 按事件时间升序（空时间排最后），再按 articleId 保证确定性 */
@@ -170,15 +171,15 @@ export function groupAngles(
 /**
  * 角度内时间串链：产出逐步关系判定。
  *
- * @returns steps 与相邻承接率（相似度 >= chainThreshold 的相邻对占比）
+ * 跨时间精度（day / year / ingest）的相邻对不构成承接：前端本来就不画箭头，
+ * 如果这里仍算 continue，会把「年级」与「入库时间」混成假演进。
  */
 export function buildSteps(
   group: AngleGroup,
   options: Pick<ThreadOptions, 'strongThreshold' | 'chainThreshold'>
-): { steps: ChainStep[]; continuity: number } {
+): ChainStep[] {
   const members = sortByEventDate(group.members);
   const steps: ChainStep[] = [];
-  let continuedPairs = 0;
 
   for (let i = 0; i < members.length; i += 1) {
     const current = members[i];
@@ -199,11 +200,13 @@ export function buildSteps(
     const similarity = dotNormalized(current.vector, prev.vector);
     const sharedMethod = sharesAny(current.methodKeys, prev.methodKeys);
     const sharedObject = sharesAny(current.objectKeys, prev.objectKeys);
-    if (similarity >= options.chainThreshold) continuedPairs += 1;
+    const crossPrecision = current.precision !== prev.precision;
 
-    // 承接判定：对象与方法都延续 → 明确承接；否则极相似也算延续；其余视为转向
+    // 承接判定：对象与方法都延续 → 明确承接；否则极相似也算延续；其余视为转向。
+    // 跨精度不画箭头，也不计入连续段。
     const relation: Relation =
-      (sharedObject && sharedMethod) || similarity >= options.strongThreshold
+      !crossPrecision &&
+      ((sharedObject && sharedMethod) || similarity >= options.strongThreshold)
         ? 'continue'
         : 'shift';
 
@@ -214,19 +217,18 @@ export function buildSteps(
       similarityToPrev: similarity,
       sharedMethod,
       sharedObject,
-      crossPrecision: current.precision !== prev.precision,
+      crossPrecision,
     });
   }
 
-  const pairs = Math.max(members.length - 1, 1);
-  return { steps, continuity: continuedPairs / pairs };
+  return steps;
 }
 
 /**
  * 由角度产出脉络。
  *
- * - linear：保留时间链，全部为 backbone；
- * - divergent：保留全部成员，按质心相似度分配 divergent / satellite / frontier，
+ * - linear：存在连续承接段，段内为 backbone，段外保留但标为 divergent；
+ * - divergent：完全没有连续段，按质心相似度分配 divergent / satellite / frontier，
  *   并给出 3 篇近质心 + 最新 1 篇代表作。
  *
  * `loose` 仅为兼容旧调用保留，正常情况下恒为空：没有成员会再被整块丢弃。
@@ -238,10 +240,9 @@ export function buildThreads(
   const threads: Thread[] = [];
 
   for (const angle of angles) {
-    const { steps, continuity } = buildSteps(angle, options);
-    const isLinear =
-      steps.length >= options.minThreadLength &&
-      continuity >= options.minContinuityRatio;
+    const steps = buildSteps(angle, options);
+    const runIds = longestContinueRun(steps);
+    const isLinear = runIds.size >= options.minThreadLength;
 
     if (isLinear) {
       threads.push({
@@ -250,7 +251,7 @@ export function buildThreads(
         patternType: 'linear',
         steps: steps.map((step) => ({
           ...step,
-          academicRole: 'backbone',
+          academicRole: runIds.has(step.articleId) ? 'backbone' : 'divergent',
           isRepresentative: false,
         })),
         representatives: [],
@@ -286,6 +287,56 @@ export function buildThreads(
   capAcademicRoles(threads);
 
   return { threads, loose: [] };
+}
+
+/**
+ * 最长连续承接段（按成员数计）。
+ *
+ * `relation === 'continue'` 才是真正可画箭头的承接；相似度单独过线、但方法/对象
+ * 都转向的对，不应把整簇从 divergent 里救出来。
+ */
+function longestContinueRun(steps: ChainStep[]): Set<number> {
+  if (steps.length === 0) return new Set();
+
+  let bestStart = 0;
+  let bestLength = 1;
+  let currentStart = 0;
+  let currentLength = 1;
+
+  for (let i = 1; i < steps.length; i += 1) {
+    if (steps[i].relation === 'continue') {
+      currentLength += 1;
+    } else {
+      currentStart = i;
+      currentLength = 1;
+    }
+    if (currentLength > bestLength) {
+      bestStart = currentStart;
+      bestLength = currentLength;
+    }
+  }
+
+  return new Set(
+    steps.slice(bestStart, bestStart + bestLength).map((step) => step.articleId)
+  );
+}
+
+/**
+ * 规则侧的可读角度名兜底：高频方法 × 高频对象。
+ *
+ * 只在 LLM 尚未回填 angle_label 时使用；不落库，避免把占位名当成最终命名。
+ */
+export function deriveAngleLabel(
+  members: Array<Pick<ChainItem, 'methodKeys' | 'objectKeys'>>
+): string | null {
+  const methods = topKeys(countKeys(members.flatMap((member) => member.methodKeys)), 1);
+  const objects = topKeys(countKeys(members.flatMap((member) => member.objectKeys)), 1);
+  const method = methods[0];
+  const object = objects[0];
+
+  if (!method && !object) return null;
+  const label = method && object ? `${method}·${object}` : `${method || object}研究`;
+  return label.length > 18 ? label.slice(0, 18) : label;
 }
 
 /* ── 角度身份 ── */

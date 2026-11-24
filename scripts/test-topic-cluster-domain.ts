@@ -12,12 +12,14 @@
 import assert from 'node:assert/strict';
 
 import {
+  buildSteps,
   buildThreads,
   groupAngles,
   type AngleGroup,
   type ChainItem,
 } from '../src/topic-cluster/domain/chaining.js';
 import { cohesionClusters, type ClusterItem } from '../src/topic-cluster/domain/clustering.js';
+import { buildReviewGroups } from '../src/topic-cluster/service/review-builder.js';
 import { buildParadigmDomains } from '../src/topic-cluster/service/paradigm.js';
 import type { TopicMemberView } from '../src/topic-cluster/service/member-view.js';
 import type { MatrixResult } from '../src/topic-cluster/service/matrix.js';
@@ -389,13 +391,19 @@ const threadOptions = {
   minThreadLength: 3,
   strongThreshold: 0.88,
   chainThreshold: 0.78,
-  minContinuityRatio: 0.5,
 };
 
-check('低承接角度保留为 divergent，成员不再进入 loose', () => {
-  // 相邻 cos47°≈0.68 < 0.78，连续性为 0；但角度仍必须保留全部 8 篇
+check('完全没有连续承接段的角度保留为 divergent，成员不再进入 loose', () => {
+  // 相邻 cos47°≈0.68 < 0.78，且方法/对象都不同 → 每条边都是 shift；
+  // 角度仍必须保留全部 8 篇。
   const items = Array.from({ length: 8 }, (_, index) =>
-    chainItem(index + 1, index * 47, `2025-0${(index % 9) + 1}-01`)
+    chainItem(
+      index + 1,
+      index * 47,
+      `2025-0${(index % 9) + 1}-01`,
+      `方法-${index}`,
+      `对象-${index}`
+    )
   );
   const { threads, loose } = buildThreads([angleOf(items)], threadOptions);
 
@@ -416,6 +424,50 @@ check('高承接角度保留为 linear，成员全部是 backbone', () => {
   assert.equal(threads[0].patternType, 'linear');
   assert.equal(threads[0].representatives.length, 0);
   assert.ok(threads[0].steps.every((step) => step.academicRole === 'backbone'));
+});
+
+check('局部连续段存在时不再整簇判为 divergent', () => {
+  // 前 3 篇同向量形成 2 条承接边，后 5 篇在 90°/180° 间来回转向：
+  // 全簇承接率很低，但局部连续段必须被识别出来。
+  const items = [
+    chainItem(1, 0, '2025-01-01', '方法-A', '对象-A'),
+    chainItem(2, 0, '2025-02-01', '方法-A', '对象-A'),
+    chainItem(3, 0, '2025-03-01', '方法-A', '对象-A'),
+    chainItem(4, 90, '2025-04-01', '方法-B', '对象-B'),
+    chainItem(5, 180, '2025-05-01', '方法-C', '对象-C'),
+    chainItem(6, 90, '2025-06-01', '方法-D', '对象-D'),
+    chainItem(7, 180, '2025-07-01', '方法-E', '对象-E'),
+    chainItem(8, 90, '2025-08-01', '方法-F', '对象-F'),
+  ];
+  const { threads } = buildThreads([angleOf(items)], threadOptions);
+
+  assert.equal(threads[0].patternType, 'linear');
+  assert.deepEqual(
+    threads[0].steps
+      .filter((step) => step.academicRole === 'backbone')
+      .map((step) => step.articleId),
+    [1, 2, 3]
+  );
+  assert.ok(
+    threads[0].steps
+      .filter((step) => step.articleId > 3)
+      .every((step) => step.academicRole === 'divergent')
+  );
+});
+
+check('跨时间精度的相邻对不构成连续承接', () => {
+  const items = [
+    { ...chainItem(1, 0, '2025-01-01', '方法-A', '对象-A'), precision: 'year' as const },
+    { ...chainItem(2, 0, '2025-01-02', '方法-A', '对象-A'), precision: 'day' as const },
+    { ...chainItem(3, 0, '2025-01-03', '方法-A', '对象-A'), precision: 'year' as const },
+  ];
+  const steps = buildSteps(angleOf(items), threadOptions);
+
+  assert.ok(
+    steps
+      .slice(1)
+      .every((step) => step.crossPrecision && step.relation === 'shift')
+  );
 });
 
 check('同签名角度追加冲突后缀，angle_key 全局唯一', () => {
@@ -496,9 +548,68 @@ check('243 篇压力用例：角度 3~10、成员不丢、angle_key 唯一、loo
   );
 });
 
-/* ── ⑤ 范式域聚合 ── */
+/* ── ⑤ 深度综述只合并角度，不独立切分成员 ── */
 
-console.log('\n⑤ 范式域聚合');
+console.log('\n⑤ 深度综述与角度分区的一致性');
+
+check('综述组只能由完整角度合并而成，不会拆开同一角度', () => {
+  const members: TopicMemberView[] = [];
+  for (let cluster = 0; cluster < 2; cluster += 1) {
+    const base = cluster === 0 ? 0 : 120;
+    for (let index = 0; index < 10; index += 1) {
+      const articleId = cluster * 10 + index + 1;
+      members.push({
+        articleId,
+        vector: unitVector(base),
+        eventDate: `2025-${String(cluster * 6 + index + 1).padStart(2, '0')}-01`,
+        precision: 'day',
+        methodKeys: ['实验研究'],
+        objectKeys: ['高校图书馆'],
+        similarity: 0.8,
+        isPrimary: true,
+        rank: articleId,
+        facet: {
+          research_question: `问题 ${articleId}`,
+          method: '实验研究',
+          study_object: '高校图书馆',
+          core_finding: `发现 ${articleId}`,
+        },
+      });
+    }
+  }
+
+  const angles = groupAngles(
+    members.map((member) => ({
+      articleId: member.articleId,
+      vector: member.vector,
+      eventDate: member.eventDate,
+      precision: member.precision,
+      methodKeys: member.methodKeys,
+      objectKeys: member.objectKeys,
+    })),
+    0.82,
+    { maxAngleCount: 10 }
+  );
+  const groups = buildReviewGroups(members, new Map());
+
+  assert.equal(angles.length, 2);
+  assert.equal(groups.length, 2);
+  for (const group of groups) {
+    for (const angle of angles) {
+      const inside = angle.members.filter((member) =>
+        group.memberIds.includes(member.articleId)
+      ).length;
+      assert.ok(
+        inside === 0 || inside === angle.members.length,
+        `角度 ${angle.angleKey} 被综述组拆开了`
+      );
+    }
+  }
+});
+
+/* ── ⑥ 范式域聚合 ── */
+
+console.log('\n⑥ 范式域聚合');
 
 check('6 个高频格聚成 3~5 个范式域，每域代表 ≤7 篇', () => {
   const members: TopicMemberView[] = [];
@@ -555,9 +666,9 @@ check('6 个高频格聚成 3~5 个范式域，每域代表 ≤7 篇', () => {
   );
 });
 
-/* ── ⑥ 周期指标月份补齐 ── */
+/* ── ⑦ 周期指标月份补齐 ── */
 
-console.log('\n⑥ 周期指标月份补齐');
+console.log('\n⑦ 周期指标月份补齐');
 
 check('addMonths 处理跨年与负偏移', () => {
   assert.equal(addMonths('2026-01', 1), '2026-02');
@@ -606,9 +717,9 @@ check('单月与空输入不额外补齐', () => {
   assert.equal(single.length, 1);
 });
 
-/* ── ⑦ 跨版本 remap 选择 ── */
+/* ── ⑧ 跨版本 remap 选择 ── */
 
-console.log('\n⑦ 跨版本 remap 选择');
+console.log('\n⑧ 跨版本 remap 选择');
 
 check('选质心最相似的新主题，低于 0.72 不重定向', () => {
   const oldVector = unitVector(0);

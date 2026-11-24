@@ -4,8 +4,8 @@
  * 流程：成员视图 → 角度分群 → 角度内时间串链 → 落库。
  * LLM **不参与**这一步；它的角度名与叙述由 analysis-runner 事后按 angle_key 回填。
  *
- * 降级纪律：某角度的相邻承接率低于阈值，或篇数不足时，该角度标记为
- * `divergent`（发散子域）并保留全部成员——宁可少给演进结论，也不丢弃文献（设计文档 §7.5）。
+ * 降级纪律：某角度完全没有连续承接段时，标记为 `divergent`（并列子域）并保留
+ * 全部成员——宁可少给演进结论，也不丢弃文献（设计文档 §7.5）。
  */
 
 import { CLUSTER_CONFIG, CLUSTER_LIMITS } from '../config.js';
@@ -58,7 +58,6 @@ export async function rebuildTopicThreads(topicId: number): Promise<ThreadBuildR
     minThreadLength: CLUSTER_LIMITS.minThreadLength,
     strongThreshold: CLUSTER_CONFIG.strongThreshold,
     chainThreshold: CLUSTER_CONFIG.chainThreshold,
-    minContinuityRatio: CLUSTER_LIMITS.minContinuityRatio,
   });
 
   const dateOf = new Map(members.map((member) => [member.articleId, member.eventDate]));

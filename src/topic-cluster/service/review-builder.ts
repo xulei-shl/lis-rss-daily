@@ -1,15 +1,19 @@
 /**
- * 深度综述的规则层（零 token）：主题内语义子簇 + 证据包。
+ * 深度综述的规则层（零 token）：角度簇合并 + 证据包。
  *
  * 与多维分析的分工：
  *   - `paradigmReviews` 是「方法 × 对象」矩阵域的短微综述；
- *   - 本模块用成员向量做**平均连接二次聚类**，得到主题内部的自然研究群，
- *     每群生成一篇长篇综述，是页面上的「深度综述」主体。
+ *   - 本模块把**已有的角度簇**按质心合并成更大的综述组，每群生成一篇长篇综述。
+ *
+ * 为什么不再独立聚类成员：角度已经是主题内唯一的语义子域划分。若综述层再按
+ * 0.7 阈值切一次，同一篇文献会在「演进脉络」和「深度综述」里落到不同子域，
+ * 前端无法解释。现在综述组只能是角度组的**并集**，不会拆开任何角度。
  *
  * LLM 不参与分群：簇、代表文献与证据白名单都由规则先行确定，模型只负责写作。
  */
 
 import { CLUSTER_CONFIG, CLUSTER_LIMITS } from '../config.js';
+import { groupAngles, type AngleGroup, type ChainItem } from '../domain/chaining.js';
 import { cohesionClusters } from '../domain/clustering.js';
 import { shortHash } from '../domain/hash.js';
 import { dotNormalized } from '../domain/vector.js';
@@ -38,26 +42,48 @@ export function buildReviewGroups(
 ): ReviewGroup[] {
   if (members.length < CLUSTER_LIMITS.reviewMinMembers) return [];
 
+  // 复用角度分区：综述层只能合并角度，不能重新切分成员。
+  const angleGroups = groupAngles(
+    members.map(toChainItem),
+    CLUSTER_CONFIG.angleThreshold,
+    { maxAngleCount: CLUSTER_LIMITS.maxAngleCount }
+  );
+
   const targetCount = clamp(
     Math.ceil(members.length / 12),
     2,
     CLUSTER_LIMITS.reviewMaxGroups
   );
   const { components } = cohesionClusters(
-    members.map((member) => ({ id: member.articleId, vector: member.vector })),
+    angleGroups.map((angle, index) => ({ id: index, vector: angle.centroid })),
     CLUSTER_LIMITS.reviewClusterThreshold,
-    { minSize: CLUSTER_LIMITS.reviewMinMembers, linkage: 'average', targetCount }
+    { minSize: 1, linkage: 'average', targetCount }
+  );
+
+  const angleIndexGroups = capReviewGroupCount(
+    components.map((component) => [...component.ids]),
+    angleGroups,
+    CLUSTER_LIMITS.reviewMaxGroups
   );
 
   const memberMap = new Map(members.map((member) => [member.articleId, member]));
   const groups: ReviewGroup[] = [];
 
-  for (const component of components) {
-    const groupMembers = component.ids
-      .map((id) => memberMap.get(id))
-      .filter((member): member is TopicMemberView => Boolean(member));
+  for (const angleIndices of angleIndexGroups) {
+    const groupMembers = angleIndices.flatMap((index) =>
+      angleGroups[index].members
+        .map((item) => memberMap.get(item.articleId))
+        .filter((member): member is TopicMemberView => Boolean(member))
+    );
+    // 与旧行为一致：证据不足的综述组跳过，但绝不会把它拆到别的角度里。
     if (groupMembers.length < CLUSTER_LIMITS.reviewMinMembers) continue;
-    groups.push(buildGroup(groupMembers, component.centroid, briefs));
+    groups.push(
+      buildGroup(
+        groupMembers,
+        centroidOf(groupMembers.map((member) => member.vector)),
+        briefs
+      )
+    );
   }
 
   // 低于阈值导致一簇都聚不出时，退化为「整主题一篇综述」，
@@ -70,6 +96,54 @@ export function buildReviewGroups(
   return groups
     .sort((a, b) => b.memberIds.length - a.memberIds.length || a.key.localeCompare(b.key))
     .slice(0, CLUSTER_LIMITS.reviewMaxGroups);
+}
+
+function toChainItem(member: TopicMemberView): ChainItem {
+  return {
+    articleId: member.articleId,
+    vector: member.vector,
+    eventDate: member.eventDate,
+    precision: member.precision,
+    methodKeys: member.methodKeys,
+    objectKeys: member.objectKeys,
+  };
+}
+
+/** 综述组超过上限时合并质心最近的两组；仍是角度并集，不拆成员。 */
+function capReviewGroupCount(
+  groups: number[][],
+  angles: AngleGroup[],
+  limit: number
+): number[][] {
+  while (groups.length > limit) {
+    let bestA = 0;
+    let bestB = 1;
+    let bestSimilarity = Number.NEGATIVE_INFINITY;
+
+    for (let i = 0; i < groups.length; i += 1) {
+      for (let j = i + 1; j < groups.length; j += 1) {
+        const similarity = dotNormalized(
+          groupCentroid(groups[i], angles),
+          groupCentroid(groups[j], angles)
+        );
+        if (similarity > bestSimilarity) {
+          bestSimilarity = similarity;
+          bestA = i;
+          bestB = j;
+        }
+      }
+    }
+
+    groups[bestA] = [...groups[bestA], ...groups[bestB]];
+    groups.splice(bestB, 1);
+  }
+  return groups;
+}
+
+function groupCentroid(indices: number[], angles: AngleGroup[]): Float32Array {
+  return centroidOf(
+    indices.flatMap((index) => angles[index].members.map((member) => member.vector))
+  );
 }
 
 function buildGroup(

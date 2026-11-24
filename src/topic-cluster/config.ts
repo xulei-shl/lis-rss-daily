@@ -89,10 +89,8 @@ export type AnalysisStatus = 'ok' | 'partial' | 'insufficient_data' | 'failed';
 export const CLUSTER_LIMITS = Object.freeze({
   /** 单主题最多角度数（K_target 上限），超出后合并最相近角度 */
   maxAngleCount: 10,
-  /** 脉络最少篇数，低于此标记为发散子域，不生成时间演进 */
+  /** 连续承接段的最少篇数，低于此标记为并列子域，不生成时间演进 */
   minThreadLength: 3,
-  /** 相邻承接率下限，低于此该角度降级为零散研究（避免把「只是语义相近」当演进） */
-  minContinuityRatio: 0.5,
   /** 低于此文章数不生成多维分析（走 insufficient_data 降级） */
   minArticlesForAnalysis: 6,
   /** 微主题整合：小主题两两合并时的平均连接阈值 */

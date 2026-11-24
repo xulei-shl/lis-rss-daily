@@ -26,15 +26,20 @@ export function renderAngles(detail, _articleIndex) {
   const angles = detail.angles
     .map((angle) => {
       const isDivergent = angle.patternType === 'divergent';
+      const allSteps = angle.steps || [];
+      const backboneCount = allSteps.filter((step) => step.academicRole === 'backbone').length;
       const head =
         '<div class="cluster-angle-head">' +
           '<span class="cluster-angle-name">' +
-            escapeHtml(angle.angleLabel || '未命名研究角度') +
+            escapeHtml(angle.angleLabel || '未命名子域') +
           '</span>' +
           (isDivergent
-            ? '<span class="cluster-tag cluster-tag-divergent">发散子域</span>'
+            ? '<span class="cluster-tag cluster-tag-divergent">并列子域</span>'
             : '<span class="cluster-tag cluster-tag-linear">时序脉络</span>') +
           '<span class="cluster-tag">' + angle.articleCount + ' 篇文献</span>' +
+          (!isDivergent && backboneCount < allSteps.length
+            ? '<span class="cluster-tag">连续段 ' + backboneCount + ' 篇</span>'
+            : '') +
           (angle.trend ? '<span class="cluster-tag">' + trendLabel(angle.trend) + '</span>' : '') +
         '</div>';
 
@@ -42,7 +47,6 @@ export function renderAngles(detail, _articleIndex) {
         ? '<div class="cluster-angle-narrative">' + escapeHtml(angle.narrative) + '</div>'
         : '';
 
-      const allSteps = angle.steps || [];
       const representativeSteps = isDivergent
         ? allSteps.filter((step) => step.isRepresentative)
         : allSteps;
@@ -61,8 +65,10 @@ export function renderAngles(detail, _articleIndex) {
         : '';
 
       const divergentNote = isDivergent
-        ? '<div class="cluster-note cluster-divergent-note">该子域内部未形成连续演进，先呈现代表作；其余成员可展开查看，均不代表时间上的承接关系。</div>'
-        : '';
+        ? '<div class="cluster-note cluster-divergent-note">该子域暂未识别出连续承接段（至少 3 篇），以下先呈现质心相近的代表文献；其余成员可展开查看，均不代表时间上的承接关系。</div>'
+        : backboneCount < allSteps.length
+          ? '<div class="cluster-note">其中 ' + backboneCount + ' 篇构成连续承接段，其余 ' + (allSteps.length - backboneCount) + ' 篇为同一子域内的背景/旁支文献。</div>'
+          : '';
 
       return (
         '<div class="cluster-angle-card">' +
@@ -82,8 +88,8 @@ export function renderAngles(detail, _articleIndex) {
         '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">🧭</span> 研究角度与研究脉络 (' + detail.angles.length + ')</h2>' +
       '</div>' +
       '<div class="cluster-note">' +
-        '以下脉络由「切面语义相似度 + 方法/研究对象延续性 + 时间先后」规则自动推断，<strong>不是引文直接继承关系</strong>。' +
-        '系统据此串联各时期关键成果与研究视角变迁。' +
+        '先按主题内语义子域分组，再在同一子域内按「切面语义相似度 + 方法/研究对象延续性 + 时间先后」自动推断连续承接段，<strong>不是引文直接继承关系</strong>。' +
+        '子域内找不到 3 篇以上的连续承接段时，才标记为并列子域。' +
       '</div>' +
       '<div class="cluster-angles-container">' + angles + '</div>' +
     '</section>'
@@ -94,9 +100,9 @@ function renderStep(step) {
   const relation = step.relation === 'loose' ? 'shift' : step.relation || 'divergent';
   const tags = [];
   if (step.isRepresentative) {
-    tags.push('<span class="cluster-tag cluster-tag-rep">子域代表作</span>');
+    tags.push('<span class="cluster-tag cluster-tag-rep">子域代表文献</span>');
   }
-  if (ROLE_LABELS[step.academicRole]) {
+  if (!step.isRepresentative && ROLE_LABELS[step.academicRole]) {
     tags.push('<span class="cluster-tag">' + ROLE_LABELS[step.academicRole] + '</span>');
   }
   if (RELATION_LABELS[step.relation]) {
