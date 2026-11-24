@@ -116,6 +116,203 @@
   color: var(--text-primary);
 }
 
+/* 依据文献胶囊按钮扩展与互动 */
+button.cluster-cite-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--cluster-blue-tint);
+  border: 1px solid var(--cluster-blue-border);
+  color: var(--cluster-blue);
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease-out;
+}
+
+button.cluster-cite-toggle:hover {
+  background: var(--cluster-blue-hover, #25639a);
+  color: #fff;
+  border-color: var(--cluster-blue-hover, #25639a);
+  transform: translateY(-1px);
+}
+
+button.cluster-cite-toggle[aria-expanded="true"] {
+  background: var(--cluster-blue);
+  color: #fff;
+  border-color: var(--cluster-blue);
+}
+
+button.cluster-cite-toggle .cite-chevron {
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+  flex-shrink: 0;
+}
+
+button.cluster-cite-toggle[aria-expanded="true"] .cite-chevron {
+  transform: rotate(180deg);
+}
+
+.cluster-cite-pill .cite-pill-icon {
+  margin-left: 2px;
+  opacity: 0.75;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.cluster-cite-pill:hover .cite-pill-icon {
+  opacity: 1;
+  transform: translate(1px, -1px);
+}
+
+/* 依据文献清单抽屉 (Evidence Drawer) */
+.cluster-gap-evidence-drawer {
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: gapDrawerSlide 0.18s ease-out;
+}
+
+.cluster-gap-evidence-drawer[hidden] {
+  display: none !important;
+}
+
+@keyframes gapDrawerSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cluster-gap-evidence-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.cluster-gap-evidence-lead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.cluster-gap-evidence-icon {
+  color: var(--cluster-blue);
+  flex-shrink: 0;
+}
+
+.cluster-gap-evidence-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.cluster-gap-evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cluster-gap-evidence-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-surface, #fff);
+  border: 1px solid transparent;
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: var(--text-xs, 12px);
+  line-height: 1.5;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+
+.cluster-gap-evidence-item:hover {
+  background: var(--cluster-blue-tint);
+  border-color: var(--cluster-blue-border);
+  color: var(--cluster-blue);
+  transform: translateX(2px);
+}
+
+.cluster-gap-evidence-num {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  width: 14px;
+  text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.cluster-gap-evidence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--cluster-blue-tint);
+  color: var(--cluster-blue);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.cluster-gap-evidence-item:hover .cluster-gap-evidence-badge {
+  background: var(--cluster-blue);
+  color: #fff;
+}
+
+.cluster-gap-evidence-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.cluster-gap-evidence-arrow {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.cluster-gap-evidence-item:hover .cluster-gap-evidence-arrow {
+  color: var(--cluster-blue);
+  transform: translate(2px, -2px);
+}
+
+@media (max-width: 640px) {
+  .cluster-gap-evidence-item {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .cluster-gap-evidence-title {
+    white-space: normal;
+  }
+}
+
 /* ── Tab 3: 邻近与交叉主题 (Adjacent & Cross-Disciplinary Topics) ── */
 .cluster-adjacent-grid {
   display: grid;

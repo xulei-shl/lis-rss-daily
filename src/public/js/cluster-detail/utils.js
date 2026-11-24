@@ -55,6 +55,11 @@ export function buildArticleIndex(detail) {
   (detail.allArticles || []).forEach((item) => {
     index[item.id] = { title: item.title, url: item.url };
   });
+  (detail.evidenceArticles || []).forEach((item) => {
+    if (!index[item.id]) {
+      index[item.id] = { title: item.title, url: item.url };
+    }
+  });
   return index;
 }
 

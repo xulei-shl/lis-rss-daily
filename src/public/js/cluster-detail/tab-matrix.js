@@ -98,17 +98,73 @@ export function renderGaps(detail, articleIndex) {
   if (gaps.length === 0) return '';
 
   const items = gaps
-    .map((gap) => {
+    .map((gap, idx) => {
       const evidenceIds = gap.evidenceArticleIds || [];
-      const evidenceTitles = evidenceIds.map((id) => {
+      const evidenceArticles = evidenceIds.map((id, aIdx) => {
         const article = articleIndex[id];
-        return article ? article.title : '#' + id;
+        return {
+          id,
+          index: aIdx + 1,
+          title: article && article.title ? article.title : '#' + id,
+        };
       });
-      const evidence = evidenceIds.length
-        ? '<a class="cluster-cite-pill" href="/articles/' + evidenceIds[0] +
-          '" target="_blank" rel="noopener" title="' + escapeHtml(evidenceTitles.join('；')) + '">' +
-            '依据 ' + evidenceIds.length + ' 篇文献' +
-          '</a>'
+
+      const drawerId = 'gap-evidence-' + (idx + 1);
+      let evidence = '';
+
+      if (evidenceArticles.length === 1) {
+        const single = evidenceArticles[0];
+        const tip = '依据文献：\n' + single.title + '\n(点击在新标签页打开详情)';
+        evidence =
+          '<a class="cluster-cite-pill" href="/articles/' + single.id +
+          '" target="_blank" rel="noopener" title="' + escapeHtml(tip) + '">' +
+            '<span>依据 1 篇文献</span>' +
+            '<svg class="cite-pill-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+              '<line x1="7" y1="17" x2="17" y2="7"></line>' +
+              '<polyline points="7 7 17 7 17 17"></polyline>' +
+            '</svg>' +
+          '</a>';
+      } else if (evidenceArticles.length > 1) {
+        const tipLines = evidenceArticles.map((a) => a.index + '. ' + a.title).join('\n');
+        const tip = '依据 ' + evidenceArticles.length + ' 篇文献：\n' + tipLines + '\n(点击展开/收起文献清单)';
+        evidence =
+          '<button type="button" class="cluster-cite-pill cluster-cite-toggle" aria-expanded="false" ' +
+            'aria-controls="' + drawerId + '" title="' + escapeHtml(tip) + '">' +
+            '<span>依据 ' + evidenceArticles.length + ' 篇文献</span>' +
+            '<svg class="cite-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+              '<polyline points="6 9 12 15 18 9"></polyline>' +
+            '</svg>' +
+          '</button>';
+      }
+
+      const drawerHtml = evidenceArticles.length > 1
+        ? '<div class="cluster-gap-evidence-drawer" id="' + drawerId + '" hidden>' +
+            '<div class="cluster-gap-evidence-head">' +
+              '<div class="cluster-gap-evidence-lead">' +
+                '<svg class="cluster-gap-evidence-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                  '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>' +
+                  '<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>' +
+                '</svg>' +
+                '<span class="cluster-gap-evidence-label">依据文献清单 (' + evidenceArticles.length + ' 篇)</span>' +
+              '</div>' +
+              '<span class="cluster-gap-evidence-hint">点击可直达单篇文献详情</span>' +
+            '</div>' +
+            '<div class="cluster-gap-evidence-list">' +
+              evidenceArticles
+                .map((a) => (
+                  '<a class="cluster-gap-evidence-item" href="/articles/' + a.id + '" target="_blank" rel="noopener" title="' + escapeHtml(a.title) + '">' +
+                    '<span class="cluster-gap-evidence-num">' + a.index + '.</span>' +
+                    '<span class="cluster-gap-evidence-badge"><span class="cite-hash">#</span>' + a.id + '</span>' +
+                    '<span class="cluster-gap-evidence-title">' + escapeHtml(a.title) + '</span>' +
+                    '<svg class="cluster-gap-evidence-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                      '<line x1="7" y1="17" x2="17" y2="7"></line>' +
+                      '<polyline points="7 7 17 7 17 17"></polyline>' +
+                    '</svg>' +
+                  '</a>'
+                ))
+                .join('') +
+            '</div>' +
+          '</div>'
         : '';
 
       const basisKey = gap.basis || 'limitation';
@@ -124,6 +180,7 @@ export function renderGaps(detail, articleIndex) {
             (evidence ? '<div class="cluster-evidence">' + evidence + '</div>' : '') +
           '</div>' +
           '<div class="cluster-gap-text">' + escapeHtml(gap.gap) + '</div>' +
+          drawerHtml +
         '</div>'
       );
     })
@@ -134,12 +191,29 @@ export function renderGaps(detail, articleIndex) {
       '<div class="cluster-section-header">' +
         '<h2 class="cluster-section-title">' +
           '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
-          '<span>关键研究空白 (' + gaps.length + ')</span>' +
+          '<span>研究空白 (' + gaps.length + ')</span>' +
         '</h2>' +
       '</div>' +
       '<div class="cluster-gaps-container">' + items + '</div>' +
     '</section>'
   );
+}
+
+export function bindMatrixEvents(root) {
+  if (!root || root._matrixEventsBound) return;
+  root._matrixEventsBound = true;
+
+  root.addEventListener('click', (e) => {
+    const toggleBtn = e.target.closest('.cluster-cite-toggle');
+    if (!toggleBtn) return;
+    const targetId = toggleBtn.getAttribute('aria-controls');
+    if (!targetId) return;
+    const drawer = root.querySelector('#' + targetId);
+    if (!drawer) return;
+    const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+    toggleBtn.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+    drawer.hidden = isExpanded;
+  });
 }
 
 export function renderAdjacent(detail) {

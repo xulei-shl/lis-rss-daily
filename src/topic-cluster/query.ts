@@ -295,6 +295,8 @@ export interface TopicDetail {
   reviews: TopicReviewItem[];
   /** 该主题内部的洞察报告（综合本主题多个综述子簇） */
   insights: TopicInsightItem[];
+  /** 研究空白等环节引用的证据文献（包含跨主题/邻近主题文献） */
+  evidenceArticles?: Array<{ id: number; title: string; url: string | null }>;
 }
 
 /** 主题详情（slug 或数字 id） */
@@ -333,7 +335,10 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     listTopicsByVersion(topic.set_version),
   ]);
 
-  const briefs = await getArticleBriefs(members.map((member) => member.articleId));
+  const analysis = parseAnalysis(analysisRow?.analysis_json ?? null);
+  const gapArticleIds = (analysis?.gaps || []).flatMap((gap) => gap.evidenceArticleIds || []);
+  const allNeededArticleIds = [...new Set([...members.map((member) => member.articleId), ...gapArticleIds])];
+  const briefs = await getArticleBriefs(allNeededArticleIds);
 
   const stepOf = (row: ThreadArticlesSelection): TopicArticleStep => {
     const member = members.find((item) => item.articleId === row.article_id);
@@ -465,12 +470,20 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     setVersion: topic.set_version,
     analysisStatus: (analysisRow?.status as AnalysisStatus | undefined) ?? 'missing',
     analysisError: analysisRow?.error_message ?? null,
-    analysis: parseAnalysis(analysisRow?.analysis_json ?? null),
+    analysis,
     matrix: parseMatrix(analysisRow?.matrix_json ?? null),
     angles,
     allArticles,
     looseArticles,
     metrics,
+    evidenceArticles: gapArticleIds.map((id) => {
+      const brief = briefs.get(id);
+      return {
+        id,
+        title: brief?.title ?? `#${id}`,
+        url: brief?.url ?? null,
+      };
+    }),
     runLogs: runLogs.map((run) => ({
       id: run.id,
       trigger: run.trigger,

@@ -7,7 +7,7 @@ import { renderHeader, renderStatusNotice } from './header.js';
 import { renderTopRunLogs } from './run-logs.js';
 import { renderSummary, renderReviews, renderInsights, renderConsensusDualView, bindSynthesisEvents } from './tab-synthesis.js';
 import { renderAngles, renderLoose } from './tab-evolution.js';
-import { renderMatrix, renderGaps, renderAdjacent } from './tab-matrix.js';
+import { renderMatrix, renderGaps, renderAdjacent, bindMatrixEvents } from './tab-matrix.js';
 import { renderTrend } from './tab-trends.js';
 import { renderCatalog, bindCatalogEvents } from './tab-catalog.js';
 
@@ -123,6 +123,9 @@ function renderPage(root, detail) {
 
   // 绑定综述折叠展开交互
   bindSynthesisEvents(root);
+
+  // 绑定研究空白依据文献交互
+  bindMatrixEvents(root);
 
   // 绑定底册即时搜索与过滤
   bindCatalogEvents(root, detail);
