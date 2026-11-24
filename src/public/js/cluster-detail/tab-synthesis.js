@@ -1,6 +1,6 @@
 // ============================================
 // 主题洞察详情页 - Tab 1: 综述与洞察
-// 包含：主题宏观概览、深度综述、主题内洞察、共识与分歧双栏看板
+// 包含：主题宏观导读、子群深度综述、主题内综合研判、共识与分歧双栏看板
 // ============================================
 
 import {
@@ -15,20 +15,23 @@ export function renderSummary(detail) {
   const blocks = [];
 
   if (analysis.overview) {
-    blocks.push('<div class="cluster-hero-overview">' + escapeHtml(analysis.overview) + '</div>');
+    blocks.push('<div class="cluster-overview-prose">' + escapeHtml(analysis.overview) + '</div>');
   }
   if (analysis.trend && analysis.trend.summary) {
     blocks.push(
-      '<div class="cluster-hero-trend">' +
-        '<span class="cluster-hero-label">演变走向：</span>' +
-        escapeHtml(analysis.trend.summary) +
+      '<div class="cluster-editorial-callout">' +
+        '<div class="callout-head">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>' +
+          '<span class="callout-label">演变动向研判</span>' +
+        '</div>' +
+        '<div class="callout-text">' + escapeHtml(analysis.trend.summary) + '</div>' +
       '</div>'
     );
   }
   if (analysis.historySummary) {
     blocks.push(
-      '<div class="cluster-note cluster-history-note">' +
-        '<span class="cluster-hero-label">研究历史溯源：</span>' +
+      '<div class="cluster-history-prose">' +
+        '<span class="cluster-history-label">溯源考证：</span>' +
         escapeHtml(analysis.historySummary) +
       '</div>'
     );
@@ -36,11 +39,14 @@ export function renderSummary(detail) {
   if (blocks.length === 0) return '';
 
   return (
-    '<section class="cluster-section cluster-hero-card">' +
+    '<section class="cluster-section cluster-summary-dossier">' +
       '<div class="cluster-section-header">' +
-        '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">📌</span> 主题宏观概览</h2>' +
+        '<h2 class="cluster-section-title">' +
+          '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>' +
+          '<span>主题综述导读</span>' +
+        '</h2>' +
       '</div>' +
-      blocks.join('') +
+      '<div class="cluster-summary-body">' + blocks.join('') + '</div>' +
     '</section>'
   );
 }
@@ -60,9 +66,9 @@ export function renderReviews(detail, articleIndex) {
               const article = articleIndex[id];
               const title = article ? article.title : '#' + id;
               return (
-                '<a class="cluster-evidence-pill" href="/articles/' + id +
+                '<a class="cluster-cite-pill" href="/articles/' + id +
                 '" target="_blank" rel="noopener" title="' + escapeHtml(title) + '">' +
-                  '<span class="evidence-hash">#</span>' + id +
+                  '<span class="cite-hash">#</span>' + id +
                 '</a>'
               );
             })
@@ -73,54 +79,51 @@ export function renderReviews(detail, articleIndex) {
               (section.insufficient ? ' data-insufficient="true"' : '') + '>' +
               '<div class="cluster-review-section-label">' + escapeHtml(section.label) + '</div>' +
               '<div class="cluster-review-section-text">' + escapeHtml(section.text) + '</div>' +
-              (evidence ? '<div class="cluster-evidence"><span class="evidence-label">支撑论据：</span>' + evidence + '</div>' : '') +
+              (evidence ? '<div class="cluster-evidence"><span class="evidence-label">证据文献：</span>' + evidence + '</div>' : '') +
             '</div>'
           );
         })
         .join('');
 
-      // 统计引用的独立文献数量
       const uniqueArticleIds = new Set();
       sectionsList.forEach((s) => {
         (s.basisArticleIds || []).forEach((id) => uniqueArticleIds.add(id));
       });
       const evidenceCount = uniqueArticleIds.size;
-
-      // 首篇默认展开提供视觉线索与范例，其余默认收起以避免海量内容霸屏；仅 1 篇时亦默认展开
       const isOpen = idx === 0;
 
       const detailsHtml = sectionsList.length > 0
-        ? '<details class="cluster-details cluster-review-details"' + (isOpen ? ' open' : '') + '>' +
-            '<summary class="cluster-details-summary cluster-review-summary">' +
-              '<span class="cluster-review-summary-main">' +
-                '<span class="cluster-review-summary-icon" aria-hidden="true">📖</span>' +
-                '<span class="cluster-review-summary-title">详细论证与支撑论据</span>' +
-                '<span class="cluster-tag cluster-tag-neutral">' + sectionsList.length + ' 节</span>' +
-                (evidenceCount > 0 ? '<span class="cluster-tag cluster-tag-neutral">' + evidenceCount + ' 篇引用</span>' : '') +
+        ? '<details class="cluster-accordion cluster-review-details"' + (isOpen ? ' open' : '') + '>' +
+            '<summary class="cluster-accordion-summary">' +
+              '<span class="cluster-accordion-summary-main">' +
+                '<svg class="accordion-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>' +
+                '<span class="accordion-title">论证章节与引用依据</span>' +
+                '<span class="cluster-tag cluster-tag-subtle">' + sectionsList.length + ' 节</span>' +
+                (evidenceCount > 0 ? '<span class="cluster-tag cluster-tag-subtle">' + evidenceCount + ' 篇引用</span>' : '') +
               '</span>' +
-              '<span class="cluster-review-summary-hint">' +
-                '<span class="hint-collapsed">展开章节 ↓</span>' +
-                '<span class="hint-expanded">收起章节 ↑</span>' +
+              '<span class="cluster-accordion-hint">' +
+                '<span class="hint-collapsed">展开论据 ↓</span>' +
+                '<span class="hint-expanded">收起论据 ↑</span>' +
               '</span>' +
             '</summary>' +
-            '<div class="cluster-details-body cluster-review-body">' +
+            '<div class="cluster-accordion-body">' +
               sections +
             '</div>' +
           '</details>'
         : '';
 
       return (
-        '<article class="cluster-review-card" id="cluster-review-' + (idx + 1) + '">' +
+        '<article class="cluster-review-entry" id="cluster-review-' + (idx + 1) + '">' +
           '<div class="cluster-review-head">' +
             '<div class="cluster-review-meta">' +
-              '<span class="cluster-tag cluster-tag-accent">' + review.memberCount + ' 篇文献</span>' +
-              '<span class="cluster-tag">v' + review.version + '</span>' +
+              '<span class="cluster-tag cluster-tag-accent">' + review.memberCount + ' 篇文献支撑</span>' +
+              '<span class="cluster-tag cluster-tag-subtle">子群综述 v' + review.version + '</span>' +
               '<span class="cluster-meta-time">更新于 ' + escapeHtml(formatDateTime(review.updatedAt)) + '</span>' +
             '</div>' +
             '<h3 class="cluster-review-title">' + escapeHtml(review.title) + '</h3>' +
           '</div>' +
           (review.abstract
-            ? '<p class="cluster-review-abstract">' + escapeHtml(review.abstract) + '</p>'
+            ? '<div class="cluster-review-abstract">' + escapeHtml(review.abstract) + '</div>'
             : '') +
           detailsHtml +
         '</article>'
@@ -131,16 +134,15 @@ export function renderReviews(detail, articleIndex) {
   return (
     '<section class="cluster-section" id="clusterReviewsSection">' +
       '<div class="cluster-section-header">' +
-        '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">📚</span> 深度综述 (' + reviews.length + ')</h2>' +
+        '<h2 class="cluster-section-title">' +
+          '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>' +
+          '<span>子群深度综述 (' + reviews.length + ')</span>' +
+        '</h2>' +
         (reviews.length > 1
           ? '<button type="button" class="cluster-btn-subtle" id="clusterReviewsToggleAll" aria-expanded="false">' +
               '全部展开' +
             '</button>'
           : '') +
-      '</div>' +
-      '<div class="cluster-note">' +
-        '每篇综述对应主题内部由高维向量聚类产出的语义子群；引用编号（#id）均可直连回溯文献。' +
-        '综述由每周流水线增量维护，成员变动幅度在安全阈值内时持续在同一篇上增订续写。' +
       '</div>' +
       '<div class="cluster-reviews-container">' + items + '</div>' +
     '</section>'
@@ -233,17 +235,17 @@ export function renderInsights(detail) {
 
       const list = (entries) =>
         (entries || []).length
-          ? '<ul class="cluster-list cluster-insight-list">' +
+          ? '<ul class="cluster-clean-list">' +
             entries.map((entry) => {
               const refs = []
                 .concat((entry.reviewIds || []).map((id) => '综述 #' + id))
                 .concat((entry.gapIds || []).map((id) => '空白 #' + id))
-                .map((label) => '<span class="cluster-tag cluster-tag-neutral">' + escapeHtml(label) + '</span>')
+                .map((label) => '<span class="cluster-tag cluster-tag-subtle">' + escapeHtml(label) + '</span>')
                 .join(' ');
               return (
-                '<li class="cluster-insight-list-item">' +
-                  '<div class="cluster-insight-list-text">' + escapeHtml(entry.text) + '</div>' +
-                  (refs ? '<div class="cluster-insight-refs">' + refs + '</div>' : '') +
+                '<li class="cluster-clean-item">' +
+                  '<div class="item-text">' + escapeHtml(entry.text) + '</div>' +
+                  (refs ? '<div class="item-refs">' + refs + '</div>' : '') +
                 '</li>'
               );
             }).join('') +
@@ -255,7 +257,10 @@ export function renderInsights(detail) {
       if ((report.convergences || []).length) {
         subBlocks.push(
           '<div class="cluster-insight-subgroup">' +
-            '<div class="cluster-insight-section-label"><span class="subgroup-icon" aria-hidden="true">🤝</span> 子簇间收敛趋势 (' + report.convergences.length + ')</div>' +
+            '<div class="cluster-insight-subgroup-title">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>' +
+              '<span>子群间收敛趋势 (' + report.convergences.length + ')</span>' +
+            '</div>' +
             list(report.convergences) +
           '</div>'
         );
@@ -264,7 +269,10 @@ export function renderInsights(detail) {
       if ((report.tensions || []).length) {
         subBlocks.push(
           '<div class="cluster-insight-subgroup">' +
-            '<div class="cluster-insight-section-label"><span class="subgroup-icon" aria-hidden="true">⚖️</span> 张力与适用边界差异 (' + report.tensions.length + ')</div>' +
+            '<div class="cluster-insight-subgroup-title">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v1"/><path d="M18 8h4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-4"/></svg>' +
+              '<span>学术张力与适用边界差异 (' + report.tensions.length + ')</span>' +
+            '</div>' +
             list(report.tensions) +
           '</div>'
         );
@@ -273,20 +281,23 @@ export function renderInsights(detail) {
       if ((report.gapMaturity || []).length) {
         subBlocks.push(
           '<div class="cluster-insight-subgroup">' +
-            '<div class="cluster-insight-section-label"><span class="subgroup-icon" aria-hidden="true">🕳️</span> 研究空白成熟度评估 (' + report.gapMaturity.length + ')</div>' +
-            '<div class="cluster-gaps-mini-list">' +
+            '<div class="cluster-insight-subgroup-title">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+              '<span>研究空白成熟度演进 (' + report.gapMaturity.length + ')</span>' +
+            '</div>' +
+            '<div class="cluster-gap-rows">' +
               report.gapMaturity
                 .map(
                   (item) =>
-                    '<div class="cluster-gap-mini">' +
-                      '<div class="cluster-gap-mini-head">' +
+                    '<div class="cluster-gap-row">' +
+                      '<div class="gap-row-head">' +
                         '<span class="gap-state-tag gap-state-' + escapeHtml(item.state || 'unaddressed') + '">' +
                           escapeHtml(GAP_STATE_LABELS[item.state] || item.state) +
                         '</span>' +
-                        (item.gapId ? '<span class="cluster-tag cluster-tag-neutral">空白 #' + escapeHtml(item.gapId) + '</span>' : '') +
+                        (item.gapId ? '<span class="cluster-tag cluster-tag-subtle">空白 #' + escapeHtml(item.gapId) + '</span>' : '') +
+                        '<span class="gap-row-title">' + escapeHtml(item.gap || '') + '</span>' +
                       '</div>' +
-                      '<div class="cluster-gap-mini-content">' + escapeHtml(item.gap || '') + '</div>' +
-                      (item.reason ? '<div class="cluster-gap-mini-reason">' + escapeHtml(item.reason) + '</div>' : '') +
+                      (item.reason ? '<div class="gap-row-reason">' + escapeHtml(item.reason) + '</div>' : '') +
                     '</div>'
                 )
                 .join('') +
@@ -298,46 +309,48 @@ export function renderInsights(detail) {
       if ((report.agenda || []).length) {
         subBlocks.push(
           '<div class="cluster-insight-subgroup">' +
-            '<div class="cluster-insight-section-label"><span class="subgroup-icon" aria-hidden="true">🧭</span> 未来研究议程建议 (' + report.agenda.length + ')</div>' +
+            '<div class="cluster-insight-subgroup-title">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>' +
+              '<span>未来研究议程建议 (' + report.agenda.length + ')</span>' +
+            '</div>' +
             list(report.agenda) +
           '</div>'
         );
       }
 
-      // 与综述一致：首篇默认展开，其余折叠；仅 1 篇时亦默认展开
       const isOpen = idx === 0;
 
       const detailsHtml = subBlocks.length > 0
-        ? '<details class="cluster-details cluster-review-details cluster-insight-details"' + (isOpen ? ' open' : '') + '>' +
-            '<summary class="cluster-details-summary cluster-review-summary">' +
-              '<span class="cluster-review-summary-main">' +
-                '<span class="cluster-review-summary-icon" aria-hidden="true">🔍</span>' +
-                '<span class="cluster-review-summary-title">展开洞察细分论述与空白评估</span>' +
-                '<span class="cluster-tag cluster-tag-neutral">' + subBlocks.length + ' 个研判维度</span>' +
+        ? '<details class="cluster-accordion cluster-insight-details"' + (isOpen ? ' open' : '') + '>' +
+            '<summary class="cluster-accordion-summary">' +
+              '<span class="cluster-accordion-summary-main">' +
+                '<svg class="accordion-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
+                '<span class="accordion-title">研判细分论述与空白成熟度</span>' +
+                '<span class="cluster-tag cluster-tag-subtle">' + subBlocks.length + ' 个研判维度</span>' +
               '</span>' +
-              '<span class="cluster-review-summary-hint">' +
-                '<span class="hint-collapsed">展开细节 ↓</span>' +
-                '<span class="hint-expanded">收起细节 ↑</span>' +
+              '<span class="cluster-accordion-hint">' +
+                '<span class="hint-collapsed">展开研判细节 ↓</span>' +
+                '<span class="hint-expanded">收起研判细节 ↑</span>' +
               '</span>' +
             '</summary>' +
-            '<div class="cluster-details-body cluster-insight-body">' +
+            '<div class="cluster-accordion-body">' +
               subBlocks.join('') +
             '</div>' +
           '</details>'
         : '';
 
       return (
-        '<article class="cluster-insight-card" id="cluster-insight-' + (idx + 1) + '">' +
+        '<article class="cluster-insight-entry" id="cluster-insight-' + (idx + 1) + '">' +
           '<div class="cluster-insight-head">' +
             (report.version
-              ? '<div class="cluster-card-meta"><span class="cluster-tag cluster-tag-accent">洞察报告 v' + report.version + '</span></div>'
+              ? '<div class="cluster-review-meta"><span class="cluster-tag cluster-tag-accent">洞察研判报告 v' + report.version + '</span></div>'
               : '') +
             '<h3 class="cluster-insight-title">' + escapeHtml(report.title) + '</h3>' +
           '</div>' +
           (report.thesis
-            ? '<blockquote class="cluster-insight-thesis">' + escapeHtml(report.thesis) + '</blockquote>'
+            ? '<div class="cluster-thesis-box">' + escapeHtml(report.thesis) + '</div>'
             : '') +
-          (topics ? '<div class="cluster-card-meta cluster-insight-topics">' + topics + '</div>' : '') +
+          (topics ? '<div class="cluster-insight-topics">' + topics + '</div>' : '') +
           detailsHtml +
         '</article>'
       );
@@ -347,15 +360,15 @@ export function renderInsights(detail) {
   return (
     '<section class="cluster-section" id="clusterInsightsSection">' +
       '<div class="cluster-section-header">' +
-        '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">💡</span> 主题洞察 (' + insights.length + ')</h2>' +
+        '<h2 class="cluster-section-title">' +
+          '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>' +
+          '<span>主题多维研判 (' + insights.length + ')</span>' +
+        '</h2>' +
         (insights.length > 1
           ? '<button type="button" class="cluster-btn-subtle" id="clusterInsightsToggleAll" aria-expanded="false">' +
               '全部展开' +
             '</button>'
           : '') +
-      '</div>' +
-      '<div class="cluster-note">' +
-        '将本主题内部的多个综述子簇与研究空白做二次聚类分析，挖掘不同学术子群之间的收敛共识、争鸣张力与空白成熟演进。' +
       '</div>' +
       '<div class="cluster-insights-container">' + items + '</div>' +
     '</section>'
@@ -374,7 +387,7 @@ export function renderConsensusDualView(detail) {
       return '<div class="cluster-empty-inline">' + escapeHtml(emptyText) + '</div>';
     }
     return (
-      '<ul class="cluster-dual-list">' +
+      '<ul class="cluster-ledger-list">' +
         items.map((item) => '<li>' + escapeHtml(item) + '</li>').join('') +
       '</ul>'
     );
@@ -383,22 +396,25 @@ export function renderConsensusDualView(detail) {
   return (
     '<section class="cluster-section">' +
       '<div class="cluster-section-header">' +
-        '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">⚖️</span> 学术共识与分歧</h2>' +
+        '<h2 class="cluster-section-title">' +
+          '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>' +
+          '<span>学术共识与边界分歧</span>' +
+        '</h2>' +
       '</div>' +
       '<div class="cluster-consensus-grid">' +
-        '<div class="consensus-card is-agreed">' +
-          '<div class="consensus-card-header">' +
-            '<span class="consensus-icon" aria-hidden="true">✅</span>' +
-            '<h3 class="consensus-card-title">学术界现有共识</h3>' +
-            '<span class="consensus-count-pill">' + consensus.length + ' 项</span>' +
+        '<div class="consensus-panel is-agreed">' +
+          '<div class="consensus-panel-header">' +
+            '<svg class="consensus-icon icon-agreed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="9 12 12 15 16 10"/></svg>' +
+            '<h3 class="consensus-panel-title">现有学术共识</h3>' +
+            '<span class="consensus-count-pill tabular-num">' + consensus.length + '</span>' +
           '</div>' +
           renderItems(consensus, '暂无明确收敛的学术共识') +
         '</div>' +
-        '<div class="consensus-card is-controversial">' +
-          '<div class="consensus-card-header">' +
-            '<span class="consensus-icon" aria-hidden="true">⚡</span>' +
-            '<h3 class="consensus-card-title">主要分歧与条件张力</h3>' +
-            '<span class="consensus-count-pill">' + controversies.length + ' 项</span>' +
+        '<div class="consensus-panel is-controversial">' +
+          '<div class="consensus-panel-header">' +
+            '<svg class="consensus-icon icon-controversial" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+            '<h3 class="consensus-panel-title">主要分歧与条件张力</h3>' +
+            '<span class="consensus-count-pill tabular-num">' + controversies.length + '</span>' +
           '</div>' +
           renderItems(controversies, '暂未探测到显著的条件性争论') +
         '</div>' +

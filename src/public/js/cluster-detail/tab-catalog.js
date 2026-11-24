@@ -60,15 +60,13 @@ export function renderCatalog(detail) {
       : '');
 
   return (
-    '<section class="cluster-section cluster-catalog-section" id="catalogSection">' +
+    '<section class="cluster-section cluster-catalog-dossier" id="catalogSection">' +
       '<div class="cluster-section-header">' +
         '<h2 class="cluster-section-title">' +
-          '<span class="section-icon" aria-hidden="true">📑</span> 全量聚类文献' +
+          '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>' +
+          '<span>全量聚类文献</span>' +
           '<span class="cluster-count-badge" id="catalogTotalBadge">' + items.length + ' 篇</span>' +
         '</h2>' +
-      '</div>' +
-      '<div class="cluster-note">' +
-        '按主题内语义子域分组展示；每篇文献都标注所属子域，便于和「演进脉络」中的角度对照。支持本地即时检索，以及按学术角色或子域过滤。' +
       '</div>' +
       '<div class="cluster-catalog-toolbar">' +
         '<div class="cluster-catalog-search-wrap">' +

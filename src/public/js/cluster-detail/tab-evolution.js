@@ -16,7 +16,10 @@ export function renderAngles(detail, _articleIndex) {
     return (
       '<section class="cluster-section">' +
         '<div class="cluster-section-header">' +
-          '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">🧭</span> 研究角度与研究脉络</h2>' +
+          '<h2 class="cluster-section-title">' +
+            '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>' +
+            '<span>研究角度与演进脉络</span>' +
+          '</h2>' +
         '</div>' +
         '<div class="cluster-empty-inline">暂无归纳的研究角度与时序脉络。</div>' +
       '</section>'
@@ -36,11 +39,11 @@ export function renderAngles(detail, _articleIndex) {
           (isDivergent
             ? '<span class="cluster-tag cluster-tag-divergent">并列子域</span>'
             : '<span class="cluster-tag cluster-tag-linear">时序脉络</span>') +
-          '<span class="cluster-tag">' + angle.articleCount + ' 篇文献</span>' +
+          '<span class="cluster-tag cluster-tag-subtle">' + angle.articleCount + ' 篇文献</span>' +
           (!isDivergent && backboneCount < allSteps.length
-            ? '<span class="cluster-tag">连续段 ' + backboneCount + ' 篇</span>'
+            ? '<span class="cluster-tag cluster-tag-subtle">连续段 ' + backboneCount + ' 篇</span>'
             : '') +
-          (angle.trend ? '<span class="cluster-tag">' + trendLabel(angle.trend) + '</span>' : '') +
+          (angle.trend ? '<span class="cluster-tag cluster-tag-subtle">' + trendLabel(angle.trend) + '</span>' : '') +
         '</div>';
 
       const narrative = angle.narrative
@@ -56,8 +59,8 @@ export function renderAngles(detail, _articleIndex) {
 
       const stepsHtml = representativeSteps.map((step) => renderStep(step)).join('');
       const restHtml = restSteps.length > 0
-        ? '<details class="cluster-details cluster-divergent-details">' +
-            '<summary class="cluster-details-summary">展开其余 ' + restSteps.length + ' 篇子域成员</summary>' +
+        ? '<details class="cluster-accordion cluster-divergent-details">' +
+            '<summary class="cluster-accordion-summary">展开其余 ' + restSteps.length + ' 篇子域成员</summary>' +
             '<ol class="cluster-thread">' +
               restSteps.map((step) => renderStep(step)).join('') +
             '</ol>' +
@@ -65,13 +68,13 @@ export function renderAngles(detail, _articleIndex) {
         : '';
 
       const divergentNote = isDivergent
-        ? '<div class="cluster-note cluster-divergent-note">该子域暂未识别出连续承接段（至少 3 篇），以下先呈现质心相近的代表文献；其余成员可展开查看，均不代表时间上的承接关系。</div>'
+        ? '<div class="cluster-ambient-tip">该子域未识别出连续承接段（至少 3 篇），以下先呈现质心代表文献；展开可查看全部成员。</div>'
         : backboneCount < allSteps.length
-          ? '<div class="cluster-note">其中 ' + backboneCount + ' 篇构成连续承接段，其余 ' + (allSteps.length - backboneCount) + ' 篇为同一子域内的背景/旁支文献。</div>'
+          ? '<div class="cluster-ambient-tip">其中 ' + backboneCount + ' 篇构成连续承接段，其余 ' + (allSteps.length - backboneCount) + ' 篇为同一子域背景文献。</div>'
           : '';
 
       return (
-        '<div class="cluster-angle-card">' +
+        '<div class="cluster-angle-dossier">' +
           head +
           narrative +
           divergentNote +
@@ -85,11 +88,10 @@ export function renderAngles(detail, _articleIndex) {
   return (
     '<section class="cluster-section">' +
       '<div class="cluster-section-header">' +
-        '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">🧭</span> 研究角度与研究脉络 (' + detail.angles.length + ')</h2>' +
-      '</div>' +
-      '<div class="cluster-note">' +
-        '先按主题内语义子域分组，再在同一子域内按「切面语义相似度 + 方法/研究对象延续性 + 时间先后」自动推断连续承接段，<strong>不是引文直接继承关系</strong>。' +
-        '子域内找不到 3 篇以上的连续承接段时，才标记为并列子域。' +
+        '<h2 class="cluster-section-title">' +
+          '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>' +
+          '<span>研究角度与演进脉络 (' + detail.angles.length + ')</span>' +
+        '</h2>' +
       '</div>' +
       '<div class="cluster-angles-container">' + angles + '</div>' +
     '</section>'

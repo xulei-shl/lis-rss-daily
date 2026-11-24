@@ -15,9 +15,12 @@ export function renderMatrix(detail) {
     return (
       '<section class="cluster-section">' +
         '<div class="cluster-section-header">' +
-          '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">📊</span> 方法 × 研究对象 对比矩阵</h2>' +
+          '<h2 class="cluster-section-title">' +
+            '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>' +
+            '<span>方法 × 研究对象 对比矩阵</span>' +
+          '</h2>' +
         '</div>' +
-        '<div class="cluster-note">样本量不足，暂无法形成可对比的方法与研究对象交叉矩阵。</div>' +
+        '<div class="cluster-empty-inline">样本量较少，暂无法形成可对比的方法与研究对象交叉矩阵。</div>' +
       '</section>'
     );
   }
@@ -28,7 +31,7 @@ export function renderMatrix(detail) {
   });
 
   const header =
-    '<tr><th class="matrix-corner">方法 \\ 研究对象</th>' +
+    '<tr><th class="matrix-corner">方法 \\ 对象</th>' +
     matrix.objects.map((object) => '<th>' + escapeHtml(object) + '</th>').join('') +
     '</tr>';
 
@@ -53,14 +56,16 @@ export function renderMatrix(detail) {
     .join('');
 
   const holesPills = (matrix.holes || []).length
-    ? '<div class="cluster-holes-box">' +
-        '<div class="cluster-holes-title">💡 显著覆盖空缺（方法与对象尚未组合，按显著度排序）：</div>' +
+    ? '<div class="cluster-holes-strip">' +
+        '<div class="cluster-holes-label">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+          '<span>未覆盖空缺（方法与对象尚未组合）：</span>' +
+        '</div>' +
         '<div class="cluster-holes-tags">' +
           matrix.holes
             .slice(0, 10)
             .map((hole) => (
-              '<span class="cluster-tag cluster-tag-hole" title="该交集目前文献空白">' +
-                '<span class="hole-icon">⚡</span> ' +
+              '<span class="cluster-tag cluster-tag-hole" title="该交叉领域目前暂无文献">' +
                 escapeHtml(hole.method) + ' <span class="hole-cross">×</span> ' + escapeHtml(hole.object) +
               '</span>'
             ))
@@ -72,10 +77,10 @@ export function renderMatrix(detail) {
   return (
     '<section class="cluster-section">' +
       '<div class="cluster-section-header">' +
-        '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">📊</span> 方法 × 研究对象 对比矩阵</h2>' +
-      '</div>' +
-      '<div class="cluster-note">' +
-        '通过文献切面标签纯规则交叉聚合。单元格数字为文献篇数，颜色深度表示聚集热度；鼠标悬停可查看对应文章 ID。' +
+        '<h2 class="cluster-section-title">' +
+          '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>' +
+          '<span>方法 × 研究对象 对比矩阵</span>' +
+        '</h2>' +
       '</div>' +
       '<div class="cluster-table-responsive">' +
         '<table class="cluster-matrix cluster-heatmap-matrix">' +
@@ -100,20 +105,20 @@ export function renderGaps(detail, articleIndex) {
         return article ? article.title : '#' + id;
       });
       const evidence = evidenceIds.length
-        ? '<a class="cluster-evidence-pill" href="/articles/' + evidenceIds[0] +
+        ? '<a class="cluster-cite-pill" href="/articles/' + evidenceIds[0] +
           '" target="_blank" rel="noopener" title="' + escapeHtml(evidenceTitles.join('；')) + '">' +
-            '依据 ' + evidenceIds.length + ' 篇文献证据' +
+            '依据 ' + evidenceIds.length + ' 篇文献' +
           '</a>'
         : '';
 
       const basisKey = gap.basis || 'limitation';
       const basisBadge = '<span class="cluster-gap-basis-badge basis-' + basisKey + '">' +
         escapeHtml(BASIS_LABELS[gap.basis] || gap.basis) +
-        (gap.evidenceScope === 'adjacent' ? ' · 跨主题证据' : '') +
+        (gap.evidenceScope === 'adjacent' ? ' · 跨主题' : '') +
       '</span>';
 
       return (
-        '<div class="cluster-gap-card">' +
+        '<div class="cluster-gap-entry">' +
           '<div class="cluster-gap-header">' +
             basisBadge +
             (evidence ? '<div class="cluster-evidence">' + evidence + '</div>' : '') +
@@ -127,11 +132,10 @@ export function renderGaps(detail, articleIndex) {
   return (
     '<section class="cluster-section">' +
       '<div class="cluster-section-header">' +
-        '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">🔍</span> 关键研究空白 (' + gaps.length + ')</h2>' +
-      '</div>' +
-      '<div class="cluster-note">' +
-        '研究空白由算法从「覆盖矩阵空格、邻近主题差异、时效断层与文献自陈局限」严格推导，' +
-        '杜绝虚构，所有空白点均需具备实体文献回溯证据。' +
+        '<h2 class="cluster-section-title">' +
+          '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
+          '<span>关键研究空白 (' + gaps.length + ')</span>' +
+        '</h2>' +
       '</div>' +
       '<div class="cluster-gaps-container">' + items + '</div>' +
     '</section>'

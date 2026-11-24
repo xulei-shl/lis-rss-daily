@@ -1,5 +1,5 @@
 // ============================================
-// 主题洞察详情页 - 运行日志模块（置顶默认折叠）
+// 主题洞察详情页 - 运行日志模块（移至底页次级区域）
 // ============================================
 
 import {
@@ -10,13 +10,13 @@ import {
   RUN_STATUS_LABELS
 } from './utils.js';
 
-export function renderTopRunLogs(detail) {
+export function renderRunLogs(detail) {
   const logs = detail.runLogs || [];
   const latestRun = logs.length > 0 ? logs[0] : null;
 
   let statusCls = 'idle';
   let statusText = '暂无记录';
-  let briefDetails = '下一轮流水线执行后将生成执行记录';
+  let briefDetails = '下一轮增量流水线执行后将生成执行记录';
 
   if (latestRun) {
     if (latestRun.status === 'completed') statusCls = 'success';
@@ -29,7 +29,7 @@ export function renderTopRunLogs(detail) {
     const added = latestRun.addedCount > 0 ? `+${latestRun.addedCount} 篇文献` : '无文献新增';
     const revAdded = (latestRun.reviewAddedCount || 0) > 0 ? ` / +${latestRun.reviewAddedCount} 综述` : '';
 
-    briefDetails = `最近执行于 ${formatDateTime(latestRun.startedAt)} · ${trig} · 耗时 ${dur} · ${added}${revAdded}`;
+    briefDetails = `最近执行：${formatDateTime(latestRun.startedAt)} · ${trig} · 耗时 ${dur} · ${added}${revAdded}`;
   }
 
   const rows = logs
@@ -67,12 +67,8 @@ export function renderTopRunLogs(detail) {
       '</div>'
     : '<div class="cluster-empty-inline">暂无执行流水记录。</div>';
 
-  const insightCountNotice = detail.insights && detail.insights.length > 0
-    ? ' 本版本共有 ' + detail.insights.length + ' 份主题内洞察报告。'
-    : '';
-
   return (
-    '<details class="cluster-run-drawer" id="clusterRunDrawer">' +
+    '<details class="cluster-run-drawer is-bottom" id="clusterRunDrawer">' +
       '<summary class="cluster-run-summary" aria-label="查看流水线运行日志">' +
         '<div class="cluster-run-summary-left">' +
           '<span class="cluster-status-dot cluster-status-dot-' + statusCls + '" aria-hidden="true"></span>' +
@@ -87,12 +83,11 @@ export function renderTopRunLogs(detail) {
         '</div>' +
       '</summary>' +
       '<div class="cluster-run-drawer-body">' +
-        '<div class="cluster-note cluster-run-note">' +
-          '统计主题聚类增量流水线的执行；「新增文献」为本轮新增聚类数，「新增综述」为新生成子群综述数（续写不计入新增）。' +
-          insightCountNotice +
-        '</div>' +
         tableBody +
       '</div>' +
     '</details>'
   );
 }
+
+// 兼容别名
+export const renderTopRunLogs = renderRunLogs;

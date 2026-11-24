@@ -50,13 +50,10 @@ function renderPage(root, detail) {
   // 1. 常驻顶层区域：主题标题与时空元数据
   parts.push(renderHeader(detail));
 
-  // 2. 置顶运行日志：默认折叠抽屉
-  parts.push(renderTopRunLogs(detail));
-
-  // 3. 状态异常/提示 Callout (若存在)
+  // 2. 状态异常/提示 (仅在存在异常或样本较少时渲染轻量横幅)
   parts.push(renderStatusNotice(detail));
 
-  // 4. Tab 导航条
+  // 3. Tab 导航条
   const tabs = [
     { id: 'synthesis', label: '综述与洞察' },
     { id: 'evolution', label: '演进脉络' },
@@ -67,7 +64,7 @@ function renderPage(root, detail) {
 
   parts.push(renderTabBar(tabs));
 
-  // 5. 5 大 Tab 面板
+  // 4. 5 大 Tab 面板
   parts.push('<div class="cluster-tab-panels" id="clusterTabPanels">');
 
   // Tab 1: 综述与洞察
@@ -113,16 +110,35 @@ function renderPage(root, detail) {
 
   parts.push('</div>');
 
+  // 5. 移至底页次级区域的流水线日志抽屉
+  parts.push(renderTopRunLogs(detail));
+
   root.innerHTML = parts.filter(Boolean).join('');
 
   // 绑定 Tab 切换与 Hash 路由
   initTabNavigation(root);
+
+  // 绑定顶部状态栏日志抽屉唤起
+  initRunLogsToggle(root);
 
   // 绑定综述折叠展开交互
   bindSynthesisEvents(root);
 
   // 绑定底册即时搜索与过滤
   bindCatalogEvents(root, detail);
+}
+
+function initRunLogsToggle(root) {
+  const btn = root.querySelector('#btnToggleRunLogs');
+  const drawer = root.querySelector('#clusterRunDrawer');
+  if (btn && drawer) {
+    btn.addEventListener('click', () => {
+      drawer.open = !drawer.open;
+      if (drawer.open) {
+        drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  }
 }
 
 function renderTabBar(tabs) {

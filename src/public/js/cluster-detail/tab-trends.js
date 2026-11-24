@@ -13,7 +13,10 @@ export function renderTrend(detail) {
     return (
       '<section class="cluster-section">' +
         '<div class="cluster-section-header">' +
-          '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">📈</span> 月度趋势与动力学</h2>' +
+          '<h2 class="cluster-section-title">' +
+            '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>' +
+            '<span>月度演化趋势与计量指标</span>' +
+          '</h2>' +
         '</div>' +
         '<div class="cluster-empty-inline">暂无月度指标度量数据。</div>' +
       '</section>'
@@ -106,10 +109,16 @@ export function renderTrend(detail) {
   return (
     '<section class="cluster-section">' +
       '<div class="cluster-section-header">' +
-        '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">📈</span> 演化趋势与动力学指标</h2>' +
+        '<h2 class="cluster-section-title">' +
+          '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>' +
+          '<span>演化趋势与计量动力学 (' + metrics.length + ' 个月)</span>' +
+        '</h2>' +
       '</div>' +
       (insufficient
-        ? '<div class="cluster-note cluster-note-warn">覆盖有效月份不足 3 个月，样本暂不足以推断长程平滑趋势，仅展示已知指标。</div>'
+        ? '<div class="cluster-ambient-notice cluster-notice-warn">' +
+            '<svg class="notice-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+            '<div class="notice-body">覆盖有效月份不足 3 个月，样本暂不足以推断平滑趋势。</div>' +
+          '</div>'
         : '') +
       '<div class="cluster-chart-card">' + chart + '</div>' +
       '<div class="cluster-table-responsive" style="margin-top:var(--space-4)">' +

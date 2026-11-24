@@ -2,7 +2,7 @@
 // 主题洞察详情页 - 顶部标题与时空元数据
 // ============================================
 
-import { escapeHtml, formatDateTime, formatMonth } from './utils.js';
+import { escapeHtml, formatMonth, formatDateTime } from './utils.js';
 
 export function renderHeader(detail) {
   const badges = [];
@@ -16,49 +16,67 @@ export function renderHeader(detail) {
   }
 
   const keywords = (detail.keywords || [])
+    .slice(0, 8)
     .map((word) => '<span class="cluster-tag">' + escapeHtml(word) + '</span>')
     .join('');
 
   const range = detail.firstEventDate || detail.lastEventDate
     ? escapeHtml(formatMonth(detail.firstEventDate)) + ' ~ ' + escapeHtml(formatMonth(detail.lastEventDate))
-    : '时间范围未知';
+    : '时间跨度未知';
 
   const badgeHtml = badges.length
     ? badges.map(([cls, label]) => '<span class="cluster-badge ' + cls + '">' + escapeHtml(label) + '</span>').join(' ')
     : '';
 
+  const logs = detail.runLogs || [];
+  const latestRun = logs.length > 0 ? logs[0] : null;
+  let runStatusCls = 'idle';
+  let runStatusText = '暂无记录';
+  if (latestRun) {
+    if (latestRun.status === 'completed') runStatusCls = 'success';
+    else if (latestRun.status === 'failed') runStatusCls = 'danger';
+    else if (latestRun.status === 'running') runStatusCls = 'running';
+    runStatusText = latestRun.status === 'completed' ? '正常' : latestRun.status === 'failed' ? '异常' : '进行中';
+  }
+
   return (
     '<div class="cluster-detail-header">' +
-      '<div class="cluster-header-nav">' +
-        '<a href="/clusters" class="cluster-back-link" title="返回全部聚类主题">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>' +
-          '<span>返回主题列表</span>' +
-        '</a>' +
+      '<div class="cluster-detail-topbar">' +
+        '<nav class="cluster-breadcrumbs" aria-label="主题路径导航">' +
+          '<a href="/clusters" class="cluster-breadcrumb-link">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>' +
+            '<span>主题洞察</span>' +
+          '</a>' +
+          '<span class="cluster-breadcrumb-separator" aria-hidden="true">/</span>' +
+          '<span class="cluster-breadcrumb-current">' + escapeHtml(detail.name) + '</span>' +
+        '</nav>' +
+        '<button type="button" class="cluster-pipeline-badge" id="btnToggleRunLogs" title="点击查看流水线执行记录">' +
+          '<span class="cluster-status-dot cluster-status-dot-' + runStatusCls + '" aria-hidden="true"></span>' +
+          '<span>流水线' + escapeHtml(runStatusText) + '</span>' +
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>' +
+        '</button>' +
       '</div>' +
+
       '<div class="cluster-title-wrap">' +
-        '<h1 class="page-title cluster-page-title">' + escapeHtml(detail.name) + '</h1>' +
+        '<h1 class="cluster-page-title">' + escapeHtml(detail.name) + '</h1>' +
         (badgeHtml ? '<div class="cluster-title-badges">' + badgeHtml + '</div>' : '') +
       '</div>' +
-      '<div class="cluster-card-meta cluster-header-meta">' +
+
+      '<div class="cluster-header-meta">' +
         '<span class="cluster-meta-pill" title="关联文献总数">' +
-          '<strong>' + detail.linkedCount + '</strong> 篇' +
+          '<strong>' + detail.linkedCount + '</strong> 篇文献' +
           '<span class="cluster-meta-sub">（主归属 ' + detail.primaryCount + '）</span>' +
         '</span>' +
-        '<span class="cluster-meta-divider" aria-hidden="true">/</span>' +
+        '<span class="cluster-meta-dot" aria-hidden="true">·</span>' +
         '<span class="cluster-meta-pill" title="文献涵盖时间段">' + escapeHtml(range) + '</span>' +
-        '<span class="cluster-meta-divider" aria-hidden="true">/</span>' +
-        '<span class="cluster-meta-pill" title="主题集合版本">集合 v' + escapeHtml(String(detail.setVersion)) + '</span>' +
-        '<span class="cluster-meta-divider" aria-hidden="true">/</span>' +
-        '<span class="cluster-meta-pill cluster-meta-time" title="主题初次创建建立时间">' +
-          '<svg class="meta-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' +
-          '创建于 ' + escapeHtml(formatDateTime(detail.createdAt)) +
-        '</span>' +
-        '<span class="cluster-meta-divider" aria-hidden="true">/</span>' +
-        '<span class="cluster-meta-pill cluster-meta-time" title="多维分析最近更新时间">' +
-          '<svg class="meta-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>' +
-          '最近更新 ' + escapeHtml(formatDateTime(detail.updatedAt)) +
+        '<span class="cluster-meta-dot" aria-hidden="true">·</span>' +
+        '<span class="cluster-meta-pill" title="演进脉络数">' + (detail.angles || []).length + ' 条脉络</span>' +
+        '<span class="cluster-meta-dot" aria-hidden="true">·</span>' +
+        '<span class="cluster-meta-pill cluster-meta-time" title="分析最近更新时间">' +
+          '更新于 ' + escapeHtml(formatDateTime(detail.updatedAt)) +
         '</span>' +
       '</div>' +
+
       (keywords ? '<div class="cluster-keywords-wrap">' + keywords + '</div>' : '') +
     '</div>'
   );
@@ -67,29 +85,45 @@ export function renderHeader(detail) {
 export function renderStatusNotice(detail) {
   if (detail.analysisStatus === 'insufficient_data') {
     return (
-      '<div class="cluster-note cluster-note-warn">' +
-        '<strong>数据提示：</strong>该主题样本量不足，仅展示规则聚合结果（对比矩阵）。为避免过度解读，未生成脉络、趋势与空白结论。' +
+      '<div class="cluster-ambient-notice cluster-notice-warn">' +
+        '<svg class="notice-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+        '<div class="notice-body">' +
+          '<strong>数据提示：</strong>该主题当前聚合样本量较少，仅展示规则聚合对比矩阵，未推断脉络与空白结论。' +
+        '</div>' +
       '</div>'
     );
   }
   if (detail.analysisStatus === 'partial') {
     return (
-      '<div class="cluster-note cluster-note-warn">' +
-        '<strong>分析状态：</strong>综述与角度已更新，范式/前沿/空白部分待下一轮重试。' +
-        (detail.analysisError ? '<br>原因：' + escapeHtml(detail.analysisError) : '') +
+      '<div class="cluster-ambient-notice cluster-notice-warn">' +
+        '<svg class="notice-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+        '<div class="notice-body">' +
+          '<strong>分析状态：</strong>部分综合研判结论待下轮流水线更新。' +
+          (detail.analysisError ? '（原因：' + escapeHtml(detail.analysisError) + '）' : '') +
+        '</div>' +
       '</div>'
     );
   }
   if (detail.analysisStatus === 'failed') {
     return (
-      '<div class="cluster-note cluster-note-warn">' +
-        '<strong>分析状态：</strong>本主题的多维分析最近一次生成失败，当前展示的是上一次成功结果。系统会在下一轮自动重试。' +
-        (detail.analysisError ? '<br>原因：' + escapeHtml(detail.analysisError) : '') +
+      '<div class="cluster-ambient-notice cluster-notice-error">' +
+        '<svg class="notice-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>' +
+        '<div class="notice-body">' +
+          '<strong>分析状态：</strong>本主题最近一次分析生成失败，当前显示为上期结果，系统将在下一轮重试。' +
+          (detail.analysisError ? '（原因：' + escapeHtml(detail.analysisError) + '）' : '') +
+        '</div>' +
       '</div>'
     );
   }
   if (detail.analysisStatus === 'missing') {
-    return '<div class="cluster-note cluster-note-warn"><strong>待生成：</strong>该主题的多维分析尚未生成，将在下一轮流水线中产出。</div>';
+    return (
+      '<div class="cluster-ambient-notice cluster-notice-info">' +
+        '<svg class="notice-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>' +
+        '<div class="notice-body">' +
+          '<strong>待生成：</strong>该主题的多维学术分析尚未生成，将在下一轮流水线中产出。' +
+        '</div>' +
+      '</div>'
+    );
   }
   return '';
 }

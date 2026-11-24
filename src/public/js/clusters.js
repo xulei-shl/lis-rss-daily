@@ -39,28 +39,30 @@
   function renderOverview(data) {
     if (!overviewBar) return;
     if (typeof data.setVersion !== 'number') {
-      overviewBar.innerHTML = '<div class="cluster-stat"><div class="cluster-stat-value">—</div><div class="cluster-stat-label">尚未建立主题集合</div></div>';
+      overviewBar.innerHTML = '<span class="cluster-metric-empty">尚未建立主题集合</span>';
       return;
     }
     const stats = [
       { value: data.topicCount, label: '主题数' },
-      { value: data.linkedArticleCount, label: '已归属文章' },
-      { value: data.poolCount, label: '游离观察池' },
-      { value: data.analysisOkCount, label: '已完成多维分析' }
+      { value: data.linkedArticleCount, label: '归属文献' },
+      { value: data.poolCount, label: '观察池' },
+      { value: data.analysisOkCount, label: '已完成分析' }
     ];
     if (data.analysisFailedCount > 0) {
-      stats.push({ value: data.analysisFailedCount, label: '分析待重算' });
+      stats.push({ value: data.analysisFailedCount, label: '待重算', warn: true });
     }
     overviewBar.innerHTML = stats
       .map(
         (stat) =>
-          '<div class="cluster-stat"><div class="cluster-stat-value">' +
+          '<div class="cluster-metric-item' + (stat.warn ? ' is-warn' : '') + '">' +
+          '<span class="cluster-metric-value tabular-num">' +
           escapeHtml(String(stat.value)) +
-          '</div><div class="cluster-stat-label">' +
+          '</span>' +
+          '<span class="cluster-metric-label">' +
           escapeHtml(stat.label) +
-          '</div></div>'
+          '</span></div>'
       )
-      .join('');
+      .join('<span class="cluster-metric-divider" aria-hidden="true">/</span>');
   }
 
   async function loadTopics() {
@@ -95,55 +97,64 @@
   }
 
   function renderCard(topic) {
-    const badges = buildBadges(topic);
+    const statusPill = buildStatusPill(topic);
     const keywords = (topic.keywords || [])
-      .slice(0, 5)
+      .slice(0, 4)
       .map((word) => '<span class="cluster-tag">' + escapeHtml(word) + '</span>')
       .join('');
 
     const range = formatRange(topic.firstEventDate, topic.lastEventDate);
-    const meta = [
-      '<span>' + topic.linkedCount + ' 篇</span>',
-      topic.threadCount > 0 ? '<span>' + topic.threadCount + ' 条脉络</span>' : '',
-      topic.angleCount ? '<span>' + topic.angleCount + ' 个角度</span>' : '',
-      range ? '<span>' + escapeHtml(range) + '</span>' : '',
-      topic.periodAddedCount > 0 ? '<span>本期 +' + topic.periodAddedCount + '</span>' : ''
-    ].filter(Boolean).join('');
+    const metaItems = [
+      '<span class="cluster-card-stat"><strong class="tabular-num">' + topic.linkedCount + '</strong> 篇</span>',
+      topic.threadCount > 0 ? '<span class="cluster-card-stat"><strong class="tabular-num">' + topic.threadCount + '</strong> 条脉络</span>' : '',
+      range ? '<span class="cluster-card-range tabular-num">' + escapeHtml(range) + '</span>' : '',
+      topic.periodAddedCount > 0 ? '<span class="cluster-tag cluster-tag-accent tabular-num">+' + topic.periodAddedCount + '</span>' : ''
+    ].filter(Boolean).join('<span class="cluster-meta-dot" aria-hidden="true">·</span>');
 
     const overview = topic.overview
-      ? '<div class="cluster-card-overview">' + escapeHtml(topic.overview) + '</div>'
-      : '<div class="cluster-card-overview" style="opacity:.6">该主题的多维分析尚未生成。</div>';
+      ? '<p class="cluster-card-overview">' + escapeHtml(topic.overview) + '</p>'
+      : '<p class="cluster-card-overview is-empty">多维深度分析待下一轮流水线生成。</p>';
 
     return (
       '<article class="cluster-card">' +
-      '<a class="cluster-card-title" href="/clusters/' + encodeURIComponent(topic.slug) + '">' +
-      escapeHtml(topic.name) +
-      '</a>' +
-      badges +
-      overview +
-      '<div class="cluster-card-meta">' + meta + '</div>' +
-      (keywords ? '<div class="cluster-card-meta">' + keywords + '</div>' : '') +
+        '<div class="cluster-card-header">' +
+          '<h2 class="cluster-card-title">' +
+            '<a href="/clusters/' + encodeURIComponent(topic.slug) + '">' +
+              escapeHtml(topic.name) +
+            '</a>' +
+          '</h2>' +
+          (statusPill ? '<div class="cluster-card-status-wrap">' + statusPill + '</div>' : '') +
+        '</div>' +
+        overview +
+        '<div class="cluster-card-footer">' +
+          '<div class="cluster-card-meta">' + metaItems + '</div>' +
+          (keywords ? '<div class="cluster-card-keywords">' + keywords + '</div>' : '') +
+        '</div>' +
       '</article>'
     );
   }
 
-  function buildBadges(topic) {
-    const badges = [];
-    if (topic.status === 'NEW') badges.push(['cluster-badge-new', '新主题']);
-    if (topic.status === 'DORMANT') badges.push(['cluster-badge-dormant', '已冷却']);
-    if (topic.trend === 'up') badges.push(['cluster-badge-rising', '升温']);
-    if (topic.trend === 'down') badges.push(['cluster-badge-cooling', '退潮']);
-    if (topic.analysisStatus === 'insufficient_data') badges.push(['cluster-badge-insufficient', '样本不足']);
-    if (topic.analysisStatus === 'partial') badges.push(['cluster-badge-partial', '综述部分更新']);
-    if (topic.analysisStatus === 'failed') badges.push(['cluster-badge-failed', '分析待更新']);
-    if (badges.length === 0) return '';
-    return (
-      '<div class="cluster-card-meta">' +
-      badges
-        .map(([cls, label]) => '<span class="cluster-badge ' + cls + '">' + escapeHtml(label) + '</span>')
-        .join('') +
-      '</div>'
-    );
+  function buildStatusPill(topic) {
+    // 采用最优先的 1 个状态胶囊，避免标签堆叠
+    if (topic.trend === 'up') {
+      return '<span class="cluster-badge cluster-badge-rising">升温</span>';
+    }
+    if (topic.trend === 'down') {
+      return '<span class="cluster-badge cluster-badge-cooling">退潮</span>';
+    }
+    if (topic.status === 'NEW') {
+      return '<span class="cluster-badge cluster-badge-new">新主题</span>';
+    }
+    if (topic.status === 'DORMANT') {
+      return '<span class="cluster-badge cluster-badge-dormant">冷却</span>';
+    }
+    if (topic.analysisStatus === 'failed') {
+      return '<span class="cluster-badge cluster-badge-failed">待更新</span>';
+    }
+    if (topic.analysisStatus === 'insufficient_data') {
+      return '<span class="cluster-badge cluster-badge-insufficient">样本较少</span>';
+    }
+    return '';
   }
 
   function formatRange(first, last) {
