@@ -153,9 +153,30 @@ export async function setTopicStatus(topicId: number, status: TopicStatus): Prom
 }
 
 export async function markTopicDirty(topicId: number): Promise<void> {
+  // 分析变脏意味着成员/切面已变化，深度综述也必须重算；两个标记彼此独立，
+  // 避免分析成功后误清综述的待更新状态。
   await getDb()
     .updateTable('cluster_topics')
-    .set({ is_dirty: 1, updated_at: new Date().toISOString() })
+    .set({ is_dirty: 1, review_dirty: 1, updated_at: new Date().toISOString() })
+    .where('id', '=', topicId)
+    .execute();
+}
+
+/** 待重算深度综述的主题 */
+export async function listReviewDirtyTopics(setVersion: number): Promise<ClusterTopicsSelection[]> {
+  return getDb()
+    .selectFrom('cluster_topics')
+    .selectAll()
+    .where('set_version', '=', setVersion)
+    .where('review_dirty', '=', 1)
+    .orderBy('id', 'asc')
+    .execute();
+}
+
+export async function clearReviewDirty(topicId: number, analyzedAt: string): Promise<void> {
+  await getDb()
+    .updateTable('cluster_topics')
+    .set({ review_dirty: 0, review_analyzed_at: analyzedAt, updated_at: analyzedAt })
     .where('id', '=', topicId)
     .execute();
 }

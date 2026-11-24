@@ -352,6 +352,73 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
   },
 
   /**
+   * cluster_deep_review 类型变量 - 主题内深度综述
+   */
+  cluster_deep_review: {
+    TOPIC_NAME: {
+      description: '所属主题名称',
+      source: 'cluster_topics.name',
+      required: true,
+    },
+    TOPIC_KEYWORDS: {
+      description: '主题关键词（逗号分隔）',
+      source: 'cluster_topics.keywords',
+      required: true,
+    },
+    GROUP_STATS: {
+      description: '子簇文献数、时间范围、主要方法与对象',
+      source: '规则计算（二次聚类）',
+      required: true,
+    },
+    EVIDENCE_JSON: {
+      description: '子簇证据包（切面 + 原文短句 + 全文总结节选）',
+      source: 'article_cluster_facets + articles.ai_summary',
+      required: true,
+    },
+    PREVIOUS_REVIEW: {
+      description: '上一次综述的标题与摘要（增量续写用）',
+      source: 'cluster_topic_reviews',
+      required: true,
+    },
+    NEW_ARTICLE_IDS: {
+      description: '本次新增文献 id',
+      source: 'article_topic_links 差量',
+      required: true,
+    },
+  },
+
+  /**
+   * cluster_insight 类型变量 - 跨主题洞察
+   */
+  cluster_insight: {
+    REPORT_SCOPE: {
+      description: '元簇覆盖的主题范围',
+      source: '规则计算（二次聚类）',
+      required: true,
+    },
+    REVIEWS_JSON: {
+      description: '成员综述（标题、摘要、主题与小节摘要）',
+      source: 'cluster_topic_reviews',
+      required: true,
+    },
+    GAPS_JSON: {
+      description: '成员研究空白（文本、依据、方法与对象）',
+      source: 'cluster_topic_gaps',
+      required: true,
+    },
+    PREVIOUS_REPORT: {
+      description: '上一次洞察报告的标题与核心判断（增量用）',
+      source: 'cluster_insight_reports',
+      required: true,
+    },
+    CHANGE_CONTEXT: {
+      description: '本次新增综述/空白节点',
+      source: '二次聚类差量',
+      required: true,
+    },
+  },
+
+  /**
    * cluster_naming 类型变量 - 主题命名
    */
   cluster_naming: {
@@ -444,4 +511,4 @@ export const TASK_TYPES = _taskTypes as readonly string[];
 /**
  * 任务类型（用于 LLM 配置验证）
  */
-export type TaskType = 'filter' | 'summary' | 'keywords' | 'translation' | 'daily_summary' | 'daily_summary_journal' | 'daily_summary_blog_news' | 'analysis' | 'insights' | 'email_parse' | 'cluster_facet' | 'cluster_analysis' | 'cluster_naming';
+export type TaskType = 'filter' | 'summary' | 'keywords' | 'translation' | 'daily_summary' | 'daily_summary_journal' | 'daily_summary_blog_news' | 'analysis' | 'insights' | 'email_parse' | 'cluster_facet' | 'cluster_analysis' | 'cluster_naming' | 'cluster_review' | 'cluster_insight';

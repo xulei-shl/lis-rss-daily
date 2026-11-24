@@ -73,9 +73,11 @@
     parts.push(renderHeader(detail));
     parts.push(renderStatusNotice(detail));
     parts.push(renderSummary(detail));
+    parts.push(renderReviews(detail, articleIndex));
     parts.push(renderAngles(detail, articleIndex));
     parts.push(renderMatrix(detail));
     parts.push(renderGaps(detail, articleIndex));
+    parts.push(renderInsights(detail));
     parts.push(renderConsensus(detail));
     parts.push(renderTrend(detail));
     parts.push(renderAdjacent(detail));
@@ -179,6 +181,147 @@
       '<section class="cluster-section">' +
       '<h2 class="cluster-section-title">📌 主题概览</h2>' +
       blocks.join('') +
+      '</section>'
+    );
+  }
+
+  /* ── 深度综述（主题内语义子簇） ── */
+
+  function renderReviews(detail, articleIndex) {
+    const reviews = detail.reviews || [];
+    if (reviews.length === 0) return '';
+
+    const items = reviews
+      .map((review) => {
+        const sections = (review.sections || [])
+          .map((section) => {
+            const evidence = (section.basisArticleIds || [])
+              .slice(0, 6)
+              .map((id) => {
+                const article = articleIndex[id];
+                const title = article ? article.title : '#' + id;
+                return (
+                  '<a class="cluster-evidence-pill" href="/articles/' + id +
+                  '" target="_blank" rel="noopener" title="' + escapeHtml(title) + '">#' + id +
+                  '</a>'
+                );
+              })
+              .join(' ');
+
+            return (
+              '<div class="cluster-review-section"' +
+              (section.insufficient ? ' data-insufficient="true"' : '') + '>' +
+              '<div class="cluster-review-section-label">' + escapeHtml(section.label) + '</div>' +
+              '<div class="cluster-review-section-text">' + escapeHtml(section.text) + '</div>' +
+              (evidence ? '<div class="cluster-evidence">' + evidence + '</div>' : '') +
+              '</div>'
+            );
+          })
+          .join('');
+
+        return (
+          '<article class="cluster-review">' +
+          '<div class="cluster-card-meta">' +
+          '<span>' + review.memberCount + ' 篇文献</span>' +
+          '<span>v' + review.version + '</span>' +
+          '<span>更新于 ' + escapeHtml(formatDateTime(review.updatedAt)) + '</span>' +
+          '</div>' +
+          '<h3 class="cluster-review-title">' + escapeHtml(review.title) + '</h3>' +
+          (review.abstract
+            ? '<p class="cluster-review-abstract">' + escapeHtml(review.abstract) + '</p>'
+            : '') +
+          sections +
+          '</article>'
+        );
+      })
+      .join('');
+
+    return (
+      '<section class="cluster-section">' +
+      '<h2 class="cluster-section-title">📚 深度综述（' + reviews.length + ' 篇）</h2>' +
+      '<div class="cluster-note">' +
+      '每篇综述对应主题内部一个由向量聚出的语义子群；引用编号均可回链到文献。' +
+      '综述由周分析增量生成，成员小幅变化时在同一篇上续写。' +
+      '</div>' +
+      items +
+      '</section>'
+    );
+  }
+
+  /* ── 跨主题洞察 ── */
+
+  const GAP_STATE_LABELS = {
+    opening: '正在打开',
+    closing: '正在被填补',
+    unaddressed: '仍无人回应'
+  };
+
+  function renderInsights(detail) {
+    const insights = detail.insights || [];
+    if (insights.length === 0) return '';
+
+    const items = insights
+      .map((report) => {
+        const topics = (report.topics || [])
+          .map(
+            (topic) =>
+              '<a class="cluster-tag" href="/clusters/' + encodeURIComponent(topic.slug) + '">' +
+              escapeHtml(topic.name) + '</a>'
+          )
+          .join(' ');
+
+        const list = (entries) =>
+          (entries || []).length
+            ? '<ul class="cluster-list">' +
+              entries.map((entry) => '<li>' + escapeHtml(entry.text) + '</li>').join('') +
+              '</ul>'
+            : '';
+
+        const gaps = (report.gapMaturity || []).length
+          ? '<div class="cluster-review-section-label">研究空白成熟度</div>' +
+            report.gapMaturity
+              .map(
+                (item) =>
+                  '<div class="cluster-gap">' +
+                  '<div class="cluster-gap-basis">' +
+                  escapeHtml(GAP_STATE_LABELS[item.state] || item.state) + '</div>' +
+                  '<div>' + escapeHtml(item.gap || '') + '</div>' +
+                  '<div class="cluster-thread-sub">' + escapeHtml(item.reason || '') + '</div>' +
+                  '</div>'
+              )
+              .join('')
+          : '';
+
+        return (
+          '<article class="cluster-review">' +
+          '<h3 class="cluster-review-title">' + escapeHtml(report.title) + '</h3>' +
+          (report.thesis
+            ? '<p class="cluster-insight-thesis">' + escapeHtml(report.thesis) + '</p>'
+            : '') +
+          (topics ? '<div class="cluster-card-meta">' + topics + '</div>' : '') +
+          ((report.convergences || []).length
+            ? '<div class="cluster-review-section-label">跨主题收敛</div>' + list(report.convergences)
+            : '') +
+          ((report.tensions || []).length
+            ? '<div class="cluster-review-section-label">张力与条件差异</div>' + list(report.tensions)
+            : '') +
+          gaps +
+          ((report.agenda || []).length
+            ? '<div class="cluster-review-section-label">研究议程</div>' + list(report.agenda)
+            : '') +
+          '</article>'
+        );
+      })
+      .join('');
+
+    return (
+      '<section class="cluster-section">' +
+      '<h2 class="cluster-section-title">💡 跨主题洞察（' + insights.length + ' 份）</h2>' +
+      '<div class="cluster-note">' +
+      '把本主题的综述与研究空白与其他主题一起做二次聚类，观察跨主题收敛与空白成熟度。' +
+      '<a href="/clusters/insights">查看全部洞察报告 →</a>' +
+      '</div>' +
+      items +
       '</section>'
     );
   }
@@ -315,6 +458,7 @@
           '<td>' + escapeHtml(formatDateTime(run.startedAt)) + '</td>' +
           '<td>' + escapeHtml(TRIGGER_LABELS[run.trigger] || run.trigger) + '</td>' +
           '<td>' + run.addedCount + '</td>' +
+          '<td>' + (run.reviewAddedCount || 0) + '</td>' +
           '<td>' +
           escapeHtml(RUN_STATUS_LABELS[run.status] || run.status) +
           (failed && run.errorMessage
@@ -331,7 +475,7 @@
       ? '<details class="cluster-details">' +
         '<summary>最近 ' + logs.length + ' 次执行明细</summary>' +
         '<div style="overflow-x:auto"><table class="cluster-matrix">' +
-        '<tr><th>执行时间</th><th>触发</th><th>新增文献</th><th>状态</th><th>耗时</th></tr>' +
+        '<tr><th>执行时间</th><th>触发</th><th>新增文献</th><th>新增综述</th><th>状态</th><th>耗时</th></tr>' +
         rows +
         '</table></div>' +
         '</details>'
@@ -340,7 +484,11 @@
     return (
       '<section class="cluster-section">' +
       '<h2 class="cluster-section-title">🗒️ 运行日志</h2>' +
-      '<div class="cluster-note">仅统计主题聚类流水线的执行；「新增文献」指该主题在本轮新增的聚类文献数（不含被淘汰的链接）。</div>' +
+      '<div class="cluster-note">仅统计主题聚类流水线的执行；「新增文献」指该主题本轮新增的聚类文献数，「新增综述」指该主题本轮新生成的深度综述数（续写不计入新增）。' +
+      (detail.insights && detail.insights.length > 0
+        ? ' 当前版本共有 ' + detail.insights.length + ' 份包含本主题的跨主题洞察报告。'
+        : '') +
+      '</div>' +
       meta +
       body +
       '</section>'
@@ -672,6 +820,9 @@
     });
     (detail.looseArticles || []).forEach((step) => {
       index[step.articleId] = { title: step.title, url: step.url };
+    });
+    (detail.allArticles || []).forEach((item) => {
+      index[item.id] = { title: item.title, url: item.url };
     });
     return index;
   }

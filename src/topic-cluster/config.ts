@@ -59,6 +59,13 @@ export const CLUSTER_CONFIG = Object.freeze({
   /** 阶段 A 输出上限；阶段 B 用完整输出预算 */
   analysisPhaseATokens: Math.min(8_192, analysisOutputTokens),
   analysisPhaseBTokens: analysisOutputTokens,
+
+  /** 深度综述输入预算：与主题分析共用同一套字符预算换算 */
+  reviewInputCharBudget: analysisInputCharBudget,
+  /** 单篇深度综述输出上限 */
+  reviewOutputTokens: analysisOutputTokens,
+  /** 跨主题洞察报告输出上限 */
+  insightOutputTokens: analysisOutputTokens,
 });
 
 /**
@@ -71,6 +78,8 @@ export const CLUSTER_TASKS = Object.freeze({
   facet: 'cluster_facet',
   analysis: 'cluster_analysis',
   naming: 'cluster_naming',
+  review: 'cluster_review',
+  insight: 'cluster_insight',
 });
 
 /** 多维分析落库状态（设计文档 §7.7） */
@@ -109,4 +118,25 @@ export const CLUSTER_LIMITS = Object.freeze({
   adjacentTopicThreshold: 0.72,
   /** 时效缺口判定：连续无新增的月数 */
   stalePeriods: 3,
+
+  /** 深度综述：主题内二级聚类的平均连接阈值 */
+  reviewClusterThreshold: 0.7,
+  /** 深度综述：语义子簇的最小成员数，低于此不生成综述 */
+  reviewMinMembers: 8,
+  /** 深度综述：单主题最多生成的子簇综述数 */
+  reviewMaxGroups: 8,
+  /** 深度综述：每篇综述最多携带的证据文献数 */
+  reviewEvidenceCap: 18,
+  /** 深度综述：周分析单轮最多处理的主题数（控制旗舰模型成本） */
+  reviewWeeklyLimit: 40,
+  /** 跨主题洞察：节点（综述 + 空白）二次聚类的相似度阈值 */
+  insightClusterThreshold: 0.66,
+  /** 跨主题洞察：元簇最少节点数 */
+  insightMinNodes: 3,
+  /** 跨主题洞察：元簇至少包含的综述数（纯空白簇不出报告） */
+  insightMinReviews: 1,
+  /** 跨主题洞察：单轮最多生成的报告数 */
+  insightMaxReports: 6,
+  /** 跨主题洞察：每份报告最多携带的综述/空白节点数 */
+  insightEvidenceCap: 12,
 });

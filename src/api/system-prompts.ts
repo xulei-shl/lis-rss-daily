@@ -67,6 +67,14 @@ const DEFAULT_PROMPT_CONFIG: Record<
     name: '主题聚类分析阶段 B（范式、前沿、计量与空白）',
   },
   cluster_naming: { fileName: 'cluster_naming.md', name: '默认主题聚类主题命名提示词' },
+  cluster_deep_review: {
+    fileName: 'cluster_deep_review.md',
+    name: '主题聚类深度综述（主题内语义子簇）',
+  },
+  cluster_insight: {
+    fileName: 'cluster_insight.md',
+    name: '主题聚类跨主题洞察报告',
+  },
 };
 
 /**

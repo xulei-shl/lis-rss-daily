@@ -144,6 +144,9 @@ async function main(): Promise<void> {
     const summary = await runScheduledAnalyses({
       limit: options.limit ?? 200,
       force: options.force,
+      // --analysis-only 保持原语义：只跑两阶段分析，不额外消耗综述/洞察 token。
+      skipReview: true,
+      skipInsight: true,
     });
     console.log(
       `分析完成：成功 ${summary.ok}，partial ${summary.partial}，` +

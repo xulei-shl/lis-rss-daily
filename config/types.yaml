@@ -108,6 +108,22 @@ task_types:
     priority: 13
     enabled: true
 
+  cluster_review:
+    code: "cluster_review"
+    label: "主题聚类-深度综述"
+    label_en: "Cluster Deep Review"
+    description: "为主题内语义子簇生成长篇学术综述（主题聚类模块）"
+    priority: 14
+    enabled: true
+
+  cluster_insight:
+    code: "cluster_insight"
+    label: "主题聚类-跨主题洞察"
+    label_en: "Cluster Cross-Topic Insight"
+    description: "对深度综述与研究空白做二次聚类后生成洞察报告（主题聚类模块）"
+    priority: 15
+    enabled: true
+
 source_types:
   journal:
     code: "journal"

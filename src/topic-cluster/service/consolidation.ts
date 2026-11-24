@@ -9,6 +9,8 @@ import {
   refreshTopicCounts,
 } from '../repo/links.js';
 import { listFacets } from '../repo/facets.js';
+import { remapReviewsToTopic } from '../repo/reviews.js';
+import { remapGapsToTopic } from '../repo/gaps.js';
 import { blobToVector, centroidOf, cosine, vectorToBlob } from '../domain/vector.js';
 import { resolveTopicDateRange } from '../service/centroid.js';
 import { logger } from '../../logger.js';
@@ -278,6 +280,11 @@ async function applyMerge(
       })
     )
     .execute();
+
+  // 综述与空白改挂到吸收方并保留历史；必须在删除主题前完成，
+  // 否则外键级联会把旧洞察报告可回链的 id 一并删掉。
+  await remapReviewsToTopic(smallTopicId, targetTopicId);
+  await remapGapsToTopic(smallTopicId, targetTopicId);
 
   await db.deleteFrom('cluster_topics').where('id', '=', smallTopicId).execute();
 

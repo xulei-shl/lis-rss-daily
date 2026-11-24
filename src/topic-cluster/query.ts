@@ -10,7 +10,13 @@
  * 否则会把归档版本的旧主题混进来。
  */
 
-import { getDb, type ThreadArticlesSelection } from '../db.js';
+import {
+  getDb,
+  type ClusterInsightReportsSelection,
+  type ClusterTopicReviewsSelection,
+  type ClusterTopicsSelection,
+  type ThreadArticlesSelection,
+} from '../db.js';
 import type { AnalysisStatus } from './config.js';
 import type { Trend } from './domain/metrics.js';
 import { emptyAnalysisResult, type AnalysisResult, type GapBasis } from './llm/analysis.js';
@@ -31,6 +37,10 @@ import { parseFacetFields, type DatePrecision, type FacetFields } from './domain
 import { normalizeMethodKeys, normalizeObjectKeys } from './domain/vocab.js';
 import { CLUSTER_CONFIG } from './config.js';
 import { getArticleBriefs } from './source.js';
+import { listPublishedInsightReports } from './repo/insights.js';
+import { listReviewsByTopic } from './repo/reviews.js';
+import type { DeepReview } from './llm/review.js';
+import type { InsightReport } from './llm/insight.js';
 
 export type TopicSort = 'recent' | 'size' | 'name';
 
@@ -200,7 +210,54 @@ export interface TopicRunLog {
   durationMs: number | null;
   /** 该主题本轮新增的聚类文献数 */
   addedCount: number;
+  /** 该主题本轮新增/重写的深度综述数 */
+  reviewAddedCount: number;
+  /** 本轮生成的跨主题洞察报告数（全局） */
+  insightReports: number;
   errorMessage: string | null;
+}
+
+export interface TopicReviewSection {
+  key: string;
+  label: string;
+  text: string;
+  basisArticleIds: number[];
+  quotes: string[];
+  insufficient: boolean;
+}
+
+export interface TopicReviewItem {
+  id: number;
+  title: string;
+  abstract: string;
+  status: string;
+  version: number;
+  memberCount: number;
+  representativeIds: number[];
+  citations: number[];
+  sections: TopicReviewSection[];
+  generatedAt: string | null;
+  updatedAt: string;
+}
+
+export interface TopicInsightLinkedText {
+  text: string;
+  reviewIds: number[];
+  gapIds: number[];
+}
+
+export interface TopicInsightItem {
+  id: number;
+  title: string;
+  thesis: string;
+  convergences: TopicInsightLinkedText[];
+  tensions: TopicInsightLinkedText[];
+  gapMaturity: Array<{ gapId: number; gap: string; state: string; reason: string }>;
+  agenda: TopicInsightLinkedText[];
+  topicIds: number[];
+  topics: Array<{ id: number; slug: string; name: string }>;
+  version: number;
+  updatedAt: string;
 }
 
 export interface TopicDetail {
@@ -230,6 +287,10 @@ export interface TopicDetail {
   runLogs: TopicRunLog[];
   /** 同一版本下的邻近主题（用于「主题间关系」展示） */
   adjacent: Array<{ id: number; slug: string; name: string; sharedMethod: boolean; sharedObject: boolean }>;
+  /** 主题内语义子簇的深度综述 */
+  reviews: TopicReviewItem[];
+  /** 包含该主题的跨主题洞察报告 */
+  insights: TopicInsightItem[];
 }
 
 /** 主题详情（slug 或数字 id） */
@@ -237,7 +298,17 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
   const topic = await resolveTopic(slugOrId);
   if (!topic) return null;
 
-  const [analysisRow, threads, threadArticles, members, metrics, runLogs] = await Promise.all([
+  const [
+    analysisRow,
+    threads,
+    threadArticles,
+    members,
+    metrics,
+    runLogs,
+    reviewRows,
+    insightRows,
+    versionTopics,
+  ] = await Promise.all([
     getDb()
       .selectFrom('cluster_topic_analysis')
       .selectAll()
@@ -253,6 +324,9 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
       topicCreatedAt: topic.created_at,
       limit: 20,
     }),
+    listReviewsByTopic(topic.id),
+    listPublishedInsightReports(topic.set_version),
+    listTopicsByVersion(topic.set_version),
   ]);
 
   const briefs = await getArticleBriefs(members.map((member) => member.articleId));
@@ -391,9 +465,18 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
       finishedAt: run.finishedAt,
       durationMs: run.durationMs,
       addedCount: run.topicDeltas[String(topic.id)] ?? 0,
+      reviewAddedCount: run.reviewDeltas[String(topic.id)] ?? 0,
+      insightReports: run.insightReports,
       errorMessage: run.errorMessage,
     })),
     adjacent: await findAdjacentTopics(topic.id, topic.set_version, members),
+    reviews: reviewRows
+      .map((row) => toTopicReview(row))
+      .filter((review): review is TopicReviewItem => review !== null),
+    insights: insightRows
+      .map((row) => toTopicInsight(row, versionTopics))
+      .filter((insight): insight is TopicInsightItem => insight !== null)
+      .filter((insight) => insight.topicIds.includes(topic.id)),
   };
 }
 
@@ -501,7 +584,131 @@ export async function getClusterOverview(): Promise<ClusterOverview> {
   return overview;
 }
 
+export interface ClusterInsightListResult {
+  setVersion: number | null;
+  total: number;
+  items: TopicInsightItem[];
+}
+
+/** 跨主题洞察报告列表（/clusters/insights 页面） */
+export async function listInsightReports(): Promise<ClusterInsightListResult> {
+  const active = await getActiveSet(CLUSTER_CONFIG.userId);
+  if (!active) return { setVersion: null, total: 0, items: [] };
+
+  const [rows, topics] = await Promise.all([
+    listPublishedInsightReports(active.version),
+    listTopicsByVersion(active.version),
+  ]);
+
+  const items = rows
+    .map((row) => toTopicInsight(row, topics))
+    .filter((item): item is TopicInsightItem => item !== null);
+
+  return { setVersion: active.version, total: items.length, items };
+}
+
 /* ── 内部工具 ── */
+
+const REVIEW_SECTION_LABELS: Record<string, string> = {
+  researchQuestions: '研究问题',
+  theoreticalBasis: '理论基础',
+  methodsAndData: '方法与数据',
+  findings: '主要发现',
+  debates: '分歧与条件差异',
+  limitations: '局限',
+  agenda: '研究议程',
+};
+
+function toTopicReview(row: ClusterTopicReviewsSelection): TopicReviewItem | null {
+  let parsed: DeepReview;
+  try {
+    parsed = JSON.parse(row.review_json) as DeepReview;
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+
+  const sections: TopicReviewSection[] = [];
+  for (const [key, label] of Object.entries(REVIEW_SECTION_LABELS)) {
+    const section = (parsed.sections as unknown as Record<string, unknown> | undefined)?.[key];
+    if (!section || typeof section !== 'object') continue;
+    const record = section as Record<string, unknown>;
+    if (typeof record.text !== 'string' || record.text.trim().length === 0) continue;
+    sections.push({
+      key,
+      label,
+      text: record.text,
+      basisArticleIds: Array.isArray(record.basisArticleIds)
+        ? record.basisArticleIds.map((id) => Number(id)).filter((id) => Number.isFinite(id))
+        : [],
+      quotes: Array.isArray(record.quotes)
+        ? record.quotes.filter((quote): quote is string => typeof quote === 'string')
+        : [],
+      insufficient: record.insufficient === true,
+    });
+  }
+
+  return {
+    id: row.id,
+    title: row.title,
+    abstract: row.abstract,
+    status: row.status,
+    version: row.version,
+    memberCount: row.linked_count,
+    representativeIds: parseNumberArray(row.representative_ids_json),
+    citations: Array.isArray(parsed.citations)
+      ? parsed.citations.map((id) => Number(id)).filter((id) => Number.isFinite(id))
+      : [],
+    sections,
+    generatedAt: row.generated_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toTopicInsight(
+  row: ClusterInsightReportsSelection,
+  topics: ClusterTopicsSelection[]
+): TopicInsightItem | null {
+  let parsed: InsightReport;
+  try {
+    parsed = JSON.parse(row.report_json) as InsightReport;
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+
+  const topicIds = parseNumberArray(row.topic_ids_json);
+  const topicById = new Map(topics.map((topic) => [topic.id, topic]));
+
+  return {
+    id: row.id,
+    title: row.title,
+    thesis: typeof parsed.thesis === 'string' ? parsed.thesis : '',
+    convergences: Array.isArray(parsed.convergences) ? parsed.convergences : [],
+    tensions: Array.isArray(parsed.tensions) ? parsed.tensions : [],
+    gapMaturity: Array.isArray(parsed.gapMaturity) ? parsed.gapMaturity : [],
+    agenda: Array.isArray(parsed.agenda) ? parsed.agenda : [],
+    topicIds,
+    topics: topicIds
+      .map((id) => topicById.get(id))
+      .filter((topic): topic is ClusterTopicsSelection => Boolean(topic))
+      .map((topic) => ({ id: topic.id, slug: topic.slug, name: topic.name })),
+    version: row.version,
+    updatedAt: row.updated_at,
+  };
+}
+
+function parseNumberArray(raw: string | null | undefined): number[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.map((id) => Number(id)).filter((id) => Number.isFinite(id))
+      : [];
+  } catch {
+    return [];
+  }
+}
 
 interface QueryMember {
   articleId: number;

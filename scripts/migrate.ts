@@ -1096,10 +1096,50 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
           console.log('      → Created cluster_run_logs');
         }
         continue;
-      }
+      }	  // ============================================================
+	  // 051: 深度综述、空白物化与跨主题洞察
+	  // ============================================================
+	  if (file === '051_add_cluster_reviews_insights.sql') {
+	    const schemaReady =
+	      hasTable(db, 'cluster_topic_reviews') &&
+	      hasTable(db, 'cluster_topic_gaps') &&
+	      hasTable(db, 'cluster_insight_reports') &&
+	      hasColumn(db, 'cluster_topics', 'review_dirty') &&
+	      hasColumn(db, 'cluster_topics', 'review_analyzed_at') &&
+	      hasColumn(db, 'cluster_run_logs', 'reviewed_topics') &&
+	      hasColumn(db, 'cluster_run_logs', 'new_reviews') &&
+	      hasColumn(db, 'cluster_run_logs', 'insight_reports') &&
+	      hasColumn(db, 'cluster_run_logs', 'review_deltas');
 
-      // 其他迁移脚本已包含在 001_init.sql 中
-      console.log('      → Skipped (included in 001_init.sql)');
+	    if (schemaReady) {
+	      console.log('      → Skipped (review/insight schema already present)');
+	      continue;
+	    }
+
+	    const statements = fs
+	      .readFileSync(fullPath, 'utf-8')
+	      .split(';')
+	      .map((statement) => statement.trim())
+	      .filter(Boolean);
+
+	    let applied = 0;
+	    for (const statement of statements) {
+	      const alter = statement.match(/ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)/i);
+	      if (alter && hasColumn(db, alter[1], alter[2])) continue;
+	      db.exec(`${statement};`);
+	      applied += 1;
+	    }
+
+	    console.log(
+	      applied > 0
+	        ? `      → Applied ${applied} review/insight migration statement(s)`
+	        : '      → Skipped (review/insight schema already present)'
+	    );
+	    continue;
+	  }
+
+	  // 其他迁移脚本已包含在 001_init.sql 中
+	  console.log('      → Skipped (included in 001_init.sql)');
     }
 
     console.log('\n✅ Migration completed successfully!\n');

@@ -14,7 +14,7 @@
  */
 
 import { logger } from '../../logger.js';
-import { CLUSTER_CONFIG } from '../config.js';
+import { CLUSTER_CONFIG, CLUSTER_LIMITS } from '../config.js';
 import { currentModel } from '../embedding.js';
 import { refreshTopicCounts } from '../repo/links.js';
 import { getTopicById, markTopicDirty, resetPeriodAddedCount } from '../repo/topics.js';
@@ -30,6 +30,9 @@ import {
 import { buildFacetsForArticles } from '../service/facet-builder.js';
 import { countFacetSourceArticles, listFacetSourceArticles } from '../source.js';
 import { runPendingAnalyses, type AnalysisStepResult } from './analyze.js';
+import { runPendingReviews, type ReviewStepResult } from './review.js';
+import { runInsightStep, type InsightStepResult } from './insight.js';
+import { countReviewsByTopic } from '../repo/reviews.js';
 import { runDeriveForDirtyTopics, type DeriveResult } from './derive.js';
 import { runIncubation, type IncubationResult } from './incubate.js';
 import { runReclaim, type ReclaimResult } from './reclaim.js';
@@ -63,6 +66,8 @@ export interface ClusterRunSummary {
   reclaim: ReclaimResult;
   derive: DeriveResult;
   analysis: AnalysisStepResult;
+  review: ReviewStepResult;
+  insight: InsightStepResult;
 }
 
 export interface RunPipelineOptions {
@@ -70,6 +75,10 @@ export interface RunPipelineOptions {
   facetLimit?: number;
   /** 单轮分析的主题上限 */
   analysisLimit?: number;
+  /** 单轮深度综述的主题上限 */
+  reviewLimit?: number;
+  /** 单轮洞察报告上限 */
+  insightLimit?: number;
   /** 忽略指纹强制重算分析 */
   forceAnalysis?: boolean;
   /** 跳过定向回捞（仅调试用） */
@@ -222,7 +231,23 @@ export async function runClusterPipeline(
           force: options.forceAnalysis,
         });
 
-    const summary: ClusterRunSummary = { setVersion, drift, facets, routing, incubation, consolidation, reclaim, derive, analysis };
+    // 深度综述与洞察只在做分析的轮次里跟进，避免日调度把旗舰模型成本翻倍。
+    const review = options.skipAnalysis
+      ? emptyReviewStepResult()
+      : await runPendingReviews(setVersion, {
+          limit: options.reviewLimit ?? 10,
+          force: options.forceAnalysis,
+        });
+    // 综述还有积压时先生成综述，避免用半套节点产出很快会过期的洞察报告。
+    const insight =
+      options.skipAnalysis || review.backlog > 0
+        ? emptyInsightStepResult()
+        : await runInsightStep(setVersion, {
+            limit: options.insightLimit,
+            force: options.forceAnalysis,
+          });
+
+    const summary: ClusterRunSummary = { setVersion, drift, facets, routing, incubation, consolidation, reclaim, derive, analysis, review, insight };
 
     log.info(
       {
@@ -234,6 +259,8 @@ export async function runClusterPipeline(
         reclaimed: reclaim.reclaimedLinks,
         analyses: analysis.ok,
         failedAnalyses: analysis.failed,
+        reviews: review.created + review.updated,
+        insights: insight.created + insight.updated,
       },
       '主题聚类流水线完成'
     );
@@ -247,6 +274,9 @@ export async function runClusterPipeline(
         newTopics: incubation.createdTopicIds.length,
         reclaimedLinks: reclaim.reclaimedLinks,
         analyzedTopics: analysis.ok,
+        reviewedTopics: review.ok + review.partial,
+        newReviews: review.created,
+        insightReports: insight.created,
       },
     };
   });
@@ -296,6 +326,13 @@ export async function runColdStart(
           limit: options.analysisLimit ?? 200,
           force: true,
         });
+    const review = options.skipAnalysis
+      ? emptyReviewStepResult()
+      : await runPendingReviews(setVersion, { limit: 200, force: true });
+    const insight =
+      options.skipAnalysis || review.backlog > 0
+        ? emptyInsightStepResult()
+        : await runInsightStep(setVersion, { force: true });
 
     log.info(
       {
@@ -304,6 +341,8 @@ export async function runColdStart(
         topics: incubation.createdTopicIds.length,
         noise: incubation.remainingPoolSize,
         analyses: analysis.ok,
+        reviews: review.created + review.updated,
+        insights: insight.created + insight.updated,
       },
       '冷启动完成'
     );
@@ -319,6 +358,8 @@ export async function runColdStart(
         reclaim: emptyReclaimResult(),
         derive,
         analysis,
+        review,
+        insight,
       },
       counters: {
         facetSucceeded: facets.succeeded,
@@ -327,6 +368,9 @@ export async function runColdStart(
         newTopics: incubation.createdTopicIds.length,
         reclaimedLinks: 0,
         analyzedTopics: analysis.ok,
+        reviewedTopics: review.ok + review.partial,
+        newReviews: review.created,
+        insightReports: insight.created,
       },
     };
   });
@@ -341,14 +385,56 @@ export async function runScheduledDerive(
   return { setVersion, derive };
 }
 
-/** 周分析：只跑脏主题的两阶段综述，不重复日派生。 */
+/**
+ * 周分析：脏主题的两阶段分析 → 深度综述 → 跨主题洞察。
+ *
+ * 三步写在同一轮执行日志里，页面能看到每周实际生成了多少综述与洞察。
+ */
 export async function runScheduledAnalyses(
-  options: { limit?: number; force?: boolean } = {}
+  options: {
+    limit?: number;
+    force?: boolean;
+    reviewLimit?: number;
+    insightLimit?: number;
+    skipReview?: boolean;
+    skipInsight?: boolean;
+  } = {}
 ): Promise<AnalysisStepResult> {
   const { setVersion } = await ensureActiveSet();
-  return runPendingAnalyses(setVersion, {
-    limit: options.limit ?? 200,
-    force: options.force,
+
+  return runWithLog('cron', setVersion, async () => {
+    const analysis = await runPendingAnalyses(setVersion, {
+      limit: options.limit ?? 200,
+      force: options.force,
+    });
+    const review = options.skipReview
+      ? emptyReviewStepResult()
+      : await runPendingReviews(setVersion, {
+          limit: options.reviewLimit ?? CLUSTER_LIMITS.reviewWeeklyLimit,
+          force: options.force,
+        });
+    const insight =
+      options.skipInsight || review.backlog > 0
+        ? emptyInsightStepResult()
+        : await runInsightStep(setVersion, {
+            limit: options.insightLimit,
+            force: options.force,
+          });
+
+    return {
+      result: analysis,
+      counters: {
+        facetSucceeded: 0,
+        facetFailed: 0,
+        routedArticles: 0,
+        newTopics: 0,
+        reclaimedLinks: 0,
+        analyzedTopics: analysis.ok,
+        reviewedTopics: review.ok + review.partial,
+        newReviews: review.created,
+        insightReports: insight.created,
+      },
+    };
   });
 }
 
@@ -402,15 +488,18 @@ async function runWithLog<T>(
     log.warn({ error: errorMessage(error) }, '读取主题链接基线失败，本轮不记录按主题增量');
     return new Map<number, number>();
   });
+  const beforeReviews = await countReviewsByTopic(setVersion).catch(() => new Map<number, number>());
 
   try {
     const { result, counters } = await execute();
     const after = await countLinksByTopic(setVersion).catch(() => new Map<number, number>());
+    const afterReviews = await countReviewsByTopic(setVersion).catch(() => new Map<number, number>());
     await safeFinishRun(runId, {
       status: 'completed',
       durationMs: Date.now() - startedAt,
       counters,
       topicDeltas: diffTopicLinkCounts(before, after),
+      reviewDeltas: diffTopicLinkCounts(beforeReviews, afterReviews),
     });
     return result;
   } catch (error) {
@@ -441,6 +530,24 @@ function emptyReclaimResult(): ReclaimResult {
 
 function emptyAnalysisStepResult(): AnalysisStepResult {
   return { attempted: 0, ok: 0, partial: 0, insufficient: 0, failed: 0, failures: [] };
+}
+
+function emptyReviewStepResult(): ReviewStepResult {
+  return {
+    attempted: 0,
+    ok: 0,
+    partial: 0,
+    skipped: 0,
+    failed: 0,
+    created: 0,
+    updated: 0,
+    backlog: 0,
+    failures: [],
+  };
+}
+
+function emptyInsightStepResult(): InsightStepResult {
+  return { status: 'skipped', clusters: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
 }
 
 export function isClusterEnabled(): boolean {

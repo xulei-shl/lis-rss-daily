@@ -30,6 +30,8 @@ import { getTopicById } from '../repo/topics.js';
 import { getArticleBriefs } from '../source.js';
 import { describePackedInput, packAnalysisInput, type PackedAnalysisInput } from './analysis-payload.js';
 import { buildCrossTopicGaps, type CrossTopicGap } from './gap-builder.js';
+import { materializeTopicGaps } from './gap-materializer.js';
+import { blobToVector } from '../domain/vector.js';
 import { buildMatrix } from './matrix.js';
 import { loadTopicMembers } from './member-view.js';
 import { buildParadigmDomains, type ParadigmDomain } from './paradigm.js';
@@ -83,6 +85,21 @@ export async function runTopicAnalysis(
       status: 'insufficient_data',
       errorMessage: `文章数 ${members.length} 低于阈值 ${CLUSTER_LIMITS.minArticlesForAnalysis}，仅输出规则聚合结果`,
     });
+    // 样本不足时旧空白已不再有分析支撑，置为 superseded，避免洞察层引用过期结论。
+    await materializeTopicGaps({
+      userId: dbTopic.user_id,
+      setVersion: dbTopic.set_version,
+      topicId,
+      gaps: [],
+      members,
+      topicCentroid: null,
+      sourceAnalysisHash: '',
+    }).catch((error) =>
+      log.warn(
+        { topicId, error: error instanceof Error ? error.message : String(error) },
+        '样本不足时清空研究空白失败'
+      )
+    );
     return {
       topicId,
       status: 'insufficient_data',
@@ -260,6 +277,7 @@ async function runPhaseB(args: {
       result
     );
     await applyAngleNarratives(args.threads, result);
+    await safeMaterializeGaps(args, phaseB.gaps);
 
     return {
       topicId: args.topicId,
@@ -293,6 +311,39 @@ async function runPhaseB(args: {
       gapCount: 0,
       error: message,
     };
+  }
+}
+
+/**
+ * 空白物化是分析之后的二级索引：失败只告警，不回滚已成功的阶段 A/B 结果。
+ * 下一次分析成功会重新物化。
+ */
+async function safeMaterializeGaps(
+  args: {
+    topicId: number;
+    dbTopic: NonNullable<Awaited<ReturnType<typeof getTopicById>>>;
+    matrix: ReturnType<typeof buildMatrix>;
+    members: Awaited<ReturnType<typeof loadTopicMembers>>['members'];
+    inputHash: string;
+  },
+  gaps: AnalysisResult['gaps']
+): Promise<void> {
+  try {
+    const centroid = args.dbTopic.centroid ? blobToVector(args.dbTopic.centroid) : null;
+    await materializeTopicGaps({
+      userId: args.dbTopic.user_id,
+      setVersion: args.dbTopic.set_version,
+      topicId: args.topicId,
+      gaps,
+      members: args.members,
+      topicCentroid: centroid,
+      sourceAnalysisHash: args.inputHash,
+    });
+  } catch (error) {
+    log.warn(
+      { topicId: args.topicId, error: error instanceof Error ? error.message : String(error) },
+      '研究空白物化失败；分析结果已保留，下次成功后重试'
+    );
   }
 }
 

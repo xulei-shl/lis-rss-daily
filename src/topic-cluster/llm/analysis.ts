@@ -409,9 +409,14 @@ function parseEvidenceList(
  *   - quotes 必须能在对应文献的切面原句或 ai_summary 中找到（忽略标点/空白）；
  *   - 无引用时只接受 `证据不足：…` 且 ≤80 字，避免把空话当结论。
  */
-function parseEvidenceText(
+export type EvidenceValidationInput = Pick<
+  AnalysisInputBase,
+  'allowedArticleIds' | 'evidenceByArticleId'
+>;
+
+export function parseEvidenceText(
   value: unknown,
-  input: SynthesisInput,
+  input: EvidenceValidationInput,
   field: string
 ): EvidenceText | null {
   if (!value || typeof value !== 'object') return null;

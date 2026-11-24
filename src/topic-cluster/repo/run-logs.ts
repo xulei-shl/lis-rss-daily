@@ -23,6 +23,9 @@ export interface ClusterRunCounters {
   newTopics: number;
   reclaimedLinks: number;
   analyzedTopics: number;
+  reviewedTopics: number;
+  newReviews: number;
+  insightReports: number;
 }
 
 /** topic_id → 该轮新增链接数 */
@@ -42,7 +45,11 @@ export interface ClusterRunLog {
   newTopics: number;
   reclaimedLinks: number;
   analyzedTopics: number;
+  reviewedTopics: number;
+  newReviews: number;
+  insightReports: number;
   topicDeltas: TopicDeltas;
+  reviewDeltas: TopicDeltas;
   errorMessage: string | null;
 }
 
@@ -72,6 +79,7 @@ export interface FinishClusterRunInput {
   durationMs: number;
   counters?: ClusterRunCounters;
   topicDeltas?: TopicDeltas;
+  reviewDeltas?: TopicDeltas;
   errorMessage?: string;
 }
 
@@ -90,9 +98,16 @@ export async function finishClusterRun(runId: number, input: FinishClusterRunInp
       new_topics: counters?.newTopics ?? 0,
       reclaimed_links: counters?.reclaimedLinks ?? 0,
       analyzed_topics: counters?.analyzedTopics ?? 0,
+      reviewed_topics: counters?.reviewedTopics ?? 0,
+      new_reviews: counters?.newReviews ?? 0,
+      insight_reports: counters?.insightReports ?? 0,
       topic_deltas:
         input.topicDeltas && Object.keys(input.topicDeltas).length > 0
           ? JSON.stringify(input.topicDeltas)
+          : null,
+      review_deltas:
+        input.reviewDeltas && Object.keys(input.reviewDeltas).length > 0
+          ? JSON.stringify(input.reviewDeltas)
           : null,
       error_message: input.errorMessage ?? null,
     })
@@ -174,7 +189,11 @@ function toRunLog(row: {
   new_topics: number;
   reclaimed_links: number;
   analyzed_topics: number;
+  reviewed_topics: number;
+  new_reviews: number;
+  insight_reports: number;
   topic_deltas: string | null;
+  review_deltas: string | null;
   error_message: string | null;
 }): ClusterRunLog {
   return {
@@ -191,7 +210,11 @@ function toRunLog(row: {
     newTopics: row.new_topics,
     reclaimedLinks: row.reclaimed_links,
     analyzedTopics: row.analyzed_topics,
+    reviewedTopics: row.reviewed_topics,
+    newReviews: row.new_reviews,
+    insightReports: row.insight_reports,
     topicDeltas: parseTopicDeltas(row.topic_deltas),
+    reviewDeltas: parseTopicDeltas(row.review_deltas),
     errorMessage: row.error_message,
   };
 }

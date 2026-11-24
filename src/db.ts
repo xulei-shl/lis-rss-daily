@@ -66,6 +66,9 @@ export interface DatabaseTable {
   topic_metrics_period: TopicMetricsPeriodTable;
   cluster_topic_analysis: ClusterTopicAnalysisTable;
   cluster_run_logs: ClusterRunLogsTable;
+  cluster_topic_reviews: ClusterTopicReviewsTable;
+  cluster_topic_gaps: ClusterTopicGapsTable;
+  cluster_insight_reports: ClusterInsightReportsTable;
 }
 
 export interface UsersTable {
@@ -519,6 +522,9 @@ export interface ClusterTopicsTable {
   last_event_date: string | null;
   is_dirty: Generated<number>;
   last_analyzed_at: string | null;
+  /** 深度综述待重算（与 is_dirty 分开，避免两个阶段互相覆盖） */
+  review_dirty: Generated<number>;
+  review_analyzed_at: string | null;
   created_at: Generated<string>;
   updated_at: Generated<string>;
 }
@@ -555,8 +561,13 @@ export interface ClusterRunLogsTable {
   new_topics: Generated<number>;
   reclaimed_links: Generated<number>;
   analyzed_topics: Generated<number>;
+  reviewed_topics: Generated<number>;
+  new_reviews: Generated<number>;
+  insight_reports: Generated<number>;
   /** JSON：{"<topic_id>": 该轮新增链接数}，只存增量 > 0 的主题 */
   topic_deltas: string | null;
+  /** JSON：{"<topic_id>": 该轮新增/重写综述数} */
+  review_deltas: string | null;
   error_message: string | null;
   created_at: Generated<string>;
 }
@@ -641,6 +652,73 @@ export interface TopicMetricsPeriodTable {
   object_entropy: number | null;
 }
 
+/** 主题内语义子簇的长篇综述（sql/051） */
+export interface ClusterTopicReviewsTable {
+  id: Generated<number>;
+  user_id: number;
+  set_version: number;
+  topic_id: number;
+  /** 稳定身份：首次生成时的核心锚点哈希，续写不改变 */
+  review_key: string;
+  title: string;
+  abstract: string;
+  review_json: string;
+  member_ids_json: string;
+  representative_ids_json: string;
+  centroid: Buffer | null;
+  centroid_dim: number | null;
+  input_hash: string;
+  linked_count: Generated<number>;
+  status: Generated<'ok' | 'partial' | 'failed' | 'superseded'>;
+  supersedes_id: number | null;
+  version: Generated<number>;
+  generated_at: string | null;
+  created_at: Generated<string>;
+  updated_at: string;
+}
+
+/** 物化的研究空白（sql/051），供跨主题二次聚类与洞察回链 */
+export interface ClusterTopicGapsTable {
+  id: Generated<number>;
+  user_id: number;
+  set_version: number;
+  topic_id: number;
+  gap_key: string;
+  gap: string;
+  basis: string;
+  method: string | null;
+  object: string | null;
+  evidence_ids_json: string;
+  embedding: Buffer | null;
+  embedding_dim: number | null;
+  source_analysis_hash: string;
+  status: Generated<'active' | 'superseded'>;
+  created_at: Generated<string>;
+  updated_at: string;
+}
+
+/** 综述 + 空白二次聚类后的跨主题洞察报告（sql/051） */
+export interface ClusterInsightReportsTable {
+  id: Generated<number>;
+  user_id: number;
+  set_version: number;
+  report_key: string;
+  title: string;
+  report_json: string;
+  /** JSON：[{kind:'review'|'gap', id, topicId}] */
+  member_refs_json: string;
+  topic_ids_json: string;
+  centroid: Buffer | null;
+  centroid_dim: number | null;
+  input_hash: string;
+  status: Generated<'ok' | 'failed' | 'superseded'>;
+  supersedes_id: number | null;
+  version: Generated<number>;
+  generated_at: string | null;
+  created_at: Generated<string>;
+  updated_at: string;
+}
+
 /** 多维分析缓存（脏标记增量更新） */
 export interface ClusterTopicAnalysisTable {
   topic_id: number;
@@ -686,6 +764,9 @@ export type TopicThreadsSelection = SelectionType<TopicThreadsTable>;
 export type ThreadArticlesSelection = SelectionType<ThreadArticlesTable>;
 export type TopicMetricsPeriodSelection = SelectionType<TopicMetricsPeriodTable>;
 export type ClusterTopicAnalysisSelection = SelectionType<ClusterTopicAnalysisTable>;
+export type ClusterTopicReviewsSelection = SelectionType<ClusterTopicReviewsTable>;
+export type ClusterTopicGapsSelection = SelectionType<ClusterTopicGapsTable>;
+export type ClusterInsightReportsSelection = SelectionType<ClusterInsightReportsTable>;
 
 let _db: DB | null = null;
 
