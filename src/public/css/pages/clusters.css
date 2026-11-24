@@ -808,6 +808,14 @@
   flex-shrink: 0;
 }
 
+.cluster-note {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-top: calc(-1 * var(--space-2));
+  margin-bottom: var(--space-4);
+}
+
 /* ── Tab 1: 综述与洞察 ── */
 .cluster-summary-dossier {
   margin-bottom: var(--space-8);
@@ -1456,6 +1464,121 @@
   font-size: var(--text-sm);
   line-height: 1.7;
   color: var(--text-primary);
+}
+
+/* ── Tab 3: 邻近与交叉主题 (Adjacent & Cross-Disciplinary Topics) ── */
+.cluster-adjacent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-3);
+}
+
+@media (max-width: 640px) {
+  .cluster-adjacent-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cluster-adjacent-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 14px 16px;
+  background: var(--bg-surface, #fff);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  text-decoration: none;
+  color: inherit;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.cluster-adjacent-card:hover {
+  border-color: var(--cluster-blue-border);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  .cluster-adjacent-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  }
+}
+
+.cluster-adjacent-card:active {
+  transform: scale(0.98);
+}
+
+.cluster-adjacent-card:focus-visible {
+  outline: 2px solid var(--cluster-blue);
+  outline-offset: 2px;
+}
+
+.cluster-adjacent-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cluster-adjacent-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.5;
+  transition: color 0.15s ease;
+}
+
+.cluster-adjacent-card:hover .cluster-adjacent-name {
+  color: var(--cluster-blue);
+}
+
+.cluster-adjacent-arrow {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  margin-top: 3px;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.cluster-adjacent-card:hover .cluster-adjacent-arrow {
+  color: var(--cluster-blue);
+  transform: translate(2px, -2px);
+}
+
+.cluster-adjacent-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.cluster-tag.cluster-tag-shared {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.4;
+}
+
+.cluster-tag.cluster-tag-shared-method {
+  background: var(--cluster-blue-tint);
+  color: var(--cluster-blue);
+  border: 1px solid var(--cluster-blue-border);
+}
+
+.cluster-tag.cluster-tag-shared-object {
+  background: var(--cluster-green-tint);
+  color: var(--cluster-green);
+  border: 1px solid var(--cluster-green-border);
+}
+
+.cluster-tag-icon {
+  flex-shrink: 0;
 }
 
 

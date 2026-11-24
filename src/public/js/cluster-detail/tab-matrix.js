@@ -150,11 +150,34 @@ export function renderAdjacent(detail) {
     .map(
       (topic) =>
         '<a class="cluster-adjacent-card" href="/clusters/' + encodeURIComponent(topic.slug) + '">' +
-          '<span class="cluster-adjacent-name">' + escapeHtml(topic.name) + '</span>' +
-          '<span class="cluster-adjacent-tags">' +
-            (topic.sharedMethod ? '<span class="cluster-tag cluster-tag-shared">同研究方法</span>' : '') +
-            (topic.sharedObject ? '<span class="cluster-tag cluster-tag-shared">同研究对象</span>' : '') +
-          '</span>' +
+          '<div class="cluster-adjacent-header">' +
+            '<span class="cluster-adjacent-name">' + escapeHtml(topic.name) + '</span>' +
+            '<svg class="cluster-adjacent-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+              '<line x1="7" y1="17" x2="17" y2="7"></line>' +
+              '<polyline points="7 7 17 7 17 17"></polyline>' +
+            '</svg>' +
+          '</div>' +
+          '<div class="cluster-adjacent-tags">' +
+            (topic.sharedMethod
+              ? '<span class="cluster-tag cluster-tag-shared cluster-tag-shared-method" title="与当前主题共享研究方法">' +
+                  '<svg class="cluster-tag-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                    '<polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>' +
+                    '<polyline points="2 17 12 22 22 17"></polyline>' +
+                    '<polyline points="2 12 12 17 22 12"></polyline>' +
+                  '</svg>' +
+                  '<span>同研究方法</span>' +
+                '</span>'
+              : '') +
+            (topic.sharedObject
+              ? '<span class="cluster-tag cluster-tag-shared cluster-tag-shared-object" title="与当前主题共享研究对象">' +
+                  '<svg class="cluster-tag-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                    '<circle cx="12" cy="12" r="10"></circle>' +
+                    '<circle cx="12" cy="12" r="4"></circle>' +
+                  '</svg>' +
+                  '<span>同研究对象</span>' +
+                '</span>'
+              : '') +
+          '</div>' +
         '</a>'
     )
     .join('');
@@ -162,7 +185,13 @@ export function renderAdjacent(detail) {
   return (
     '<section class="cluster-section">' +
       '<div class="cluster-section-header">' +
-        '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">🔗</span> 邻近与交叉主题 (' + adjacent.length + ')</h2>' +
+        '<h2 class="cluster-section-title">' +
+          '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>' +
+            '<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>' +
+          '</svg>' +
+          '<span>邻近与交叉主题 (' + adjacent.length + ')</span>' +
+        '</h2>' +
       '</div>' +
       '<div class="cluster-note">与当前研究方向共享方法或研究对象、但归属于平行分支的关联主题。</div>' +
       '<div class="cluster-adjacent-grid">' + items + '</div>' +
