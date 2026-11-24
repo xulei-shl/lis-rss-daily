@@ -1,5 +1,5 @@
 // ============================================
-// 主题洞察详情页 - Tab 5: 全量文献底册
+// 主题洞察详情页 - Tab 5: 全量聚类文献
 // 包含：全量文献资产底册、即时快速搜索、学术角色筛选、渐进分页
 // ============================================
 
@@ -16,7 +16,7 @@ export function renderCatalog(detail) {
     return (
       '<section class="cluster-section">' +
         '<div class="cluster-section-header">' +
-          '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">📑</span> 全量文献底册 (0)</h2>' +
+          '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">📑</span> 全量聚类文献 (0)</h2>' +
         '</div>' +
         '<div class="cluster-empty-inline">该主题暂无归属文献。</div>' +
       '</section>'
@@ -34,19 +34,19 @@ export function renderCatalog(detail) {
     '<section class="cluster-section cluster-catalog-section" id="catalogSection">' +
       '<div class="cluster-section-header">' +
         '<h2 class="cluster-section-title">' +
-          '<span class="section-icon" aria-hidden="true">📑</span> 全量文献底册' +
+          '<span class="section-icon" aria-hidden="true">📑</span> 全量聚类文献' +
           '<span class="cluster-count-badge" id="catalogTotalBadge">' + items.length + ' 篇</span>' +
         '</h2>' +
       '</div>' +
       '<div class="cluster-note">' +
-        '本主题归属的所有学术文献底册。支持本地即时检索与按学术角色过滤；每篇文献均标记了研究切面与归属权重。' +
+        '本主题归属的所有学术聚类文献。支持本地即时检索与按学术角色过滤；每篇文献均标记了研究切面与归属权重。' +
       '</div>' +
       '<div class="cluster-catalog-toolbar">' +
         '<div class="cluster-catalog-search-wrap">' +
           '<svg class="catalog-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
             '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' +
           '</svg>' +
-          '<input type="text" id="catalogSearchInput" class="cluster-catalog-input" placeholder="在底册中快速搜索文献标题、方法、研究对象..." aria-label="搜索文献底册">' +
+          '<input type="text" id="catalogSearchInput" class="cluster-catalog-input" placeholder="在底册中快速搜索文献标题、方法、研究对象..." aria-label="搜索聚类文献">' +
         '</div>' +
         '<div class="cluster-catalog-filters" id="catalogRoleFilters" role="radiogroup" aria-label="按学术角色筛选">' +
           '<button type="button" class="catalog-filter-btn active" data-role="all" aria-pressed="true">全部 <span class="filter-count">(' + items.length + ')</span></button>' +

@@ -5,7 +5,7 @@
 import { buildArticleIndex, escapeHtml } from './utils.js';
 import { renderHeader, renderStatusNotice } from './header.js';
 import { renderTopRunLogs } from './run-logs.js';
-import { renderSummary, renderReviews, renderInsights, renderConsensusDualView } from './tab-synthesis.js';
+import { renderSummary, renderReviews, renderInsights, renderConsensusDualView, bindSynthesisEvents } from './tab-synthesis.js';
 import { renderAngles, renderLoose } from './tab-evolution.js';
 import { renderMatrix, renderGaps, renderAdjacent } from './tab-matrix.js';
 import { renderTrend } from './tab-trends.js';
@@ -67,7 +67,7 @@ function renderPage(root, detail) {
     { id: 'evolution', label: '演进脉络', icon: '🧭', count: anglesCount },
     { id: 'matrix', label: '矩阵与空白', icon: '📊', count: gapsCount },
     { id: 'trends', label: '演化趋势', icon: '📈' },
-    { id: 'catalog', label: '文献底册', icon: '📑', count: catalogCount }
+    { id: 'catalog', label: '聚类文献', icon: '📑', count: catalogCount }
   ];
 
   parts.push(renderTabBar(tabs));
@@ -109,7 +109,7 @@ function renderPage(root, detail) {
     '</div>'
   );
 
-  // Tab 5: 文献底册
+  // Tab 5: 聚类文献
   parts.push(
     '<div class="cluster-tab-panel" id="panel-catalog" role="tabpanel" aria-labelledby="tab-catalog" hidden>' +
       renderCatalog(detail) +
@@ -122,6 +122,9 @@ function renderPage(root, detail) {
 
   // 绑定 Tab 切换与 Hash 路由
   initTabNavigation(root);
+
+  // 绑定综述折叠展开交互
+  bindSynthesisEvents(root);
 
   // 绑定底册即时搜索与过滤
   bindCatalogEvents(root, detail);

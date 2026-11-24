@@ -448,10 +448,24 @@
   line-height: 1.6;
 }
 
+:root {
+  --cluster-note-warn-border: #d97706;
+  --cluster-note-warn-bg: rgba(217, 119, 6, 0.08);
+  --cluster-note-warn-color: #92400e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --cluster-note-warn-border: var(--amber);
+    --cluster-note-warn-bg: rgba(251, 191, 36, 0.10);
+    --cluster-note-warn-color: var(--amber);
+  }
+}
+
 .cluster-note-warn {
-  border-left-color: #d97706;
-  background: rgba(217, 119, 6, 0.08);
-  color: #92400e;
+  border-left-color: var(--cluster-note-warn-border);
+  background: var(--cluster-note-warn-bg);
+  color: var(--cluster-note-warn-color);
 }
 
 /* ── 页面内 Tab 导航系统 ── */
@@ -586,6 +600,39 @@
   align-items: center;
   gap: var(--space-2);
   margin: 0;
+}
+
+.cluster-btn-subtle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--accent-primary, #1a4d7a);
+  background: var(--bg-surface, #fff);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  padding: 4px 12px;
+  min-height: 28px;
+  cursor: pointer;
+  line-height: 1.4;
+  user-select: none;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease-out;
+}
+
+.cluster-btn-subtle:hover {
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.04));
+  color: var(--text-primary);
+  border-color: var(--border-strong, var(--border));
+}
+
+.cluster-btn-subtle:active {
+  transform: scale(0.97);
+}
+
+.cluster-btn-subtle:focus-visible {
+  outline: 2px solid var(--accent-primary, #1a4d7a);
+  outline-offset: 2px;
 }
 
 .section-icon {
@@ -766,7 +813,171 @@
   transform: scale(0.96);
 }
 
-/* 宏观洞察卡片 */
+/* 综述详细章节折叠组件 */
+.cluster-review-details {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  margin-top: var(--space-3);
+  background: var(--bg-surface, #fff);
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cluster-review-details:hover {
+  border-color: var(--border-strong, var(--border));
+}
+
+.cluster-review-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: var(--text-xs);
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
+  color: var(--text-secondary);
+  user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  list-style: none;
+}
+
+.cluster-review-summary::-webkit-details-marker {
+  display: none;
+}
+
+.cluster-review-summary::marker {
+  display: none;
+}
+
+.cluster-review-summary:hover {
+  background: var(--bg-elevated, rgba(0, 0, 0, 0.04));
+  color: var(--text-primary);
+}
+
+.cluster-review-summary:focus-visible {
+  outline: 2px solid var(--accent-primary, #1a4d7a);
+  outline-offset: -2px;
+}
+
+.cluster-review-summary-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.cluster-review-summary-icon {
+  font-size: 14px;
+}
+
+.cluster-review-summary-title {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.cluster-tag-neutral {
+  background: var(--bg-subtle, rgba(127, 127, 127, 0.1));
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+.cluster-review-summary-hint {
+  font-size: var(--text-xs);
+  color: var(--accent-primary, #1a4d7a);
+  font-weight: 500;
+}
+
+.cluster-review-details[open] > .cluster-review-summary {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.03));
+}
+
+.cluster-review-details[open] .hint-collapsed {
+  display: none;
+}
+
+.cluster-review-details:not([open]) .hint-expanded {
+  display: none;
+}
+
+.cluster-review-body {
+  padding: var(--space-4);
+  background: var(--bg-surface, #fff);
+}
+
+.cluster-review-body .cluster-review-section:first-child {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+/* 宏观洞察卡片与研究空白成熟度状态 */
+:root {
+  --gap-state-closing-bg: rgba(16, 185, 129, 0.12);
+  --gap-state-closing-color: #065f46;
+  --gap-state-closing-border: rgba(16, 185, 129, 0.28);
+
+  --gap-state-opening-bg: rgba(2, 136, 209, 0.12);
+  --gap-state-opening-color: #0369a1;
+  --gap-state-opening-border: rgba(2, 136, 209, 0.28);
+
+  --gap-state-unaddressed-bg: rgba(239, 68, 68, 0.10);
+  --gap-state-unaddressed-color: #991b1b;
+  --gap-state-unaddressed-border: rgba(239, 68, 68, 0.25);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --gap-state-closing-bg: rgba(52, 211, 153, 0.15);
+    --gap-state-closing-color: #6ee7b7;
+    --gap-state-closing-border: rgba(52, 211, 153, 0.3);
+
+    --gap-state-opening-bg: rgba(56, 189, 248, 0.15);
+    --gap-state-opening-color: #7dd3fc;
+    --gap-state-opening-border: rgba(56, 189, 248, 0.3);
+
+    --gap-state-unaddressed-bg: rgba(248, 113, 113, 0.15);
+    --gap-state-unaddressed-color: #fca5a5;
+    --gap-state-unaddressed-border: rgba(248, 113, 113, 0.3);
+  }
+}
+
+.gap-state-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.gap-state-tag.gap-state-closing {
+  background: var(--gap-state-closing-bg);
+  color: var(--gap-state-closing-color);
+  border-color: var(--gap-state-closing-border);
+}
+
+.gap-state-tag.gap-state-opening {
+  background: var(--gap-state-opening-bg);
+  color: var(--gap-state-opening-color);
+  border-color: var(--gap-state-opening-border);
+}
+
+.gap-state-tag.gap-state-unaddressed {
+  background: var(--gap-state-unaddressed-bg);
+  color: var(--gap-state-unaddressed-color);
+  border-color: var(--gap-state-unaddressed-border);
+}
+
 .cluster-insights-container {
   display: flex;
   flex-direction: column;
@@ -781,30 +992,147 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
+.cluster-insight-head {
+  margin-bottom: var(--space-2);
+}
+
 .cluster-insight-title {
   font-size: var(--text-lg);
   font-weight: 600;
   line-height: 1.45;
   color: var(--text-primary);
-  margin: 0 0 var(--space-2) 0;
+  margin: var(--space-1) 0 var(--space-2) 0;
+  font-family: var(--font-heading, serif);
 }
 
 .cluster-insight-thesis {
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   font-weight: 500;
-  line-height: 1.7;
+  line-height: 1.75;
   color: var(--text-primary);
   margin: var(--space-2) 0 var(--space-3);
-  padding-left: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
   border-left: 3px solid var(--accent-primary, #1a4d7a);
+  border-radius: 0 var(--radius-md, 8px) var(--radius-md, 8px) 0;
+}
+
+.cluster-insight-topics {
+  margin-bottom: var(--space-3);
+}
+
+.cluster-insight-subgroup {
+  margin-top: var(--space-4);
+}
+
+.cluster-insight-subgroup:first-child {
+  margin-top: 0;
+}
+
+.cluster-insight-section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.subgroup-icon {
+  font-size: 14px;
 }
 
 .cluster-insight-list {
+  list-style: none;
+  padding: 0;
   margin: 0;
-  padding-left: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.cluster-insight-list-item {
+  background: var(--bg-surface, #fff);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-3);
   font-size: var(--text-sm);
   line-height: 1.75;
+  color: var(--text-primary);
+  position: relative;
+  padding-left: calc(var(--space-3) + 14px);
+}
+
+.cluster-insight-list-item::before {
+  content: '•';
+  position: absolute;
+  left: var(--space-3);
+  top: var(--space-3);
+  color: var(--accent-primary, #1a4d7a);
+  font-weight: bold;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.cluster-insight-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: var(--space-2);
+}
+
+/* 微型研究空白演进卡片 */
+.cluster-gaps-mini-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.cluster-gap-mini {
+  background: var(--bg-surface, #fff);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cluster-gap-mini:hover {
+  border-color: var(--border-strong, var(--border));
+}
+
+.cluster-gap-mini-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.cluster-gap-mini-content {
+  font-size: var(--text-sm);
+  line-height: 1.7;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.cluster-gap-mini-reason {
+  font-size: var(--text-xs);
+  line-height: 1.65;
   color: var(--text-secondary);
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
+  padding: 6px 10px;
+  border-radius: var(--radius-sm, 6px);
+  border-left: 2px solid var(--accent-subtle, rgba(26, 77, 122, 0.3));
+}
+
+.cluster-insight-body {
+  padding: var(--space-4);
+  background: var(--bg-surface, #fff);
 }
 
 /* 双栏共识与分歧 */
@@ -1026,6 +1354,54 @@
 
 /* ── Tab 3: 矩阵与空白组件 ── */
 
+:root {
+  --matrix-cell-hot-low-bg: rgba(2, 136, 209, 0.08);
+  --matrix-cell-hot-low-color: var(--text-primary);
+  --matrix-cell-hot-med-bg: rgba(2, 136, 209, 0.18);
+  --matrix-cell-hot-med-color: var(--text-primary);
+  --matrix-cell-hot-high-bg: rgba(2, 136, 209, 0.32);
+  --matrix-cell-hot-high-color: #01579b;
+  --matrix-cell-hole-bg: rgba(0, 0, 0, 0.015);
+  --matrix-cell-hole-dot: var(--text-secondary);
+  --matrix-tag-hole-bg: rgba(217, 119, 6, 0.08);
+  --matrix-tag-hole-color: #92400e;
+  --matrix-tag-hole-border: rgba(217, 119, 6, 0.2);
+
+  --basis-hole-bg: rgba(217, 119, 6, 0.12);
+  --basis-hole-color: #92400e;
+  --basis-staleness-bg: rgba(120, 120, 120, 0.12);
+  --basis-staleness-color: var(--text-secondary);
+  --basis-limitation-bg: rgba(2, 136, 209, 0.12);
+  --basis-limitation-color: #0369a1;
+  --basis-cross-bg: rgba(124, 58, 237, 0.12);
+  --basis-cross-color: #6d28d9;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --matrix-cell-hot-low-bg: rgba(96, 165, 250, 0.12);
+    --matrix-cell-hot-low-color: var(--text-primary);
+    --matrix-cell-hot-med-bg: rgba(96, 165, 250, 0.24);
+    --matrix-cell-hot-med-color: var(--text-primary);
+    --matrix-cell-hot-high-bg: rgba(96, 165, 250, 0.42);
+    --matrix-cell-hot-high-color: #ffffff;
+    --matrix-cell-hole-bg: rgba(255, 255, 255, 0.02);
+    --matrix-cell-hole-dot: var(--text-secondary);
+    --matrix-tag-hole-bg: rgba(251, 191, 36, 0.12);
+    --matrix-tag-hole-color: var(--amber);
+    --matrix-tag-hole-border: rgba(251, 191, 36, 0.25);
+
+    --basis-hole-bg: rgba(251, 191, 36, 0.15);
+    --basis-hole-color: #fbbf24;
+    --basis-staleness-bg: rgba(156, 163, 175, 0.15);
+    --basis-staleness-color: var(--text-secondary);
+    --basis-limitation-bg: rgba(96, 165, 250, 0.15);
+    --basis-limitation-color: #60a5fa;
+    --basis-cross-bg: rgba(167, 139, 250, 0.15);
+    --basis-cross-color: #c4b5fd;
+  }
+}
+
 .cluster-heatmap-matrix th.matrix-corner {
   background: var(--bg-elevated);
   font-weight: 600;
@@ -1038,29 +1414,32 @@
 }
 
 .cluster-heatmap-matrix td.cell-hot-low {
-  background: rgba(2, 136, 209, 0.08);
+  background: var(--matrix-cell-hot-low-bg);
+  color: var(--matrix-cell-hot-low-color);
   font-weight: 500;
 }
 
 .cluster-heatmap-matrix td.cell-hot-med {
-  background: rgba(2, 136, 209, 0.18);
+  background: var(--matrix-cell-hot-med-bg);
+  color: var(--matrix-cell-hot-med-color);
   font-weight: 600;
 }
 
 .cluster-heatmap-matrix td.cell-hot-high {
-  background: rgba(2, 136, 209, 0.35);
-  color: #01579b;
+  background: var(--matrix-cell-hot-high-bg);
+  color: var(--matrix-cell-hot-high-color);
   font-weight: 700;
 }
 
 .cluster-heatmap-matrix td.is-hole {
   color: var(--text-tertiary);
-  background: rgba(0, 0, 0, 0.015);
+  background: var(--matrix-cell-hole-bg);
   border-style: dashed;
 }
 
 .hole-dot {
-  opacity: 0.4;
+  color: var(--matrix-cell-hole-dot);
+  opacity: 0.75;
 }
 
 .cell-value {
@@ -1089,9 +1468,9 @@
 }
 
 .cluster-tag-hole {
-  background: rgba(217, 119, 6, 0.08);
-  color: #92400e;
-  border: 1px solid rgba(217, 119, 6, 0.2);
+  background: var(--matrix-tag-hole-bg);
+  color: var(--matrix-tag-hole-color);
+  border: 1px solid var(--matrix-tag-hole-border);
   padding: 3px 10px;
   font-size: var(--text-xs);
 }
@@ -1102,6 +1481,7 @@
 
 .hole-cross {
   color: var(--text-tertiary);
+  opacity: 0.8;
 }
 
 /* 研究空白卡片 */
@@ -1142,11 +1522,11 @@
   border-radius: 4px;
 }
 
-.basis-matrix_hole { background: rgba(217, 119, 6, 0.12); color: #b45309; }
-.basis-staleness { background: rgba(120, 120, 120, 0.12); color: var(--text-secondary); }
-.basis-limitation { background: rgba(2, 136, 209, 0.12); color: #0277bd; }
-.basis-cross_topic_gap { background: rgba(124, 58, 237, 0.12); color: #6d28d9; }
-.basis-adjacent_topic { background: rgba(124, 58, 237, 0.12); color: #6d28d9; }
+.basis-matrix_hole { background: var(--basis-hole-bg); color: var(--basis-hole-color); }
+.basis-staleness { background: var(--basis-staleness-bg); color: var(--basis-staleness-color); }
+.basis-limitation { background: var(--basis-limitation-bg); color: var(--basis-limitation-color); }
+.basis-cross_topic_gap { background: var(--basis-cross-bg); color: var(--basis-cross-color); }
+.basis-adjacent_topic { background: var(--basis-cross-bg); color: var(--basis-cross-color); }
 
 .cluster-gap-text {
   font-size: var(--text-sm);
@@ -1299,7 +1679,7 @@
   font-size: var(--text-xs);
 }
 
-/* ── Tab 5: 全量文献底册组件 ── */
+/* ── Tab 5: 全量聚类文献组件 ── */
 
 .cluster-catalog-section {
   background: var(--bg-elevated, #fff);
