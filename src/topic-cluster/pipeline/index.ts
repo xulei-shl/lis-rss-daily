@@ -34,6 +34,15 @@ import { runDeriveForDirtyTopics, type DeriveResult } from './derive.js';
 import { runIncubation, type IncubationResult } from './incubate.js';
 import { runReclaim, type ReclaimResult } from './reclaim.js';
 import { runIncrementalRouting, type RouteResult } from './route.js';
+import {
+  beginClusterRun,
+  countLinksByTopic,
+  diffTopicLinkCounts,
+  finishClusterRun,
+  type ClusterRunCounters,
+  type ClusterRunTrigger,
+  type FinishClusterRunInput,
+} from '../repo/run-logs.js';
 
 const log = logger.child({ module: 'topic-cluster/pipeline' });
 
@@ -67,6 +76,8 @@ export interface RunPipelineOptions {
   skipReclaim?: boolean;
   /** 在回捞之后立刻重算派生数据与（冷启动场景下可传 false，由调用方自己分轮） */
   skipAnalysis?: boolean;
+  /** 执行日志的触发来源（默认 cron） */
+  trigger?: ClusterRunTrigger;
 }
 
 /**
@@ -168,64 +179,77 @@ async function runFacetStep(limit: number): Promise<FacetStepSummary> {
 export async function runClusterPipeline(
   options: RunPipelineOptions = {}
 ): Promise<ClusterRunSummary> {
-  const startedAt = Date.now();
   const { setVersion, drift } = await ensureActiveSet();
 
-  // 周期新增计数只在每日轮次重置（冷启动会另开一轮，届时重新累计）
-  await resetPeriodAddedCount(setVersion);
+  return runWithLog(options.trigger ?? 'cron', setVersion, async () => {
+    const startedAt = Date.now();
 
-  const facets = await runFacetStep(options.facetLimit ?? 50);
-  const routing = await runIncrementalRouting({ userId: CLUSTER_CONFIG.userId, setVersion });
-  const incubation = await runIncubation({ userId: CLUSTER_CONFIG.userId, setVersion });
+    // 周期新增计数只在每日轮次重置（冷启动会另开一轮，届时重新累计）
+    await resetPeriodAddedCount(setVersion);
 
-  // 孵化后先整合样本不足的微主题，避免回捞把它们重新拉成散装主题。
-  const consolidation = await consolidateSmallTopics(setVersion);
+    const facets = await runFacetStep(options.facetLimit ?? 50);
+    const routing = await runIncrementalRouting({ userId: CLUSTER_CONFIG.userId, setVersion });
+    const incubation = await runIncubation({ userId: CLUSTER_CONFIG.userId, setVersion });
 
-  // 新主题在孵化时只是 NEW 且无计数，这里统一补齐计数与脏标记；
-  // 若某个新主题在整合中被并入其他主题，则不再刷新已删除主题。
-  for (const topicId of incubation.createdTopicIds) {
-    const topic = await getTopicById(topicId);
-    if (!topic) continue;
-    await refreshTopicCounts(topicId);
-    await markTopicDirty(topicId);
-  }
+    // 孵化后先整合样本不足的微主题，避免回捞把它们重新拉成散装主题。
+    const consolidation = await consolidateSmallTopics(setVersion);
 
-  const reclaim = options.skipReclaim
-    ? emptyReclaimResult()
-    : await runReclaim({
-        userId: CLUSTER_CONFIG.userId,
+    // 新主题在孵化时只是 NEW 且无计数，这里统一补齐计数与脏标记；
+    // 若某个新主题在整合中被并入其他主题，则不再刷新已删除主题。
+    for (const topicId of incubation.createdTopicIds) {
+      const topic = await getTopicById(topicId);
+      if (!topic) continue;
+      await refreshTopicCounts(topicId);
+      await markTopicDirty(topicId);
+    }
+
+    const reclaim = options.skipReclaim
+      ? emptyReclaimResult()
+      : await runReclaim({
+          userId: CLUSTER_CONFIG.userId,
+          setVersion,
+          newTopicIds: incubation.createdTopicIds.filter(
+            (topicId) => consolidation.removedTopicIds.indexOf(topicId) === -1
+          ),
+        });
+
+    const derive = await runDeriveForDirtyTopics(setVersion);
+
+    const analysis = options.skipAnalysis
+      ? emptyAnalysisStepResult()
+      : await runPendingAnalyses(setVersion, {
+          limit: options.analysisLimit ?? 20,
+          force: options.forceAnalysis,
+        });
+
+    const summary: ClusterRunSummary = { setVersion, drift, facets, routing, incubation, consolidation, reclaim, derive, analysis };
+
+    log.info(
+      {
         setVersion,
-        newTopicIds: incubation.createdTopicIds.filter(
-          (topicId) => consolidation.removedTopicIds.indexOf(topicId) === -1
-        ),
-      });
+        elapsedMs: Date.now() - startedAt,
+        facets: facets.succeeded,
+        routed: routing.routedArticles,
+        newTopics: incubation.createdTopicIds.length,
+        reclaimed: reclaim.reclaimedLinks,
+        analyses: analysis.ok,
+        failedAnalyses: analysis.failed,
+      },
+      '主题聚类流水线完成'
+    );
 
-  const derive = await runDeriveForDirtyTopics(setVersion);
-
-  const analysis = options.skipAnalysis
-    ? emptyAnalysisStepResult()
-    : await runPendingAnalyses(setVersion, {
-        limit: options.analysisLimit ?? 20,
-        force: options.forceAnalysis,
-      });
-
-  const summary: ClusterRunSummary = { setVersion, drift, facets, routing, incubation, consolidation, reclaim, derive, analysis };
-
-  log.info(
-    {
-      setVersion,
-      elapsedMs: Date.now() - startedAt,
-      facets: facets.succeeded,
-      routed: routing.routedArticles,
-      newTopics: incubation.createdTopicIds.length,
-      reclaimed: reclaim.reclaimedLinks,
-      analyses: analysis.ok,
-      failedAnalyses: analysis.failed,
-    },
-    '主题聚类流水线完成'
-  );
-
-  return summary;
+    return {
+      result: summary,
+      counters: {
+        facetSucceeded: facets.succeeded,
+        facetFailed: facets.failed,
+        routedArticles: routing.routedArticles,
+        newTopics: incubation.createdTopicIds.length,
+        reclaimedLinks: reclaim.reclaimedLinks,
+        analyzedTopics: analysis.ok,
+      },
+    };
+  });
 }
 
 /**
@@ -236,58 +260,76 @@ export async function runClusterPipeline(
  * 回捞在冷启动阶段必然无收益（无已归属文章），故跳过。
  */
 export async function runColdStart(
-  options: { facetBatchSize?: number; analysisLimit?: number; skipAnalysis?: boolean } = {}
+  options: {
+    facetBatchSize?: number;
+    analysisLimit?: number;
+    skipAnalysis?: boolean;
+    trigger?: Extract<ClusterRunTrigger, 'cold_start' | 'rebuild'>;
+  } = {}
 ): Promise<ClusterRunSummary> {
-  const startedAt = Date.now();
   const { setVersion, drift } = await ensureActiveSet();
-  await resetPeriodAddedCount(setVersion);
 
-  // 冷启动要抽完所有历史文章（817 篇量级），分批以控制单次任务时长
-  const facets = await runFacetStep(options.facetBatchSize ?? 2000);
+  return runWithLog(options.trigger ?? 'cold_start', setVersion, async () => {
+    const startedAt = Date.now();
+    await resetPeriodAddedCount(setVersion);
 
-  const routing = await runIncrementalRouting({ userId: CLUSTER_CONFIG.userId, setVersion });
-  const incubation = await runIncubation({ userId: CLUSTER_CONFIG.userId, setVersion });
+    // 冷启动要抽完所有历史文章（817 篇量级），分批以控制单次任务时长
+    const facets = await runFacetStep(options.facetBatchSize ?? 2000);
 
-  for (const topicId of incubation.createdTopicIds) {
-    const topic = await getTopicById(topicId);
-    if (!topic) continue;
-    await refreshTopicCounts(topicId);
-    await markTopicDirty(topicId);
-  }
+    const routing = await runIncrementalRouting({ userId: CLUSTER_CONFIG.userId, setVersion });
+    const incubation = await runIncubation({ userId: CLUSTER_CONFIG.userId, setVersion });
 
-  const consolidation = await consolidateSmallTopics(setVersion);
+    for (const topicId of incubation.createdTopicIds) {
+      const topic = await getTopicById(topicId);
+      if (!topic) continue;
+      await refreshTopicCounts(topicId);
+      await markTopicDirty(topicId);
+    }
 
-  const derive = await runDeriveForDirtyTopics(setVersion);
-  // 跳过分析时保留 is_dirty，之后跑一次每日流水线或重新执行冷启动即可补齐
-  const analysis = options.skipAnalysis
-    ? emptyAnalysisStepResult()
-    : await runPendingAnalyses(setVersion, {
-        limit: options.analysisLimit ?? 200,
-        force: true,
-      });
+    const consolidation = await consolidateSmallTopics(setVersion);
 
-  log.info(
-    {
-      setVersion,
-      elapsedMs: Date.now() - startedAt,
-      topics: incubation.createdTopicIds.length,
-      noise: incubation.remainingPoolSize,
-      analyses: analysis.ok,
-    },
-    '冷启动完成'
-  );
+    const derive = await runDeriveForDirtyTopics(setVersion);
+    // 跳过分析时保留 is_dirty，之后跑一次每日流水线或重新执行冷启动即可补齐
+    const analysis = options.skipAnalysis
+      ? emptyAnalysisStepResult()
+      : await runPendingAnalyses(setVersion, {
+          limit: options.analysisLimit ?? 200,
+          force: true,
+        });
 
-  return {
-    setVersion,
-    drift,
-    facets,
-    routing,
-    incubation,
-    consolidation,
-    reclaim: emptyReclaimResult(),
-    derive,
-    analysis,
-  };
+    log.info(
+      {
+        setVersion,
+        elapsedMs: Date.now() - startedAt,
+        topics: incubation.createdTopicIds.length,
+        noise: incubation.remainingPoolSize,
+        analyses: analysis.ok,
+      },
+      '冷启动完成'
+    );
+
+    return {
+      result: {
+        setVersion,
+        drift,
+        facets,
+        routing,
+        incubation,
+        consolidation,
+        reclaim: emptyReclaimResult(),
+        derive,
+        analysis,
+      },
+      counters: {
+        facetSucceeded: facets.succeeded,
+        facetFailed: facets.failed,
+        routedArticles: routing.routedArticles,
+        newTopics: incubation.createdTopicIds.length,
+        reclaimedLinks: 0,
+        analyzedTopics: analysis.ok,
+      },
+    };
+  });
 }
 
 /** 日派生：只重算脏主题的脉络与指标，不调用 LLM。forceAll 用于 schema 升级后全量回填。 */
@@ -334,6 +376,63 @@ export async function startNewSetVersion(triggerReason: string): Promise<number>
 
   log.warn({ from: active?.version ?? null, to: version, triggerReason }, '已切换到新的主题集合版本');
   return version;
+}
+
+/**
+ * 包一层执行日志：进入前记录基线链接数，退出后记录耗时、计数与按主题增量。
+ *
+ * 日志是旁路能力，任何日志写入失败都只告警，不影响流水线本身的结果与异常传播。
+ */
+async function runWithLog<T>(
+  trigger: ClusterRunTrigger,
+  setVersion: number,
+  execute: () => Promise<{ result: T; counters: ClusterRunCounters }>
+): Promise<T> {
+  const startedAt = Date.now();
+
+  let runId: number;
+  try {
+    runId = await beginClusterRun({ userId: CLUSTER_CONFIG.userId, setVersion, trigger });
+  } catch (error) {
+    log.warn({ error: errorMessage(error) }, '写入执行日志失败，本轮跳过日志记录');
+    return (await execute()).result;
+  }
+
+  const before = await countLinksByTopic(setVersion).catch((error) => {
+    log.warn({ error: errorMessage(error) }, '读取主题链接基线失败，本轮不记录按主题增量');
+    return new Map<number, number>();
+  });
+
+  try {
+    const { result, counters } = await execute();
+    const after = await countLinksByTopic(setVersion).catch(() => new Map<number, number>());
+    await safeFinishRun(runId, {
+      status: 'completed',
+      durationMs: Date.now() - startedAt,
+      counters,
+      topicDeltas: diffTopicLinkCounts(before, after),
+    });
+    return result;
+  } catch (error) {
+    await safeFinishRun(runId, {
+      status: 'failed',
+      durationMs: Date.now() - startedAt,
+      errorMessage: errorMessage(error),
+    });
+    throw error;
+  }
+}
+
+async function safeFinishRun(runId: number, input: FinishClusterRunInput): Promise<void> {
+  try {
+    await finishClusterRun(runId, input);
+  } catch (error) {
+    log.warn({ runId, error: errorMessage(error) }, '更新执行日志失败');
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function emptyReclaimResult(): ReclaimResult {

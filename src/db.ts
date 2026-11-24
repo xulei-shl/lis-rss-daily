@@ -65,6 +65,7 @@ export interface DatabaseTable {
   thread_articles: ThreadArticlesTable;
   topic_metrics_period: TopicMetricsPeriodTable;
   cluster_topic_analysis: ClusterTopicAnalysisTable;
+  cluster_run_logs: ClusterRunLogsTable;
 }
 
 export interface UsersTable {
@@ -536,6 +537,28 @@ export interface ArticleClusterFacetsTable {
   date_precision: 'day' | 'year' | 'ingest' | null;
   created_at: Generated<string>;
   updated_at: Generated<string>;
+}
+
+/** 主题聚类执行日志（每轮流水线一行） */
+export interface ClusterRunLogsTable {
+  id: Generated<number>;
+  user_id: number;
+  set_version: number | null;
+  trigger: 'cron' | 'manual' | 'cold_start' | 'rebuild';
+  status: Generated<'running' | 'completed' | 'failed'>;
+  started_at: string;
+  finished_at: string | null;
+  duration_ms: number | null;
+  facet_succeeded: Generated<number>;
+  facet_failed: Generated<number>;
+  routed_articles: Generated<number>;
+  new_topics: Generated<number>;
+  reclaimed_links: Generated<number>;
+  analyzed_topics: Generated<number>;
+  /** JSON：{"<topic_id>": 该轮新增链接数}，只存增量 > 0 的主题 */
+  topic_deltas: string | null;
+  error_message: string | null;
+  created_at: Generated<string>;
 }
 
 /** 文章 ↔ 主题（多归属链接） */

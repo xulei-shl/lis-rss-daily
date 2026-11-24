@@ -18,6 +18,7 @@ import type { MatrixResult } from './service/matrix.js';
 import { listTopicMetrics, type MetricRow } from './repo/metrics.js';
 import { listThreads, listThreadArticles } from './repo/threads.js';
 import { getActiveSet } from './repo/sets.js';
+import { listTopicRunLogs } from './repo/run-logs.js';
 import { getTopicById, getTopicBySlug, listTopicsByVersion } from './repo/topics.js';
 import {
   findTopicIdBySlugAnyVersion,
@@ -189,6 +190,19 @@ export interface TopicArticleItem {
   similarity: number;
 }
 
+/** 一轮流水线在单个主题上的执行记录 */
+export interface TopicRunLog {
+  id: number;
+  trigger: string;
+  status: 'running' | 'completed' | 'failed';
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  /** 该主题本轮新增的聚类文献数 */
+  addedCount: number;
+  errorMessage: string | null;
+}
+
 export interface TopicDetail {
   id: number;
   slug: string;
@@ -199,6 +213,8 @@ export interface TopicDetail {
   primaryCount: number;
   firstEventDate: string | null;
   lastEventDate: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
   setVersion: number;
   analysisStatus: AnalysisStatus | 'missing';
   analysisError: string | null;
@@ -210,6 +226,8 @@ export interface TopicDetail {
   /** 未构成线索、平铺展示的文章（设计文档 §7.5 的降级路径） */
   looseArticles: TopicArticleStep[];
   metrics: MetricRow[];
+  /** 该主题最近若干轮的执行日志（最近的在前） */
+  runLogs: TopicRunLog[];
   /** 同一版本下的邻近主题（用于「主题间关系」展示） */
   adjacent: Array<{ id: number; slug: string; name: string; sharedMethod: boolean; sharedObject: boolean }>;
 }
@@ -219,7 +237,7 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
   const topic = await resolveTopic(slugOrId);
   if (!topic) return null;
 
-  const [analysisRow, threads, threadArticles, members, metrics] = await Promise.all([
+  const [analysisRow, threads, threadArticles, members, metrics, runLogs] = await Promise.all([
     getDb()
       .selectFrom('cluster_topic_analysis')
       .selectAll()
@@ -229,6 +247,12 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     listThreadArticles(topic.id),
     listTopicMembersForQuery(topic.id),
     listTopicMetrics(topic.id),
+    listTopicRunLogs({
+      userId: CLUSTER_CONFIG.userId,
+      setVersion: topic.set_version,
+      topicCreatedAt: topic.created_at,
+      limit: 20,
+    }),
   ]);
 
   const briefs = await getArticleBriefs(members.map((member) => member.articleId));
@@ -348,6 +372,8 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     primaryCount: topic.primary_count,
     firstEventDate: topic.first_event_date,
     lastEventDate: topic.last_event_date,
+    createdAt: topic.created_at ?? null,
+    updatedAt: topic.updated_at ?? null,
     setVersion: topic.set_version,
     analysisStatus: (analysisRow?.status as AnalysisStatus | undefined) ?? 'missing',
     analysisError: analysisRow?.error_message ?? null,
@@ -357,6 +383,16 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     allArticles,
     looseArticles,
     metrics,
+    runLogs: runLogs.map((run) => ({
+      id: run.id,
+      trigger: run.trigger,
+      status: run.status,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      durationMs: run.durationMs,
+      addedCount: run.topicDeltas[String(topic.id)] ?? 0,
+      errorMessage: run.errorMessage,
+    })),
     adjacent: await findAdjacentTopics(topic.id, topic.set_version, members),
   };
 }

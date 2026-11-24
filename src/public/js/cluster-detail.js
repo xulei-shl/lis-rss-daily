@@ -20,6 +20,19 @@
     frontier: '前沿探针'
   };
 
+  const TRIGGER_LABELS = {
+    cron: '定时',
+    manual: '手动',
+    cold_start: '冷启动',
+    rebuild: '重建'
+  };
+
+  const RUN_STATUS_LABELS = {
+    running: '进行中',
+    completed: '完成',
+    failed: '失败'
+  };
+
   const BASIS_LABELS = {
     matrix_hole: '依据：方法×对象覆盖空缺',
     cross_topic_gap: '依据：邻近主题间的交叉空白',
@@ -66,6 +79,7 @@
     parts.push(renderConsensus(detail));
     parts.push(renderTrend(detail));
     parts.push(renderAdjacent(detail));
+    parts.push(renderRunLogs(detail));
     parts.push(renderCatalog(detail));
     parts.push(renderLoose(detail));
 
@@ -282,6 +296,56 @@
   }
 
   /* ── 对比矩阵 ── */
+
+  /* ── 运行日志 ── */
+
+  function renderRunLogs(detail) {
+    const logs = detail.runLogs || [];
+    const meta =
+      '<div class="cluster-card-meta" style="margin-bottom:8px">' +
+      '<span>创建于 ' + escapeHtml(formatDateTime(detail.createdAt)) + '</span>' +
+      '<span>最近更新 ' + escapeHtml(formatDateTime(detail.updatedAt)) + '</span>' +
+      '</div>';
+
+    const rows = logs
+      .map((run) => {
+        const failed = run.status === 'failed';
+        return (
+          '<tr>' +
+          '<td>' + escapeHtml(formatDateTime(run.startedAt)) + '</td>' +
+          '<td>' + escapeHtml(TRIGGER_LABELS[run.trigger] || run.trigger) + '</td>' +
+          '<td>' + run.addedCount + '</td>' +
+          '<td>' +
+          escapeHtml(RUN_STATUS_LABELS[run.status] || run.status) +
+          (failed && run.errorMessage
+            ? '<span style="color:#e65100" title="' + escapeHtml(run.errorMessage) + '"> ⚠</span>'
+            : '') +
+          '</td>' +
+          '<td>' + (run.durationMs === null ? '—' : escapeHtml(formatDuration(run.durationMs))) + '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+
+    const body = logs.length
+      ? '<details class="cluster-details">' +
+        '<summary>最近 ' + logs.length + ' 次执行明细</summary>' +
+        '<div style="overflow-x:auto"><table class="cluster-matrix">' +
+        '<tr><th>执行时间</th><th>触发</th><th>新增文献</th><th>状态</th><th>耗时</th></tr>' +
+        rows +
+        '</table></div>' +
+        '</details>'
+      : '<div class="cluster-note">暂无执行记录。下一轮主题聚类执行后会出现。</div>';
+
+    return (
+      '<section class="cluster-section">' +
+      '<h2 class="cluster-section-title">🗒️ 运行日志</h2>' +
+      '<div class="cluster-note">仅统计主题聚类流水线的执行；「新增文献」指该主题在本轮新增的聚类文献数（不含被淘汰的链接）。</div>' +
+      meta +
+      body +
+      '</section>'
+    );
+  }
 
   /* ── 全量底册 ── */
 
@@ -616,6 +680,18 @@
     if (trend === 'up') return '升温';
     if (trend === 'down') return '退潮';
     return '平稳';
+  }
+
+  function formatDateTime(value) {
+    if (!value) return '未知';
+    return String(value).replace('T', ' ').slice(0, 16);
+  }
+
+  function formatDuration(ms) {
+    if (ms < 1000) return ms + ' ms';
+    if (ms < 60000) return (ms / 1000).toFixed(1) + ' s';
+    const minutes = Math.floor(ms / 60000);
+    return minutes + ' 分 ' + Math.round((ms % 60000) / 1000) + ' 秒';
   }
 
   function formatMonth(value) {

@@ -159,6 +159,7 @@ async function main(): Promise<void> {
     skipAnalysis: options.skipAnalysis,
     analysisLimit: options.limit ?? 20,
     forceAnalysis: options.force,
+    trigger: 'manual',
   });
   console.log(
     `v${summary.setVersion} 刷新完成：新增切面 ${summary.facets.succeeded}，` +

@@ -1085,6 +1085,19 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
         continue;
       }
 
+      // ============================================================
+      // 050: 主题聚类执行日志
+      // ============================================================
+      if (file === '050_add_cluster_run_logs.sql') {
+        if (hasTable(db, 'cluster_run_logs')) {
+          console.log('      → Skipped (cluster_run_logs already exists)');
+        } else {
+          db.exec(fs.readFileSync(fullPath, 'utf-8'));
+          console.log('      → Created cluster_run_logs');
+        }
+        continue;
+      }
+
       // 其他迁移脚本已包含在 001_init.sql 中
       console.log('      → Skipped (included in 001_init.sql)');
     }

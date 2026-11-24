@@ -91,6 +91,7 @@ async function main(): Promise<void> {
   const summary = await runColdStart({
     skipAnalysis: options.skipAnalysis,
     analysisLimit: options.analysisLimit ?? 200,
+    trigger: 'rebuild',
   });
 
   let remapped = 0;

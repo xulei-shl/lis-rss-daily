@@ -65,7 +65,7 @@ export class TopicClusterScheduler extends BaseScheduler {
 
     try {
       // 日节奏只做切面/路由/派生；综述由 TopicAnalysisScheduler 每周跑。
-      const summary = await runClusterPipeline({ skipAnalysis: true });
+      const summary = await runClusterPipeline({ skipAnalysis: true, trigger: 'cron' });
       this.stats.lastRunSummary = summary;
       this.stats.lastRunError = undefined;
     } catch (error) {
@@ -105,7 +105,7 @@ export class TopicClusterScheduler extends BaseScheduler {
   /** 手动立即执行一轮（供 API/脚本调用，不改变定时计划） */
   async runNow(): Promise<ClusterRunSummary> {
     log.info('手动触发主题聚类流水线');
-    return runClusterPipeline({ forceAnalysis: false });
+    return runClusterPipeline({ forceAnalysis: false, trigger: 'manual' });
   }
 }
 
