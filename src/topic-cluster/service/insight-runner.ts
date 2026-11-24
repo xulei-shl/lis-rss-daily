@@ -47,22 +47,31 @@ export interface RunInsightOptions {
   /** 单轮最多生成的报告数（跨全部主题） */
   limit?: number;
   force?: boolean;
+  /** 只处理这些主题；不传则处理集合内全部主题（单主题重跑用） */
+  topicIds?: readonly number[];
 }
 
 export async function runInsightReports(
   setVersion: number,
   options: RunInsightOptions = {}
 ): Promise<InsightRunResult> {
-  const [reviews, gaps, topics, existing] = await Promise.all([
+  const [reviews, gaps, allTopics, existing] = await Promise.all([
     listActiveReviewsBySet(setVersion),
     listActiveGapsBySet(setVersion),
     listTopicsByVersion(setVersion),
     listActiveInsightReports(setVersion),
   ]);
+  const targetTopicIds = options.topicIds ? new Set(options.topicIds) : null;
+  const topics = targetTopicIds
+    ? allTopics.filter((topic) => targetTopicIds.has(topic.id))
+    : allTopics;
 
   // 052 之前的跨主题报告无法归属单一主题，保留审计但不再参与增量匹配。
-  for (const report of existing) {
-    if (report.topic_id == null) await supersedeInsightReport(report.id, null);
+  // 单主题重跑不清理全库遗留报告，避免误伤其他主题。
+  if (!targetTopicIds) {
+    for (const report of existing) {
+      if (report.topic_id == null) await supersedeInsightReport(report.id, null);
+    }
   }
 
   const reviewsByTopic = groupByTopic(reviews);

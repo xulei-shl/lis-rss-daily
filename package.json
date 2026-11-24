@@ -13,6 +13,7 @@
     "trigger-insights": "tsx scripts/trigger-insights.ts",
     "cluster:init": "tsx scripts/cluster-init.ts",
     "cluster:refresh": "tsx scripts/cluster-refresh.ts",
+    "cluster:insight-rebuild": "tsx scripts/cluster-insight-rebuild.ts",
     "cluster:consolidate": "tsx scripts/cluster-consolidate.ts",
     "cluster:rebuild": "tsx scripts/cluster-rebuild.ts",
     "cluster:calibrate": "tsx scripts/cluster-calibrate.ts",
