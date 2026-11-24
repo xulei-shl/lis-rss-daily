@@ -248,7 +248,7 @@
     );
   }
 
-  /* ── 跨主题洞察 ── */
+  /* ── 主题内洞察 ── */
 
   const GAP_STATE_LABELS = {
     opening: '正在打开',
@@ -300,7 +300,7 @@
             : '') +
           (topics ? '<div class="cluster-card-meta">' + topics + '</div>' : '') +
           ((report.convergences || []).length
-            ? '<div class="cluster-review-section-label">跨主题收敛</div>' + list(report.convergences)
+            ? '<div class="cluster-review-section-label">子簇间收敛</div>' + list(report.convergences)
             : '') +
           ((report.tensions || []).length
             ? '<div class="cluster-review-section-label">张力与条件差异</div>' + list(report.tensions)
@@ -316,10 +316,10 @@
 
     return (
       '<section class="cluster-section">' +
-      '<h2 class="cluster-section-title">💡 跨主题洞察（' + insights.length + ' 份）</h2>' +
+      '<h2 class="cluster-section-title">💡 主题内洞察（' + insights.length + ' 份）</h2>' +
       '<div class="cluster-note">' +
-      '把本主题的综述与研究空白与其他主题一起做二次聚类，观察跨主题收敛与空白成熟度。' +
-      '<a href="/clusters/insights">查看全部洞察报告 →</a>' +
+      '把本主题的多个综述子簇与研究空白做二次聚类，观察子簇之间的收敛、张力与空白成熟度。' +
+      '<a href="/clusters/insights">查看全部主题洞察报告 →</a>' +
       '</div>' +
       items +
       '</section>'
@@ -486,7 +486,7 @@
       '<h2 class="cluster-section-title">🗒️ 运行日志</h2>' +
       '<div class="cluster-note">仅统计主题聚类流水线的执行；「新增文献」指该主题本轮新增的聚类文献数，「新增综述」指该主题本轮新生成的深度综述数（续写不计入新增）。' +
       (detail.insights && detail.insights.length > 0
-        ? ' 当前版本共有 ' + detail.insights.length + ' 份包含本主题的跨主题洞察报告。'
+        ? ' 当前版本本主题共有 ' + detail.insights.length + ' 份主题内洞察报告。'
         : '') +
       '</div>' +
       meta +

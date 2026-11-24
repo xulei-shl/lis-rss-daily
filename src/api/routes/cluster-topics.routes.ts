@@ -56,7 +56,7 @@ router.get('/cluster-topics/overview', requireAuth, async (_req: express.Request
   }
 });
 
-/** 跨主题洞察报告列表 */
+/** 主题内洞察报告列表 */
 router.get('/cluster-insights', requireAuth, async (_req: express.Request, res: express.Response) => {
   try {
     res.json(await listInsightReports());

@@ -697,16 +697,19 @@ export interface ClusterTopicGapsTable {
   updated_at: string;
 }
 
-/** 综述 + 空白二次聚类后的跨主题洞察报告（sql/051） */
+/** 主题内综述子簇 + 研究空白二次聚类后的洞察报告（sql/051、052） */
 export interface ClusterInsightReportsTable {
   id: Generated<number>;
   user_id: number;
   set_version: number;
+  /** 报告所属的单个大主题；052 之前的跨主题历史行为 null */
+  topic_id: number | null;
   report_key: string;
   title: string;
   report_json: string;
-  /** JSON：[{kind:'review'|'gap', id, topicId}] */
+  /** JSON：[{kind:'review'|'gap', id, topicId}]，同属 topic_id 一个主题 */
   member_refs_json: string;
+  /** 兼容字段：仅含 topic_id 一个元素 */
   topic_ids_json: string;
   centroid: Buffer | null;
   centroid_dim: number | null;

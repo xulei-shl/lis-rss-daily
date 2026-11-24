@@ -1,7 +1,7 @@
 /**
  * 物化研究空白仓储（cluster_topic_gaps）。
  *
- * 空白原本只存在于 `cluster_topic_analysis.analysis_json`，跨主题二次聚类需要稳定 id
+ * 空白原本只存在于 `cluster_topic_analysis.analysis_json`，主题内二次聚类需要稳定 id
  * 与向量，因此在阶段 B 成功后物化一份。`gap_key` 在同一主题内由空白文本决定，
  * 重算时 upsert 而不是删了重插，旧洞察报告仍能回链。
  */

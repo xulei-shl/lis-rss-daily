@@ -73,7 +73,7 @@ const DEFAULT_PROMPT_CONFIG: Record<
   },
   cluster_insight: {
     fileName: 'cluster_insight.md',
-    name: '主题聚类跨主题洞察报告',
+    name: '主题聚类主题内洞察报告',
   },
 };
 

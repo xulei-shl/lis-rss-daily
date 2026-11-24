@@ -64,7 +64,7 @@ export const CLUSTER_CONFIG = Object.freeze({
   reviewInputCharBudget: analysisInputCharBudget,
   /** 单篇深度综述输出上限 */
   reviewOutputTokens: analysisOutputTokens,
-  /** 跨主题洞察报告输出上限 */
+  /** 主题内洞察报告输出上限 */
   insightOutputTokens: analysisOutputTokens,
 });
 
@@ -129,14 +129,16 @@ export const CLUSTER_LIMITS = Object.freeze({
   reviewEvidenceCap: 18,
   /** 深度综述：周分析单轮最多处理的主题数（控制旗舰模型成本） */
   reviewWeeklyLimit: 40,
-  /** 跨主题洞察：节点（综述 + 空白）二次聚类的相似度阈值 */
+  /** 主题内洞察：节点（综述子簇 + 空白）二次聚类的相似度阈值 */
   insightClusterThreshold: 0.66,
-  /** 跨主题洞察：元簇最少节点数 */
-  insightMinNodes: 3,
-  /** 跨主题洞察：元簇至少包含的综述数（纯空白簇不出报告） */
-  insightMinReviews: 1,
-  /** 跨主题洞察：单轮最多生成的报告数 */
-  insightMaxReports: 6,
-  /** 跨主题洞察：每份报告最多携带的综述/空白节点数 */
+  /** 主题内洞察：元簇最少节点数 */
+  insightMinNodes: 2,
+  /** 主题内洞察：元簇至少包含的综述子簇数（纯空白簇不出报告） */
+  insightMinReviews: 2,
+  /** 主题内洞察：单主题最多生成的报告数 */
+  insightMaxReports: 3,
+  /** 主题内洞察：周分析单轮最多生成的报告数（跨全部主题，控制成本） */
+  insightWeeklyLimit: 12,
+  /** 主题内洞察：每份报告最多携带的综述/空白节点数 */
   insightEvidenceCap: 12,
 });

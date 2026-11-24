@@ -257,7 +257,7 @@ export function createApp(): express.Express {
       return res.redirect('/login');
     }
     res.render('cluster-insights', {
-      pageTitle: '跨主题洞察 - LIS-RSS Literature Tracker',
+      pageTitle: '主题内洞察 - LIS-RSS Literature Tracker',
       user: req.user,
     });
   });

@@ -11,6 +11,7 @@ import {
 import { listFacets } from '../repo/facets.js';
 import { remapReviewsToTopic } from '../repo/reviews.js';
 import { remapGapsToTopic } from '../repo/gaps.js';
+import { supersedeInsightReportsForTopic } from '../repo/insights.js';
 import { blobToVector, centroidOf, cosine, vectorToBlob } from '../domain/vector.js';
 import { resolveTopicDateRange } from '../service/centroid.js';
 import { logger } from '../../logger.js';
@@ -285,6 +286,8 @@ async function applyMerge(
   // 否则外键级联会把旧洞察报告可回链的 id 一并删掉。
   await remapReviewsToTopic(smallTopicId, targetTopicId);
   await remapGapsToTopic(smallTopicId, targetTopicId);
+  // 主题内洞察只属于原主题，合并后不再成立；保留审计并等待吸收方重新生成。
+  await supersedeInsightReportsForTopic(smallTopicId);
 
   await db.deleteFrom('cluster_topics').where('id', '=', smallTopicId).execute();
 

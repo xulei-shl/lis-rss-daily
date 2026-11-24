@@ -1,14 +1,21 @@
 /**
- * 跨主题洞察编排。
+ * 主题内洞察编排。
  *
- * 每次运行都会重新做二次聚类（纯代码、数百节点秒级），但只对「成员内容哈希变化」
- * 的元簇调用 LLM。元簇成员发生变化时按 Jaccard 续写同一行，旧报告置为 superseded。
+ * 每个大主题内部，把它的多个综述子簇与研究空白做二次聚类；只有跨至少两个
+ * 综述子簇的元簇才生成报告，不跨大主题。每次运行都会重新聚类（纯代码、秒级），
+ * 但只对「成员内容哈希变化」的元簇调用 LLM。成员变化按 Jaccard 续写同一行，
+ * 成员散开的旧报告置为 superseded。
  */
 
 import { createHash } from 'node:crypto';
 import { logger } from '../../logger.js';
-import type { ClusterInsightReportsSelection } from '../../db.js';
-import { CLUSTER_CONFIG, CLUSTER_LIMITS } from '../config.js';
+import type {
+  ClusterInsightReportsSelection,
+  ClusterTopicGapsSelection,
+  ClusterTopicReviewsSelection,
+  ClusterTopicsSelection,
+} from '../../db.js';
+import { CLUSTER_LIMITS } from '../config.js';
 import { vectorToBlob } from '../domain/vector.js';
 import { synthesizeInsightReport, type InsightReport } from '../llm/insight.js';
 import { listActiveGapsBySet } from '../repo/gaps.js';
@@ -22,7 +29,7 @@ import {
 } from '../repo/insights.js';
 import { listActiveReviewsBySet } from '../repo/reviews.js';
 import { listTopicsByVersion } from '../repo/topics.js';
-import { buildInsightClusters, refKey, type InsightCluster } from './insight-builder.js';
+import { buildTopicInsightClusters, refKey, type InsightCluster } from './insight-builder.js';
 
 const log = logger.child({ module: 'topic-cluster/insight-runner' });
 
@@ -37,6 +44,7 @@ export interface InsightRunResult {
 }
 
 export interface RunInsightOptions {
+  /** 单轮最多生成的报告数（跨全部主题） */
   limit?: number;
   force?: boolean;
 }
@@ -52,28 +60,55 @@ export async function runInsightReports(
     listActiveInsightReports(setVersion),
   ]);
 
-  const clusters = buildInsightClusters({ reviews, gaps, topics });
-  if (clusters.length === 0) {
-    for (const report of existing) await supersedeInsightReport(report.id, null);
+  // 052 之前的跨主题报告无法归属单一主题，保留审计但不再参与增量匹配。
+  for (const report of existing) {
+    if (report.topic_id == null) await supersedeInsightReport(report.id, null);
+  }
+
+  const reviewsByTopic = groupByTopic(reviews);
+  const gapsByTopic = groupByTopic(gaps);
+  const existingByTopic = new Map<number, ClusterInsightReportsSelection[]>();
+  for (const report of existing) {
+    if (report.topic_id == null) continue;
+    const rows = existingByTopic.get(report.topic_id) ?? [];
+    rows.push(report);
+    existingByTopic.set(report.topic_id, rows);
+  }
+
+  const candidates: Array<{ topic: ClusterTopicsSelection; cluster: InsightCluster; match: ClusterInsightReportsSelection | null }> = [];
+  let clusterCount = 0;
+
+  for (const topic of topics) {
+    const topicReviews = reviewsByTopic.get(topic.id) ?? [];
+    const clusters = buildTopicInsightClusters({
+      topic,
+      reviews: topicReviews,
+      gaps: gapsByTopic.get(topic.id) ?? [],
+    });
+    clusterCount += clusters.length;
+
+    const topicExisting = existingByTopic.get(topic.id) ?? [];
+    const usedExisting = new Set<number>();
+
+    for (const cluster of clusters) {
+      const match = matchExisting(cluster, topicExisting, usedExisting);
+      if (match) usedExisting.add(match.id);
+      candidates.push({ topic, cluster, match });
+    }
+
+    // 该主题已不再成立的旧报告：成员已散开或子簇不足。
+    for (const report of topicExisting) {
+      if (!usedExisting.has(report.id)) await supersedeInsightReport(report.id, null);
+    }
+  }
+
+  if (candidates.length === 0) {
     return { status: 'skipped', clusters: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
   }
 
-  const userId = topics[0]?.user_id ?? CLUSTER_CONFIG.userId;
-  const usedExisting = new Set<number>();
-  const matches = clusters.map((cluster) => {
-    const match = matchExisting(cluster, existing, usedExisting);
-    if (match) usedExisting.add(match.id);
-    return { cluster, match };
-  });
-
-  // 没有任何新元簇对应的旧报告：成员已经散开，保留历史但标记替代。
-  for (const report of existing) {
-    if (!usedExisting.has(report.id)) await supersedeInsightReport(report.id, null);
-  }
-
   const limit = Math.min(
-    Math.max(options.limit ?? CLUSTER_LIMITS.insightMaxReports, 1),
-    CLUSTER_LIMITS.insightMaxReports
+    Math.max(options.limit ?? CLUSTER_LIMITS.insightWeeklyLimit, 1),
+    CLUSTER_LIMITS.insightWeeklyLimit
   );
 
   let created = 0;
@@ -83,7 +118,7 @@ export async function runInsightReports(
   const errors: InsightRunResult['errors'] = [];
   let attempted = 0;
 
-  for (const { cluster, match } of matches) {
+  for (const { topic, cluster, match } of candidates) {
     if (attempted >= limit) {
       skipped += 1;
       continue;
@@ -105,7 +140,7 @@ export async function runInsightReports(
 
     try {
       const report = await synthesizeInsightReport({
-        userId,
+        userId: topic.user_id,
         scope: cluster.scope,
         reviews: cluster.reviews,
         gaps: cluster.gaps,
@@ -114,8 +149,9 @@ export async function runInsightReports(
       });
 
       const row = {
-        userId,
+        userId: topic.user_id,
         setVersion,
+        topicId: topic.id,
         title: report.title,
         reportJson: JSON.stringify(report),
         memberRefs: cluster.refs,
@@ -131,7 +167,7 @@ export async function runInsightReports(
         await updateInsightReport(match.id, { ...row, version: match.version + 1 });
         updated += 1;
       } else {
-        const duplicate = await getInsightReportByKey(setVersion, cluster.key);
+        const duplicate = await getInsightReportByKey(setVersion, topic.id, cluster.key);
         if (duplicate) {
           await updateInsightReport(duplicate.id, {
             ...row,
@@ -148,19 +184,32 @@ export async function runInsightReports(
       failed += 1;
       const message = error instanceof Error ? error.message : String(error);
       errors.push({ clusterKey: cluster.key, error: message });
-      log.warn({ setVersion, cluster: cluster.key, error: message }, '跨主题洞察生成失败');
+      log.warn(
+        { setVersion, topicId: topic.id, cluster: cluster.key, error: message },
+        '主题内洞察生成失败'
+      );
     }
   }
 
   return {
     status: failed === 0 ? 'ok' : failed === attempted ? 'failed' : 'partial',
-    clusters: clusters.length,
+    clusters: clusterCount,
     created,
     updated,
     skipped,
     failed,
     errors,
   };
+}
+
+function groupByTopic<T extends { topic_id: number }>(rows: T[]): Map<number, T[]> {
+  const grouped = new Map<number, T[]>();
+  for (const row of rows) {
+    const list = grouped.get(row.topic_id) ?? [];
+    list.push(row);
+    grouped.set(row.topic_id, list);
+  }
+  return grouped;
 }
 
 function matchExisting(
@@ -174,6 +223,7 @@ function matchExisting(
 
   for (const report of existing) {
     if (used.has(report.id)) continue;
+    if (report.topic_id !== cluster.topicId) continue;
     const reportKeys = parseRefs(report.member_refs_json).map(refKey);
     const score = jaccardStrings([...clusterKeys], reportKeys);
     if (score > bestScore) {
@@ -187,8 +237,8 @@ function matchExisting(
 
 function computeReportHash(
   cluster: InsightCluster,
-  reviews: Awaited<ReturnType<typeof listActiveReviewsBySet>>,
-  gaps: Awaited<ReturnType<typeof listActiveGapsBySet>>
+  reviews: ClusterTopicReviewsSelection[],
+  gaps: ClusterTopicGapsSelection[]
 ): string {
   const reviewHash = new Map(reviews.map((review) => [review.id, review.input_hash]));
   const gapHash = new Map(gaps.map((gap) => [gap.id, `${gap.gap}|${gap.source_analysis_hash}`]));
@@ -200,7 +250,9 @@ function computeReportHash(
     )
     .sort();
 
-  return createHash('sha256').update(`insight:v1|${parts.join('|')}`).digest('hex');
+  return createHash('sha256')
+    .update(`insight:v2|topic:${cluster.topicId}|${parts.join('|')}`)
+    .digest('hex');
 }
 
 function parsePreviousReport(

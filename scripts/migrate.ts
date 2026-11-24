@@ -1138,6 +1138,19 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
 	    continue;
 	  }
 
+	  // ============================================================
+	  // 052: 洞察报告收口到单个主题
+	  // ============================================================
+	  if (file === '052_scope_insights_to_topic.sql') {
+	    if (hasColumn(db, 'cluster_insight_reports', 'topic_id')) {
+	      console.log('      → Skipped (insight topic scope already present)');
+	    } else {
+	      db.exec(fs.readFileSync(fullPath, 'utf-8'));
+	      console.log('      → Applied insight topic scope');
+	    }
+	    continue;
+	  }
+
 	  // 其他迁移脚本已包含在 001_init.sql 中
 	  console.log('      → Skipped (included in 001_init.sql)');
     }

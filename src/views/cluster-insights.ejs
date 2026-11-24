@@ -1,9 +1,9 @@
 <%- include('layout', { pageTitle: pageTitle, pageStyles: '<link rel="stylesheet" href="/css/pages/clusters.css">' ,
   body: ` <div class="page-header">
-    <h1 class="page-title"><span aria-hidden="true">💡</span> 跨主题洞察</h1>
+    <h1 class="page-title"><span aria-hidden="true">💡</span> 主题内洞察</h1>
     <p class="cluster-subtitle">
-      把各主题的深度综述与研究空白做二次聚类，找出跨主题的收敛、张力与空白成熟度。
-      全部内容由周分析预生成并落库，页面仅做展示。
+      在单个大主题内部，把多个深度综述子簇与研究空白做二次聚类，
+      找出子簇之间的收敛、张力与空白成熟度。全部内容由周分析预生成并落库，页面仅做展示。
     </p>
   </div>
 
@@ -13,7 +13,7 @@
 
   <div class="results-count" id="insightCount"></div>
   <div id="insightsRoot" aria-live="polite">
-    <div class="cluster-note">正在加载跨主题洞察…</div>
+    <div class="cluster-note">正在加载主题内洞察…</div>
   </div>
 
   <script src="/js/cluster-insights.js"></script>

@@ -77,7 +77,7 @@ export interface RunPipelineOptions {
   analysisLimit?: number;
   /** 单轮深度综述的主题上限 */
   reviewLimit?: number;
-  /** 单轮洞察报告上限 */
+  /** 单轮主题内洞察报告上限（跨全部主题） */
   insightLimit?: number;
   /** 忽略指纹强制重算分析 */
   forceAnalysis?: boolean;
@@ -386,7 +386,7 @@ export async function runScheduledDerive(
 }
 
 /**
- * 周分析：脏主题的两阶段分析 → 深度综述 → 跨主题洞察。
+ * 周分析：脏主题的两阶段分析 → 深度综述 → 主题内洞察。
  *
  * 三步写在同一轮执行日志里，页面能看到每周实际生成了多少综述与洞察。
  */

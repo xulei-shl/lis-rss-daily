@@ -1,7 +1,7 @@
 /**
- * 跨主题洞察报告仓储（cluster_insight_reports）。
+ * 主题内洞察报告仓储（cluster_insight_reports）。
  *
- * 报告身份同样与成员解耦：`report_key` 在首次生成时由核心节点决定，
+ * 报告只属于一个大主题，身份与成员解耦：`report_key` 由核心节点决定，
  * 后续成员变化按 Jaccard 续写同一行；被替代的报告保留为 `superseded`。
  */
 
@@ -16,6 +16,7 @@ export interface InsightMemberRef {
 export interface InsightWriteRow {
   userId: number;
   setVersion: number;
+  topicId: number;
   reportKey: string;
   title: string;
   reportJson: string;
@@ -39,6 +40,7 @@ export async function insertInsightReport(row: InsightWriteRow): Promise<number>
     .values({
       user_id: row.userId,
       set_version: row.setVersion,
+      topic_id: row.topicId,
       report_key: row.reportKey,
       title: row.title,
       report_json: row.reportJson,
@@ -65,6 +67,7 @@ export async function updateInsightReport(
   await getDb()
     .updateTable('cluster_insight_reports')
     .set({
+      topic_id: row.topicId,
       title: row.title,
       report_json: row.reportJson,
       member_refs_json: JSON.stringify(row.memberRefs),
@@ -125,14 +128,29 @@ export async function listPublishedInsightReports(
 
 export async function getInsightReportByKey(
   setVersion: number,
+  topicId: number,
   reportKey: string
 ): Promise<ClusterInsightReportsSelection | undefined> {
   return getDb()
     .selectFrom('cluster_insight_reports')
     .selectAll()
     .where('set_version', '=', setVersion)
+    .where('topic_id', '=', topicId)
     .where('report_key', '=', reportKey)
     .executeTakeFirst();
+}
+
+/** 主题被合并后，其主题内洞察不再成立，保留审计但置为 superseded */
+export async function supersedeInsightReportsForTopic(topicId: number): Promise<void> {
+  await getDb()
+    .updateTable('cluster_insight_reports')
+    .set({
+      status: 'superseded',
+      updated_at: new Date().toISOString(),
+    })
+    .where('topic_id', '=', topicId)
+    .where('status', '!=', 'superseded')
+    .execute();
 }
 
 export async function getInsightReportById(

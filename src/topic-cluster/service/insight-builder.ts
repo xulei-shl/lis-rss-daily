@@ -1,10 +1,13 @@
 /**
- * 跨主题洞察的规则层（零 token）：综述 + 研究空白二次聚类。
+ * 主题内洞察的规则层（零 token）：对单个大主题的综述子簇 + 研究空白二次聚类。
  *
  * 节点向量全部复用已有产物：
  *   - 综述 → 子簇质心；
  *   - 空白 → 证据文献切面的质心。
  * 因此二次聚类不产生任何 embedding 调用。
+ *
+ * 每个元簇至少包含两个综述子簇，保证报告是在「子簇之间」做综合，
+ * 而不是复述某一篇综述。
  */
 
 import type {
@@ -26,6 +29,7 @@ import { refKey } from '../repo/insights.js';
 
 export interface InsightCluster {
   key: string;
+  topicId: number;
   refs: InsightMemberRef[];
   topicIds: number[];
   centroid: Float32Array;
@@ -39,28 +43,37 @@ interface Node {
   vector: Float32Array;
 }
 
-export interface BuildInsightClustersInput {
+export interface BuildTopicInsightClustersInput {
+  topic: ClusterTopicsSelection;
+  /** 该主题的 active 综述；函数内部按 topic_id 再过滤一次，调用方传全量也可 */
   reviews: ClusterTopicReviewsSelection[];
+  /** 该主题的 active 空白 */
   gaps: ClusterTopicGapsSelection[];
-  topics: ClusterTopicsSelection[];
 }
 
-export function buildInsightClusters(input: BuildInsightClustersInput): InsightCluster[] {
-  const topicsById = new Map(input.topics.map((topic) => [topic.id, topic]));
-  const topicName = (topicId: number) => topicsById.get(topicId)?.name ?? `主题 #${topicId}`;
+export function buildTopicInsightClusters(
+  input: BuildTopicInsightClustersInput
+): InsightCluster[] {
+  const topic = input.topic;
+  const topicName = topic.name;
+
+  const topicReviews = input.reviews.filter((review) => review.topic_id === topic.id);
+  // 只有一个子簇时没有「子簇之间」的洞察，直接跳过。
+  if (topicReviews.length < CLUSTER_LIMITS.insightMinReviews) return [];
+  const topicGaps = input.gaps.filter((gap) => gap.topic_id === topic.id);
 
   const nodes: Node[] = [];
-  for (const review of input.reviews) {
+  for (const review of topicReviews) {
     if (!review.centroid) continue;
     nodes.push({
-      ref: { kind: 'review', id: review.id, topicId: review.topic_id },
+      ref: { kind: 'review', id: review.id, topicId: topic.id },
       vector: blobToVector(review.centroid),
     });
   }
-  for (const gap of input.gaps) {
+  for (const gap of topicGaps) {
     if (!gap.embedding) continue;
     nodes.push({
-      ref: { kind: 'gap', id: gap.id, topicId: gap.topic_id },
+      ref: { kind: 'gap', id: gap.id, topicId: topic.id },
       vector: blobToVector(gap.embedding),
     });
   }
@@ -69,7 +82,7 @@ export function buildInsightClusters(input: BuildInsightClustersInput): InsightC
 
   const targetCount = clamp(
     Math.ceil(nodes.length / 6),
-    3,
+    1,
     CLUSTER_LIMITS.insightMaxReports
   );
   const { components } = cohesionClusters(
@@ -78,8 +91,8 @@ export function buildInsightClusters(input: BuildInsightClustersInput): InsightC
     { minSize: CLUSTER_LIMITS.insightMinNodes, linkage: 'average', targetCount }
   );
 
-  const reviewById = new Map(input.reviews.map((review) => [review.id, review]));
-  const gapById = new Map(input.gaps.map((gap) => [gap.id, gap]));
+  const reviewById = new Map(topicReviews.map((review) => [review.id, review]));
+  const gapById = new Map(topicGaps.map((gap) => [gap.id, gap]));
   const clusters: InsightCluster[] = [];
 
   for (const component of components) {
@@ -87,10 +100,9 @@ export function buildInsightClusters(input: BuildInsightClustersInput): InsightC
       .map((index) => nodes[index])
       .filter((node): node is Node => Boolean(node));
 
-    const topicIds = [...new Set(componentNodes.map((node) => node.ref.topicId))];
     const reviewNodes = componentNodes.filter((node) => node.ref.kind === 'review');
-    // 单主题簇或没有综述的纯空白簇不是「跨主题洞察」。
-    if (topicIds.length < 2 || reviewNodes.length < CLUSTER_LIMITS.insightMinReviews) continue;
+    // 纯空白簇不算洞察；至少要跨两个综述子簇。
+    if (reviewNodes.length < CLUSTER_LIMITS.insightMinReviews) continue;
 
     const selected = selectRepresentatives(componentNodes, component.centroid);
     const refs = selected.map((node) => node.ref);
@@ -104,7 +116,7 @@ export function buildInsightClusters(input: BuildInsightClustersInput): InsightC
       .filter((node) => node.ref.kind === 'review')
       .map((node) => reviewById.get(node.ref.id))
       .filter((review): review is ClusterTopicReviewsSelection => Boolean(review))
-      .map((review) => toReviewInput(review, topicName(review.topic_id)));
+      .map((review) => toReviewInput(review, topicName));
 
     const gaps = selected
       .filter((node) => node.ref.kind === 'gap')
@@ -114,25 +126,26 @@ export function buildInsightClusters(input: BuildInsightClustersInput): InsightC
         id: gap.id,
         gap: gap.gap,
         basis: gap.basis,
-        topicName: topicName(gap.topic_id),
+        topicName,
         method: gap.method,
         object: gap.object,
       }));
 
     clusters.push({
-      key: `ins-${shortHash(anchor.join('|'), 10)}`,
+      key: `ins-${shortHash(`topic:${topic.id}|${anchor.join('|')}`, 10)}`,
+      topicId: topic.id,
       refs,
-      topicIds,
+      topicIds: [topic.id],
       centroid: component.centroid,
-      scope: topicIds.map(topicName).join('、'),
+      scope: `${topicName}（主题内 ${reviewNodes.length} 个综述子簇）`,
       reviews,
       gaps,
     });
   }
 
-  return clusters.sort(
-    (a, b) => b.refs.length - a.refs.length || a.key.localeCompare(b.key)
-  );
+  return clusters
+    .sort((a, b) => b.refs.length - a.refs.length || a.key.localeCompare(b.key))
+    .slice(0, CLUSTER_LIMITS.insightMaxReports);
 }
 
 /** 元簇内抽样：按到质心的相似度取代表，综述与空白各不超过 evidenceCap */

@@ -212,7 +212,7 @@ export interface TopicRunLog {
   addedCount: number;
   /** 该主题本轮新增/重写的深度综述数 */
   reviewAddedCount: number;
-  /** 本轮生成的跨主题洞察报告数（全局） */
+  /** 本轮生成的主题内洞察报告数（全局） */
   insightReports: number;
   errorMessage: string | null;
 }
@@ -289,7 +289,7 @@ export interface TopicDetail {
   adjacent: Array<{ id: number; slug: string; name: string; sharedMethod: boolean; sharedObject: boolean }>;
   /** 主题内语义子簇的深度综述 */
   reviews: TopicReviewItem[];
-  /** 包含该主题的跨主题洞察报告 */
+  /** 该主题内部的洞察报告（综合本主题多个综述子簇） */
   insights: TopicInsightItem[];
 }
 
@@ -474,9 +474,9 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
       .map((row) => toTopicReview(row))
       .filter((review): review is TopicReviewItem => review !== null),
     insights: insightRows
+      .filter((row) => row.topic_id === topic.id)
       .map((row) => toTopicInsight(row, versionTopics))
-      .filter((insight): insight is TopicInsightItem => insight !== null)
-      .filter((insight) => insight.topicIds.includes(topic.id)),
+      .filter((insight): insight is TopicInsightItem => insight !== null),
   };
 }
 
@@ -590,7 +590,7 @@ export interface ClusterInsightListResult {
   items: TopicInsightItem[];
 }
 
-/** 跨主题洞察报告列表（/clusters/insights 页面） */
+/** 主题内洞察报告列表（/clusters/insights 页面） */
 export async function listInsightReports(): Promise<ClusterInsightListResult> {
   const active = await getActiveSet(CLUSTER_CONFIG.userId);
   if (!active) return { setVersion: null, total: 0, items: [] };
@@ -677,7 +677,9 @@ function toTopicInsight(
   }
   if (!parsed || typeof parsed !== 'object') return null;
 
-  const topicIds = parseNumberArray(row.topic_ids_json);
+  const topicIds = row.topic_id != null
+    ? [row.topic_id]
+    : parseNumberArray(row.topic_ids_json);
   const topicById = new Map(topics.map((topic) => [topic.id, topic]));
 
   return {

@@ -1,5 +1,5 @@
 // ============================================
-// 跨主题洞察页
+// 主题内洞察页
 // ============================================
 
 (function () {
@@ -31,7 +31,7 @@
     if (countEl) countEl.textContent = items.length > 0 ? '共 ' + items.length + ' 份洞察报告' : '';
     if (items.length === 0) {
       root.innerHTML =
-        '<div class="cluster-empty">暂无跨主题洞察。周分析会在综述与空白足够后自动生成。</div>';
+        '<div class="cluster-empty">暂无主题内洞察。周分析会在同一主题的综述子簇足够后自动生成。</div>';
       return;
     }
     root.innerHTML = items.map(renderReport).join('');
@@ -56,12 +56,12 @@
       '<div class="cluster-card-meta">' +
       '<span>报告 v' + report.version + '</span>' +
       '<span>更新于 ' + escapeHtml(formatDateTime(report.updatedAt)) + '</span>' +
-      '<span>' + (report.topics || []).length + ' 个主题</span>' +
+      '<span>主题内综合</span>' +
       '</div>' +
       '<h2 class="cluster-insight-title">' + escapeHtml(report.title) + '</h2>' +
       thesis +
       (topics ? '<div class="cluster-card-meta">' + topics + '</div>' : '') +
-      renderLinkedSection('🤝 跨主题收敛', report.convergences) +
+      renderLinkedSection('🤝 子簇间收敛', report.convergences) +
       renderLinkedSection('⚖️ 张力与条件差异', report.tensions) +
       renderGapMaturity(report.gapMaturity) +
       renderLinkedSection('🧭 研究议程', report.agenda) +

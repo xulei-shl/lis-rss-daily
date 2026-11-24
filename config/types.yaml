@@ -118,9 +118,9 @@ task_types:
 
   cluster_insight:
     code: "cluster_insight"
-    label: "主题聚类-跨主题洞察"
+    label: "主题聚类-主题内洞察"
     label_en: "Cluster Cross-Topic Insight"
-    description: "对深度综述与研究空白做二次聚类后生成洞察报告（主题聚类模块）"
+    description: "对单个主题内的深度综述子簇与研究空白做二次聚类后生成洞察报告（主题聚类模块）"
     priority: 15
     enabled: true
 
