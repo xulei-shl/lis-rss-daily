@@ -11,21 +11,23 @@
     </div>
   </div>
 
-  <div class="cluster-filters-bar" role="search" aria-label="主题检索与筛选">
-    <div class="search-box">
-      <svg class="search-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+  <div class="cluster-toolbar" role="search" aria-label="主题检索与筛选">
+    <div class="cluster-search-wrap">
+      <svg class="cluster-search-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="8"/>
         <line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
-      <input type="text" id="clusterSearch" class="search-input" placeholder="按主题名称、研究方法、对象或关键词过滤..." aria-label="搜索主题">
+      <input type="text" id="clusterSearch" class="cluster-search-input" placeholder="按主题名称、研究方法、对象或关键词过滤..." aria-label="搜索主题">
     </div>
-    <div class="filter-group">
-      <label for="clusterSort" class="filter-label">排序</label>
-      <select id="clusterSort" class="filter-select" aria-label="排序方式">
-        <option value="recent">最近更新</option>
-        <option value="size">文献最多</option>
-        <option value="name">主题名称</option>
-      </select>
+    <div class="cluster-sort-wrap">
+      <label for="clusterSort" class="cluster-sort-label">排序</label>
+      <div class="cluster-sort-select-container">
+        <select id="clusterSort" class="filter-select cluster-sort-select" aria-label="排序方式">
+          <option value="recent">最近更新</option>
+          <option value="size">文献最多</option>
+          <option value="name">主题名称</option>
+        </select>
+      </div>
     </div>
   </div>
 
