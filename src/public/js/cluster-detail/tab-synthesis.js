@@ -383,7 +383,7 @@ export function renderConsensusDualView(detail) {
   return (
     '<section class="cluster-section">' +
       '<div class="cluster-section-header">' +
-        '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">⚖️</span> 学术共识与学术分歧</h2>' +
+        '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">⚖️</span> 学术共识与分歧</h2>' +
       '</div>' +
       '<div class="cluster-consensus-grid">' +
         '<div class="consensus-card is-agreed">' +
