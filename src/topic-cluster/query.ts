@@ -187,23 +187,6 @@ export interface TopicAngle {
   steps: TopicArticleStep[];
 }
 
-export interface TopicArticleItem {
-  id: number;
-  title: string;
-  url: string | null;
-  year: number | null;
-  role: 'backbone' | 'divergent' | 'satellite' | 'frontier';
-  patternType: 'linear' | 'divergent' | null;
-  /** 所属语义子域（topic_threads.angle_key）；未入链时为 null */
-  angleKey: string | null;
-  angleLabel: string | null;
-  method: string;
-  object: string;
-  researchQuestion: string;
-  isPrimary: boolean;
-  similarity: number;
-}
-
 /** 一轮流水线在单个主题上的执行记录 */
 export interface TopicRunLog {
   id: number;
@@ -282,8 +265,6 @@ export interface TopicDetail {
   analysis: AnalysisResult | null;
   matrix: MatrixResult | null;
   angles: TopicAngle[];
-  /** 全量底册：243 篇一次性返回，前端本地分页（设计文档 v2 §4.4） */
-  allArticles: TopicArticleItem[];
   /** 未构成线索、平铺展示的文章（设计文档 §7.5 的降级路径） */
   looseArticles: TopicArticleStep[];
   metrics: MetricRow[];
@@ -425,36 +406,6 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     })
     .sort((a, b) => (a.eventDate ?? '').localeCompare(b.eventDate ?? ''));
 
-  const threadById = new Map(threads.map((thread) => [thread.id, thread]));
-  const threadRowByArticle = new Map(threadArticles.map((row) => [row.article_id, row]));
-  const angleLabelByKey = new Map(
-    angles.map((angle) => [angle.angleKey, angle.angleLabel])
-  );
-  const allArticles: TopicArticleItem[] = members
-    .map((member) => {
-      const row = threadRowByArticle.get(member.articleId);
-      const thread = row ? threadById.get(row.thread_id) : undefined;
-      const brief = briefs.get(member.articleId);
-      const year = brief?.publishedYear ??
-        (member.eventDate ? Number(member.eventDate.slice(0, 4)) : null);
-      return {
-        id: member.articleId,
-        title: brief?.title ?? `#${member.articleId}`,
-        url: brief?.url ?? null,
-        year: Number.isFinite(year ?? NaN) ? year : null,
-        role: row?.academic_role ?? 'divergent',
-        patternType: thread?.pattern_type ?? null,
-        angleKey: thread?.angle_key ?? null,
-        angleLabel: thread ? angleLabelByKey.get(thread.angle_key) ?? null : null,
-        method: member.facet?.method ?? '',
-        object: member.facet?.study_object ?? '',
-        researchQuestion: member.facet?.research_question ?? '',
-        isPrimary: member.isPrimary,
-        similarity: member.similarity,
-      };
-    })
-    .sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || b.id - a.id);
-
   return {
     id: topic.id,
     slug: topic.slug,
@@ -473,7 +424,6 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     analysis,
     matrix: parseMatrix(analysisRow?.matrix_json ?? null),
     angles,
-    allArticles,
     looseArticles,
     metrics,
     evidenceArticles: gapArticleIds.map((id) => {

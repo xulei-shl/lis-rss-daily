@@ -1,5 +1,5 @@
 // ============================================
-// 主题洞察详情页 - Tab 2: 演进脉络
+// 主题洞察详情页 - Tab 2: 研究脉络
 // 包含：研究角度与时序脉络、零散研究
 // ============================================
 
@@ -18,10 +18,10 @@ export function renderAngles(detail, _articleIndex) {
         '<div class="cluster-section-header">' +
           '<h2 class="cluster-section-title">' +
             '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>' +
-            '<span>研究角度与演进脉络</span>' +
+            '<span>研究脉络</span>' +
           '</h2>' +
         '</div>' +
-        '<div class="cluster-empty-inline">暂无归纳的研究角度与时序脉络。</div>' +
+        '<div class="cluster-empty-inline">暂无归纳的研究脉络。</div>' +
       '</section>'
     );
   }
@@ -90,7 +90,7 @@ export function renderAngles(detail, _articleIndex) {
       '<div class="cluster-section-header">' +
         '<h2 class="cluster-section-title">' +
           '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>' +
-          '<span>研究角度与演进脉络 (' + detail.angles.length + ')</span>' +
+          '<span>研究脉络 (' + detail.angles.length + ')</span>' +
         '</h2>' +
       '</div>' +
       '<div class="cluster-angles-container">' + angles + '</div>' +

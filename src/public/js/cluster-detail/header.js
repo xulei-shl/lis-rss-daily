@@ -70,7 +70,7 @@ export function renderHeader(detail) {
         '<span class="cluster-meta-dot" aria-hidden="true">·</span>' +
         '<span class="cluster-meta-pill" title="文献涵盖时间段">' + escapeHtml(range) + '</span>' +
         '<span class="cluster-meta-dot" aria-hidden="true">·</span>' +
-        '<span class="cluster-meta-pill" title="演进脉络数">' + (detail.angles || []).length + ' 条脉络</span>' +
+        '<span class="cluster-meta-pill" title="研究脉络数">' + (detail.angles || []).length + ' 条脉络</span>' +
         '<span class="cluster-meta-dot" aria-hidden="true">·</span>' +
         '<span class="cluster-meta-pill cluster-meta-time" title="分析最近更新时间">' +
           '更新于 ' + escapeHtml(formatDateTime(detail.updatedAt)) +

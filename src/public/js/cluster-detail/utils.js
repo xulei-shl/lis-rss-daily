@@ -52,9 +52,6 @@ export function buildArticleIndex(detail) {
   (detail.looseArticles || []).forEach((step) => {
     index[step.articleId] = { title: step.title, url: step.url };
   });
-  (detail.allArticles || []).forEach((item) => {
-    index[item.id] = { title: item.title, url: item.url };
-  });
   (detail.evidenceArticles || []).forEach((item) => {
     if (!index[item.id]) {
       index[item.id] = { title: item.title, url: item.url };

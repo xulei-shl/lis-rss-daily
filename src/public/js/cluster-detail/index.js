@@ -9,9 +9,8 @@ import { renderSummary, renderReviews, renderInsights, renderConsensusDualView, 
 import { renderAngles, renderLoose } from './tab-evolution.js';
 import { renderMatrix, renderGaps, renderAdjacent, bindMatrixEvents } from './tab-matrix.js';
 import { renderTrend } from './tab-trends.js';
-import { renderCatalog, bindCatalogEvents } from './tab-catalog.js';
 
-const VALID_TABS = ['synthesis', 'evolution', 'matrix', 'trends', 'catalog'];
+const VALID_TABS = ['synthesis', 'evolution', 'matrix', 'trends'];
 const DEFAULT_TAB = 'synthesis';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -56,15 +55,14 @@ function renderPage(root, detail) {
   // 3. Tab 导航条
   const tabs = [
     { id: 'synthesis', label: '综述与洞察' },
-    { id: 'evolution', label: '演进脉络' },
+    { id: 'evolution', label: '研究脉络' },
     { id: 'matrix', label: '矩阵与空白' },
-    { id: 'trends', label: '演化趋势' },
-    { id: 'catalog', label: '聚类文献' }
+    { id: 'trends', label: '演化趋势' }
   ];
 
   parts.push(renderTabBar(tabs));
 
-  // 4. 5 大 Tab 面板
+  // 4. 4 大 Tab 面板
   parts.push('<div class="cluster-tab-panels" id="clusterTabPanels">');
 
   // Tab 1: 综述与洞察
@@ -77,7 +75,7 @@ function renderPage(root, detail) {
     '</div>'
   );
 
-  // Tab 2: 演进脉络
+  // Tab 2: 研究脉络
   parts.push(
     '<div class="cluster-tab-panel" id="panel-evolution" role="tabpanel" aria-labelledby="tab-evolution" hidden>' +
       renderAngles(detail, articleIndex) +
@@ -101,13 +99,6 @@ function renderPage(root, detail) {
     '</div>'
   );
 
-  // Tab 5: 聚类文献
-  parts.push(
-    '<div class="cluster-tab-panel" id="panel-catalog" role="tabpanel" aria-labelledby="tab-catalog" hidden>' +
-      renderCatalog(detail) +
-    '</div>'
-  );
-
   parts.push('</div>');
 
   // 5. 移至底页次级区域的流水线日志抽屉
@@ -126,9 +117,6 @@ function renderPage(root, detail) {
 
   // 绑定研究空白依据文献交互
   bindMatrixEvents(root);
-
-  // 绑定底册即时搜索与过滤
-  bindCatalogEvents(root, detail);
 }
 
 function initRunLogsToggle(root) {
@@ -183,6 +171,7 @@ function initTabNavigation(root) {
 
   function getTargetTabFromHash() {
     const rawHash = (window.location.hash || '').replace(/^#/, '');
+    if (rawHash === 'catalog') return 'evolution';
     return VALID_TABS.includes(rawHash) ? rawHash : DEFAULT_TAB;
   }
 
