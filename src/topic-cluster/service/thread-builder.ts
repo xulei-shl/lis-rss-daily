@@ -84,11 +84,7 @@ export async function rebuildTopicThreads(topicId: number): Promise<ThreadBuildR
       })),
       periodStart: dates.length > 0 ? dates[0] : null,
       periodEnd: dates.length > 0 ? dates[dates.length - 1] : null,
-      // 发散子域没有时间演进语义，不生成趋势箭头
-      trend:
-        thread.patternType === 'linear'
-          ? threadTrend(thread.steps.map((step) => step.articleId), dateOf)
-          : null,
+      trend: threadTrend(thread.steps.map((step) => step.articleId), dateOf),
       summary: null,
     };
   });

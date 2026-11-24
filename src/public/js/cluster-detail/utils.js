@@ -10,7 +10,7 @@ export const RELATION_LABELS = {
 
 export const ROLE_LABELS = {
   backbone: '演进主干',
-  divergent: '子域一般成员',
+  divergent: '子课题成员',
   satellite: '边际卫星',
   frontier: '前沿探针'
 };

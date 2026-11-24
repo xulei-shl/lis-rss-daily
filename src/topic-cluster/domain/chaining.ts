@@ -17,10 +17,10 @@
  * 不是真实学术传承关系，前端必须标注口径。
  */
 
-import { cohesionClusters, type ClusterItem } from './clustering.js';
+import { cohesionClusters, type ClusterItem, type ClusterComponent } from './clustering.js';
 import { shortHash } from './hash.js';
 import { sharesAny, type DatePrecision } from './facet.js';
-import { dotNormalized, normalize } from './vector.js';
+import { dotNormalized, normalize, centroidOf } from './vector.js';
 
 export interface ChainItem {
   articleId: number;
@@ -32,19 +32,28 @@ export interface ChainItem {
   objectKeys: string[];
 }
 
-export interface AngleGroup {
-  angleKey: string;
-  angleLabel: string | null;
+export interface SubtopicGroup {
+  subtopicKey: string;
+  label: string | null;
   members: ChainItem[];
   centroid: Float32Array;
-}
-
-/** 旧脉络身份：用于重建时复用 angle_key，避免成员小幅变动导致身份漂移 */
-export interface AngleIdentity {
+  /** 兼容既有角度接口 */
   angleKey: string;
   angleLabel: string | null;
+}
+
+export type AngleGroup = SubtopicGroup;
+
+/** 子主题/脉络身份：用于重建时复用 key 与 label，避免成员小幅变动导致身份漂移 */
+export interface SubtopicIdentity {
+  subtopicKey?: string;
+  label?: string | null;
+  angleKey?: string;
+  angleLabel?: string | null;
   articleIds: number[];
 }
+
+export type AngleIdentity = SubtopicIdentity;
 
 export type Relation = 'origin' | 'continue' | 'shift';
 export type PatternType = 'linear' | 'divergent';
@@ -75,12 +84,16 @@ export interface Thread {
   representatives: number[];
 }
 
-export interface AngleOptions {
-  /** K_target 上限（默认 10） */
-  maxAngleCount: number;
+export interface SubtopicOptions {
+  /** K_target 上限（默认 8） */
+  maxSubtopics?: number;
+  /** 兼容旧参数 maxAngleCount */
+  maxAngleCount?: number;
   /** 旧脉络身份；为空表示首次构建 */
-  previous?: AngleIdentity[];
+  previous?: SubtopicIdentity[];
 }
+
+export type AngleOptions = SubtopicOptions;
 
 export interface ThreadOptions {
   minThreadLength: number;
@@ -99,83 +112,63 @@ export function sortByEventDate(items: ChainItem[]): ChainItem[] {
 }
 
 /**
- * 角度分群：平均连接凝聚 + 目标簇数护栏 + 小角度归并。
+ * 子主题/分面二次聚类（纯向量平均连接凝聚 + 离散点就近吸收 + 身份平滑继承）。
  *
- * 与旧实现的区别：旧实现先用贪心 leader 分出很多桶，再硬压到 maxAngleCount；
- * 这里先用平均连接保证「同簇内平均相似度达标」，再用目标簇数防止碎成不可读的
- * 20+ 子域。目标簇数只是停止条件之一，不是唯一判据。
+ * 废除旧 groupAngles 中的黑洞吞并逻辑（mergeUntilLimit），改用受控的纯向量凝聚：
+ *   1. 簇内纯向量平均连接凝聚（θ ≈ 0.70，目标 K=2~maxSubtopics）；
+ *   2. 离散点/极小簇只对比初始质心就近吸收，杜绝滚雪球吞并；
+ *   3. 身份平滑继承（基于历史 Jaccard），保证增量跑批时稳定。
  */
+export function groupSubtopics(
+  items: ChainItem[],
+  subtopicThreshold: number = 0.70,
+  options: SubtopicOptions = {}
+): SubtopicGroup[] {
+  if (items.length === 0) return [];
+
+  const maxCount = options.maxSubtopics ?? options.maxAngleCount ?? 8;
+  const targetCount = clamp(Math.ceil(items.length / 8), 2, maxCount);
+  const minSize = 2; // 最少 2 篇成簇
+
+  // 1. 簇内纯向量平均连接凝聚
+  const { components, noiseIds } = cohesionClusters(
+    items.map((m) => ({ id: m.articleId, vector: m.vector })),
+    subtopicThreshold,
+    { minSize, linkage: 'average', targetCount, cutSimilarityFloor: Math.min(subtopicThreshold, 0.68) }
+  );
+
+  // 2. 离散点/极小簇就近吸收（寻找最近质心，绝不滚雪球吞并）
+  const subtopics = formBalancedSubtopics(components, noiseIds, items, maxCount, targetCount);
+
+  // 3. 身份平滑继承（基于历史 Jaccard 相似度，防止周度跑批时 Key 与 Label 乱漂）
+  assignStableIdentities(subtopics, options.previous ?? []);
+
+  return subtopics.sort(
+    (a, b) =>
+      b.members.length - a.members.length ||
+      minArticleId(a.members) - minArticleId(b.members) ||
+      (a.subtopicKey < b.subtopicKey ? -1 : 1)
+  );
+}
+
+/** 兼容旧 groupAngles 命名与调用签名 */
 export function groupAngles(
   items: ChainItem[],
   angleThreshold: number,
   options: AngleOptions
 ): AngleGroup[] {
-  if (items.length === 0) return [];
-
-  const targetCount = clamp(
-    Math.ceil(items.length / 18),
-    3,
-    Math.max(3, Math.min(options.maxAngleCount, 10))
-  );
-  // 文档 §2.2：下限 2、上限 4，避免「3 簇 × 每簇至少 4 篇」在小主题上无解。
-  const minAngleSize = clamp(Math.floor(items.length / targetCount), 2, 4);
-  // 为凑 K 强行合并异质簇比多留一个角度更糟；低于主题入门阈值即停止。
-  const cutSimilarityFloor = Math.max(angleThreshold, 0.78);
-
-  const byId = new Map(items.map((item) => [item.articleId, item]));
-  const clusterItems: ClusterItem[] = items.map((item) => ({
-    id: item.articleId,
-    vector: item.vector,
-  }));
-
-  // minSize=1：先拿到完整划分（含单点），再由 mergeSmallBuckets 决定小簇归属。
-  const { components } = cohesionClusters(clusterItems, angleThreshold, {
-    minSize: 1,
-    linkage: 'average',
-    targetCount,
-    cutSimilarityFloor,
-  });
-
-  const buckets: Array<{ centroid: Float32Array; members: ChainItem[] }> = components.map(
-    (component) => ({
-      centroid: component.centroid,
-      members: component.ids
-        .map((id) => byId.get(id))
-        .filter((item): item is ChainItem => Boolean(item)),
-    })
-  );
-
-  // 护栏：平均连接可能因阈值提前停止，仍超过目标簇数时合并最相近的簇。
-  mergeUntilLimit(buckets, targetCount);
-  if (buckets.length > 1) {
-    mergeSmallBuckets(buckets, minAngleSize);
-  }
-
-  const angles: AngleGroup[] = buckets.map((bucket) => ({
-    angleKey: buildAngleKey(bucket.members),
-    angleLabel: null,
-    members: sortByEventDate(bucket.members),
-    centroid: centroidOfItems(bucket.members),
-  }));
-
-  assignAngleKeys(angles, options.previous ?? []);
-
-  return angles.sort(
-    (a, b) =>
-      b.members.length - a.members.length ||
-      minArticleId(a.members) - minArticleId(b.members) ||
-      (a.angleKey < b.angleKey ? -1 : 1)
-  );
+  return groupSubtopics(items, angleThreshold, options);
 }
 
 /**
  * 角度内时间串链：产出逐步关系判定。
  *
- * 跨时间精度（day / year / ingest）的相邻对不构成承接：前端本来就不画箭头，
- * 如果这里仍算 continue，会把「年级」与「入库时间」混成假演进。
+ * 跨时间精度（day / year / ingest）的相邻对不构成承接：前端不画箭头。
+ * 在同一子课题内，共享方法或共享对象，或者语义相似度达到 chainThreshold，
+ * 均视为学术探索的自然承接；否则为研究转向。
  */
 export function buildSteps(
-  group: AngleGroup,
+  group: SubtopicGroup,
   options: Pick<ThreadOptions, 'strongThreshold' | 'chainThreshold'>
 ): ChainStep[] {
   const members = sortByEventDate(group.members);
@@ -202,11 +195,11 @@ export function buildSteps(
     const sharedObject = sharesAny(current.objectKeys, prev.objectKeys);
     const crossPrecision = current.precision !== prev.precision;
 
-    // 承接判定：对象与方法都延续 → 明确承接；否则极相似也算延续；其余视为转向。
-    // 跨精度不画箭头，也不计入连续段。
+    // 承接判定：同一子课题内，共享方法或共享对象，或者语义相似度达到 chainThreshold，
+    // 均视为学术探索的自然承接；否则为研究转向。跨精度不画箭头。
     const relation: Relation =
       !crossPrecision &&
-      ((sharedObject && sharedMethod) || similarity >= options.strongThreshold)
+      (sharedObject || sharedMethod || similarity >= options.chainThreshold)
         ? 'continue'
         : 'shift';
 
@@ -225,16 +218,13 @@ export function buildSteps(
 }
 
 /**
- * 由角度产出脉络。
+ * 由子课题/角度产出脉络。
  *
- * - linear：存在连续承接段，段内为 backbone，段外保留但标为 divergent；
- * - divergent：完全没有连续段，按质心相似度分配 divergent / satellite / frontier，
- *   并给出 3 篇近质心 + 最新 1 篇代表作。
- *
- * `loose` 仅为兼容旧调用保留，正常情况下恒为空：没有成员会再被整块丢弃。
+ * - linear：存在连续承接段（>= minThreadLength），段内标为 backbone，段外为 divergent；
+ * - divergent：无连续承接段，仍完整保留全部成员、时序关系与相似度，并标记代表作。
  */
 export function buildThreads(
-  angles: AngleGroup[],
+  angles: SubtopicGroup[],
   options: ThreadOptions
 ): { threads: Thread[]; loose: ChainItem[] } {
   const threads: Thread[] = [];
@@ -243,44 +233,23 @@ export function buildThreads(
     const steps = buildSteps(angle, options);
     const runIds = longestContinueRun(steps);
     const isLinear = runIds.size >= options.minThreadLength;
-
-    if (isLinear) {
-      threads.push({
-        angleKey: angle.angleKey,
-        angleLabel: angle.angleLabel,
-        patternType: 'linear',
-        steps: steps.map((step) => ({
-          ...step,
-          academicRole: runIds.has(step.articleId) ? 'backbone' : 'divergent',
-          isRepresentative: false,
-        })),
-        representatives: [],
-      });
-      continue;
-    }
-
     const similarities = centroidSimilarities(angle);
     const representatives = pickRepresentatives(angle, similarities);
     const roles = assignDivergentRoles(angle, similarities, representatives);
-    const members = sortByEventDate(angle.members);
 
     threads.push({
-      angleKey: angle.angleKey,
-      angleLabel: angle.angleLabel,
-      patternType: 'divergent',
-      steps: members.map((member, index) => ({
-        articleId: member.articleId,
-        seq: index,
-        relation: null,
-        similarityToPrev: null,
-        sharedMethod: false,
-        sharedObject: false,
-        crossPrecision: false,
-        academicRole: roles.get(member.articleId) ?? 'divergent',
-        isRepresentative: representatives.has(member.articleId),
-        centroidSimilarity: similarities.get(member.articleId),
+      angleKey: angle.subtopicKey,
+      angleLabel: angle.label,
+      patternType: isLinear ? 'linear' : 'divergent',
+      steps: steps.map((step) => ({
+        ...step,
+        academicRole: isLinear
+          ? (runIds.has(step.articleId) ? 'backbone' : 'divergent')
+          : (roles.get(step.articleId) ?? 'divergent'),
+        isRepresentative: isLinear ? false : representatives.has(step.articleId),
+        centroidSimilarity: similarities.get(step.articleId),
       })),
-      representatives: [...representatives],
+      representatives: isLinear ? [] : [...representatives],
     });
   }
 
@@ -339,29 +308,33 @@ export function deriveAngleLabel(
   return label.length > 18 ? label.slice(0, 18) : label;
 }
 
-/* ── 角度身份 ── */
+/* ── 角度 / 子主题身份 ── */
 
 /**
- * 优先复用旧脉络的 angle_key（成员 Jaccard >= 0.5），避免增量更新导致
+ * 优先复用旧脉络/子主题的 key 与 label（成员 Jaccard >= 0.5），避免增量更新导致
  * Changelog、LLM 叙述回填与前端锚点全部漂移；新角度才重新哈希。
  * 同一批次内哈希相同则追加 -2 / -3 后缀，保证 UNIQUE(topic_id, angle_key)。
  */
-function assignAngleKeys(angles: AngleGroup[], previous: AngleIdentity[]): void {
+function assignStableIdentities(
+  subtopics: SubtopicGroup[],
+  previous: SubtopicIdentity[]
+): void {
   const used = new Set<string>();
   const consumed = new Set<string>();
-  const ordered = [...angles].sort(
+  const ordered = [...subtopics].sort(
     (a, b) =>
       b.members.length - a.members.length ||
       minArticleId(a.members) - minArticleId(b.members)
   );
 
-  for (const angle of ordered) {
-    const memberIds = new Set(angle.members.map((member) => member.articleId));
-    let best: AngleIdentity | null = null;
+  for (const subtopic of ordered) {
+    const memberIds = new Set(subtopic.members.map((member) => member.articleId));
+    let best: SubtopicIdentity | null = null;
     let bestScore = 0;
 
     for (const identity of previous) {
-      if (consumed.has(identity.angleKey)) continue;
+      const prevKey = identity.subtopicKey || identity.angleKey;
+      if (!prevKey || consumed.has(prevKey)) continue;
       const score = jaccard(memberIds, new Set(identity.articleIds));
       if (score > bestScore) {
         bestScore = score;
@@ -369,17 +342,28 @@ function assignAngleKeys(angles: AngleGroup[], previous: AngleIdentity[]): void 
       }
     }
 
-    if (best && bestScore >= 0.5 && !used.has(best.angleKey)) {
-      angle.angleKey = best.angleKey;
-      angle.angleLabel = best.angleLabel;
-      consumed.add(best.angleKey);
+    const prevKey = best ? (best.subtopicKey || best.angleKey) : null;
+    const prevLabel = best ? (best.label ?? best.angleLabel ?? null) : null;
+
+    if (best && prevKey && bestScore >= 0.5 && !used.has(prevKey)) {
+      subtopic.subtopicKey = prevKey;
+      subtopic.angleKey = prevKey;
+      subtopic.label = prevLabel;
+      subtopic.angleLabel = prevLabel;
+      consumed.add(prevKey);
     } else {
-      angle.angleKey = uniqueAngleKey(buildAngleKey(angle.members), used);
-      angle.angleLabel = null;
+      const baseKey = buildAngleKey(subtopic.members);
+      const uniqueKey = uniqueAngleKey(baseKey, used);
+      subtopic.subtopicKey = uniqueKey;
+      subtopic.angleKey = uniqueKey;
+      subtopic.label = null;
+      subtopic.angleLabel = null;
     }
-    used.add(angle.angleKey);
+    used.add(subtopic.subtopicKey);
   }
 }
+
+const assignAngleKeys = assignStableIdentities;
 
 function uniqueAngleKey(base: string, used: Set<string>): string {
   if (!used.has(base)) return base;
@@ -522,82 +506,158 @@ function percentile(sorted: number[], ratio: number): number {
 
 /* ── 内部工具 ── */
 
-/** 角度数超上限时，反复合并质心最相近的两个角度 */
-function mergeUntilLimit(
-  buckets: Array<{ centroid: Float32Array; members: ChainItem[] }>,
-  maxAngleCount: number
-): void {
-  while (buckets.length > maxAngleCount) {
+/**
+ * 形成平衡子主题：
+ * 1. 纯向量平均连接产生的组件作为初始干净子主题；
+ * 2. 离散点/极小簇只对比 initialCentroid 就近吸收，彻底避免滚雪球黑洞；
+ * 3. 吸收完成后统一定稿质心；
+ * 4. 若簇数仍超过 maxSubtopics，受控合并最相近的两簇。
+ */
+function formBalancedSubtopics(
+  components: ClusterComponent[],
+  noiseIds: number[],
+  items: ChainItem[],
+  maxSubtopics: number,
+  targetCount: number
+): SubtopicGroup[] {
+  const byId = new Map(items.map((item) => [item.articleId, item]));
+
+  let activeComponents = components;
+  if (activeComponents.length === 0) {
+    activeComponents = fallbackComponents(items, targetCount);
+    return activeComponents.map((component) => {
+      const members = component.ids
+        .map((id) => byId.get(id))
+        .filter((item): item is ChainItem => Boolean(item));
+      const key = buildAngleKey(members);
+      return {
+        subtopicKey: key,
+        label: null,
+        angleKey: key,
+        angleLabel: null,
+        members: sortByEventDate(members),
+        centroid: component.centroid,
+      };
+    });
+  }
+
+  const buckets: Array<{
+    centroid: Float32Array;
+    initialCentroid: Float32Array;
+    members: ChainItem[];
+  }> = activeComponents.map((component) => {
+    const members = component.ids
+      .map((id) => byId.get(id))
+      .filter((item): item is ChainItem => Boolean(item));
+    return {
+      centroid: component.centroid,
+      initialCentroid: new Float32Array(component.centroid),
+      members,
+    };
+  });
+
+  // 离散点根据初始质心就近吸收，绝不破坏初始簇独立性
+  for (const noiseId of noiseIds) {
+    const item = byId.get(noiseId);
+    if (!item) continue;
+
+    let bestIdx = 0;
+    let bestSim = dotNormalized(item.vector, buckets[0].initialCentroid);
+    for (let i = 1; i < buckets.length; i += 1) {
+      const sim = dotNormalized(item.vector, buckets[i].initialCentroid);
+      if (sim > bestSim) {
+        bestSim = sim;
+        bestIdx = i;
+      }
+    }
+    buckets[bestIdx].members.push(item);
+  }
+
+  // 吸收完成后，整体重新计算质心
+  for (const bucket of buckets) {
+    bucket.centroid = centroidOfItems(bucket.members);
+  }
+
+  // 若簇数仍大于上限（maxSubtopics），受控合并最相近的两簇
+  while (buckets.length > maxSubtopics) {
     let bestA = 0;
     let bestB = 1;
-    let bestSimilarity = -Infinity;
+    let bestSim = Number.NEGATIVE_INFINITY;
 
     for (let i = 0; i < buckets.length; i += 1) {
       for (let j = i + 1; j < buckets.length; j += 1) {
-        const similarity = dotNormalized(buckets[i].centroid, buckets[j].centroid);
-        if (similarity > bestSimilarity) {
-          bestSimilarity = similarity;
+        const sim = dotNormalized(buckets[i].centroid, buckets[j].centroid);
+        if (sim > bestSim) {
+          bestSim = sim;
           bestA = i;
           bestB = j;
         }
       }
     }
-
-    mergeBuckets(buckets, bestA, bestB);
+    buckets[bestA].members.push(...buckets[bestB].members);
+    buckets[bestA].centroid = centroidOfItems(buckets[bestA].members);
+    buckets.splice(bestB, 1);
   }
+
+  return buckets.map((bucket) => {
+    const key = buildAngleKey(bucket.members);
+    return {
+      subtopicKey: key,
+      label: null,
+      angleKey: key,
+      angleLabel: null,
+      members: sortByEventDate(bucket.members),
+      centroid: bucket.centroid,
+    };
+  });
 }
 
-/** 成员数不足 minAngleSize 的角度并入最相近（优先共享方法/对象）的角度 */
-function mergeSmallBuckets(
-  buckets: Array<{ centroid: Float32Array; members: ChainItem[] }>,
-  minAngleSize: number
-): void {
-  for (let i = buckets.length - 1; i >= 0; i -= 1) {
-    if (buckets[i].members.length >= minAngleSize || buckets.length <= 1) continue;
-
-    let target = -1;
-    let bestSimilarity = -Infinity;
-    for (let j = 0; j < buckets.length; j += 1) {
-      if (j === i) continue;
-      const similarity = dotNormalized(buckets[i].centroid, buckets[j].centroid);
-      const aligned = bucketSharesAny(buckets[i], buckets[j]);
-      // 共享方法/对象的角度优先；没有时退回最近质心，避免把小簇留在外面。
-      const score = similarity + (aligned ? 1 : 0);
-      if (score > bestSimilarity) {
-        bestSimilarity = score;
-        target = j;
+function fallbackComponents(items: ChainItem[], targetCount: number): ClusterComponent[] {
+  if (items.length <= 1) {
+    return [{ ids: items.map((it) => it.articleId), centroid: items[0]?.vector ?? new Float32Array(0) }];
+  }
+  const count = clamp(targetCount, 2, items.length);
+  const seeds: number[] = [0];
+  while (seeds.length < count) {
+    let farthestIdx = -1;
+    let minMaxSim = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < items.length; i += 1) {
+      if (seeds.includes(i)) continue;
+      let maxSimToSeeds = Number.NEGATIVE_INFINITY;
+      for (const s of seeds) {
+        const sim = dotNormalized(items[i].vector, items[s].vector);
+        if (sim > maxSimToSeeds) maxSimToSeeds = sim;
+      }
+      if (maxSimToSeeds < minMaxSim) {
+        minMaxSim = maxSimToSeeds;
+        farthestIdx = i;
       }
     }
-    if (target < 0) continue;
-
-    const [small, big] = i < target ? [i, target] : [target, i];
-    mergeBuckets(buckets, small, big);
+    if (farthestIdx >= 0) seeds.push(farthestIdx);
+    else break;
   }
-}
-
-function bucketSharesAny(
-  a: { members: ChainItem[] },
-  b: { members: ChainItem[] }
-): boolean {
-  const aMethods = new Set(a.members.flatMap((member) => member.methodKeys));
-  const aObjects = new Set(a.members.flatMap((member) => member.objectKeys));
-  return b.members.some(
-    (member) =>
-      member.methodKeys.some((key) => aMethods.has(key)) ||
-      member.objectKeys.some((key) => aObjects.has(key))
-  );
-}
-
-function mergeBuckets(
-  buckets: Array<{ centroid: Float32Array; members: ChainItem[] }>,
-  a: number,
-  b: number
-): void {
-  const target = buckets[a];
-  const source = buckets[b];
-  target.members.push(...source.members);
-  target.centroid = centroidOfItems(target.members);
-  buckets.splice(b, 1);
+  const buckets: Array<{ ids: number[]; vectors: Float32Array[] }> = seeds.map((s) => ({
+    ids: [items[s].articleId],
+    vectors: [items[s].vector],
+  }));
+  for (let i = 0; i < items.length; i += 1) {
+    if (seeds.includes(i)) continue;
+    let bestSeed = 0;
+    let bestSim = dotNormalized(items[i].vector, items[seeds[0]].vector);
+    for (let s = 1; s < seeds.length; s += 1) {
+      const sim = dotNormalized(items[i].vector, items[seeds[s]].vector);
+      if (sim > bestSim) {
+        bestSim = sim;
+        bestSeed = s;
+      }
+    }
+    buckets[bestSeed].ids.push(items[i].articleId);
+    buckets[bestSeed].vectors.push(items[i].vector);
+  }
+  return buckets.map((b) => ({
+    ids: b.ids,
+    centroid: centroidOf(b.vectors),
+  }));
 }
 
 function centroidOfItems(items: ChainItem[]): Float32Array {

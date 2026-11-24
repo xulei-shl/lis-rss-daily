@@ -297,22 +297,22 @@ function getConfig(): Config {
     // DeepSearch
     deepSearchApiUrl: process.env.DEEPSEARCH_API_URL || 'http://localhost:8082',
 
-    // Topic Cluster（默认值均为初始值，需按设计文档 §14.3 校准后固化）
+    // Topic Cluster（按重构方案 v3.0 校准固化）
     clusterEnabled: process.env.CLUSTER_ENABLED !== 'false',
     clusterSchedule: process.env.CLUSTER_SCHEDULE || '30 8 * * *',
     clusterAnalysisSchedule: process.env.CLUSTER_ANALYSIS_SCHEDULE || '30 9 * * 1',
     clusterUserId: intEnv(process.env.CLUSTER_USER_ID, 1, 1),
     clusterScope: process.env.CLUSTER_SCOPE === 'journal_only' ? 'journal_only' : 'all_summary',
-    clusterSimThreshold: floatEnv(process.env.CLUSTER_SIM_THRESHOLD, 0.78, 0),
-    // 冷启动/孵化：平均连接凝聚的**簇间平均相似度**阈值。
-    // 注意尺度与单链不同（平均连接恒 ≤ 单链），且实测本语料两两相似度上界在 0.75 附近，
-    // 因此旧值 0.80 在新算法下**结构性不可达**（一簇都孵不出）。
-    // 当前 0.65 为待校准的临时值，必须以 pnpm run cluster:validate 在 200+ 篇切面上实测后定稿。
-    clusterInitThreshold: floatEnv(process.env.CLUSTER_INIT_THRESHOLD, 0.65, 0),
-    clusterReclaimThreshold: floatEnv(process.env.CLUSTER_RECLAIM_THRESHOLD, 0.8, 0),
-    clusterAngleThreshold: floatEnv(process.env.CLUSTER_ANGLE_THRESHOLD, 0.82, 0),
-    clusterChainThreshold: floatEnv(process.env.CLUSTER_CHAIN_THRESHOLD, 0.78, 0),
-    clusterStrongThreshold: floatEnv(process.env.CLUSTER_STRONG_THRESHOLD, 0.88, 0),
+    // 增量路由阈值
+    clusterSimThreshold: floatEnv(process.env.CLUSTER_SIM_THRESHOLD, 0.70, 0),
+    // 一级宏观聚类/冷启动/孵化阈值（推荐 0.68，单主题控制在 15~40 篇）
+    clusterInitThreshold: floatEnv(process.env.CLUSTER_INIT_THRESHOLD, 0.68, 0),
+    // 定向回捞阈值
+    clusterReclaimThreshold: floatEnv(process.env.CLUSTER_RECLAIM_THRESHOLD, 0.72, 0),
+    // 二级子主题聚类阈值（推荐 0.70）
+    clusterAngleThreshold: floatEnv(process.env.CLUSTER_ANGLE_THRESHOLD, 0.70, 0),
+    clusterChainThreshold: floatEnv(process.env.CLUSTER_CHAIN_THRESHOLD, 0.70, 0),
+    clusterStrongThreshold: floatEnv(process.env.CLUSTER_STRONG_THRESHOLD, 0.75, 0),
     clusterMinPoolSize: intEnv(process.env.CLUSTER_MIN_POOL_SIZE, 6, 1),
     clusterMinClusterSize: intEnv(process.env.CLUSTER_MIN_CLUSTER_SIZE, 3, 2),
     clusterMaxTopicsPerArticle: intEnv(process.env.CLUSTER_MAX_TOPICS_PER_ARTICLE, 2, 1),

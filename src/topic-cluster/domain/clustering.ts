@@ -132,11 +132,9 @@ function mergeByAverageLink(
   const size = new Int32Array(n).fill(1);
   const members: number[][] = Array.from({ length: n }, (_, index) => [index]);
   let activeCount = n;
-  const floor = Math.max(threshold, cutSimilarityFloor ?? threshold);
+  const floor = cutSimilarityFloor ?? threshold;
 
   while (activeCount > 1) {
-    if (targetCount !== undefined && activeCount <= targetCount) break;
-
     let bestA = -1;
     let bestB = -1;
     let best = Number.NEGATIVE_INFINITY;
@@ -157,6 +155,9 @@ function mergeByAverageLink(
 
     // 没有任何一对达到阈值（或低于停止下限）→ 收敛
     if (bestA === -1 || best < floor) break;
+
+    // 达到目标簇数且下一次合并相似度已经低于门槛时停止；高于门槛的同质成员始终允许合并成簇
+    if (targetCount !== undefined && activeCount <= targetCount && best < threshold) break;
 
     const sizeA = size[bestA];
     const sizeB = size[bestB];

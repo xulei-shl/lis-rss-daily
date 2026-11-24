@@ -6,7 +6,8 @@
 import {
   escapeHtml,
   formatDateTime,
-  GAP_STATE_LABELS
+  GAP_STATE_LABELS,
+  BASIS_LABELS
 } from './utils.js';
 
 export function renderSummary(detail) {
@@ -112,6 +113,29 @@ export function renderReviews(detail, articleIndex) {
           '</details>'
         : '';
 
+      const reviewGaps = (review.gaps && review.gaps.length > 0)
+        ? review.gaps
+        : ((detail.analysis && detail.analysis.gaps) || []).filter((g) => {
+            if (!g.subtopicKey) return false;
+            const k1 = g.subtopicKey.replace(/^rv-/, '');
+            const k2 = (review.subtopicKey || review.reviewKey || '').replace(/^rv-/, '');
+            return k1 === k2;
+          });
+
+      const gapsHtml = reviewGaps.length > 0
+        ? '<div class="cluster-review-gaps">' +
+            '<div class="cluster-review-gaps-head">' +
+              '<svg class="cluster-review-gaps-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' +
+              '</svg>' +
+              '<span class="cluster-review-gaps-title">本分面局限与研究空白 (' + reviewGaps.length + ')</span>' +
+            '</div>' +
+            '<div class="cluster-review-gaps-list">' +
+              reviewGaps.map((gap, gIdx) => renderSubtopicGap(gap, idx, gIdx, articleIndex)).join('') +
+            '</div>' +
+          '</div>'
+        : '';
+
       return (
         '<article class="cluster-review-entry" id="cluster-review-' + (idx + 1) + '">' +
           '<div class="cluster-review-head">' +
@@ -126,6 +150,7 @@ export function renderReviews(detail, articleIndex) {
             ? '<div class="cluster-review-abstract">' + escapeHtml(review.abstract) + '</div>'
             : '') +
           detailsHtml +
+          gapsHtml +
         '</article>'
       );
     })
@@ -146,6 +171,92 @@ export function renderReviews(detail, articleIndex) {
       '</div>' +
       '<div class="cluster-reviews-container">' + items + '</div>' +
     '</section>'
+  );
+}
+
+function renderSubtopicGap(gap, rIdx, gIdx, articleIndex) {
+  const evidenceIds = gap.evidenceArticleIds || [];
+  const evidenceArticles = evidenceIds.map((id, aIdx) => {
+    const article = articleIndex[id];
+    return {
+      id,
+      index: aIdx + 1,
+      title: article && article.title ? article.title : '#' + id,
+    };
+  });
+
+  const drawerId = 'review-' + (rIdx + 1) + '-gap-evidence-' + (gIdx + 1);
+  let evidence = '';
+
+  if (evidenceArticles.length === 1) {
+    const single = evidenceArticles[0];
+    const tip = '依据文献：\n' + single.title + '\n(点击在新标签页打开详情)';
+    evidence =
+      '<a class="cluster-cite-pill" href="/articles/' + single.id +
+      '" target="_blank" rel="noopener" title="' + escapeHtml(tip) + '">' +
+        '<span>依据 1 篇文献</span>' +
+        '<svg class="cite-pill-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+          '<line x1="7" y1="17" x2="17" y2="7"></line>' +
+          '<polyline points="7 7 17 7 17 17"></polyline>' +
+        '</svg>' +
+      '</a>';
+  } else if (evidenceArticles.length > 1) {
+    const tipLines = evidenceArticles.map((a) => a.index + '. ' + a.title).join('\n');
+    const tip = '依据 ' + evidenceArticles.length + ' 篇文献：\n' + tipLines + '\n(点击展开/收起文献清单)';
+    evidence =
+      '<button type="button" class="cluster-cite-pill cluster-cite-toggle" aria-expanded="false" ' +
+        'aria-controls="' + drawerId + '" title="' + escapeHtml(tip) + '">' +
+        '<span>依据 ' + evidenceArticles.length + ' 篇文献</span>' +
+        '<svg class="cite-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+          '<polyline points="6 9 12 15 18 9"></polyline>' +
+        '</svg>' +
+      '</button>';
+  }
+
+  const drawerHtml = evidenceArticles.length > 1
+    ? '<div class="cluster-gap-evidence-drawer" id="' + drawerId + '" hidden>' +
+        '<div class="cluster-gap-evidence-head">' +
+          '<div class="cluster-gap-evidence-lead">' +
+            '<svg class="cluster-gap-evidence-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+              '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>' +
+              '<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>' +
+            '</svg>' +
+            '<span class="cluster-gap-evidence-label">依据文献清单 (' + evidenceArticles.length + ' 篇)</span>' +
+          '</div>' +
+          '<span class="cluster-gap-evidence-hint">点击可直达单篇文献详情</span>' +
+        '</div>' +
+        '<div class="cluster-gap-evidence-list">' +
+          evidenceArticles
+            .map((a) => (
+              '<a class="cluster-gap-evidence-item" href="/articles/' + a.id + '" target="_blank" rel="noopener" title="' + escapeHtml(a.title) + '">' +
+                '<span class="cluster-gap-evidence-num">' + a.index + '.</span>' +
+                '<span class="cluster-gap-evidence-badge"><span class="cite-hash">#</span>' + a.id + '</span>' +
+                '<span class="cluster-gap-evidence-title">' + escapeHtml(a.title) + '</span>' +
+                '<svg class="cluster-gap-evidence-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                  '<line x1="7" y1="17" x2="17" y2="7"></line>' +
+                  '<polyline points="7 7 17 7 17 17"></polyline>' +
+                '</svg>' +
+              '</a>'
+            ))
+            .join('') +
+        '</div>' +
+      '</div>'
+    : '';
+
+  const basisKey = gap.basis || 'limitation';
+  const basisBadge = '<span class="cluster-gap-basis-badge basis-' + basisKey + '">' +
+    escapeHtml(BASIS_LABELS[gap.basis] || gap.basis) +
+  '</span>';
+
+  return (
+    '<div class="cluster-gap-entry">' +
+      '<div class="cluster-gap-header">' +
+        basisBadge +
+        (evidence ? '<div class="cluster-evidence">' + evidence + '</div>' : '') +
+      '</div>' +
+      '<div class="cluster-gap-text">' + escapeHtml(gap.gap) + '</div>' +
+      drawerHtml +
+    '</div>'
   );
 }
 
@@ -216,6 +327,22 @@ export function bindSynthesisEvents(root) {
       },
       true
     );
+  }
+
+  // 3. 局限与研究空白依据文献清单抽屉展开/收起
+  if (!root._synthesisGapsBound) {
+    root._synthesisGapsBound = true;
+    root.addEventListener('click', (e) => {
+      const toggleBtn = e.target.closest('.cluster-cite-toggle');
+      if (!toggleBtn) return;
+      const targetId = toggleBtn.getAttribute('aria-controls');
+      if (!targetId) return;
+      const drawer = root.querySelector('#' + targetId);
+      if (!drawer) return;
+      const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+      toggleBtn.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+      drawer.hidden = isExpanded;
+    });
   }
 }
 

@@ -15,6 +15,7 @@ import {
   buildSteps,
   buildThreads,
   groupAngles,
+  groupSubtopics,
   type AngleGroup,
   type ChainItem,
 } from '../src/topic-cluster/domain/chaining.js';
@@ -384,7 +385,7 @@ function angleOf(items: ChainItem[], angleKey = 'a-test'): AngleGroup {
       return sum;
     }, new Float32Array(items[0].vector.length))
   );
-  return { angleKey, angleLabel: null, members: items, centroid };
+  return { subtopicKey: angleKey, label: null, angleKey, angleLabel: null, members: items, centroid };
 }
 
 const threadOptions = {
@@ -546,6 +547,32 @@ check('243 篇压力用例：角度 3~10、成员不丢、angle_key 唯一、loo
     new Set(threads.flatMap((thread) => thread.steps.map((step) => step.articleId))).size,
     243
   );
+});
+
+check('二级聚类：杜绝滚雪球黑洞，156 篇多专题切分为同质子课题', () => {
+  // 模拟 156 篇文献分布在 6 个不同研究分面
+  const items = Array.from({ length: 156 }, (_, index) => {
+    const cluster = index % 6; // 0, 60, 120, 180, 240, 300 度
+    const angleOffset = cluster * 60;
+    return chainItem(
+      index + 1,
+      angleOffset + (index % 4) * 2, // 簇内扰动 <= 6度，相似度 >= 0.99
+      `2025-${String((index % 12) + 1).padStart(2, '0')}-01`,
+      `方法-${cluster}`,
+      `对象-${cluster}`
+    );
+  });
+
+  const subtopics = groupSubtopics(items, 0.70, { maxSubtopics: 8 });
+  assert.equal(subtopics.length, 6, `应切分为 6 个子课题，实际 ${subtopics.length}`);
+  // 验证成员没有丢失
+  const totalMembers = subtopics.reduce((sum, s) => sum + s.members.length, 0);
+  assert.equal(totalMembers, 156);
+  // 验证每个子课题都在 26 篇左右，没有单一黑洞吞掉全库
+  for (const s of subtopics) {
+    assert.equal(s.members.length, 26);
+    assert.ok(s.subtopicKey.startsWith('a-') || s.subtopicKey.startsWith('sub-'));
+  }
 });
 
 /* ── ⑤ 深度综述只合并角度，不独立切分成员 ── */

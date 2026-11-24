@@ -40,6 +40,7 @@ import { CLUSTER_CONFIG } from './config.js';
 import { getArticleBriefs } from './source.js';
 import { listPublishedInsightReports } from './repo/insights.js';
 import { listReviewsByTopic } from './repo/reviews.js';
+import { listActiveGapsByTopic } from './repo/gaps.js';
 import type { DeepReview } from './llm/review.js';
 import type { InsightReport } from './llm/insight.js';
 
@@ -213,8 +214,19 @@ export interface TopicReviewSection {
   insufficient: boolean;
 }
 
+export interface TopicReviewGapItem {
+  gapKey: string;
+  gap: string;
+  basis: string;
+  method: string | null;
+  object: string | null;
+  evidenceArticleIds: number[];
+}
+
 export interface TopicReviewItem {
   id: number;
+  reviewKey: string;
+  subtopicKey: string;
   title: string;
   abstract: string;
   status: string;
@@ -223,6 +235,7 @@ export interface TopicReviewItem {
   representativeIds: number[];
   citations: number[];
   sections: TopicReviewSection[];
+  gaps: TopicReviewGapItem[];
   generatedAt: string | null;
   updatedAt: string;
 }
@@ -295,6 +308,7 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     reviewRows,
     insightRows,
     versionTopics,
+    gapRows,
   ] = await Promise.all([
     getDb()
       .selectFrom('cluster_topic_analysis')
@@ -314,11 +328,19 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     listReviewsByTopic(topic.id),
     listPublishedInsightReports(topic.set_version),
     listTopicsByVersion(topic.set_version),
+    listActiveGapsByTopic(topic.id),
   ]);
 
   const analysis = parseAnalysis(analysisRow?.analysis_json ?? null);
   const gapArticleIds = (analysis?.gaps || []).flatMap((gap) => gap.evidenceArticleIds || []);
-  const allNeededArticleIds = [...new Set([...members.map((member) => member.articleId), ...gapArticleIds])];
+  const activeGapEvidenceIds = gapRows.flatMap((r) => parseNumberArray(r.evidence_ids_json));
+  const allNeededArticleIds = [
+    ...new Set([
+      ...members.map((member) => member.articleId),
+      ...gapArticleIds,
+      ...activeGapEvidenceIds,
+    ]),
+  ];
   const briefs = await getArticleBriefs(allNeededArticleIds);
 
   const stepOf = (row: ThreadArticlesSelection): TopicArticleStep => {
@@ -448,7 +470,24 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     })),
     adjacent: await findAdjacentTopics(topic.id, topic.set_version, members),
     reviews: reviewRows
-      .map((row) => toTopicReview(row))
+      .map((row) => {
+        const normKey = row.review_key.replace(/^rv-/, '');
+        const matchingGaps = gapRows
+          .filter((g) => {
+            if (!g.subtopic_key) return false;
+            const normSub = g.subtopic_key.replace(/^rv-/, '');
+            return normSub === normKey;
+          })
+          .map((g) => ({
+            gapKey: g.gap_key,
+            gap: g.gap,
+            basis: g.basis,
+            method: g.method,
+            object: g.object,
+            evidenceArticleIds: parseNumberArray(g.evidence_ids_json),
+          }));
+        return toTopicReview(row, matchingGaps);
+      })
       .filter((review): review is TopicReviewItem => review !== null),
     insights: insightRows
       .filter((row) => row.topic_id === topic.id)
@@ -573,7 +612,10 @@ const REVIEW_SECTION_LABELS: Record<string, string> = {
   agenda: '研究议程',
 };
 
-function toTopicReview(row: ClusterTopicReviewsSelection): TopicReviewItem | null {
+function toTopicReview(
+  row: ClusterTopicReviewsSelection,
+  gaps: TopicReviewGapItem[] = []
+): TopicReviewItem | null {
   let parsed: DeepReview;
   try {
     parsed = JSON.parse(row.review_json) as DeepReview;
@@ -604,6 +646,8 @@ function toTopicReview(row: ClusterTopicReviewsSelection): TopicReviewItem | nul
 
   return {
     id: row.id,
+    reviewKey: row.review_key,
+    subtopicKey: row.review_key.replace(/^rv-/, ''),
     title: row.title,
     abstract: row.abstract,
     status: row.status,
@@ -614,6 +658,7 @@ function toTopicReview(row: ClusterTopicReviewsSelection): TopicReviewItem | nul
       ? parsed.citations.map((id) => Number(id)).filter((id) => Number.isFinite(id))
       : [],
     sections,
+    gaps,
     generatedAt: row.generated_at,
     updatedAt: row.updated_at,
   };

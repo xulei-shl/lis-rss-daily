@@ -684,6 +684,7 @@ export interface ClusterTopicGapsTable {
   set_version: number;
   topic_id: number;
   gap_key: string;
+  subtopic_key: string | null;
   gap: string;
   basis: string;
   method: string | null;

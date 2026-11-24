@@ -34,14 +34,14 @@ export function renderAngles(detail, _articleIndex) {
       const head =
         '<div class="cluster-angle-head">' +
           '<span class="cluster-angle-name">' +
-            escapeHtml(angle.angleLabel || '未命名子域') +
+            escapeHtml(angle.angleLabel || '未命名子课题') +
           '</span>' +
-          (isDivergent
-            ? '<span class="cluster-tag cluster-tag-divergent">并列子域</span>'
-            : '<span class="cluster-tag cluster-tag-linear">时序脉络</span>') +
+          '<span class="cluster-tag ' + (isDivergent ? 'cluster-tag-subtle' : 'cluster-tag-linear') + '">' +
+            (isDivergent ? '专题分面' : '时序脉络') +
+          '</span>' +
           '<span class="cluster-tag cluster-tag-subtle">' + angle.articleCount + ' 篇文献</span>' +
-          (!isDivergent && backboneCount < allSteps.length
-            ? '<span class="cluster-tag cluster-tag-subtle">连续段 ' + backboneCount + ' 篇</span>'
+          (backboneCount > 0 && backboneCount < allSteps.length
+            ? '<span class="cluster-tag cluster-tag-subtle">核心主干 ' + backboneCount + ' 篇</span>'
             : '') +
           (angle.trend ? '<span class="cluster-tag cluster-tag-subtle">' + trendLabel(angle.trend) + '</span>' : '') +
         '</div>';
@@ -50,36 +50,13 @@ export function renderAngles(detail, _articleIndex) {
         ? '<div class="cluster-angle-narrative">' + escapeHtml(angle.narrative) + '</div>'
         : '';
 
-      const representativeSteps = isDivergent
-        ? allSteps.filter((step) => step.isRepresentative)
-        : allSteps;
-      const restSteps = isDivergent
-        ? allSteps.filter((step) => !step.isRepresentative)
-        : [];
-
-      const stepsHtml = representativeSteps.map((step) => renderStep(step)).join('');
-      const restHtml = restSteps.length > 0
-        ? '<details class="cluster-accordion cluster-divergent-details">' +
-            '<summary class="cluster-accordion-summary">展开其余 ' + restSteps.length + ' 篇子域成员</summary>' +
-            '<ol class="cluster-thread">' +
-              restSteps.map((step) => renderStep(step)).join('') +
-            '</ol>' +
-          '</details>'
-        : '';
-
-      const divergentNote = isDivergent
-        ? '<div class="cluster-ambient-tip">该子域未识别出连续承接段（至少 3 篇），以下先呈现质心代表文献；展开可查看全部成员。</div>'
-        : backboneCount < allSteps.length
-          ? '<div class="cluster-ambient-tip">其中 ' + backboneCount + ' 篇构成连续承接段，其余 ' + (allSteps.length - backboneCount) + ' 篇为同一子域背景文献。</div>'
-          : '';
+      const stepsHtml = allSteps.map((step) => renderStep(step)).join('');
 
       return (
         '<div class="cluster-angle-dossier">' +
           head +
           narrative +
-          divergentNote +
           '<ol class="cluster-thread">' + stepsHtml + '</ol>' +
-          restHtml +
         '</div>'
       );
     })
@@ -102,7 +79,7 @@ function renderStep(step) {
   const relation = step.relation === 'loose' ? 'shift' : step.relation || 'divergent';
   const tags = [];
   if (step.isRepresentative) {
-    tags.push('<span class="cluster-tag cluster-tag-rep">子域代表文献</span>');
+    tags.push('<span class="cluster-tag cluster-tag-rep">子课题代表文献</span>');
   }
   if (!step.isRepresentative && ROLE_LABELS[step.academicRole]) {
     tags.push('<span class="cluster-tag">' + ROLE_LABELS[step.academicRole] + '</span>');

@@ -13,6 +13,7 @@ export interface GapWriteRow {
   setVersion: number;
   topicId: number;
   gapKey: string;
+  subtopicKey?: string | null;
   gap: string;
   basis: string;
   method: string | null;
@@ -47,6 +48,7 @@ export async function replaceTopicGaps(
           set_version: row.setVersion,
           topic_id: row.topicId,
           gap_key: row.gapKey,
+          subtopic_key: row.subtopicKey ?? null,
           gap: row.gap,
           basis: row.basis,
           method: row.method,
@@ -60,6 +62,7 @@ export async function replaceTopicGaps(
         })
         .onConflict((oc) =>
           oc.columns(['topic_id', 'gap_key']).doUpdateSet({
+            subtopic_key: row.subtopicKey ?? null,
             gap: row.gap,
             basis: row.basis,
             method: row.method,

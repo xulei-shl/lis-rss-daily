@@ -9,8 +9,10 @@
  */
 
 import type { AnalysisGap } from '../llm/analysis.js';
+import { CLUSTER_CONFIG } from '../config.js';
+import { groupSubtopics } from '../domain/chaining.js';
 import { shortHash } from '../domain/hash.js';
-import { blobToVector, centroidOf, vectorToBlob } from '../domain/vector.js';
+import { blobToVector, centroidOf, dotNormalized, vectorToBlob } from '../domain/vector.js';
 import { listFacetsByArticleIds } from '../repo/facets.js';
 import { replaceTopicGaps, type GapWriteRow } from '../repo/gaps.js';
 import type { TopicMemberView } from './member-view.js';
@@ -42,6 +44,27 @@ export async function materializeTopicGaps(input: MaterializeGapsInput): Promise
     }
   }
 
+  // 划分二级子课题分面，以便将空白精准挂载到所属的专门子课题
+  const subtopics = input.members.length > 0
+    ? groupSubtopics(
+        input.members.map((m) => ({
+          articleId: m.articleId,
+          vector: m.vector,
+          eventDate: m.eventDate,
+          precision: m.precision,
+          methodKeys: m.methodKeys,
+          objectKeys: m.objectKeys,
+        })),
+        CLUSTER_CONFIG.subtopicThreshold
+      )
+    : [];
+
+  const subtopicMemberSets = subtopics.map((s) => ({
+    key: s.subtopicKey,
+    centroid: s.centroid,
+    memberIds: new Set(s.members.map((m) => m.articleId)),
+  }));
+
   const rows: GapWriteRow[] = input.gaps.map((gap) => {
     const vectors = gap.evidenceArticleIds
       .map((id) => vectorById.get(id))
@@ -52,11 +75,42 @@ export async function materializeTopicGaps(input: MaterializeGapsInput): Promise
         : input.topicCentroid;
     const gapKey = `gp-${shortHash(normalizeGap(gap.gap), 10)}`;
 
+    // 确定所属子课题分面（优先依据证据文献包含数，次之依据质心相似度）
+    let assignedSubtopicKey: string | null = null;
+    let maxEvidenceMatch = 0;
+
+    for (const sub of subtopicMemberSets) {
+      let matchCount = 0;
+      for (const id of gap.evidenceArticleIds) {
+        if (sub.memberIds.has(id)) matchCount += 1;
+      }
+      if (matchCount > maxEvidenceMatch) {
+        maxEvidenceMatch = matchCount;
+        assignedSubtopicKey = sub.key;
+      }
+    }
+
+    if (!assignedSubtopicKey && embedding && subtopicMemberSets.length > 0) {
+      let bestSim = -Infinity;
+      let bestKey: string | null = null;
+      for (const sub of subtopicMemberSets) {
+        const sim = dotNormalized(embedding, sub.centroid);
+        if (sim > bestSim) {
+          bestSim = sim;
+          bestKey = sub.key;
+        }
+      }
+      if (bestSim >= CLUSTER_CONFIG.subtopicThreshold) {
+        assignedSubtopicKey = bestKey;
+      }
+    }
+
     return {
       userId: input.userId,
       setVersion: input.setVersion,
       topicId: input.topicId,
       gapKey,
+      subtopicKey: assignedSubtopicKey,
       gap: gap.gap,
       basis: gap.basis,
       method: gap.method ?? null,

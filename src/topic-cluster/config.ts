@@ -42,6 +42,7 @@ export const CLUSTER_CONFIG = Object.freeze({
   initThreshold: appConfig.clusterInitThreshold,
   reclaimThreshold: appConfig.clusterReclaimThreshold,
   angleThreshold: appConfig.clusterAngleThreshold,
+  subtopicThreshold: appConfig.clusterAngleThreshold,
   chainThreshold: appConfig.clusterChainThreshold,
   strongThreshold: appConfig.clusterStrongThreshold,
 
@@ -119,8 +120,8 @@ export const CLUSTER_LIMITS = Object.freeze({
 
   /** 深度综述：主题内二级聚类的平均连接阈值 */
   reviewClusterThreshold: 0.7,
-  /** 深度综述：语义子簇的最小成员数，低于此不生成综述 */
-  reviewMinMembers: 8,
+  /** 深度综述：语义子课题的最小成员数（最少 2 篇成簇并支持综述） */
+  reviewMinMembers: 2,
   /** 深度综述：单主题最多生成的子簇综述数 */
   reviewMaxGroups: 8,
   /** 深度综述：每篇综述最多携带的证据文献数 */
