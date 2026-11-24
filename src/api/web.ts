@@ -252,16 +252,6 @@ export function createApp(): express.Express {
     });
   });
 
-  app.get('/clusters/insights', optionalAuth, (req: any, res: Response) => {
-    if (!req.userId) {
-      return res.redirect('/login');
-    }
-    res.render('cluster-insights', {
-      pageTitle: '主题内洞察 - LIS-RSS Literature Tracker',
-      user: req.user,
-    });
-  });
-
   app.get('/clusters/:slug', optionalAuth, (req: any, res: Response) => {
     if (!req.userId) {
       return res.redirect('/login');

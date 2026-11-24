@@ -598,29 +598,6 @@ export async function getClusterOverview(): Promise<ClusterOverview> {
   return overview;
 }
 
-export interface ClusterInsightListResult {
-  setVersion: number | null;
-  total: number;
-  items: TopicInsightItem[];
-}
-
-/** 主题内洞察报告列表（/clusters/insights 页面） */
-export async function listInsightReports(): Promise<ClusterInsightListResult> {
-  const active = await getActiveSet(CLUSTER_CONFIG.userId);
-  if (!active) return { setVersion: null, total: 0, items: [] };
-
-  const [rows, topics] = await Promise.all([
-    listPublishedInsightReports(active.version),
-    listTopicsByVersion(active.version),
-  ]);
-
-  const items = rows
-    .map((row) => toTopicInsight(row, topics))
-    .filter((item): item is TopicInsightItem => item !== null);
-
-  return { setVersion: active.version, total: items.length, items };
-}
-
 /* ── 内部工具 ── */
 
 const REVIEW_SECTION_LABELS: Record<string, string> = {

@@ -14,7 +14,6 @@ import { logger } from '../../logger.js';
 import {
   getClusterOverview,
   getTopicDetail,
-  listInsightReports,
   listTopicCards,
   type TopicSort,
 } from '../../topic-cluster/query.js';
@@ -53,17 +52,6 @@ router.get('/cluster-topics/overview', requireAuth, async (_req: express.Request
     const message = error instanceof Error ? error.message : String(error);
     log.error({ error: message }, '读取主题概览失败');
     res.status(500).json({ error: '读取主题概览失败' });
-  }
-});
-
-/** 主题内洞察报告列表 */
-router.get('/cluster-insights', requireAuth, async (_req: express.Request, res: express.Response) => {
-  try {
-    res.json(await listInsightReports());
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    log.error({ error: message }, '读取洞察报告失败');
-    res.status(500).json({ error: '读取洞察报告失败' });
   }
 });
 
