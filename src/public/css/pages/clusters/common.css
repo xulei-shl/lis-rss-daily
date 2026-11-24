@@ -1,0 +1,224 @@
+/* ==========================================================================
+   主题洞察样式系统 · 通用辅助排版类与共享徽标微组件
+   ========================================================================== */
+
+/* ── 1. 通用辅助排版类 ── */
+
+.tabular-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* 标签与徽标系统（色彩高度克制） */
+.cluster-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.04));
+  color: var(--text-secondary);
+  font-size: var(--text-xs, 12px);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.cluster-tag-accent {
+  background: var(--cluster-blue-tint);
+  color: var(--cluster-blue);
+  font-weight: 500;
+}
+
+.cluster-tag-subtle {
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.03));
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.cluster-tag-linear {
+  background: var(--cluster-blue-tint);
+  color: var(--cluster-blue);
+  font-weight: 500;
+}
+
+.cluster-tag-divergent {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+
+.cluster-tag-rep {
+  background: var(--cluster-green-tint);
+  color: var(--cluster-green);
+  font-weight: 600;
+}
+
+.cluster-tag-role {
+  background: var(--cluster-blue-tint);
+  color: var(--cluster-blue);
+}
+
+.cluster-tag-relation {
+  background: var(--cluster-amber-tint);
+  color: var(--cluster-amber);
+}
+
+.cluster-tag-primary {
+  background: var(--cluster-green-tint);
+  color: var(--cluster-green);
+  font-weight: 600;
+}
+
+.cluster-tag-angle {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 状态徽标 (Badges) */
+.cluster-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.cluster-badge-rising { background: var(--cluster-blue-tint); color: var(--cluster-blue); }
+.cluster-badge-cooling { background: var(--bg-subtle); color: var(--text-secondary); }
+.cluster-badge-new { background: var(--cluster-green-tint); color: var(--cluster-green); }
+.cluster-badge-dormant { background: var(--bg-subtle); color: var(--text-tertiary); }
+.cluster-badge-insufficient { background: var(--cluster-amber-tint); color: var(--cluster-amber); }
+.cluster-badge-failed { background: var(--cluster-red-tint); color: var(--cluster-red); }
+
+/* 引用锚点胶囊 (Citation Pill) */
+.cluster-cite-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--cluster-blue-tint);
+  color: var(--cluster-blue);
+  font-size: 11px;
+  text-decoration: none;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease-out;
+}
+
+.cluster-cite-pill:hover {
+  background: var(--cluster-blue);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.cluster-cite-pill .cite-hash {
+  opacity: 0.6;
+  font-size: 10px;
+}
+
+/* 状态圆点 (Pipeline Dot) */
+.cluster-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cluster-status-dot-success { background: var(--cluster-green); box-shadow: 0 0 0 2px var(--cluster-green-tint); }
+.cluster-status-dot-danger { background: var(--cluster-red); box-shadow: 0 0 0 2px var(--cluster-red-tint); }
+.cluster-status-dot-running { background: var(--cluster-blue); box-shadow: 0 0 0 2px var(--cluster-blue-tint); }
+.cluster-status-dot-idle { background: #9ca3af; }
+
+/* 提示与横幅 Callout */
+.cluster-ambient-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--text-xs, 12px);
+  line-height: 1.6;
+  margin-bottom: var(--space-4);
+  border: 1px solid transparent;
+}
+
+.cluster-ambient-notice .notice-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.cluster-ambient-notice .notice-body strong {
+  font-weight: 600;
+}
+
+.cluster-notice-warn {
+  background: var(--cluster-amber-tint);
+  border-color: var(--cluster-amber-border);
+  color: var(--cluster-amber);
+}
+
+.cluster-notice-error {
+  background: var(--cluster-red-tint);
+  border-color: var(--cluster-red-border);
+  color: var(--cluster-red);
+}
+
+.cluster-notice-info {
+  background: var(--cluster-blue-tint);
+  border-color: var(--cluster-blue-border);
+  color: var(--cluster-blue);
+}
+
+.cluster-ambient-tip {
+  font-size: var(--text-xs, 12px);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  padding: 6px 12px;
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
+  border-radius: var(--radius-sm, 6px);
+  margin-bottom: var(--space-3);
+}
+
+/* 按钮与微交互 */
+.cluster-btn-subtle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs, 12px);
+  font-weight: 500;
+  color: var(--cluster-blue);
+  background: var(--bg-surface, #fff);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  padding: 4px 12px;
+  min-height: 28px;
+  cursor: pointer;
+  line-height: 1.4;
+  user-select: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.cluster-btn-subtle:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong, var(--border));
+}
+
+.cluster-btn-subtle:active {
+  transform: scale(0.97);
+}
+
+.cluster-empty-inline {
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.015));
+  border-radius: var(--radius-md, 8px);
+  border: 1px dashed var(--border);
+}

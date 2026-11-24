@@ -1,0 +1,66 @@
+/* ==========================================================================
+   Tab 4: 演化趋势 (tab-trends.js)
+   ========================================================================== */
+
+/* ── Tab 4: 演化趋势 ── */
+.cluster-chart-card {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--bg-surface, #fff);
+  margin-bottom: var(--space-4);
+}
+
+.cluster-chart-legend {
+  display: flex;
+  gap: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-3);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.legend-bar { background: rgba(26, 77, 122, 0.45); }
+.legend-line { background: var(--cluster-blue); height: 3px; }
+
+.cluster-chart-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.cluster-chart {
+  display: block;
+  width: 100%;
+  min-width: 420px;
+  height: auto;
+}
+
+.cluster-bar-rect { fill: rgba(26, 77, 122, 0.45); transition: fill 0.15s ease; }
+.cluster-bar-rect:hover { fill: var(--cluster-blue); }
+.cluster-line { stroke: var(--cluster-blue); stroke-width: 2.2; }
+.cluster-line-dot { fill: #fff; stroke: var(--cluster-blue); stroke-width: 2; }
+.cluster-area { fill: var(--cluster-blue-tint); }
+.cluster-axis { stroke: var(--border); stroke-width: 1; }
+
+.cluster-chart-labels {
+  display: grid;
+  min-width: 420px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}

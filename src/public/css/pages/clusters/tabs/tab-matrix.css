@@ -1,0 +1,232 @@
+/* ==========================================================================
+   Tab 3: 对比矩阵与空白 (tab-matrix.js)
+   ========================================================================== */
+
+/* ── Tab 3: 对比矩阵与空白 ── */
+.cluster-table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  margin-bottom: var(--space-4);
+}
+
+.cluster-heatmap-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+  background: var(--bg-surface, #fff);
+}
+
+.cluster-heatmap-matrix th,
+.cluster-heatmap-matrix td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: center;
+}
+
+.cluster-heatmap-matrix th {
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.cluster-heatmap-matrix td.cell-hot-low { background: rgba(26, 77, 122, 0.08); color: var(--text-primary); }
+.cluster-heatmap-matrix td.cell-hot-med { background: rgba(26, 77, 122, 0.18); color: var(--cluster-blue); font-weight: 600; }
+.cluster-heatmap-matrix td.cell-hot-high { background: rgba(26, 77, 122, 0.32); color: #fff; font-weight: 700; }
+
+.cluster-heatmap-matrix td.is-hole {
+  color: var(--text-tertiary);
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.015));
+}
+
+.cluster-holes-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
+  border-radius: var(--radius-md, 8px);
+  margin-bottom: var(--space-6);
+}
+
+.cluster-holes-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.cluster-holes-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cluster-tag-hole {
+  background: var(--cluster-amber-tint);
+  color: var(--cluster-amber);
+  border: 1px solid var(--cluster-amber-border);
+}
+
+/* 研究空白条目 (Gap Entries) */
+.cluster-gaps-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.cluster-gap-entry {
+  padding: 12px 14px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border);
+  background: var(--bg-surface, #fff);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cluster-gap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cluster-gap-basis-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+
+.basis-matrix_hole { background: var(--cluster-amber-tint); color: var(--cluster-amber); }
+.basis-limitation { background: var(--cluster-blue-tint); color: var(--cluster-blue); }
+.basis-staleness { background: var(--bg-subtle); color: var(--text-secondary); }
+
+.cluster-gap-text {
+  font-size: var(--text-sm);
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+
+/* ── Tab 3: 邻近与交叉主题 (Adjacent & Cross-Disciplinary Topics) ── */
+.cluster-adjacent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-3);
+}
+
+@media (max-width: 640px) {
+  .cluster-adjacent-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cluster-adjacent-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 14px 16px;
+  background: var(--bg-surface, #fff);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  text-decoration: none;
+  color: inherit;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.cluster-adjacent-card:hover {
+  border-color: var(--cluster-blue-border);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  .cluster-adjacent-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  }
+}
+
+.cluster-adjacent-card:active {
+  transform: scale(0.98);
+}
+
+.cluster-adjacent-card:focus-visible {
+  outline: 2px solid var(--cluster-blue);
+  outline-offset: 2px;
+}
+
+.cluster-adjacent-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cluster-adjacent-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.5;
+  transition: color 0.15s ease;
+}
+
+.cluster-adjacent-card:hover .cluster-adjacent-name {
+  color: var(--cluster-blue);
+}
+
+.cluster-adjacent-arrow {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  margin-top: 3px;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.cluster-adjacent-card:hover .cluster-adjacent-arrow {
+  color: var(--cluster-blue);
+  transform: translate(2px, -2px);
+}
+
+.cluster-adjacent-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.cluster-tag.cluster-tag-shared {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.4;
+}
+
+.cluster-tag.cluster-tag-shared-method {
+  background: var(--cluster-blue-tint);
+  color: var(--cluster-blue);
+  border: 1px solid var(--cluster-blue-border);
+}
+
+.cluster-tag.cluster-tag-shared-object {
+  background: var(--cluster-green-tint);
+  color: var(--cluster-green);
+  border: 1px solid var(--cluster-green-border);
+}
+
+.cluster-tag-icon {
+  flex-shrink: 0;
+}

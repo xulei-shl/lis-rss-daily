@@ -1,0 +1,259 @@
+/* ==========================================================================
+   Tab 5: 全量文献底册 (tab-catalog.js)
+   ========================================================================== */
+
+/* ── Tab 5: 全量文献底册 (Dossier Catalog) ── */
+.cluster-catalog-dossier {
+  background: var(--bg-surface, #fff);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+  padding: var(--space-4);
+}
+
+.cluster-count-badge {
+  font-size: var(--text-xs);
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  margin-left: 6px;
+}
+
+.cluster-catalog-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.cluster-catalog-search-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.catalog-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.cluster-catalog-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px 0 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  font-size: var(--text-sm);
+  background: var(--bg-surface, #fff);
+  color: var(--text-primary);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease;
+}
+
+.cluster-catalog-input:focus {
+  border-color: var(--cluster-blue);
+  box-shadow: 0 0 0 3px var(--cluster-blue-tint);
+}
+
+.cluster-catalog-subfilters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cluster-catalog-filter-label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.cluster-catalog-select {
+  height: 34px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-surface, #fff);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.cluster-catalog-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.catalog-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface, #fff);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.catalog-filter-btn:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.catalog-filter-btn.active {
+  background: var(--cluster-blue);
+  color: #fff;
+  border-color: var(--cluster-blue);
+  font-weight: 500;
+}
+
+.cluster-catalog-results-info {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.cluster-catalog-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cluster-catalog-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px 4px 6px;
+  margin-top: var(--space-3);
+  border-bottom: 1.5px solid var(--border);
+}
+
+.cluster-catalog-group-head:first-child {
+  margin-top: 0;
+}
+
+.cluster-catalog-group-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cluster-catalog-group-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 高密度文献列表行 (Document Row) */
+.cluster-catalog-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--divider, var(--border));
+  transition: background-color 0.15s ease;
+}
+
+.cluster-catalog-item:hover {
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.015));
+}
+
+.cluster-catalog-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cluster-catalog-title {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+  text-decoration: none;
+  line-height: 1.45;
+}
+
+.cluster-catalog-title:hover {
+  color: var(--cluster-blue);
+  text-decoration: underline;
+}
+
+.cluster-catalog-sub {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.cluster-catalog-year {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.cluster-catalog-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.cluster-catalog-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.cluster-catalog-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-surface, #fff);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.cluster-catalog-more:hover {
+  border-color: var(--cluster-blue);
+  color: var(--cluster-blue);
+}
+
+/* ── 文献底册移动端自适应断点 ── */
+@media (max-width: 640px) {
+  .cluster-catalog-item {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .cluster-catalog-tags {
+    align-self: flex-start;
+  }
+}

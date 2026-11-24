@@ -1,0 +1,97 @@
+/* ==========================================================================
+   5. 底页流水线日志抽屉 (Bottom Pipeline Drawer)
+   ========================================================================== */
+
+.cluster-run-drawer.is-bottom {
+  margin-top: var(--space-8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-surface, #fff);
+  overflow: hidden;
+}
+
+.cluster-run-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  min-height: 40px;
+  cursor: pointer;
+  font-size: var(--text-xs);
+  user-select: none;
+  list-style: none;
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
+  color: var(--text-secondary);
+}
+
+.cluster-run-summary::-webkit-details-marker,
+.cluster-run-summary::marker {
+  display: none;
+}
+
+.cluster-run-summary:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.cluster-run-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cluster-run-title strong {
+  color: var(--text-primary);
+}
+
+.cluster-run-meta-desc {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.cluster-run-summary-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.cluster-run-count-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-surface, #fff);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.cluster-drawer-chevron {
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+  color: var(--text-tertiary);
+}
+
+.cluster-run-drawer[open] .cluster-drawer-chevron {
+  transform: rotate(180deg);
+}
+
+.cluster-run-drawer-body {
+  padding: var(--space-4);
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface, #fff);
+}
+
+.cluster-run-table {
+  font-size: var(--text-xs);
+}
+
+.cluster-run-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.cluster-run-badge-completed { background: var(--cluster-green-tint); color: var(--cluster-green); font-weight: 500; }
+.cluster-run-badge-failed { background: var(--cluster-red-tint); color: var(--cluster-red); font-weight: 500; }
+.cluster-run-badge-running { background: var(--cluster-blue-tint); color: var(--cluster-blue); font-weight: 500; }

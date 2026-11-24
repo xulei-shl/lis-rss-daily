@@ -1,0 +1,46 @@
+/* ==========================================================================
+   主题洞察样式系统 · Token 与语义基准
+   ========================================================================== */
+
+/* ── 0. 设计系统 Token 与语义基准 ── */
+:root {
+  --cluster-blue: #1a4d7a;
+  --cluster-blue-hover: #25639a;
+  --cluster-blue-tint: rgba(26, 77, 122, 0.05);
+  --cluster-blue-subtle: rgba(26, 77, 122, 0.09);
+  --cluster-blue-border: rgba(26, 77, 122, 0.2);
+
+  --cluster-green: #059669;
+  --cluster-green-tint: rgba(5, 150, 105, 0.08);
+  --cluster-green-border: rgba(5, 150, 105, 0.25);
+
+  --cluster-amber: #d97706;
+  --cluster-amber-tint: rgba(217, 119, 6, 0.08);
+  --cluster-amber-border: rgba(217, 119, 6, 0.25);
+
+  --cluster-red: #dc2626;
+  --cluster-red-tint: rgba(220, 38, 38, 0.08);
+  --cluster-red-border: rgba(220, 38, 38, 0.25);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --cluster-blue: #60a5fa;
+    --cluster-blue-hover: #93c5fd;
+    --cluster-blue-tint: rgba(96, 165, 250, 0.08);
+    --cluster-blue-subtle: rgba(96, 165, 250, 0.15);
+    --cluster-blue-border: rgba(96, 165, 250, 0.3);
+
+    --cluster-green: #34d399;
+    --cluster-green-tint: rgba(52, 211, 153, 0.1);
+    --cluster-green-border: rgba(52, 211, 153, 0.3);
+
+    --cluster-amber: #fbbf24;
+    --cluster-amber-tint: rgba(251, 191, 36, 0.1);
+    --cluster-amber-border: rgba(251, 191, 36, 0.3);
+
+    --cluster-red: #f87171;
+    --cluster-red-tint: rgba(248, 113, 113, 0.1);
+    --cluster-red-border: rgba(248, 113, 113, 0.3);
+  }
+}

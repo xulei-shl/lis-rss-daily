@@ -1,0 +1,279 @@
+/* ==========================================================================
+   3. 主题详情页 (/clusters/:slug) 卷宗架构
+   ========================================================================== */
+
+.cluster-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.cluster-detail-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: 4px;
+}
+
+.cluster-breadcrumbs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.cluster-breadcrumb-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.cluster-breadcrumb-link:hover {
+  color: var(--cluster-blue);
+}
+
+.cluster-breadcrumb-separator {
+  color: var(--border);
+  user-select: none;
+}
+
+.cluster-breadcrumb-current {
+  color: var(--text-tertiary);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 顶部流水线执行徽标 */
+.cluster-pipeline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface, #fff);
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.cluster-pipeline-badge:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong, var(--border));
+}
+
+.cluster-title-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 4px 0;
+}
+
+.cluster-page-title {
+  font-size: clamp(1.5rem, 2.5vw, 2.1rem);
+  font-weight: 700;
+  font-family: var(--font-heading, serif);
+  color: var(--text-primary);
+  line-height: 1.25;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.cluster-title-badges {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.cluster-header-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.cluster-meta-pill strong {
+  color: var(--text-primary);
+}
+
+.cluster-meta-sub {
+  color: var(--text-tertiary);
+}
+
+.cluster-meta-time {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.cluster-keywords-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* ── 页面内 Tab 导航系统（极简吸顶 Hairline） ── */
+.cluster-tab-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg-primary, #f8f9fa);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-6);
+}
+
+.cluster-tab-bar {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.cluster-tab-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.cluster-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  min-height: 42px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  font-family: var(--font-body, system-ui);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.cluster-tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.cluster-tab-btn.active {
+  color: var(--cluster-blue);
+  border-bottom-color: var(--cluster-blue);
+  font-weight: 600;
+}
+
+.cluster-tab-btn:focus-visible {
+  outline: 2px solid var(--cluster-blue);
+  outline-offset: -2px;
+}
+
+.cluster-tab-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.cluster-tab-btn.active .cluster-tab-badge {
+  background: var(--cluster-blue-tint);
+  color: var(--cluster-blue);
+}
+
+.cluster-tab-panels {
+  min-height: 420px;
+}
+
+.cluster-tab-panel[hidden] {
+  display: none !important;
+}
+
+.cluster-tab-panel {
+  animation: panelFadeIn 0.15s ease-out;
+}
+
+@keyframes panelFadeIn {
+  from { opacity: 0.6; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   4. Tab 各区块流式编排 (Academic Dossier)
+   ========================================================================== */
+
+.cluster-section {
+  margin-bottom: var(--space-8);
+}
+
+.cluster-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.cluster-section-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.section-icon {
+  color: var(--cluster-blue);
+  flex-shrink: 0;
+}
+
+.cluster-note {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-top: calc(-1 * var(--space-2));
+  margin-bottom: var(--space-4);
+}
+
+/* ── 详情页框架移动端自适应断点 ── */
+@media (max-width: 640px) {
+  .cluster-detail-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .cluster-header-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .cluster-meta-dot {
+    display: none;
+  }
+
+  .cluster-tab-btn {
+    padding: 8px 12px;
+    font-size: var(--text-xs);
+  }
+}

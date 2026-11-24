@@ -1,0 +1,110 @@
+/* ==========================================================================
+   Tab 2: 演进脉络 (tab-evolution.js)
+   ========================================================================== */
+
+/* ── Tab 2: 演进脉络 ── */
+.cluster-angles-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.cluster-angle-dossier {
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--border);
+}
+
+.cluster-angle-dossier:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.cluster-angle-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: 8px;
+}
+
+.cluster-angle-name {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-heading, serif);
+}
+
+.cluster-angle-narrative {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: var(--space-3);
+  max-width: 75ch;
+}
+
+/* 时序时间轴轨道 (Lineage Thread) */
+.cluster-thread {
+  list-style: none;
+  margin: var(--space-3) 0 0 8px;
+  padding: 0;
+  border-left: 2px solid var(--border);
+}
+
+.cluster-thread-item {
+  position: relative;
+  padding: 0 0 var(--space-3) var(--space-4);
+}
+
+.cluster-thread-item::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bg-surface, #fff);
+  border: 2px solid var(--border);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.cluster-thread-item[data-relation='continue']::before { border-color: var(--cluster-blue); background: var(--cluster-blue-tint); }
+.cluster-thread-item[data-relation='origin']::before { border-color: var(--cluster-green); background: var(--cluster-green-tint); }
+.cluster-thread-item[data-relation='shift']::before { border-color: var(--cluster-amber); background: var(--cluster-amber-tint); }
+
+.cluster-thread-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cluster-thread-title {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+  text-decoration: none;
+  line-height: 1.45;
+}
+
+.cluster-thread-title:hover {
+  color: var(--cluster-blue);
+  text-decoration: underline;
+}
+
+.cluster-thread-sub {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.cluster-thread-facet {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.cluster-thread-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
