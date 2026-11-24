@@ -75,7 +75,7 @@ export function renderMatrix(detail) {
         '<h2 class="cluster-section-title"><span class="section-icon" aria-hidden="true">📊</span> 方法 × 研究对象 对比矩阵</h2>' +
       '</div>' +
       '<div class="cluster-note">' +
-        '通过文献切面标签纯规则交叉聚合，不依赖模型想象。单元格数字为文献篇数，颜色深度表示聚集热度；鼠标悬停可查看对应文章 ID。' +
+        '通过文献切面标签纯规则交叉聚合。单元格数字为文献篇数，颜色深度表示聚集热度；鼠标悬停可查看对应文章 ID。' +
       '</div>' +
       '<div class="cluster-table-responsive">' +
         '<table class="cluster-matrix cluster-heatmap-matrix">' +
