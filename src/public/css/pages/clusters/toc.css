@@ -202,7 +202,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 7px 10px 7px 8px;
+  padding: 7px 10px;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -212,11 +212,9 @@
   line-height: 1.45;
   text-align: left;
   cursor: pointer;
-  box-shadow: inset 2px 0 0 transparent;
   transition:
     background-color 120ms ease-out,
     color 120ms ease-out,
-    box-shadow 120ms ease-out,
     transform 120ms ease-out;
 }
 
@@ -237,7 +235,6 @@
 .cluster-toc-link.is-active {
   background: var(--cluster-blue-tint);
   color: var(--cluster-blue);
-  box-shadow: inset 2px 0 0 var(--cluster-blue);
 }
 
 .cluster-toc-link.is-active .cluster-toc-link-title {
