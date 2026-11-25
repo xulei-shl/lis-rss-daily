@@ -23,6 +23,8 @@ export interface AnalysisStepResult {
   insufficient: number;
   failed: number;
   failures: Array<{ topicId: number; error: string }>;
+  /** 本轮产出了可展示分析内容的主题（用于生成版本文件） */
+  processedTopicIds: number[];
 }
 
 export interface RunAnalysesOptions {
@@ -46,6 +48,7 @@ export async function runPendingAnalyses(
     insufficient: 0,
     failed: 0,
     failures: [],
+    processedTopicIds: [],
   };
   if (topics.length === 0) return result;
 
@@ -54,12 +57,15 @@ export async function runPendingAnalyses(
 
     if (outcome.status === 'ok') {
       result.ok += 1;
+      result.processedTopicIds.push(topic.id);
       await clearTopicDirty(topic.id, new Date().toISOString());
     } else if (outcome.status === 'partial') {
       result.partial += 1;
+      result.processedTopicIds.push(topic.id);
       // 阶段 A 已落库；保留 is_dirty=1，下一轮只重跑阶段 B
     } else if (outcome.status === 'insufficient_data') {
       result.insufficient += 1;
+      result.processedTopicIds.push(topic.id);
       // 样本不足不是错误：已写入规则聚合结果，清除脏标记避免每轮重复计算
       await clearTopicDirty(topic.id, new Date().toISOString());
     } else {

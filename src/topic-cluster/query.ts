@@ -39,6 +39,7 @@ import { normalizeMethodKeys, normalizeObjectKeys } from './domain/vocab.js';
 import { CLUSTER_CONFIG } from './config.js';
 import { getArticleBriefs } from './source.js';
 import { listPublishedInsightReports } from './repo/insights.js';
+import { listTopicDocuments } from './repo/documents.js';
 import { listReviewsByTopic } from './repo/reviews.js';
 import { listActiveGapsByTopic } from './repo/gaps.js';
 import type { DeepReview } from './llm/review.js';
@@ -262,6 +263,14 @@ export interface TopicInsightItem {
   updatedAt: string;
 }
 
+export interface TopicDocumentItem {
+  id: number;
+  version: number;
+  filename: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
 export interface TopicDetail {
   id: number;
   slug: string;
@@ -293,6 +302,8 @@ export interface TopicDetail {
   insights: TopicInsightItem[];
   /** 研究空白等环节引用的证据文献（包含跨主题/邻近主题文献） */
   evidenceArticles?: Array<{ id: number; title: string; url: string | null }>;
+  /** 历史版本文件（最新在前） */
+  documents: TopicDocumentItem[];
 }
 
 /** 主题详情（slug 或数字 id） */
@@ -311,6 +322,7 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     insightRows,
     versionTopics,
     gapRows,
+    documentRows,
   ] = await Promise.all([
     getDb()
       .selectFrom('cluster_topic_analysis')
@@ -331,6 +343,7 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     listPublishedInsightReports(topic.set_version),
     listTopicsByVersion(topic.set_version),
     listActiveGapsByTopic(topic.id),
+    listTopicDocuments(topic.id),
   ]);
 
   const analysis = parseAnalysis(analysisRow?.analysis_json ?? null);
@@ -505,6 +518,13 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
       .filter((row) => row.topic_id === topic.id)
       .map((row) => toTopicInsight(row, versionTopics, refTitles))
       .filter((insight): insight is TopicInsightItem => insight !== null),
+    documents: documentRows.map((row) => ({
+      id: row.id,
+      version: row.version,
+      filename: row.filename,
+      sizeBytes: row.size_bytes,
+      createdAt: row.created_at,
+    })),
   };
 }
 

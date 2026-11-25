@@ -19,3 +19,6 @@
 
 /* 4. 底页流水线日志抽屉 */
 @import url('./clusters/run-logs.css');
+
+/* 5. 历史版本文件列表 */
+@import url('./clusters/documents.css');

@@ -41,6 +41,8 @@ export interface InsightRunResult {
   skipped: number;
   failed: number;
   errors: Array<{ clusterKey: string; error: string }>;
+  /** 本轮成功产出/更新洞察报告的主题（用于生成版本文件） */
+  topicIds: number[];
 }
 
 export interface RunInsightOptions {
@@ -112,7 +114,7 @@ export async function runInsightReports(
   }
 
   if (candidates.length === 0) {
-    return { status: 'skipped', clusters: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
+    return { status: 'skipped', clusters: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [], topicIds: [] };
   }
 
   const limit = Math.min(
@@ -125,6 +127,7 @@ export async function runInsightReports(
   let skipped = 0;
   let failed = 0;
   const errors: InsightRunResult['errors'] = [];
+  const touchedTopicIds = new Set<number>();
   let attempted = 0;
 
   for (const { topic, cluster, match } of candidates) {
@@ -189,6 +192,7 @@ export async function runInsightReports(
           created += 1;
         }
       }
+      touchedTopicIds.add(topic.id);
     } catch (error) {
       failed += 1;
       const message = error instanceof Error ? error.message : String(error);
@@ -208,6 +212,7 @@ export async function runInsightReports(
     skipped,
     failed,
     errors,
+    topicIds: [...touchedTopicIds],
   };
 }
 

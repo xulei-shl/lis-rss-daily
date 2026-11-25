@@ -26,6 +26,7 @@ import {
   markTopicDirty,
 } from '../src/topic-cluster/repo/topics.js';
 import { runInsightReports } from '../src/topic-cluster/service/insight-runner.js';
+import { generateTopicDocument } from '../src/topic-cluster/service/document-generator.js';
 import { rebuildTopicMetrics } from '../src/topic-cluster/service/metrics-builder.js';
 import { runTopicAnalysis } from '../src/topic-cluster/service/analysis-runner.js';
 import { runTopicReviews } from '../src/topic-cluster/service/review-runner.js';
@@ -50,6 +51,7 @@ interface TopicResult {
   analysis: string;
   reviews: string;
   insights: string;
+  document: string;
 }
 
 interface Failure {
@@ -114,6 +116,7 @@ function printHelp(): void {
 说明：
   - 本脚本只重建已有主题的洞察层，不重抽 facets、不改成员、不切换版本；
   - 单主题模式不会处理其他主题；全量模式会遍历 active 版本全部主题；
+  - 每个主题完成后会生成一份 HTML 版本文件，内容未变化时自动跳过；
   - --derive-only 会保留脏标记，后续分析/综述仍会被调度器补算；
   - 全量 LLM 重建可能产生大量调用，建议先 --dry-run 看目标数量。
 `);
@@ -183,6 +186,7 @@ async function runTopic(
     analysis: '—',
     reviews: '—',
     insights: '—',
+    document: '—',
   };
 
   try {
@@ -333,7 +337,25 @@ async function main(): Promise<void> {
   for (let index = 0; index < targets.length; index += 1) {
     const topic = targets[index];
     console.log(`\n[${index + 1}/${targets.length}] #${topic.id} ${topic.name}`);
-    results.push(await runTopic(topic, active.version, options, failures));
+    const result = await runTopic(topic, active.version, options, failures);
+
+    // 重建完成后为本主题生成版本文件（契约：生成器内部按内容哈希幂等跳过）。
+    try {
+      const document = await generateTopicDocument(topic.id);
+      result.document = document ? `v${document.version}` : '未变化';
+      console.log(
+        document
+          ? `  [版本文件] 已生成 v${document.version}：${document.filename}`
+          : '  [版本文件] 内容未变化，跳过'
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      result.document = 'error';
+      failures.push({ topicId: topic.id, stage: 'document', error: message });
+      console.log(`  ✗ 版本文件生成失败：${message}`);
+    }
+
+    results.push(result);
   }
 
   console.log('\n=== 重建结果 ===');
@@ -347,6 +369,7 @@ async function main(): Promise<void> {
       分析: item.analysis,
       综述: item.reviews,
       洞察: item.insights,
+      版本文件: item.document,
     }))
   );
 
@@ -355,7 +378,7 @@ async function main(): Promise<void> {
     for (const failure of failures) {
       console.log(`  - #${failure.topicId} [${failure.stage}] ${failure.error}`);
     }
-    console.log('失败主题保留了脏标记，可修复后重跑本脚本。');
+    console.log('失败环节修复后可重跑本脚本（已成功的环节会按缓存/哈希跳过）。');
   } else {
     console.log('\n全部完成。');
   }

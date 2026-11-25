@@ -43,6 +43,7 @@ interface CliOptions {
 }
 
 const CLUSTER_TABLES = [
+  'cluster_topic_documents',
   'cluster_insight_reports',
   'cluster_topic_gaps',
   'cluster_topic_reviews',
@@ -245,6 +246,11 @@ async function main(): Promise<void> {
   console.log('\n[步骤 2/3] 正在清空历史聚类与洞察数据表...');
   const cleared = await clearClusterTables(options.cleanFacets);
   console.log(`  ✓ 已清空 ${CLUSTER_TABLES.length} 张聚类表及自增序列计数。`);
+
+  // 旧主题的 HTML 版本文件已失去归属，随元数据一并删除，避免磁盘残留。
+  const documentsDir = path.join(path.dirname(config.databasePath), 'cluster-documents');
+  fs.rmSync(documentsDir, { recursive: true, force: true });
+  console.log('  ✓ 已删除旧的主题洞察 HTML 版本文件。');
   if (options.cleanFacets) {
     console.log(`  ✓ 已一并清空 article_cluster_facets（共 ${cleared.article_cluster_facets} 条切面）。`);
   } else {

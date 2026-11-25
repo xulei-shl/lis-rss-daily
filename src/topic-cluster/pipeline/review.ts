@@ -24,6 +24,8 @@ export interface ReviewStepResult {
   /** 因单轮上限未处理、留到下一轮的主题数 */
   backlog: number;
   failures: Array<{ topicId: number; error: string }>;
+  /** 本轮产出了可展示综述的主题（用于生成版本文件） */
+  processedTopicIds: number[];
 }
 
 export interface RunReviewsOptions {
@@ -49,6 +51,7 @@ export async function runPendingReviews(
     updated: 0,
     backlog: Math.max(dirtyTopics.length - topics.length, 0),
     failures: [],
+    processedTopicIds: [],
   };
 
   for (const topic of topics) {
@@ -56,9 +59,13 @@ export async function runPendingReviews(
     result.created += outcome.created;
     result.updated += outcome.updated;
 
-    if (outcome.status === 'ok') result.ok += 1;
-    else if (outcome.status === 'partial') result.partial += 1;
-    else if (outcome.status === 'skipped') result.skipped += 1;
+    if (outcome.status === 'ok') {
+      result.ok += 1;
+      result.processedTopicIds.push(topic.id);
+    } else if (outcome.status === 'partial') {
+      result.partial += 1;
+      result.processedTopicIds.push(topic.id);
+    } else if (outcome.status === 'skipped') result.skipped += 1;
     else {
       result.failed += 1;
       result.failures.push({ topicId: topic.id, error: outcome.error ?? '未知错误' });

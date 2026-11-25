@@ -9,6 +9,7 @@ import { renderSummary, renderReviews, renderInsights, renderConsensusDualView, 
 import { renderAngles, renderLoose } from './tab-evolution.js';
 import { renderMatrix, renderGaps, renderAdjacent } from './tab-matrix.js';
 import { renderTrend } from './tab-trends.js';
+import { renderDocuments, bindDocumentsEvents } from './documents.js';
 import { buildSynthesisToc, buildEvolutionToc, wrapWithTocLayout, initTocNavigation } from './toc.js';
 
 const VALID_TABS = ['synthesis', 'evolution', 'matrix', 'trends'];
@@ -106,6 +107,9 @@ function renderPage(root, detail) {
   // 4. 移至底页次级区域的流水线日志抽屉
   parts.push(renderTopRunLogs(detail));
 
+  // 5. 页面底部：历史版本文件列表
+  parts.push(renderDocuments(detail));
+
   root.innerHTML = parts.filter(Boolean).join('');
 
   // 初始化章节目录联动与吸顶偏移
@@ -122,6 +126,9 @@ function renderPage(root, detail) {
 
   // 绑定研究空白依据文献清单展开/收起交互
   bindGapEvidenceToggle(root);
+
+  // 绑定版本文件手动生成按钮
+  bindDocumentsEvents(root);
 }
 
 function initRunLogsToggle(root) {

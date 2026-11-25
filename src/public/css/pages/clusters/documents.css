@@ -1,0 +1,96 @@
+/* ==========================================================================
+   主题洞察详情 · 历史版本文件列表（页面底部）
+   ========================================================================== */
+
+.cluster-documents {
+  margin-top: var(--space-8, 48px);
+}
+
+.cluster-documents-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cluster-document-generate {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--cluster-blue-border, #cbd5e1);
+  border-radius: 6px;
+  background: var(--surface-primary, #fff);
+  font-size: 13px;
+  color: var(--cluster-blue, #1a4d7a);
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.cluster-document-generate:hover:not(:disabled) {
+  background: var(--cluster-blue-tint, #f1f5f9);
+}
+
+.cluster-document-generate:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.cluster-documents-status {
+  margin: 0 0 var(--space-3, 12px);
+  font-size: 13px;
+}
+
+.cluster-documents-status.is-success {
+  color: var(--cluster-green, #059669);
+}
+
+.cluster-documents-status.is-info {
+  color: var(--color-text-secondary, #64748b);
+}
+
+.cluster-documents-status.is-error {
+  color: var(--cluster-red, #dc2626);
+}
+
+.cluster-documents-desc {
+  margin: 0 0 var(--space-3, 12px);
+  font-size: 13px;
+  color: var(--color-text-secondary, #64748b);
+  line-height: 1.6;
+}
+
+.cluster-documents-table th:first-child,
+.cluster-documents-table td:first-child {
+  min-width: 260px;
+}
+
+.cluster-document-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  word-break: break-all;
+}
+
+.cluster-document-name svg {
+  flex: none;
+  color: var(--cluster-blue, #1a4d7a);
+}
+
+.cluster-document-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--cluster-blue-border, #cbd5e1);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--cluster-blue, #1a4d7a);
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.cluster-document-download:hover {
+  background: var(--cluster-blue-tint, #f1f5f9);
+}

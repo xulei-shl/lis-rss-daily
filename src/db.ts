@@ -69,6 +69,7 @@ export interface DatabaseTable {
   cluster_topic_reviews: ClusterTopicReviewsTable;
   cluster_topic_gaps: ClusterTopicGapsTable;
   cluster_insight_reports: ClusterInsightReportsTable;
+  cluster_topic_documents: ClusterTopicDocumentsTable;
 }
 
 export interface UsersTable {
@@ -724,6 +725,19 @@ export interface ClusterInsightReportsTable {
   updated_at: string;
 }
 
+/** 主题洞察版本文件（每轮周分析成功后生成的 HTML 快照，sql/055） */
+export interface ClusterTopicDocumentsTable {
+  id: Generated<number>;
+  user_id: number;
+  set_version: number;
+  topic_id: number;
+  version: number;
+  filename: string;
+  size_bytes: number;
+  content_hash: string;
+  created_at: string;
+}
+
 /** 多维分析缓存（脏标记增量更新） */
 export interface ClusterTopicAnalysisTable {
   topic_id: number;
@@ -772,6 +786,7 @@ export type ClusterTopicAnalysisSelection = SelectionType<ClusterTopicAnalysisTa
 export type ClusterTopicReviewsSelection = SelectionType<ClusterTopicReviewsTable>;
 export type ClusterTopicGapsSelection = SelectionType<ClusterTopicGapsTable>;
 export type ClusterInsightReportsSelection = SelectionType<ClusterInsightReportsTable>;
+export type ClusterTopicDocumentsSelection = SelectionType<ClusterTopicDocumentsTable>;
 
 let _db: DB | null = null;
 

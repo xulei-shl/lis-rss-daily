@@ -37,6 +37,7 @@ import { runDeriveForDirtyTopics, type DeriveResult } from './derive.js';
 import { runIncubation, type IncubationResult } from './incubate.js';
 import { runReclaim, type ReclaimResult } from './reclaim.js';
 import { runIncrementalRouting, type RouteResult } from './route.js';
+import { generateTopicDocuments } from '../service/document-generator.js';
 import {
   beginClusterRun,
   countLinksByTopic,
@@ -247,6 +248,16 @@ export async function runClusterPipeline(
             force: options.forceAnalysis,
           });
 
+    // 完整轮次（分析 → 综述 → 洞察）成功后，为内容有变化的主题各生成一份版本文件。
+    // 日节奏的 skipAnalysis 轮次不触发，避免每日重复产出。
+    if (!options.skipAnalysis) {
+      await generateTopicDocuments([
+        ...analysis.processedTopicIds,
+        ...review.processedTopicIds,
+        ...insight.topicIds,
+      ]);
+    }
+
     const summary: ClusterRunSummary = { setVersion, drift, facets, routing, incubation, consolidation, reclaim, derive, analysis, review, insight };
 
     log.info(
@@ -334,6 +345,12 @@ export async function runColdStart(
         ? emptyInsightStepResult()
         : await runInsightStep(setVersion, { force: true });
 
+    await generateTopicDocuments([
+      ...analysis.processedTopicIds,
+      ...review.processedTopicIds,
+      ...insight.topicIds,
+    ]);
+
     log.info(
       {
         setVersion,
@@ -420,6 +437,12 @@ export async function runScheduledAnalyses(
             limit: options.insightLimit,
             force: options.force,
           });
+
+    await generateTopicDocuments([
+      ...analysis.processedTopicIds,
+      ...review.processedTopicIds,
+      ...insight.topicIds,
+    ]);
 
     return {
       result: analysis,
@@ -529,7 +552,15 @@ function emptyReclaimResult(): ReclaimResult {
 }
 
 function emptyAnalysisStepResult(): AnalysisStepResult {
-  return { attempted: 0, ok: 0, partial: 0, insufficient: 0, failed: 0, failures: [] };
+  return {
+    attempted: 0,
+    ok: 0,
+    partial: 0,
+    insufficient: 0,
+    failed: 0,
+    failures: [],
+    processedTopicIds: [],
+  };
 }
 
 function emptyReviewStepResult(): ReviewStepResult {
@@ -543,11 +574,12 @@ function emptyReviewStepResult(): ReviewStepResult {
     updated: 0,
     backlog: 0,
     failures: [],
+    processedTopicIds: [],
   };
 }
 
 function emptyInsightStepResult(): InsightStepResult {
-  return { status: 'skipped', clusters: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] };
+  return { status: 'skipped', clusters: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [], topicIds: [] };
 }
 
 export function isClusterEnabled(): boolean {
