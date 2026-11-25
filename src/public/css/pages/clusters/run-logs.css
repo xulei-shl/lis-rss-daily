@@ -81,6 +81,17 @@
   background: var(--bg-surface, #fff);
 }
 
+.cluster-run-notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.cluster-run-notices .cluster-ambient-notice {
+  margin-bottom: 0;
+}
+
 .cluster-run-table {
   font-size: var(--text-xs);
 }

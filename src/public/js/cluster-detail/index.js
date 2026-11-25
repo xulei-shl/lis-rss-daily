@@ -3,7 +3,7 @@
 // ============================================
 
 import { buildArticleIndex, escapeHtml } from './utils.js';
-import { renderHeader, renderStatusNotice } from './header.js';
+import { renderHeader } from './header.js';
 import { renderTopRunLogs } from './run-logs.js';
 import { renderSummary, renderReviews, renderInsights, renderConsensusDualView, bindSynthesisEvents } from './tab-synthesis.js';
 import { renderAngles, renderLoose } from './tab-evolution.js';
@@ -46,13 +46,10 @@ function renderPage(root, detail) {
   const articleIndex = buildArticleIndex(detail);
   const parts = [];
 
-  // 1. 常驻顶层区域：主题标题与时空元数据
+  // 1. 常驻顶层区域：主题标题、时空元数据与状态提示
   parts.push(renderHeader(detail));
 
-  // 2. 状态异常/提示 (仅在存在异常或样本较少时渲染轻量横幅)
-  parts.push(renderStatusNotice(detail));
-
-  // 3. Tab 导航条
+  // 2. Tab 导航条
   const tabs = [
     { id: 'synthesis', label: '综述与洞察' },
     { id: 'evolution', label: '研究脉络' },
@@ -62,7 +59,7 @@ function renderPage(root, detail) {
 
   parts.push(renderTabBar(tabs));
 
-  // 4. 4 大 Tab 面板
+  // 3. 4 大 Tab 面板
   parts.push('<div class="cluster-tab-panels" id="clusterTabPanels">');
 
   // Tab 1: 综述与洞察
@@ -101,7 +98,7 @@ function renderPage(root, detail) {
 
   parts.push('</div>');
 
-  // 5. 移至底页次级区域的流水线日志抽屉
+  // 4. 移至底页次级区域的流水线日志抽屉
   parts.push(renderTopRunLogs(detail));
 
   root.innerHTML = parts.filter(Boolean).join('');
@@ -120,16 +117,27 @@ function renderPage(root, detail) {
 }
 
 function initRunLogsToggle(root) {
-  const btn = root.querySelector('#btnToggleRunLogs');
   const drawer = root.querySelector('#clusterRunDrawer');
-  if (btn && drawer) {
-    btn.addEventListener('click', () => {
+  if (!drawer) return;
+
+  const topBtn = root.querySelector('#btnToggleRunLogs');
+  if (topBtn) {
+    topBtn.addEventListener('click', () => {
       drawer.open = !drawer.open;
       if (drawer.open) {
         drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
     });
   }
+
+  root.addEventListener('click', (e) => {
+    const noticeTrigger = e.target.closest('[data-open-run-drawer="true"]');
+    if (!noticeTrigger) return;
+    e.preventDefault();
+    e.stopPropagation();
+    drawer.open = true;
+    drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
 }
 
 function renderTabBar(tabs) {

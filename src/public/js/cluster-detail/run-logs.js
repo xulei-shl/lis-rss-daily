@@ -6,6 +6,7 @@ import {
   escapeHtml,
   formatDateTime,
   formatDuration,
+  getDetailNotices,
   TRIGGER_LABELS,
   RUN_STATUS_LABELS
 } from './utils.js';
@@ -67,6 +68,21 @@ export function renderRunLogs(detail) {
       '</div>'
     : '<div class="cluster-empty-inline">暂无执行流水记录。</div>';
 
+  const notices = getDetailNotices(detail);
+  const finalStatusHtml = notices.length
+    ? '<div class="cluster-run-notices">' +
+        notices
+          .map(
+            (notice) =>
+              '<div class="cluster-ambient-notice cluster-run-final-status cluster-notice-' + notice.tone + '">' +
+                notice.iconSvg +
+                '<div class="notice-body">' + notice.fullHtml + '</div>' +
+              '</div>'
+          )
+          .join('') +
+      '</div>'
+    : '';
+
   return (
     '<details class="cluster-run-drawer is-bottom" id="clusterRunDrawer">' +
       '<summary class="cluster-run-summary" aria-label="查看流水线运行日志">' +
@@ -83,6 +99,7 @@ export function renderRunLogs(detail) {
         '</div>' +
       '</summary>' +
       '<div class="cluster-run-drawer-body">' +
+        finalStatusHtml +
         tableBody +
       '</div>' +
     '</details>'

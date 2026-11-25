@@ -5,6 +5,7 @@
 
 import {
   escapeHtml,
+  renderInlineNoticeChip,
   BASIS_LABELS
 } from './utils.js';
 
@@ -256,6 +257,13 @@ export function renderAdjacent(detail) {
     )
     .join('');
 
+  const adjacentChip = renderInlineNoticeChip({
+    tone: 'info',
+    shortText: '共享方法/对象之平行分支',
+    fullText: '与当前研究方向共享方法或研究对象、但归属于平行分支的关联主题。',
+    extraClass: 'cluster-section-notice'
+  });
+
   return (
     '<section class="cluster-section">' +
       '<div class="cluster-section-header">' +
@@ -266,8 +274,8 @@ export function renderAdjacent(detail) {
           '</svg>' +
           '<span>邻近与交叉主题 (' + adjacent.length + ')</span>' +
         '</h2>' +
+        adjacentChip +
       '</div>' +
-      '<div class="cluster-note">与当前研究方向共享方法或研究对象、但归属于平行分支的关联主题。</div>' +
       '<div class="cluster-adjacent-grid">' + items + '</div>' +
     '</section>'
   );

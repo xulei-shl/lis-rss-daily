@@ -3,6 +3,7 @@
    ========================================================================== */
 
 .cluster-detail-header {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -119,11 +120,59 @@
   font-variant-numeric: tabular-nums;
 }
 
+.cluster-header-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+  margin-top: 4px;
+}
+
 .cluster-keywords-wrap {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 4px;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.cluster-ambient-notice.cluster-inline-notice {
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 0;
+  padding-block: 4px;
+  padding-inline: 10px;
+  gap: 6px;
+  line-height: 1.45;
+  text-align: start;
+  font-family: var(--font-body, system-ui);
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.1s ease-out;
+}
+
+.cluster-ambient-notice.cluster-inline-notice:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.cluster-ambient-notice.cluster-inline-notice:active {
+  transform: scale(0.98);
+}
+
+.cluster-ambient-notice.cluster-inline-notice:focus-visible {
+  outline: 2px solid var(--cluster-blue);
+  outline-offset: 2px;
+}
+
+.cluster-ambient-notice.cluster-inline-notice .notice-icon {
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+}
+
+.cluster-ambient-notice.cluster-inline-notice .notice-body {
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 /* ── 页面内 Tab 导航系统（极简吸顶 Hairline） ── */
@@ -223,12 +272,20 @@
 
 .cluster-section-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
+  gap: var(--space-2) var(--space-4);
   margin-bottom: var(--space-4);
   padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--border);
+}
+
+.cluster-section-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .cluster-section-title {
@@ -254,7 +311,24 @@
   margin-bottom: var(--space-4);
 }
 
-/* ── 详情页框架移动端自适应断点 ── */
+/* ── 详情页框架容器与移动端自适应断点 ── */
+@container (max-width: 520px) {
+  .cluster-header-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+
+  .cluster-keywords-wrap {
+    flex: 0 1 auto;
+    width: 100%;
+  }
+
+  .cluster-ambient-notice.cluster-inline-notice {
+    max-width: 100%;
+  }
+}
+
 @media (max-width: 640px) {
   .cluster-detail-topbar {
     flex-direction: column;

@@ -7,6 +7,7 @@ import {
   escapeHtml,
   formatDate,
   trendLabel,
+  renderInlineNoticeChip,
   RELATION_LABELS,
   ROLE_LABELS
 } from './utils.js';
@@ -138,18 +139,28 @@ export function renderLoose(detail) {
     ))
     .join('');
 
+  const looseChip = renderInlineNoticeChip({
+    tone: 'info',
+    shortText: '未聚合成脉络 · 平铺展示',
+    fullText: '这些文献隶属于本主题，但由于彼此承接关系不成立或篇数不足以聚合成独立角度，故保留平铺展示，不强制附会演进线索。',
+    extraClass: 'cluster-section-notice'
+  });
+
   return (
     '<section class="cluster-section">' +
       '<details class="cluster-details">' +
         '<summary class="cluster-details-summary">' +
-          '<h3 class="cluster-section-title" style="display:inline-flex;margin:0">' +
+          '<h3 class="cluster-section-title">' +
             '<span class="section-icon" aria-hidden="true">🗂️</span> 零散研究（' + loose.length + ' 篇未归链文献）' +
           '</h3>' +
+          '<span class="cluster-details-summary-right">' +
+            looseChip +
+            '<svg class="cluster-drawer-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">' +
+              '<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>' +
+            '</svg>' +
+          '</span>' +
         '</summary>' +
         '<div class="cluster-details-body">' +
-          '<div class="cluster-note">' +
-            '这些文献隶属于本主题，但由于彼此承接关系不成立或篇数不足以聚合成独立角度，故保留平铺展示，不强制附会演进线索。' +
-          '</div>' +
           '<ol class="cluster-thread">' + items + '</ol>' +
         '</div>' +
       '</details>' +

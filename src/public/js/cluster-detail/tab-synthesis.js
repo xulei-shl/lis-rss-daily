@@ -6,6 +6,8 @@
 import {
   escapeHtml,
   formatDateTime,
+  renderInlineNoticeChip,
+  countInsufficientReviewSections,
   GAP_STATE_LABELS,
   BASIS_LABELS
 } from './utils.js';
@@ -75,10 +77,22 @@ export function renderReviews(detail, articleIndex) {
             })
             .join(' ');
 
+          const insufficientChip = section.insufficient
+            ? renderInlineNoticeChip({
+                tone: 'warn',
+                shortText: '证据不足',
+                fullText: '该论证章节暂无直接支撑文献，系统仅保留原文声明而未补写结论。',
+                extraClass: 'cluster-section-notice'
+              })
+            : '';
+
           return (
             '<div class="cluster-review-section"' +
               (section.insufficient ? ' data-insufficient="true"' : '') + '>' +
-              '<div class="cluster-review-section-label">' + escapeHtml(section.label) + '</div>' +
+              '<div class="cluster-review-section-head">' +
+                '<div class="cluster-review-section-label">' + escapeHtml(section.label) + '</div>' +
+                insufficientChip +
+              '</div>' +
               '<div class="cluster-review-section-text">' + escapeHtml(section.text) + '</div>' +
               (evidence ? '<div class="cluster-evidence"><span class="evidence-label">证据文献：</span>' + evidence + '</div>' : '') +
             '</div>'
@@ -156,6 +170,24 @@ export function renderReviews(detail, articleIndex) {
     })
     .join('');
 
+  const insufficientTotal = countInsufficientReviewSections(detail);
+  const insufficientHeaderChip = insufficientTotal > 0
+    ? renderInlineNoticeChip({
+        tone: 'warn',
+        shortText: '含 ' + insufficientTotal + ' 处证据不足',
+        fullText: '子群综述中共有 ' + insufficientTotal + ' 处论证章节暂无直接文献支撑，已按原文声明保留空白。',
+        extraClass: 'cluster-section-notice'
+      })
+    : '';
+  const toggleAllBtn = reviews.length > 1
+    ? '<button type="button" class="cluster-btn-subtle" id="clusterReviewsToggleAll" aria-expanded="false">' +
+        '全部展开' +
+      '</button>'
+    : '';
+  const headerActions = (insufficientHeaderChip || toggleAllBtn)
+    ? '<div class="cluster-section-actions">' + insufficientHeaderChip + toggleAllBtn + '</div>'
+    : '';
+
   return (
     '<section class="cluster-section" id="clusterReviewsSection">' +
       '<div class="cluster-section-header">' +
@@ -163,11 +195,7 @@ export function renderReviews(detail, articleIndex) {
           '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>' +
           '<span>子群深度综述 (' + reviews.length + ')</span>' +
         '</h2>' +
-        (reviews.length > 1
-          ? '<button type="button" class="cluster-btn-subtle" id="clusterReviewsToggleAll" aria-expanded="false">' +
-              '全部展开' +
-            '</button>'
-          : '') +
+        headerActions +
       '</div>' +
       '<div class="cluster-reviews-container">' + items + '</div>' +
     '</section>'

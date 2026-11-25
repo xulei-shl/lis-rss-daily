@@ -2,7 +2,13 @@
 // 主题洞察详情页 - 顶部标题与时空元数据
 // ============================================
 
-import { escapeHtml, formatMonth, formatDateTime } from './utils.js';
+import {
+  escapeHtml,
+  formatMonth,
+  formatDateTime,
+  getAnalysisStatusNotice,
+  renderInlineNoticeChip
+} from './utils.js';
 
 export function renderHeader(detail) {
   const badges = [];
@@ -38,6 +44,9 @@ export function renderHeader(detail) {
     else if (latestRun.status === 'running') runStatusCls = 'running';
     runStatusText = latestRun.status === 'completed' ? '正常' : latestRun.status === 'failed' ? '异常' : '进行中';
   }
+
+  const statusNotice = renderStatusNotice(detail);
+  const hasFooter = Boolean(keywords || statusNotice);
 
   return (
     '<div class="cluster-detail-header">' +
@@ -77,53 +86,26 @@ export function renderHeader(detail) {
         '</span>' +
       '</div>' +
 
-      (keywords ? '<div class="cluster-keywords-wrap">' + keywords + '</div>' : '') +
+      (hasFooter
+        ? '<div class="cluster-header-footer">' +
+            (keywords ? '<div class="cluster-keywords-wrap">' + keywords + '</div>' : '') +
+            statusNotice +
+          '</div>'
+        : '') +
     '</div>'
   );
 }
 
 export function renderStatusNotice(detail) {
-  if (detail.analysisStatus === 'insufficient_data') {
-    return (
-      '<div class="cluster-ambient-notice cluster-notice-warn">' +
-        '<svg class="notice-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
-        '<div class="notice-body">' +
-          '<strong>数据提示：</strong>该主题当前聚合样本量较少，仅展示规则聚合对比矩阵，未推断脉络与空白结论。' +
-        '</div>' +
-      '</div>'
-    );
-  }
-  if (detail.analysisStatus === 'partial') {
-    return (
-      '<div class="cluster-ambient-notice cluster-notice-warn">' +
-        '<svg class="notice-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
-        '<div class="notice-body">' +
-          '<strong>分析状态：</strong>部分综合研判结论待下轮流水线更新。' +
-          (detail.analysisError ? '（原因：' + escapeHtml(detail.analysisError) + '）' : '') +
-        '</div>' +
-      '</div>'
-    );
-  }
-  if (detail.analysisStatus === 'failed') {
-    return (
-      '<div class="cluster-ambient-notice cluster-notice-error">' +
-        '<svg class="notice-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>' +
-        '<div class="notice-body">' +
-          '<strong>分析状态：</strong>本主题最近一次分析生成失败，当前显示为上期结果，系统将在下一轮重试。' +
-          (detail.analysisError ? '（原因：' + escapeHtml(detail.analysisError) + '）' : '') +
-        '</div>' +
-      '</div>'
-    );
-  }
-  if (detail.analysisStatus === 'missing') {
-    return (
-      '<div class="cluster-ambient-notice cluster-notice-info">' +
-        '<svg class="notice-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>' +
-        '<div class="notice-body">' +
-          '<strong>待生成：</strong>该主题的多维学术分析尚未生成，将在下一轮流水线中产出。' +
-        '</div>' +
-      '</div>'
-    );
-  }
-  return '';
+  const notice = getAnalysisStatusNotice(detail);
+  if (!notice || !notice.shortText) return '';
+
+  const fullText = notice.fullHtml.replace(/<[^>]+>/g, '');
+  return renderInlineNoticeChip({
+    tone: notice.tone,
+    shortText: notice.shortText,
+    fullText,
+    extraClass: 'cluster-header-notice',
+    id: 'btnHeaderStatusNotice'
+  });
 }

@@ -175,6 +175,12 @@
   color: var(--cluster-blue);
 }
 
+.cluster-notice-success {
+  background: var(--cluster-green-tint);
+  border-color: var(--cluster-green-border);
+  color: var(--cluster-green);
+}
+
 .cluster-ambient-tip {
   font-size: var(--text-xs, 12px);
   color: var(--text-secondary);

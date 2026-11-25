@@ -4,7 +4,9 @@
 // ============================================
 
 import {
-  escapeHtml
+  escapeHtml,
+  renderInlineNoticeChip,
+  isTrendMetricsInsufficient
 } from './utils.js';
 
 export function renderTrend(detail) {
@@ -104,7 +106,15 @@ export function renderTrend(detail) {
     )
     .join('');
 
-  const insufficient = metrics.filter((row) => row.addedLinkedCount > 0).length < 3;
+  const insufficient = isTrendMetricsInsufficient(detail);
+  const insufficientChip = insufficient
+    ? renderInlineNoticeChip({
+        tone: 'warn',
+        shortText: '有效月份不足 3 个月',
+        fullText: '覆盖有效月份不足 3 个月，样本暂不足以推断平滑趋势。',
+        extraClass: 'cluster-section-notice'
+      })
+    : '';
 
   return (
     '<section class="cluster-section">' +
@@ -113,13 +123,8 @@ export function renderTrend(detail) {
           '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>' +
           '<span>演化趋势与计量动力学 (' + metrics.length + ' 个月)</span>' +
         '</h2>' +
+        insufficientChip +
       '</div>' +
-      (insufficient
-        ? '<div class="cluster-ambient-notice cluster-notice-warn">' +
-            '<svg class="notice-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
-            '<div class="notice-body">覆盖有效月份不足 3 个月，样本暂不足以推断平滑趋势。</div>' +
-          '</div>'
-        : '') +
       '<div class="cluster-chart-card">' + chart + '</div>' +
       '<div class="cluster-table-responsive" style="margin-top:var(--space-4)">' +
         '<table class="cluster-matrix cluster-metrics-table">' +

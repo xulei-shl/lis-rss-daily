@@ -108,3 +108,38 @@
   gap: 4px;
   margin-top: 4px;
 }
+
+/* 零散研究折叠区 (Loose Articles Details) */
+.cluster-details-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.cluster-details-summary::-webkit-details-marker,
+.cluster-details-summary::marker {
+  display: none;
+}
+
+.cluster-details-summary-right {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-inline-start: auto;
+}
+
+.cluster-details[open] .cluster-drawer-chevron {
+  transform: rotate(180deg);
+}
+
+.cluster-details-body {
+  padding-top: var(--space-3);
+}
