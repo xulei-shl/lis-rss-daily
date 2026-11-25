@@ -88,6 +88,37 @@ class TelegramBotManager {
   }
 
   /**
+   * Restart the polling bot of a user from the current database settings.
+   * Called after the bot token / enabled flag is saved, so the change applies
+   * without restarting the whole application.
+   */
+  async reloadUser(userId: number): Promise<void> {
+    const existing = this.bots.get(userId);
+    if (existing) {
+      await existing.stop();
+      this.bots.delete(userId);
+    }
+
+    const config = await this.getUserConfig(userId);
+
+    if (!config) {
+      log.info({ userId }, 'Telegram bot reloaded: disabled or no active chats, polling stopped');
+      return;
+    }
+
+    try {
+      const bot = new TelegramBot(config.botToken, config.userId, config.chats);
+      await bot.start();
+      this.bots.set(config.userId, bot);
+      // start() may have found no bots at boot; keep the lifecycle flag truthful
+      this.isRunning = true;
+      log.info({ userId }, 'Telegram bot reloaded with current settings');
+    } catch (error) {
+      log.error({ userId, error }, 'Failed to reload bot for user');
+    }
+  }
+
+  /**
    * Get all active user Telegram configurations
    * Note: This is a simplified implementation that assumes a single user (id=1)
    * For multi-user support, the users table would need to be queried
@@ -95,20 +126,26 @@ class TelegramBotManager {
   private async getEnabledUserConfigs(): Promise<UserTelegramConfig[]> {
     // For now, just check user 1 (the default user)
     // TODO: Extend to query all users from the users table
-    const userId = 1;
+    const config = await this.getUserConfig(1);
+    return config ? [config] : [];
+  }
 
+  /**
+   * Build the Telegram polling config for a user, or null when polling should be off.
+   */
+  private async getUserConfig(userId: number): Promise<UserTelegramConfig | null> {
     // Check if Telegram is enabled for this user
     const enabled = await getUserSetting(userId, 'telegram_enabled');
 
     if (enabled !== 'true') {
-      return [];
+      return null;
     }
 
     // Get bot token
     const botToken = await getUserSetting(userId, 'telegram_bot_token');
 
     if (!botToken) {
-      return [];
+      return null;
     }
 
     // Get all active chats for this user
@@ -116,16 +153,10 @@ class TelegramBotManager {
 
     if (chats.length === 0) {
       log.debug({ userId }, 'No active Telegram chats configured');
-      return [];
+      return null;
     }
 
-    return [
-      {
-        userId,
-        botToken,
-        chats,
-      },
-    ];
+    return { userId, botToken, chats };
   }
 }
 

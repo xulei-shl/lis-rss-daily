@@ -18,6 +18,7 @@ import { initInsightsScheduler } from './insights-scheduler.js';
 import { initTopicClusterScheduler } from './topic-cluster-scheduler.js';
 import { initTopicAnalysisScheduler } from './topic-cluster-analysis-scheduler.js';
 import { initTelegramBotManager } from './telegram/bot-manager.js';
+import { acquireInstanceLock } from './instance-lock.js';
 import { initGmailScheduler } from './gmail-scheduler.js';
 import { initWebScheduler } from './web-scheduler.js';
 import { initRejectedCleanupScheduler } from './rejected-cleanup-scheduler.js';
@@ -36,6 +37,21 @@ async function main() {
   // Initialize logger
   initLogger();
   log.info('🚀 LIS-RSS Literature Tracker starting...');
+
+  // Single-instance guard: a second instance polling the same Telegram bot token
+  // makes Telegram answer 409 Conflict and kill the long poll, so /getarticles stops working.
+  const lockPath = path.join(path.dirname(config.databasePath), 'app.lock');
+  const instanceLock = await acquireInstanceLock(lockPath);
+  if (!instanceLock.acquired) {
+    log.error(
+      { lockPath, pid: process.pid },
+      '❌ 另一个 LIS-RSS 主应用实例正在运行，本次启动退出（避免重复轮询同一个 Telegram bot）'
+    );
+    process.exit(0);
+  }
+
+  // 任何退出路径都释放锁（崩溃时残留的 socket 也会在下次启动被接管）
+  process.once('exit', instanceLock.release);
 
   // Log configuration
   log.info({
@@ -270,6 +286,7 @@ async function main() {
       log.info('🌐 Web server closed');
     });
     await closeDb();
+    instanceLock.release();
     log.info('👋 Goodbye!');
     process.exit(0);
   };

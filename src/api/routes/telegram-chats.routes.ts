@@ -13,6 +13,7 @@ import {
   type TelegramPushFlags,
 } from '../telegram-chats.js';
 import { PUSH_TYPE_DEFINITIONS } from '../../constants/push-types.js';
+import { getBotManager } from '../../telegram/bot-manager.js';
 import { logger } from '../../logger.js';
 
 const log = logger.child({ module: 'api-routes/telegram-chats' });
@@ -27,6 +28,18 @@ function readPushFlags(body: Record<string, any>): Partial<TelegramPushFlags> {
     }
   }
   return flags;
+}
+
+/**
+ * 让 chat 变更立即生效：重建该用户的轮询 bot（chat 列表在构造时注入，不重建读不到新配置）。
+ * 写库已成功，重建失败只记日志，不让请求失败。
+ */
+async function reloadBotForUser(userId: number): Promise<void> {
+  try {
+    await getBotManager().reloadUser(userId);
+  } catch (error) {
+    log.error({ error, userId }, 'Failed to reload Telegram bot after chat change');
+  }
 }
 
 /**
@@ -80,6 +93,7 @@ router.post('/telegram-chats', requireAuth, requireAdmin, async (req: AuthReques
     };
 
     const chat = await addTelegramChat(req.userId!, input);
+    await reloadBotForUser(req.userId!);
     res.status(201).json(chat);
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to add Telegram chat');
@@ -121,6 +135,11 @@ router.put('/telegram-chats/:id', requireAuth, requireAdmin, async (req: AuthReq
       return res.status(404).json({ error: 'Telegram Chat 不存在' });
     }
 
+    // 只有影响轮询权限/可达性的字段变更才重建 bot（推送开关在发送时读取，无需重建）
+    if (role !== undefined || isActive !== undefined) {
+      await reloadBotForUser(req.userId!);
+    }
+
     res.json(chat);
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to update Telegram chat');
@@ -145,6 +164,7 @@ router.delete('/telegram-chats/:id', requireAuth, requireAdmin, async (req: Auth
       return res.status(404).json({ error: 'Telegram Chat 不存在' });
     }
 
+    await reloadBotForUser(req.userId!);
     res.json({ success: true });
   } catch (error) {
     log.error({ error, userId: req.userId }, 'Failed to delete Telegram chat');

@@ -3,6 +3,7 @@ import type { AuthRequest } from '../../middleware/auth.js';
 import { requireAuth, requireAdmin } from '../../middleware/auth.js';
 import { getChromaSettings, updateChromaSettings, getTelegramSettings, updateTelegramSettings } from '../settings.js';
 import { getTelegramNotifier } from '../../telegram/index.js';
+import { getBotManager } from '../../telegram/bot-manager.js';
 import { getTelegramChats, hasTelegramChats } from '../telegram-chats.js';
 import { logger } from '../../logger.js';
 
@@ -125,6 +126,9 @@ router.put('/settings/telegram', requireAuth, requireAdmin, async (req: AuthRequ
       enabled: enabled !== undefined ? Boolean(enabled) : undefined,
       botToken: botToken?.trim(),
     });
+
+    // 让设置立即生效：按新 token / 启用状态重建该用户的轮询 bot（无需重启服务）
+    await getBotManager().reloadUser(req.userId!);
 
     // 获取更新后的完整配置并返回（脱敏处理）
     const updatedSettings = await getTelegramSettings(req.userId!);

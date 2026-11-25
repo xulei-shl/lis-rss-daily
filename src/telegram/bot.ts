@@ -9,7 +9,7 @@
  */
 
 import { logger } from '../logger.js';
-import { TelegramClient } from './client.js';
+import { TelegramClient, TelegramApiError } from './client.js';
 import { getMergedSources, type MergedSourceOption } from '../api/articles.js';
 
 import { CallbackHandler } from './bot-callbacks.js';
@@ -26,6 +26,7 @@ const log = logger.child({ module: 'telegram-bot' });
 const POLL_TIMEOUT = 30; // seconds
 const POLL_LIMIT = 100;
 const POLL_ERROR_DELAY = 5000; // ms
+const MAX_POLL_ERROR_DELAY = 60000; // ms
 
 // State persistence
 const STATE_DIR = process.env.TELEGRAM_STATE_DIR || '/tmp/lis-rss-daily/telegram';
@@ -57,6 +58,7 @@ export class TelegramBot {
   private lastActivityTime: number = Date.now();
   private idlePollInterval: number = 10000;
   private activePollInterval: number = 1000;
+  private consecutivePollFailures: number = 0;
 
   // State persistence
   private stateFilePath: string;
@@ -273,6 +275,8 @@ export class TelegramBot {
 
     this.getUpdates()
       .then((updates) => {
+        this.consecutivePollFailures = 0;
+
         if (updates.length > 0) {
           this.lastActivityTime = Date.now();
           this.processUpdates(updates).catch((error) => {
@@ -281,40 +285,69 @@ export class TelegramBot {
         }
       })
       .catch((error) => {
-        log.error({ error }, 'Error polling for updates');
+        this.consecutivePollFailures++;
+        this.logPollError(error);
       })
       .finally(() => {
         if (this.isRunning) {
-          const timeSinceActivity = Date.now() - this.lastActivityTime;
-          const pollInterval = timeSinceActivity > 300000
-            ? this.idlePollInterval
-            : this.activePollInterval;
-
-          this.pollTimeout = setTimeout(() => this.poll(), pollInterval);
+          this.pollTimeout = setTimeout(() => this.poll(), this.getNextPollInterval());
         }
       });
+  }
+
+  /**
+   * Poll interval: activity-based normally, exponential backoff while failing.
+   * Without backoff a deploy problem (e.g. two instances -> 409) turns into a tight retry loop.
+   */
+  private getNextPollInterval(): number {
+    if (this.consecutivePollFailures > 0) {
+      const backoff = POLL_ERROR_DELAY * Math.pow(2, this.consecutivePollFailures - 1);
+      return Math.min(backoff, MAX_POLL_ERROR_DELAY);
+    }
+
+    const timeSinceActivity = Date.now() - this.lastActivityTime;
+    return timeSinceActivity > 300000 ? this.idlePollInterval : this.activePollInterval;
+  }
+
+  private logPollError(error: unknown): void {
+    // Polling stopped on purpose (e.g. bot reload after saving a new token) - the abort is not a failure
+    if (!this.isRunning) {
+      return;
+    }
+
+    // 409 means another process is polling the same bot token; retrying cannot fix it,
+    // so log an actionable message instead of a bare error.
+    if (error instanceof TelegramApiError && error.statusCode === 409) {
+      log.error({
+        userId: this.userId,
+        consecutiveFailures: this.consecutivePollFailures,
+        hint: '同一个 bot token 正被多个进程 getUpdates：检查是否有第二个主应用实例（systemd 服务、手动 pnpm dev 或容器）仍在运行',
+      }, 'Telegram 409 Conflict: multiple pollers for the same bot');
+      return;
+    }
+
+    log.error({
+      userId: this.userId,
+      consecutiveFailures: this.consecutivePollFailures,
+      error,
+    }, 'Error polling for updates');
   }
 
   /**
    * Get updates from Telegram
    */
   private async getUpdates(): Promise<TelegramUpdate[]> {
-    try {
-      const response = await this.client.getUpdates(
-        this.latestUpdateId > 0 ? this.latestUpdateId + 1 : undefined,
-        POLL_LIMIT,
-        POLL_TIMEOUT
-      );
+    const response = await this.client.getUpdates(
+      this.latestUpdateId > 0 ? this.latestUpdateId + 1 : undefined,
+      POLL_LIMIT,
+      POLL_TIMEOUT
+    );
 
-      if (response.ok && response.result) {
-        return response.result;
-      }
-
-      return [];
-    } catch (error) {
-      log.error({ error }, 'Error in getUpdates');
-      return [];
+    if (response.ok && response.result) {
+      return response.result;
     }
+
+    return [];
   }
 
   /**

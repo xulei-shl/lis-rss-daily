@@ -40,6 +40,30 @@ systemctl list-units --type=service --all | grep -E 'lis-rss|chroma|deepsearch|p
 - **health-watchdog**：从 `scripts/health-watchdog/deploy/` 安装 `.service/.timer`，并用 `Environment="HEALTH_SERVICES=..."` 覆盖为**实际服务名**（本次：`lis-rss.service chromadb.service deepsearch-api.service paper-pdf-api.service paper-pdf-summary-telegram.service`）。旧模板中的 `paper-pdf-summary-api.service` 名不一致会误报，该过期模板已从 `deploy/` 删除（实际 unit 名为 `paper-pdf-api.service`）。
 - **Chroma 数据路径必须一致**：服务 `--path /opt/lis-rss-daily/data/vector/chroma`（目录）。若历史 `chroma.sqlite3` 位于 `data/vector/chroma.sqlite3`，迁移前先停 Chroma，再移动到 `data/vector/chroma/chroma.sqlite3` 或按下述重建流程处理；避免“服务能起但向量库与预期不一致”。
 
+### 单实例锁与 Telegram 热加载（2026-11-25）
+
+- **同一个 bot token 只能有一个主应用实例在轮询**：`src/index.ts` 启动时先获取单实例锁 `data/app.lock`（Unix domain socket，由内核仲裁，不依赖 pid 存活判断）。拿不到锁时打印 `❌ 另一个 LIS-RSS 主应用实例正在运行，本次启动退出` 并主动 `exit(0)`；崩溃残留的 socket 在 2s 内可被接管，无需手工删文件。
+- 正因如此，`lis-rss` 的 `Restart` 必须最终落到 `on-failure`：锁冲突是**主动退出**，`Restart=always` 会被每 `RestartSec` 反复拉起，两个实例同时 `getUpdates` 就是 Telegram `409 Conflict` 的成因。
+- **本清单所有 `lis-rss.service` 示例仍保持 `Restart=always`，统一用 drop-in 覆盖为 `on-failure`**（不改原 unit，便于对照历史模板与回滚）；新建机器也走这同一条路径：
+
+```bash
+mkdir -p /etc/systemd/system/lis-rss.service.d
+cat > /etc/systemd/system/lis-rss.service.d/override.conf << 'EOF'
+[Service]
+Restart=on-failure
+RestartSec=10
+EOF
+systemctl daemon-reload
+systemctl show lis-rss -p Restart   # 期望 Restart=on-failure
+```
+
+- 排障：`ls -l data/app.lock`、`ss -xlp | grep app.lock`、`ss -lntp | grep 8007` 三者应指向**同一 PID**；`journalctl -u lis-rss --since '-10 min' --no-pager | grep 'statusCode":409'` 应为 0。启动日志正常顺序为 `已获取单实例锁` → `Database initialized` → `Web server listening on 0.0.0.0:8007` → `Telegram bot manager started`。
+- **409 自愈**：轮询遇 409 按 `5s × 2^(n-1)` 指数退避（上限 60s）并打专门的 `409 Conflict` 告警，间隔恢复后自动继续，不需要手工重启。
+- **Telegram 配置热加载**（保存即生效，不必 `systemctl restart lis-rss`）：
+  - Web「设置 → Telegram」保存 bot token / 启用开关 → 旧 bot 停止，按库中最新 token 重建。
+  - 「Telegram Chats」新增 / 删除 chat、修改 `role` / 启用状态 → 立即重建路由；只改推送开关（如 `telegram_new_articles`）不会重建长轮询，发送时直接读库。
+  - 该热加载只覆盖主应用内的 bot；`paper-pdf-summary-telegram` 是独立服务，改它自己的 `.env` 仍需重启该服务。
+
 ### Chroma/向量库恢复（主库完整、向量库不全/对不上）
 
 1. **判定**：`sqlite3 data/rss-tracker.db "SELECT count(*) FROM articles;"`；`curl http://127.0.0.1:8000/api/v2/heartbeat`；检查 `GET /api/v2/.../collections` 或 `GET /api/articles/vector-check`（需登录）。`embeddings=0`/collection 空/维度或内容不可信时考虑重建。
@@ -62,6 +86,12 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8007/
 curl -s http://127.0.0.1:8081/health
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8081/docs
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8082/docs
+# 单实例锁与重启策略（详见「单实例锁与 Telegram 热加载」）
+ls -l data/app.lock
+ss -xlp | grep app.lock
+ss -lntp | grep 8007                          # PID 应与上一行一致
+systemctl show lis-rss -p Restart             # 期望 Restart=on-failure
+journalctl -u lis-rss --since '-10 min' --no-pager | grep -c 'statusCode":409'   # 期望 0
 systemctl --failed --no-pager
 crontab -l | grep paper-pdf-summary
 ls -l /etc/logrotate.d/paper-pdf-summary
@@ -568,6 +598,7 @@ WorkingDirectory=/opt/lis-rss-daily
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=/opt/lis-rss-daily/.env
 ExecStart=/usr/local/bin/pnpm dev
+# Restart 由 drop-in 覆盖为 on-failure，见「单实例锁与 Telegram 热加载」
 Restart=always
 RestartSec=10
 
@@ -644,6 +675,7 @@ User=root
 WorkingDirectory=/opt/lis-rss-daily
 Environment="PATH=/root/.nvm/versions/node/v24.13.1/bin:/usr/local/bin:/usr/bin:/bin"
 ExecStart=/root/.nvm/versions/node/v24.13.1/bin/pnpm dev
+# Restart 由 drop-in 覆盖为 on-failure，见「单实例锁与 Telegram 热加载」
 Restart=always
 RestartSec=10
 StandardOutput=append:/opt/lis-rss-daily/logs/app.log
@@ -740,6 +772,7 @@ WorkingDirectory=/opt/lis-rss-daily
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=/opt/lis-rss-daily/.env
 ExecStart=/usr/local/bin/pnpm dev
+# Restart 由 drop-in 覆盖为 on-failure，见「单实例锁与 Telegram 热加载」
 Restart=always
 RestartSec=10
 
@@ -753,6 +786,14 @@ SyslogIdentifier=lis-rss
 
 [Install]
 WantedBy=multi-user.target
+EOF
+
+# 2.1 用 drop-in 把重启策略改为 on-failure（单实例锁冲突时应用会主动 exit(0)，不能被 always 反复拉起）
+mkdir -p /etc/systemd/system/lis-rss.service.d
+cat > /etc/systemd/system/lis-rss.service.d/override.conf << 'EOF'
+[Service]
+Restart=on-failure
+RestartSec=10
 EOF
 
 # 3. DeepSearch API 服务
@@ -855,6 +896,7 @@ systemctl start paper-pdf-summary-telegram
 # 验证所有服务状态（含 timer）
 systemctl status chromadb lis-rss deepsearch-api paper-pdf-api paper-pdf-summary-telegram --no-pager
 systemctl is-enabled chromadb lis-rss deepsearch-api paper-pdf-api paper-pdf-summary-telegram health-watchdog.timer
+systemctl show lis-rss -p Restart   # 期望 Restart=on-failure（drop-in 生效）
 systemctl list-timers health-watchdog.timer --no-pager
 systemctl --failed --no-pager
 ```
@@ -1434,6 +1476,9 @@ sudo journalctl -u lis-rss -f
 |------|------|
 | 应用代码更新（含新迁移） | `git pull` + `pnpm run db:migrate` + `systemctl restart lis-rss` |
 | 应用配置修改 (.env) | `systemctl restart lis-rss` |
+| Telegram Bot token / 启停（Web 设置页） | 无需重启，保存即生效（热加载） |
+| Telegram Chats 新增/删除/改角色或启用状态 | 无需重启，保存即生效（热加载） |
+| Telegram 推送开关（新文章/每日报告等） | 无需重启，发送时读库 |
 | Web 爬虫源配置修改 (WEB_FETCH_*, BROWSER_ADDRESS) | `systemctl restart lis-rss` |
 | 依赖更新 | `pnpm install` + `pnpm run db:migrate` + `systemctl restart lis-rss` |
 | 应用服务卡死 | `systemctl restart lis-rss` |

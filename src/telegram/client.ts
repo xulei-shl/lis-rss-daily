@@ -36,10 +36,13 @@ function isAbortError(error: unknown): boolean {
  * Error for Telegram API responses that must not be retried (e.g. 4xx).
  * Kept distinct so the network-error catch below does not retry it.
  */
-class TelegramApiError extends Error {
-  constructor(message: string) {
+export class TelegramApiError extends Error {
+  readonly statusCode?: number;
+
+  constructor(message: string, statusCode?: number) {
     super(message);
     this.name = 'TelegramApiError';
+    this.statusCode = statusCode;
   }
 }
 
@@ -133,7 +136,7 @@ export class TelegramClient {
           if (!retryable || attempt === MAX_RETRIES) {
             const error = data.description || `HTTP ${statusCode}`;
             log.error({ method, statusCode, error }, 'Telegram API request failed');
-            throw new TelegramApiError(`Telegram API error: ${error}`);
+            throw new TelegramApiError(`Telegram API error: ${error}`, statusCode);
           }
 
           const retryAfterSeconds = data.parameters?.retry_after;
