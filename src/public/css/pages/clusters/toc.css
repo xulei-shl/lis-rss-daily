@@ -364,6 +364,24 @@
     overflow-y: auto;
     min-height: 0;
     scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .cluster-toc-body-wrap::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .cluster-toc-body-wrap::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .cluster-toc-body-wrap::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+  }
+
+  .cluster-toc-body-wrap::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
   }
 
   .cluster-toc-aside[data-mobile-open='true'] .cluster-toc-body-wrap {
