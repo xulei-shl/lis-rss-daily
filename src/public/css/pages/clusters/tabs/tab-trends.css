@@ -64,3 +64,68 @@
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+
+.cluster-metrics-guide {
+  margin-top: var(--space-4);
+}
+
+.cluster-metrics-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.cluster-metrics-guide-item {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
+}
+
+.cluster-metrics-guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.cluster-metrics-guide-name {
+  font-size: var(--text-sm, 14px);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cluster-metrics-guide-desc {
+  margin: 0 0 6px;
+  font-size: var(--text-xs, 12px);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.cluster-metrics-guide-desc:last-child {
+  margin-bottom: 0;
+}
+
+.cluster-metrics-guide-desc code {
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bg-surface, #fff);
+  border: 1px solid var(--border);
+}
+
+.cluster-metrics-guide-note {
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--border);
+  font-size: var(--text-xs, 12px);
+  line-height: 1.6;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 820px) {
+  .cluster-metrics-guide-grid {
+    grid-template-columns: 1fr;
+  }
+}
