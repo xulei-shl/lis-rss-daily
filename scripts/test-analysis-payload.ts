@@ -22,6 +22,17 @@ import {
   type ParadigmInput,
   type SynthesisInput,
 } from '../src/topic-cluster/llm/analysis.js';
+import { parseSubtopicGaps } from '../src/topic-cluster/llm/subtopic-gaps.js';
+import { parseInsightReport } from '../src/topic-cluster/llm/insight.js';
+import { ClusterSchemaError } from '../src/topic-cluster/llm/schema.js';
+import { buildReviewGroups } from '../src/topic-cluster/service/review-builder.js';
+import { buildTopicInsightClusters } from '../src/topic-cluster/service/insight-builder.js';
+import { vectorToBlob } from '../src/topic-cluster/domain/vector.js';
+import type {
+  ClusterTopicGapsSelection,
+  ClusterTopicReviewsSelection,
+  ClusterTopicsSelection,
+} from '../src/db.js';
 
 let passed = 0;
 function check(name: string, fn: () => void): void {
@@ -381,6 +392,210 @@ check('截断识别：无闭合符或接近 maxTokens 都判定为截断', () =>
   assert.equal(isLikelyTruncated(`{"a":"${'x'.repeat(200)}"}`, 100), true);
   assert.equal(isLikelyTruncated('{"a":1}', 100), false);
   assert.equal(isLikelyTruncated('```json\n{}\n```', 100), false);
+});
+
+/* ── v3.1 子主题独立空白分析与洞察联动 ── */
+
+check('子主题空白解析：白名单过滤、去重、上限 3 条，越界整组抛错', () => {
+  const allowed = new Set([101, 102, 103]);
+  const parsed = parseSubtopicGaps(
+    {
+      gaps: [
+        { gap: '跨馆多模态数据缺乏统一评估基准。', evidence_article_ids: [101, 999] },
+        { gap: '跨馆多模态数据缺乏统一评估基准。', evidence_article_ids: [102] },
+        { gap: '缺少纵向对比验证。', evidence_article_ids: [102, 103] },
+        { gap: '未验证老年用户可访问性。', evidence_article_ids: [103] },
+        { gap: '第 4 条应被上限截断。', evidence_article_ids: [101] },
+      ],
+    },
+    allowed
+  );
+  assert.equal(parsed.length, 3);
+  assert.equal(parsed[0].basis, 'llm_analysis');
+  assert.deepEqual(parsed[0].evidenceArticleIds, [101]);
+
+  assert.throws(
+    () =>
+      parseSubtopicGaps(
+        { gaps: [{ gap: '越界空白', evidence_article_ids: [999] }] },
+        allowed
+      ),
+    ClusterSchemaError
+  );
+  assert.deepEqual(parseSubtopicGaps({ gaps: [] }, allowed), []);
+});
+
+check('综述组为子主题空白保留全量成员切面与局部矩阵统计', () => {
+  const vec = new Float32Array(16);
+  vec[0] = 1;
+  const largeMembers: TopicMemberView[] = Array.from({ length: 24 }, (_, idx) => ({
+    articleId: idx + 1,
+    vector: vec,
+    eventDate: `2025-${String((idx % 12) + 1).padStart(2, '0')}-01`,
+    precision: 'day',
+    methodKeys: ['实验研究'],
+    objectKeys: ['高校图书馆'],
+    similarity: 0.9,
+    isPrimary: true,
+    rank: idx + 1,
+    facet: {
+      research_question: `问题 ${idx + 1}`,
+      method: '实验研究',
+      study_object: '高校图书馆',
+      core_finding: `发现 ${idx + 1}`,
+      limitation: `局限 ${idx + 1}`,
+    },
+  }));
+  const groups = buildReviewGroups(largeMembers, new Map());
+  assert.equal(groups.length, 1);
+  assert.ok(groups[0].evidence.length <= 18 && groups[0].evidence.length < 24);
+  assert.equal(groups[0].gapMembers.length, 24);
+  assert.ok(groups[0].gapStatsText.includes('实验研究'));
+});
+
+check('洞察聚类：先对综述聚元簇再挂载空白，不被大量空白拆散且兼容 16 条成熟度', () => {
+  const v1 = new Float32Array(16);
+  v1[0] = 1;
+  const v2 = new Float32Array(16);
+  v2[0] = 0.9;
+  v2[1] = Math.sqrt(1 - 0.81);
+  const blob1 = vectorToBlob(v1);
+  const blob2 = vectorToBlob(v2);
+
+  const topic = {
+    id: 1,
+    name: '智慧图书馆',
+  } as ClusterTopicsSelection;
+
+  const reviews: ClusterTopicReviewsSelection[] = [
+    {
+      id: 11,
+      topic_id: 1,
+      review_key: 'rv-a-sub1',
+      title: '子群一综述',
+      abstract: '摘要一',
+      review_json: JSON.stringify({
+        sections: {
+          findings: { text: '主要发现一' },
+          limitations: { text: '旧局限段落' },
+        },
+      }),
+      centroid: blob1,
+    } as ClusterTopicReviewsSelection,
+    {
+      id: 12,
+      topic_id: 1,
+      review_key: 'rv-a-sub2',
+      title: '子群二综述',
+      abstract: '摘要二',
+      review_json: JSON.stringify({
+        sections: {
+          findings: { text: '主要发现二' },
+          limitations: { text: '旧局限段落二' },
+        },
+      }),
+      centroid: blob2,
+    } as ClusterTopicReviewsSelection,
+  ];
+
+  // 构造 10 条子主题 LLM 空白 + 2 条宏观空白（其中 1 条旧 limitation 应被去重跳过）
+  const subtopicGaps: ClusterTopicGapsSelection[] = Array.from({ length: 10 }, (_, idx) => ({
+    id: 100 + idx,
+    topic_id: 1,
+    gap_key: `sg-${idx}`,
+    subtopic_key: idx < 5 ? 'a-sub1' : 'a-sub2',
+    scope: 'subtopic',
+    gap: `分面空白 ${idx}`,
+    basis: 'llm_analysis',
+    method: null,
+    object: null,
+    evidence_ids_json: '[1]',
+    embedding: idx < 5 ? blob1 : blob2,
+    embedding_dim: 16,
+    source_analysis_hash: 'h',
+    status: 'active',
+    created_at: '',
+    updated_at: '',
+  } as ClusterTopicGapsSelection));
+
+  const macroGaps: ClusterTopicGapsSelection[] = [
+    {
+      id: 201,
+      topic_id: 1,
+      gap_key: 'gp-hole',
+      subtopic_key: 'a-sub1',
+      scope: 'topic',
+      gap: '跨分面矩阵空白',
+      basis: 'matrix_hole',
+      method: '问卷调查',
+      object: '公共图书馆',
+      evidence_ids_json: '[1]',
+      embedding: blob1,
+      embedding_dim: 16,
+      source_analysis_hash: 'h',
+      status: 'active',
+      created_at: '',
+      updated_at: '',
+    } as ClusterTopicGapsSelection,
+    {
+      id: 202,
+      topic_id: 1,
+      gap_key: 'gp-old-lim',
+      subtopic_key: 'a-sub1',
+      scope: 'topic',
+      gap: '旧阶段 B limitation 空白',
+      basis: 'limitation',
+      method: null,
+      object: null,
+      evidence_ids_json: '[1]',
+      embedding: blob1,
+      embedding_dim: 16,
+      source_analysis_hash: 'h',
+      status: 'active',
+      created_at: '',
+      updated_at: '',
+    } as ClusterTopicGapsSelection,
+  ];
+
+  const clusters = buildTopicInsightClusters({
+    topic,
+    reviews,
+    gaps: [...subtopicGaps, ...macroGaps],
+  });
+
+  assert.equal(clusters.length, 1);
+  assert.equal(clusters[0].reviews.length, 2);
+  // 已有 subtopic 空白时省略冗余 limitations 节，并跳过宏观旧 limitation
+  assert.equal(clusters[0].reviews[0].sections.limitations, undefined);
+  assert.equal(clusters[0].gaps.length, 11);
+  assert.equal(clusters[0].gaps.some((g) => g.id === 202), false);
+  assert.equal(clusters[0].gaps[0].sourceReviewId, 11);
+  assert.equal(clusters[0].gaps[0].scope, 'subtopic');
+
+  // 校验 parseInsightReport 允许超过 8 条空白的 gap_maturity
+  const report = parseInsightReport(
+    {
+      title: '智慧图书馆跨分面研判',
+      thesis: '核心判断。',
+      convergences: [{ text: '收敛结论。', review_ids: [11, 12], gap_ids: [] }],
+      tensions: [],
+      gap_maturity: clusters[0].gaps.map((g) => ({
+        gap_id: g.id,
+        state: 'closing',
+        reason: '已被另一分面回应',
+      })),
+      agenda: [{ text: '联合验证。', review_ids: [11], gap_ids: [100] }],
+    },
+    {
+      userId: 1,
+      scope: clusters[0].scope,
+      reviews: clusters[0].reviews,
+      gaps: clusters[0].gaps,
+      previousReport: null,
+      newRefKeys: [],
+    }
+  );
+  assert.equal(report.gapMaturity.length, 11);
 });
 
 console.log(`\n全部通过：${passed} 项`);

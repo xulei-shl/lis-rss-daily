@@ -1164,6 +1164,19 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
 	    continue;
 	  }
 
+	  // ============================================================
+	  // 054: 研究空白增加来源范围 scope 区分
+	  // ============================================================
+	  if (file === '054_add_gap_scope.sql') {
+	    if (hasColumn(db, 'cluster_topic_gaps', 'scope')) {
+	      console.log('      → Skipped (gap scope already present)');
+	    } else {
+	      db.exec(fs.readFileSync(fullPath, 'utf-8'));
+	      console.log('      → Applied gap scope column');
+	    }
+	    continue;
+	  }
+
 	  // 其他迁移脚本已包含在 001_init.sql 中
 	  console.log('      → Skipped (included in 001_init.sql)');
     }

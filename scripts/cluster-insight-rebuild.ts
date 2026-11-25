@@ -3,9 +3,9 @@
  *
  * 只重建已有主题的洞察层，不重抽 facets、不改成员、不切版本：
  *   1. 角度/脉络 + 周期指标（零 token）
- *   2. 两阶段分析（overview / synthesis / angles / gaps）
- *   3. 深度综述（角度簇合并后的综述组）
- *   4. 主题内洞察（按该主题的综述/空白元簇）
+ *   2. 两阶段分析（overview / synthesis / angles / 宏观 gaps）
+ *   3. 深度综述 + 子主题独立研究空白分析（按子课题分面各调一次 LLM）
+ *   4. 主题内洞察（先对综述聚元簇再挂载分面与宏观空白）
  *
  * 运行：
  *   pnpm run cluster:insight-rebuild -- --topic v1-t-030-f5ffcaaa
@@ -161,7 +161,8 @@ function printPlan(
   if (!options.deriveOnly) {
     console.log(
       `预计 LLM 调用：两阶段分析 2 × ${targets.length} 次；` +
-        '深度综述按角度组通常 1~8 次/主题；主题内洞察按综述/空白元簇 0~3 次/主题。'
+        '深度综述按子课题分面通常 1~8 次/主题；子主题独立空白分析 1~8 次/主题；' +
+        '主题内洞察按综述元簇 0~3 次/主题。'
     );
   }
 }
@@ -239,7 +240,8 @@ async function runTopic(
     result.reviews = reviews.status;
     console.log(
       `  [综述] ${reviews.status}，新建 ${reviews.created}，更新 ${reviews.updated}，` +
-        `跳过 ${reviews.skipped}，失败 ${reviews.failed}`
+        `跳过 ${reviews.skipped}，失败 ${reviews.failed}` +
+        (typeof reviews.gapsGenerated === 'number' ? `，空白 ${reviews.gapsGenerated}` : '')
     );
     if (reviews.status === 'failed') {
       failures.push({

@@ -226,22 +226,36 @@ function matchExisting(
   existing: ClusterInsightReportsSelection[],
   used: ReadonlySet<number>
 ): ClusterInsightReportsSelection | null {
-  const clusterKeys = new Set(cluster.refs.map(refKey));
+  const clusterKeys = cluster.refs.map(refKey);
+  const clusterReviewKeys = cluster.refs
+    .filter((ref) => ref.kind === 'review')
+    .map(refKey);
+
   let best: ClusterInsightReportsSelection | null = null;
-  let bestScore = 0;
+  let bestCombined = 0;
 
   for (const report of existing) {
     if (used.has(report.id)) continue;
     if (report.topic_id !== cluster.topicId) continue;
-    const reportKeys = parseRefs(report.member_refs_json).map(refKey);
-    const score = jaccardStrings([...clusterKeys], reportKeys);
-    if (score > bestScore) {
-      bestScore = score;
+
+    const reportRefs = parseRefs(report.member_refs_json);
+    const reportKeys = reportRefs.map(refKey);
+    const reportReviewKeys = reportRefs
+      .filter((ref) => ref.kind === 'review')
+      .map(refKey);
+
+    const overallScore = jaccardStrings(clusterKeys, reportKeys);
+    const reviewScore = jaccardStrings(clusterReviewKeys, reportReviewKeys);
+    if (overallScore < 0.5 && reviewScore < 0.5) continue;
+
+    const combined = reviewScore * 0.7 + overallScore * 0.3;
+    if (combined > bestCombined) {
+      bestCombined = combined;
       best = report;
     }
   }
 
-  return best && bestScore >= 0.5 ? best : null;
+  return best;
 }
 
 function computeReportHash(
@@ -250,7 +264,12 @@ function computeReportHash(
   gaps: ClusterTopicGapsSelection[]
 ): string {
   const reviewHash = new Map(reviews.map((review) => [review.id, review.input_hash]));
-  const gapHash = new Map(gaps.map((gap) => [gap.id, `${gap.gap}|${gap.source_analysis_hash}`]));
+  const gapHash = new Map(
+    gaps.map((gap) => [
+      gap.id,
+      `${gap.gap}|${gap.scope}|${gap.basis}|${gap.subtopic_key ?? ''}|${gap.source_analysis_hash}`,
+    ])
+  );
   const parts = cluster.refs
     .map((ref) =>
       ref.kind === 'review'
@@ -260,7 +279,7 @@ function computeReportHash(
     .sort();
 
   return createHash('sha256')
-    .update(`insight:v2|topic:${cluster.topicId}|${parts.join('|')}`)
+    .update(`insight:v3|topic:${cluster.topicId}|${parts.join('|')}`)
     .digest('hex');
 }
 

@@ -111,6 +111,7 @@ export async function materializeTopicGaps(input: MaterializeGapsInput): Promise
       topicId: input.topicId,
       gapKey,
       subtopicKey: assignedSubtopicKey,
+      scope: 'topic',
       gap: gap.gap,
       basis: gap.basis,
       method: gap.method ?? null,

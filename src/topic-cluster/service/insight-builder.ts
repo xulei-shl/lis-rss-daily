@@ -1,13 +1,11 @@
 /**
- * 主题内洞察的规则层（零 token）：对单个大主题的综述子簇 + 研究空白二次聚类。
+ * 主题内洞察的规则层（零 token）：先对综述子簇聚出元簇，再按归属挂载研究空白。
  *
- * 节点向量全部复用已有产物：
- *   - 综述 → 子簇质心；
- *   - 空白 → 证据文献切面的质心。
- * 因此二次聚类不产生任何 embedding 调用。
- *
- * 每个元簇至少包含两个综述子簇，保证报告是在「子簇之间」做综合，
- * 而不是复述某一篇综述。
+ * 设计要点（v3.1）：
+ *   - 只用 `cluster_topic_reviews` 参与二次聚类，避免大量分面空白节点把综述元簇拆散；
+ *   - 综述元簇确定后，`scope = 'subtopic'` 空白按 `subtopic_key` 精确挂载，
+ *     `scope = 'topic'` 宏观空白按质心相似度挂载；
+ *   - 节点向量全部复用已有产物，不产生任何 embedding 调用。
  */
 
 import type {
@@ -38,8 +36,10 @@ export interface InsightCluster {
   gaps: InsightGapInput[];
 }
 
-interface Node {
+interface ReviewNode {
   ref: InsightMemberRef;
+  review: ClusterTopicReviewsSelection;
+  normKey: string;
   vector: Float32Array;
 }
 
@@ -60,114 +60,189 @@ export function buildTopicInsightClusters(
   const topicReviews = input.reviews.filter((review) => review.topic_id === topic.id);
   // 只有一个子簇时没有「子簇之间」的洞察，直接跳过。
   if (topicReviews.length < CLUSTER_LIMITS.insightMinReviews) return [];
-  const topicGaps = input.gaps.filter((gap) => gap.topic_id === topic.id);
 
-  const nodes: Node[] = [];
+  const reviewNodes: ReviewNode[] = [];
   for (const review of topicReviews) {
     if (!review.centroid) continue;
-    nodes.push({
+    reviewNodes.push({
       ref: { kind: 'review', id: review.id, topicId: topic.id },
+      review,
+      normKey: review.review_key.replace(/^rv-/, ''),
       vector: blobToVector(review.centroid),
     });
   }
-  for (const gap of topicGaps) {
-    if (!gap.embedding) continue;
-    nodes.push({
-      ref: { kind: 'gap', id: gap.id, topicId: topic.id },
-      vector: blobToVector(gap.embedding),
-    });
-  }
 
-  if (nodes.length < CLUSTER_LIMITS.insightMinNodes) return [];
+  if (reviewNodes.length < CLUSTER_LIMITS.insightMinReviews) return [];
 
   const targetCount = clamp(
-    Math.ceil(nodes.length / 6),
+    Math.ceil(reviewNodes.length / 4),
     1,
     CLUSTER_LIMITS.insightMaxReports
   );
   const { components } = cohesionClusters(
-    nodes.map((node, index) => ({ id: index, vector: node.vector })),
+    reviewNodes.map((node, index) => ({ id: index, vector: node.vector })),
     CLUSTER_LIMITS.insightClusterThreshold,
-    { minSize: CLUSTER_LIMITS.insightMinNodes, linkage: 'average', targetCount }
+    { minSize: CLUSTER_LIMITS.insightMinReviews, linkage: 'average', targetCount }
   );
 
-  const reviewById = new Map(topicReviews.map((review) => [review.id, review]));
-  const gapById = new Map(topicGaps.map((gap) => [gap.id, gap]));
-  const clusters: InsightCluster[] = [];
+  if (components.length === 0) return [];
 
-  for (const component of components) {
-    const componentNodes = component.ids
-      .map((index) => nodes[index])
-      .filter((node): node is Node => Boolean(node));
+  const topicGaps = input.gaps.filter((gap) => gap.topic_id === topic.id);
+  const hasSubtopicScope = topicGaps.some((gap) => gap.scope === 'subtopic');
 
-    const reviewNodes = componentNodes.filter((node) => node.ref.kind === 'review');
-    // 纯空白簇不算洞察；至少要跨两个综述子簇。
-    if (reviewNodes.length < CLUSTER_LIMITS.insightMinReviews) continue;
+  const baseClusters = components
+    .map((component) => {
+      const members = component.ids
+        .map((index) => reviewNodes[index])
+        .filter((node): node is ReviewNode => Boolean(node))
+        .sort(
+          (a, b) =>
+            dotNormalized(b.vector, component.centroid) - dotNormalized(a.vector, component.centroid) ||
+            a.review.id - b.review.id
+        )
+        .slice(0, CLUSTER_LIMITS.insightEvidenceCap);
 
-    const selected = selectRepresentatives(componentNodes, component.centroid);
-    const refs = selected.map((node) => node.ref);
-    const anchor = [...selected]
-      .sort((a, b) => dotNormalized(b.vector, component.centroid) - dotNormalized(a.vector, component.centroid))
+      return {
+        centroid: component.centroid,
+        members,
+        byNormKey: new Map(members.map((node) => [node.normKey, node.review])),
+        subtopicGaps: [] as Array<{ gap: ClusterTopicGapsSelection; sourceReview: ClusterTopicReviewsSelection; score: number }>,
+        macroGaps: [] as Array<{ gap: ClusterTopicGapsSelection; sourceReview: ClusterTopicReviewsSelection | null; score: number }>,
+      };
+    })
+    .filter((cluster) => cluster.members.length >= CLUSTER_LIMITS.insightMinReviews);
+
+  if (baseClusters.length === 0) return [];
+
+  // 挂载空白：分面空白按 subtopic_key 精确入簇；宏观空白优先按 subtopic_key，其次按质心相似度入最相近元簇
+  for (const gap of topicGaps) {
+    const gapScope = gap.scope === 'subtopic' ? 'subtopic' : 'topic';
+    // 已有子主题独立 LLM 空白时，忽略宏观阶段 B 的旧 limitation 空白以减少重复与噪音
+    if (hasSubtopicScope && gapScope === 'topic' && gap.basis === 'limitation') {
+      continue;
+    }
+
+    const gapNormKey = gap.subtopic_key ? gap.subtopic_key.replace(/^rv-/, '') : null;
+    const gapVector = gap.embedding ? blobToVector(gap.embedding) : null;
+
+    if (gapScope === 'subtopic') {
+      if (!gapNormKey) continue;
+      for (const cluster of baseClusters) {
+        const sourceReview = cluster.byNormKey.get(gapNormKey);
+        if (!sourceReview) continue;
+        const score = gapVector ? dotNormalized(gapVector, cluster.centroid) : 1;
+        cluster.subtopicGaps.push({ gap, sourceReview, score });
+      }
+      continue;
+    }
+
+    let matchedCluster: (typeof baseClusters)[number] | null = null;
+    let matchedReview: ClusterTopicReviewsSelection | null = null;
+    let matchedScore = -Infinity;
+
+    if (gapNormKey) {
+      for (const cluster of baseClusters) {
+        const review = cluster.byNormKey.get(gapNormKey);
+        if (review) {
+          matchedCluster = cluster;
+          matchedReview = review;
+          matchedScore = gapVector ? dotNormalized(gapVector, cluster.centroid) : 1;
+          break;
+        }
+      }
+    }
+
+    if (!matchedCluster && gapVector) {
+      for (const cluster of baseClusters) {
+        const sim = dotNormalized(gapVector, cluster.centroid);
+        if (sim >= CLUSTER_LIMITS.insightClusterThreshold && sim > matchedScore) {
+          matchedScore = sim;
+          matchedCluster = cluster;
+        }
+      }
+    }
+
+    if (matchedCluster) {
+      matchedCluster.macroGaps.push({
+        gap,
+        sourceReview: matchedReview,
+        score: matchedScore,
+      });
+    }
+  }
+
+  const clusters: InsightCluster[] = baseClusters.map((cluster) => {
+    const subtopicSorted = [...cluster.subtopicGaps].sort(
+      (a, b) => b.score - a.score || a.gap.id - b.gap.id
+    );
+    const macroSorted = [...cluster.macroGaps].sort(
+      (a, b) => b.score - a.score || a.gap.id - b.gap.id
+    );
+
+    const selectedGapEntries = [...subtopicSorted, ...macroSorted].slice(
+      0,
+      CLUSTER_LIMITS.insightGapCap
+    );
+
+    const refs: InsightMemberRef[] = [
+      ...cluster.members.map((node) => node.ref),
+      ...selectedGapEntries.map((entry) => ({
+        kind: 'gap' as const,
+        id: entry.gap.id,
+        topicId: topic.id,
+      })),
+    ];
+
+    // 报告身份锚点只取核心综述节点，避免空白更新导致 report_key 漂移
+    const anchor = cluster.members
       .slice(0, 3)
       .map((node) => refKey(node.ref))
       .sort();
 
-    const reviews = selected
-      .filter((node) => node.ref.kind === 'review')
-      .map((node) => reviewById.get(node.ref.id))
-      .filter((review): review is ClusterTopicReviewsSelection => Boolean(review))
-      .map((review) => toReviewInput(review, topicName));
+    const includeLimitations = !hasSubtopicScope;
+    const reviews = cluster.members.map((node) =>
+      toReviewInput(node.review, topicName, includeLimitations)
+    );
 
-    const gaps = selected
-      .filter((node) => node.ref.kind === 'gap')
-      .map((node) => gapById.get(node.ref.id))
-      .filter((gap): gap is ClusterTopicGapsSelection => Boolean(gap))
-      .map((gap) => ({
-        id: gap.id,
-        gap: gap.gap,
-        basis: gap.basis,
-        topicName,
-        method: gap.method,
-        object: gap.object,
-      }));
+    const gaps: InsightGapInput[] = selectedGapEntries.map(({ gap, sourceReview }) => ({
+      id: gap.id,
+      gap: gap.gap,
+      basis: gap.basis,
+      scope: gap.scope === 'subtopic' ? 'subtopic' : 'topic',
+      sourceReviewId: sourceReview?.id ?? null,
+      subtopicTitle: sourceReview?.title ?? null,
+      topicName,
+      method: gap.method,
+      object: gap.object,
+    }));
 
-    clusters.push({
+    return {
       key: `ins-${shortHash(`topic:${topic.id}|${anchor.join('|')}`, 10)}`,
       topicId: topic.id,
       refs,
       topicIds: [topic.id],
-      centroid: component.centroid,
-      scope: `${topicName}（主题内 ${reviewNodes.length} 个综述子簇）`,
+      centroid: cluster.centroid,
+      scope: `${topicName}（主题内 ${cluster.members.length} 个综述子簇）`,
       reviews,
       gaps,
-    });
-  }
+    };
+  });
 
   return clusters
     .sort((a, b) => b.refs.length - a.refs.length || a.key.localeCompare(b.key))
     .slice(0, CLUSTER_LIMITS.insightMaxReports);
 }
 
-/** 元簇内抽样：按到质心的相似度取代表，综述与空白各不超过 evidenceCap */
-function selectRepresentatives(nodes: Node[], centroid: Float32Array): Node[] {
-  const scored = [...nodes].sort(
-    (a, b) =>
-      dotNormalized(b.vector, centroid) - dotNormalized(a.vector, centroid) ||
-      refKey(a.ref).localeCompare(refKey(b.ref))
-  );
-  const reviews = scored.filter((node) => node.ref.kind === 'review').slice(0, CLUSTER_LIMITS.insightEvidenceCap);
-  const gaps = scored.filter((node) => node.ref.kind === 'gap').slice(0, CLUSTER_LIMITS.insightEvidenceCap);
-  return [...reviews, ...gaps];
-}
-
 function toReviewInput(
   review: ClusterTopicReviewsSelection,
-  topicName: string
+  topicName: string,
+  includeLimitations: boolean
 ): InsightReviewInput {
   const parsed = parseReview(review.review_json);
   const sections: Record<string, string> = {};
   if (parsed) {
     for (const [key, value] of Object.entries(parsed.sections)) {
+      if (!includeLimitations && key === 'limitations') continue;
       if (value && typeof value === 'object' && 'text' in value && typeof value.text === 'string') {
         sections[key] = value.text;
       }

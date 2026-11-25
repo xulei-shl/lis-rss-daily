@@ -65,6 +65,8 @@ export const CLUSTER_CONFIG = Object.freeze({
   reviewInputCharBudget: analysisInputCharBudget,
   /** 单篇深度综述输出上限 */
   reviewOutputTokens: analysisOutputTokens,
+  /** 单个子主题独立空白分析输出上限 */
+  subtopicGapsOutputTokens: Math.min(4_096, analysisOutputTokens),
   /** 主题内洞察报告输出上限 */
   insightOutputTokens: analysisOutputTokens,
 });
@@ -126,6 +128,8 @@ export const CLUSTER_LIMITS = Object.freeze({
   reviewMaxGroups: 8,
   /** 深度综述：每篇综述最多携带的证据文献数 */
   reviewEvidenceCap: 18,
+  /** 子主题独立空白分析：每个子主题最多产出的研究空白条数 */
+  subtopicMaxGaps: 3,
   /** 深度综述：周分析单轮最多处理的主题数（控制旗舰模型成本） */
   reviewWeeklyLimit: 40,
   /** 主题内洞察：节点（综述子簇 + 空白）二次聚类的相似度阈值 */
@@ -140,4 +144,6 @@ export const CLUSTER_LIMITS = Object.freeze({
   insightWeeklyLimit: 12,
   /** 主题内洞察：每份报告最多携带的综述/空白节点数 */
   insightEvidenceCap: 12,
+  /** 主题内洞察：每份报告挂载的空白数量与成熟度评估上限 */
+  insightGapCap: 16,
 });

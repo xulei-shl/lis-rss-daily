@@ -11,11 +11,13 @@
  */
 
 import { CLUSTER_CONFIG, CLUSTER_LIMITS } from '../config.js';
-import { groupSubtopics, type SubtopicGroup, type ChainItem } from '../domain/chaining.js';
+import { groupSubtopics, type ChainItem } from '../domain/chaining.js';
 import { shortHash } from '../domain/hash.js';
 import { dotNormalized } from '../domain/vector.js';
+import type { SubtopicMemberFacetInput } from '../llm/subtopic-gaps.js';
 import type { ArticleBrief } from '../source.js';
 import type { EvidencePack } from './analysis-payload.js';
+import { buildMatrix, renderMatrixSummary } from './matrix.js';
 import type { TopicMemberView } from './member-view.js';
 
 export interface ReviewGroup {
@@ -28,6 +30,10 @@ export interface ReviewGroup {
   centroid: Float32Array;
   evidence: EvidencePack[];
   statsText: string;
+  /** 供子主题独立空白分析使用的局部统计与矩阵分布 */
+  gapStatsText: string;
+  /** 供子主题独立空白分析使用的全量成员轻量切面 */
+  gapMembers: SubtopicMemberFacetInput[];
   /** 全成员切面签名，用于增量重算判定（非代表成员变化也要触发） */
   facetSignature: string;
 }
@@ -125,6 +131,14 @@ function buildGroup(
     ? (subtopicKey.startsWith('rv-') ? subtopicKey : `rv-${subtopicKey}`)
     : `rv-${shortHash(anchor.join(','), 10)}`;
 
+  const statsText = renderGroupStats(members);
+  const gapStatsText = renderSubtopicGapStats(members, statsText);
+  const gapMembers = buildGapMembers(
+    scored,
+    briefs,
+    Math.floor(CLUSTER_CONFIG.reviewInputCharBudget * 0.7)
+  );
+
   return {
     key,
     subtopicKey: subtopicKey ?? key,
@@ -132,7 +146,9 @@ function buildGroup(
     representativeIds: selected.map((member) => member.articleId),
     centroid,
     evidence,
-    statsText: renderGroupStats(members),
+    statsText,
+    gapStatsText,
+    gapMembers,
     facetSignature: members
       .map(
         (member) =>
@@ -140,6 +156,100 @@ function buildGroup(
           `${member.facet.study_object}|${member.facet.core_finding}|${member.facet.limitation ?? ''}`
       )
       .join('||'),
+  };
+}
+
+function renderSubtopicGapStats(members: TopicMemberView[], baseStats: string): string {
+  const matrix = buildMatrix(
+    members.map((member) => ({
+      articleId: member.articleId,
+      methodKeys: member.methodKeys,
+      objectKeys: member.objectKeys,
+    })),
+    { minCount: 2, maxHoles: 8 }
+  );
+
+  if (matrix.cells.length > 0 || matrix.holes.length > 0) {
+    return `${baseStats}\n\n${renderMatrixSummary(matrix, 12, 8)}`;
+  }
+
+  const methods = formatTopKeyCounts(members.flatMap((member) => member.methodKeys), 8);
+  const objects = formatTopKeyCounts(members.flatMap((member) => member.objectKeys), 8);
+  return [
+    baseStats,
+    `【方法频次（局部样本较少，未构成 ≥2 篇交叉矩阵）】${methods}`,
+    `【对象频次】${objects}`,
+  ].join('\n');
+}
+
+function formatTopKeyCounts(keys: string[], limit: number): string {
+  const counts = new Map<string, number>();
+  for (const key of keys) {
+    if (!key) continue;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  if (counts.size === 0) return '暂无规范词条';
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([key, count]) => `${key}（${count} 篇）`)
+    .join('、');
+}
+
+function buildGapMembers(
+  scoredMembers: TopicMemberView[],
+  briefs: Map<number, ArticleBrief>,
+  charBudget: number
+): SubtopicMemberFacetInput[] {
+  const presets = [
+    { title: 90, question: 100, finding: 120, limitation: 200 },
+    { title: 60, question: 60, finding: 70, limitation: 140 },
+    { title: 45, question: 45, finding: 50, limitation: 100 },
+  ];
+
+  for (const limits of presets) {
+    const packed = scoredMembers.map((member) => toGapMember(member, briefs.get(member.articleId), limits));
+    if (JSON.stringify(packed, null, 2).length <= charBudget) {
+      return packed;
+    }
+  }
+
+  // 极端长列表：优先保留有自陈局限的文献，再按质心代表性裁剪到预算内
+  const compact = scoredMembers.map((member) =>
+    toGapMember(member, briefs.get(member.articleId), presets[2])
+  );
+  const prioritized = [
+    ...compact.filter((item) => Boolean(item.limitation)),
+    ...compact.filter((item) => !item.limitation),
+  ];
+  const kept: SubtopicMemberFacetInput[] = [];
+  let currentChars = 4;
+  for (const item of prioritized) {
+    const size = JSON.stringify(item).length + 4;
+    if (kept.length >= 6 && currentChars + size > charBudget) break;
+    kept.push(item);
+    currentChars += size;
+  }
+  return kept;
+}
+
+function toGapMember(
+  member: TopicMemberView,
+  brief: ArticleBrief | undefined,
+  limits: { title: number; question: number; finding: number; limitation: number }
+): SubtopicMemberFacetInput {
+  const year =
+    brief?.publishedYear ??
+    (member.eventDate ? Number(member.eventDate.slice(0, 4)) : null);
+  return {
+    articleId: member.articleId,
+    title: truncate(brief?.title ?? '', limits.title),
+    year: Number.isFinite(year ?? NaN) ? year : null,
+    researchQuestion: truncate(member.facet.research_question, limits.question),
+    method: truncate(member.facet.method, 50),
+    studyObject: truncate(member.facet.study_object, 60),
+    coreFinding: truncate(member.facet.core_finding, limits.finding),
+    limitation: member.facet.limitation ? truncate(member.facet.limitation, limits.limitation) : null,
   };
 }
 

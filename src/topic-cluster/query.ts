@@ -218,6 +218,7 @@ export interface TopicReviewGapItem {
   gapKey: string;
   gap: string;
   basis: string;
+  scope?: 'topic' | 'subtopic';
   method: string | null;
   object: string | null;
   evidenceArticleIds: number[];
@@ -256,6 +257,7 @@ export interface TopicInsightItem {
   agenda: TopicInsightLinkedText[];
   topicIds: number[];
   topics: Array<{ id: number; slug: string; name: string }>;
+  refTitles?: { reviews: Record<number, string>; gaps: Record<number, string> };
   version: number;
   updatedAt: string;
 }
@@ -428,6 +430,14 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     })
     .sort((a, b) => (a.eventDate ?? '').localeCompare(b.eventDate ?? ''));
 
+  const hasSubtopicGaps = gapRows.some((g) => g.scope === 'subtopic');
+  const reviewTitleById: Record<number, string> = {};
+  for (const row of reviewRows) reviewTitleById[row.id] = row.title;
+  const gapTextById: Record<number, string> = {};
+  for (const row of gapRows) gapTextById[row.id] = row.gap;
+  const refTitles = { reviews: reviewTitleById, gaps: gapTextById };
+  const uniqueEvidenceIds = [...new Set([...gapArticleIds, ...activeGapEvidenceIds])];
+
   return {
     id: topic.id,
     slug: topic.slug,
@@ -448,7 +458,7 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
     angles,
     looseArticles,
     metrics,
-    evidenceArticles: gapArticleIds.map((id) => {
+    evidenceArticles: uniqueEvidenceIds.map((id) => {
       const brief = briefs.get(id);
       return {
         id,
@@ -474,6 +484,7 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
         const normKey = row.review_key.replace(/^rv-/, '');
         const matchingGaps = gapRows
           .filter((g) => {
+            if (hasSubtopicGaps && g.scope !== 'subtopic') return false;
             if (!g.subtopic_key) return false;
             const normSub = g.subtopic_key.replace(/^rv-/, '');
             return normSub === normKey;
@@ -482,6 +493,7 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
             gapKey: g.gap_key,
             gap: g.gap,
             basis: g.basis,
+            scope: (g.scope === 'subtopic' ? 'subtopic' : 'topic') as 'topic' | 'subtopic',
             method: g.method,
             object: g.object,
             evidenceArticleIds: parseNumberArray(g.evidence_ids_json),
@@ -491,7 +503,7 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
       .filter((review): review is TopicReviewItem => review !== null),
     insights: insightRows
       .filter((row) => row.topic_id === topic.id)
-      .map((row) => toTopicInsight(row, versionTopics))
+      .map((row) => toTopicInsight(row, versionTopics, refTitles))
       .filter((insight): insight is TopicInsightItem => insight !== null),
   };
 }
@@ -666,7 +678,8 @@ function toTopicReview(
 
 function toTopicInsight(
   row: ClusterInsightReportsSelection,
-  topics: ClusterTopicsSelection[]
+  topics: ClusterTopicsSelection[],
+  refTitles?: { reviews: Record<number, string>; gaps: Record<number, string> }
 ): TopicInsightItem | null {
   let parsed: InsightReport;
   try {
@@ -694,6 +707,7 @@ function toTopicInsight(
       .map((id) => topicById.get(id))
       .filter((topic): topic is ClusterTopicsSelection => Boolean(topic))
       .map((topic) => ({ id: topic.id, slug: topic.slug, name: topic.name })),
+    ...(refTitles ? { refTitles } : {}),
     version: row.version,
     updatedAt: row.updated_at,
   };

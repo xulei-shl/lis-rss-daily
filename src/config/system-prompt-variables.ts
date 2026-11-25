@@ -388,7 +388,38 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
   },
 
   /**
-   * cluster_insight 类型变量 - 跨主题洞察
+   * cluster_subtopic_gaps 类型变量 - 子主题独立研究空白分析
+   */
+  cluster_subtopic_gaps: {
+    TOPIC_NAME: {
+      description: '所属主题名称',
+      source: 'cluster_topics.name',
+      required: true,
+    },
+    TOPIC_KEYWORDS: {
+      description: '主题关键词（逗号分隔）',
+      source: 'cluster_topics.keywords',
+      required: true,
+    },
+    SUBTOPIC_STATS: {
+      description: '子课题规模、时间范围及局部方法×对象分布与空缺格',
+      source: '规则计算（局部矩阵与频次）',
+      required: true,
+    },
+    REVIEW_CONTEXT: {
+      description: '本子课题深度综述标题、摘要与分歧摘要',
+      source: 'cluster_topic_reviews',
+      required: true,
+    },
+    MEMBERS_JSON: {
+      description: '本子课题全量成员轻量切面（研究问题/方法/对象/发现/局限）',
+      source: 'article_cluster_facets + articles.title',
+      required: true,
+    },
+  },
+
+  /**
+   * cluster_insight 类型变量 - 主题内洞察
    */
   cluster_insight: {
     REPORT_SCOPE: {
@@ -397,12 +428,12 @@ export const PROMPT_VARIABLES: Record<string, Record<string, VariableDescription
       required: true,
     },
     REVIEWS_JSON: {
-      description: '成员综述（标题、摘要、主题与小节摘要）',
+      description: '成员综述（标题、摘要、主题与核心小节摘要）',
       source: 'cluster_topic_reviews',
       required: true,
     },
     GAPS_JSON: {
-      description: '成员研究空白（文本、依据、方法与对象）',
+      description: '成员研究空白（文本、依据、来源范围与所属子课题）',
       source: 'cluster_topic_gaps',
       required: true,
     },

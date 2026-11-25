@@ -29,6 +29,7 @@ export const RUN_STATUS_LABELS = {
 };
 
 export const BASIS_LABELS = {
+  llm_analysis: '依据：LLM分析',
   matrix_hole: '依据：方法×对象覆盖空缺',
   cross_topic_gap: '依据：邻近主题间的交叉空白',
   adjacent_topic: '依据：邻近主题间的空白',

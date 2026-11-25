@@ -106,6 +106,7 @@
   color: var(--text-secondary);
 }
 
+.basis-llm_analysis { background: var(--cluster-blue-tint); color: var(--cluster-blue); }
 .basis-matrix_hole { background: var(--cluster-amber-tint); color: var(--cluster-amber); }
 .basis-limitation { background: var(--cluster-blue-tint); color: var(--cluster-blue); }
 .basis-staleness { background: var(--bg-subtle); color: var(--text-secondary); }

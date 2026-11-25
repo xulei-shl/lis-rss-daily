@@ -376,14 +376,27 @@ export function renderInsights(detail) {
         )
         .join(' ');
 
+      const refTitles = report.refTitles || {};
+      const reviewTitles = refTitles.reviews || {};
+      const gapTitles = refTitles.gaps || {};
       const list = (entries) =>
         (entries || []).length
           ? '<ul class="cluster-clean-list">' +
             entries.map((entry) => {
               const refs = []
-                .concat((entry.reviewIds || []).map((id) => '综述 #' + id))
-                .concat((entry.gapIds || []).map((id) => '空白 #' + id))
-                .map((label) => '<span class="cluster-tag cluster-tag-subtle">' + escapeHtml(label) + '</span>')
+                .concat((entry.reviewIds || []).map((id) => ({
+                  label: '综述 #' + id,
+                  title: reviewTitles[id] ? '综述：' + reviewTitles[id] : '',
+                })))
+                .concat((entry.gapIds || []).map((id) => ({
+                  label: '空白 #' + id,
+                  title: gapTitles[id] ? '空白：' + gapTitles[id] : '',
+                })))
+                .map((ref) =>
+                  '<span class="cluster-tag cluster-tag-subtle"' +
+                  (ref.title ? ' title="' + escapeHtml(ref.title) + '"' : '') + '>' +
+                  escapeHtml(ref.label) + '</span>'
+                )
                 .join(' ');
               return (
                 '<li class="cluster-clean-item">' +

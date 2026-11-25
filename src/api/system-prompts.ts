@@ -71,6 +71,10 @@ const DEFAULT_PROMPT_CONFIG: Record<
     fileName: 'cluster_deep_review.md',
     name: '主题聚类深度综述（主题内语义子簇）',
   },
+  cluster_subtopic_gaps: {
+    fileName: 'cluster_subtopic_gaps.md',
+    name: '主题聚类子主题独立研究空白分析',
+  },
   cluster_insight: {
     fileName: 'cluster_insight.md',
     name: '主题聚类主题内洞察报告',

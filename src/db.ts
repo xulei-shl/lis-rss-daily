@@ -685,6 +685,7 @@ export interface ClusterTopicGapsTable {
   topic_id: number;
   gap_key: string;
   subtopic_key: string | null;
+  scope: Generated<'topic' | 'subtopic'>;
   gap: string;
   basis: string;
   method: string | null;

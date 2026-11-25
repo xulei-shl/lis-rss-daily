@@ -6,7 +6,7 @@
  * 而不是复述单篇文献或跨越大主题。
  */
 
-import { CLUSTER_CONFIG, CLUSTER_TASKS } from '../config.js';
+import { CLUSTER_CONFIG, CLUSTER_LIMITS, CLUSTER_TASKS } from '../config.js';
 import { runClusterJsonTask } from './client.js';
 import {
   ClusterSchemaError,
@@ -51,6 +51,9 @@ export interface InsightGapInput {
   id: number;
   gap: string;
   basis: string;
+  scope: 'subtopic' | 'topic';
+  sourceReviewId: number | null;
+  subtopicTitle: string | null;
   topicName: string;
   method: string | null;
   object: string | null;
@@ -168,7 +171,7 @@ function parseGapMaturity(
       state,
       reason: truncate(reason, 240),
     });
-    if (out.length >= 8) break;
+    if (out.length >= CLUSTER_LIMITS.insightGapCap) break;
   }
   return out;
 }

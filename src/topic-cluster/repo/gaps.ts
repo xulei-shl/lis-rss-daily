@@ -8,12 +8,15 @@
 
 import { getDb, type ClusterTopicGapsSelection } from '../../db.js';
 
+export type GapScope = 'topic' | 'subtopic';
+
 export interface GapWriteRow {
   userId: number;
   setVersion: number;
   topicId: number;
   gapKey: string;
   subtopicKey?: string | null;
+  scope?: GapScope;
   gap: string;
   basis: string;
   method: string | null;
@@ -24,7 +27,7 @@ export interface GapWriteRow {
   sourceAnalysisHash: string;
 }
 
-/** 用本轮空白整体替换主题的 active 空白；未再出现的旧空白置为 superseded */
+/** 用本轮宏观空白整体替换主题的 active topic 级空白；不覆写 subtopic 独立分析空白 */
 export async function replaceTopicGaps(
   topicId: number,
   rows: GapWriteRow[]
@@ -37,10 +40,12 @@ export async function replaceTopicGaps(
       .updateTable('cluster_topic_gaps')
       .set({ status: 'superseded', updated_at: now })
       .where('topic_id', '=', topicId)
+      .where('scope', '=', 'topic')
       .where('status', '=', 'active')
       .execute();
 
     for (const row of rows) {
+      const scope = row.scope ?? 'topic';
       await trx
         .insertInto('cluster_topic_gaps')
         .values({
@@ -49,6 +54,7 @@ export async function replaceTopicGaps(
           topic_id: row.topicId,
           gap_key: row.gapKey,
           subtopic_key: row.subtopicKey ?? null,
+          scope,
           gap: row.gap,
           basis: row.basis,
           method: row.method,
@@ -63,6 +69,7 @@ export async function replaceTopicGaps(
         .onConflict((oc) =>
           oc.columns(['topic_id', 'gap_key']).doUpdateSet({
             subtopic_key: row.subtopicKey ?? null,
+            scope,
             gap: row.gap,
             basis: row.basis,
             method: row.method,
@@ -78,6 +85,109 @@ export async function replaceTopicGaps(
         .execute();
     }
   });
+}
+
+/** 替换单个子课题的 active subtopic 级空白；不影响同主题其他子课题与宏观空白 */
+export async function replaceSubtopicGaps(
+  topicId: number,
+  subtopicKey: string,
+  rows: GapWriteRow[]
+): Promise<void> {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const keys = expandSubtopicKeys(subtopicKey);
+
+  await db.transaction().execute(async (trx) => {
+    await trx
+      .updateTable('cluster_topic_gaps')
+      .set({ status: 'superseded', updated_at: now })
+      .where('topic_id', '=', topicId)
+      .where('scope', '=', 'subtopic')
+      .where('subtopic_key', 'in', keys)
+      .where('status', '=', 'active')
+      .execute();
+
+    for (const row of rows) {
+      await trx
+        .insertInto('cluster_topic_gaps')
+        .values({
+          user_id: row.userId,
+          set_version: row.setVersion,
+          topic_id: row.topicId,
+          gap_key: row.gapKey,
+          subtopic_key: subtopicKey,
+          scope: 'subtopic',
+          gap: row.gap,
+          basis: row.basis,
+          method: row.method,
+          object: row.object,
+          evidence_ids_json: JSON.stringify(row.evidenceIds),
+          embedding: row.embedding,
+          embedding_dim: row.embeddingDim,
+          source_analysis_hash: row.sourceAnalysisHash,
+          status: 'active',
+          updated_at: now,
+        })
+        .onConflict((oc) =>
+          oc.columns(['topic_id', 'gap_key']).doUpdateSet({
+            subtopic_key: subtopicKey,
+            scope: 'subtopic',
+            gap: row.gap,
+            basis: row.basis,
+            method: row.method,
+            object: row.object,
+            evidence_ids_json: JSON.stringify(row.evidenceIds),
+            embedding: row.embedding,
+            embedding_dim: row.embeddingDim,
+            source_analysis_hash: row.sourceAnalysisHash,
+            status: 'active',
+            updated_at: now,
+          })
+        )
+        .execute();
+    }
+  });
+}
+
+/** 读取某个子课题当前 active 的 subtopic 级空白（用于 hash 缓存命中判定） */
+export async function listActiveSubtopicGaps(
+  topicId: number,
+  subtopicKey: string
+): Promise<ClusterTopicGapsSelection[]> {
+  return getDb()
+    .selectFrom('cluster_topic_gaps')
+    .selectAll()
+    .where('topic_id', '=', topicId)
+    .where('scope', '=', 'subtopic')
+    .where('subtopic_key', 'in', expandSubtopicKeys(subtopicKey))
+    .where('status', '=', 'active')
+    .orderBy('id', 'asc')
+    .execute();
+}
+
+/** 将不再活跃的子课题空白置为 superseded（子课题被替换/主题缩小时调用） */
+export async function supersedeSubtopicGaps(
+  topicId: number,
+  subtopicKeys?: readonly string[]
+): Promise<void> {
+  if (subtopicKeys && subtopicKeys.length === 0) return;
+  let query = getDb()
+    .updateTable('cluster_topic_gaps')
+    .set({ status: 'superseded', updated_at: new Date().toISOString() })
+    .where('topic_id', '=', topicId)
+    .where('scope', '=', 'subtopic')
+    .where('status', '=', 'active');
+
+  if (subtopicKeys) {
+    const expanded = [...new Set(subtopicKeys.flatMap((key) => expandSubtopicKeys(key)))];
+    query = query.where('subtopic_key', 'in', expanded);
+  }
+  await query.execute();
+}
+
+function expandSubtopicKeys(subtopicKey: string): string[] {
+  const norm = subtopicKey.replace(/^rv-/, '');
+  return norm === subtopicKey ? [norm, `rv-${norm}`] : [norm, subtopicKey];
 }
 
 export async function listActiveGapsBySet(setVersion: number): Promise<ClusterTopicGapsSelection[]> {
