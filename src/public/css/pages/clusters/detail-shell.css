@@ -151,6 +151,11 @@
   transition: box-shadow 0.15s ease, transform 0.1s ease-out;
 }
 
+.cluster-ambient-notice.cluster-header-notice,
+.cluster-ambient-notice.cluster-section-notice {
+  min-width: min(100%, 212px);
+}
+
 .cluster-ambient-notice.cluster-inline-notice:hover {
   box-shadow: var(--shadow-sm);
 }

@@ -242,3 +242,24 @@ export function getDetailNotices(detail) {
 
   return notices;
 }
+
+/**
+ * 绑定「依据 X 篇文献」抽屉展开/收起交互（综述空白与矩阵空白共用）。
+ * 必须在 root 上只绑定一次，避免重复监听导致单次点击被连续翻转两次。
+ */
+export function bindGapEvidenceToggle(root) {
+  if (!root || root._gapEvidenceBound) return;
+  root._gapEvidenceBound = true;
+
+  root.addEventListener('click', (e) => {
+    const toggleBtn = e.target.closest('.cluster-cite-toggle');
+    if (!toggleBtn) return;
+    const targetId = toggleBtn.getAttribute('aria-controls');
+    if (!targetId) return;
+    const drawer = root.querySelector('#' + targetId);
+    if (!drawer) return;
+    const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+    toggleBtn.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+    drawer.hidden = isExpanded;
+  });
+}

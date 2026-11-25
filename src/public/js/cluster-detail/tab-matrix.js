@@ -200,23 +200,6 @@ export function renderGaps(detail, articleIndex) {
   );
 }
 
-export function bindMatrixEvents(root) {
-  if (!root || root._matrixEventsBound) return;
-  root._matrixEventsBound = true;
-
-  root.addEventListener('click', (e) => {
-    const toggleBtn = e.target.closest('.cluster-cite-toggle');
-    if (!toggleBtn) return;
-    const targetId = toggleBtn.getAttribute('aria-controls');
-    if (!targetId) return;
-    const drawer = root.querySelector('#' + targetId);
-    if (!drawer) return;
-    const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
-    toggleBtn.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
-    drawer.hidden = isExpanded;
-  });
-}
-
 export function renderAdjacent(detail) {
   const adjacent = detail.adjacent || [];
   if (adjacent.length === 0) return '';

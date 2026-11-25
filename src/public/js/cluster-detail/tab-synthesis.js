@@ -82,7 +82,7 @@ export function renderReviews(detail, articleIndex) {
                 tone: 'warn',
                 shortText: '证据不足',
                 fullText: '该论证章节暂无直接支撑文献，系统仅保留原文声明而未补写结论。',
-                extraClass: 'cluster-section-notice'
+                extraClass: 'cluster-sub-notice'
               })
             : '';
 
@@ -355,22 +355,6 @@ export function bindSynthesisEvents(root) {
       },
       true
     );
-  }
-
-  // 3. 局限与研究空白依据文献清单抽屉展开/收起
-  if (!root._synthesisGapsBound) {
-    root._synthesisGapsBound = true;
-    root.addEventListener('click', (e) => {
-      const toggleBtn = e.target.closest('.cluster-cite-toggle');
-      if (!toggleBtn) return;
-      const targetId = toggleBtn.getAttribute('aria-controls');
-      if (!targetId) return;
-      const drawer = root.querySelector('#' + targetId);
-      if (!drawer) return;
-      const isExpanded = toggleBtn.getAttribute('aria-expanded') === 'true';
-      toggleBtn.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
-      drawer.hidden = isExpanded;
-    });
   }
 }
 

@@ -2,12 +2,12 @@
 // 主题洞察详情页 - 模块化入口总装
 // ============================================
 
-import { buildArticleIndex, escapeHtml } from './utils.js';
+import { buildArticleIndex, escapeHtml, bindGapEvidenceToggle } from './utils.js';
 import { renderHeader } from './header.js';
 import { renderTopRunLogs } from './run-logs.js';
 import { renderSummary, renderReviews, renderInsights, renderConsensusDualView, bindSynthesisEvents } from './tab-synthesis.js';
 import { renderAngles, renderLoose } from './tab-evolution.js';
-import { renderMatrix, renderGaps, renderAdjacent, bindMatrixEvents } from './tab-matrix.js';
+import { renderMatrix, renderGaps, renderAdjacent } from './tab-matrix.js';
 import { renderTrend } from './tab-trends.js';
 
 const VALID_TABS = ['synthesis', 'evolution', 'matrix', 'trends'];
@@ -112,8 +112,8 @@ function renderPage(root, detail) {
   // 绑定综述折叠展开交互
   bindSynthesisEvents(root);
 
-  // 绑定研究空白依据文献交互
-  bindMatrixEvents(root);
+  // 绑定研究空白依据文献清单展开/收起交互
+  bindGapEvidenceToggle(root);
 }
 
 function initRunLogsToggle(root) {
