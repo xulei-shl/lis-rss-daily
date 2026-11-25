@@ -20,8 +20,9 @@ import {
   resolveTopic,
   type TopicSort,
 } from '../../topic-cluster/query.js';
-import { getTopicDocumentById } from '../../topic-cluster/repo/documents.js';
+import { deleteTopicDocument, getTopicDocumentById } from '../../topic-cluster/repo/documents.js';
 import {
+  formatDocumentVersion,
   generateTopicDocument,
   getTopicDocumentFilePath,
 } from '../../topic-cluster/service/document-generator.js';
@@ -92,7 +93,7 @@ router.post(
         return;
       }
 
-      const document = await generateTopicDocument(topic.id);
+      const document = await generateTopicDocument(topic.id, { source: 'manual' });
       if (!document) {
         res.json({ generated: false, message: '内容未变化，未生成新版本' });
         return;
@@ -100,7 +101,7 @@ router.post(
 
       res.json({
         generated: true,
-        message: `已生成版本 v${document.version}`,
+        message: `已生成版本 v${formatDocumentVersion(document.version)}`,
         document: {
           id: document.id,
           version: document.version,
@@ -137,16 +138,54 @@ router.get(
         return;
       }
 
+      // 文件内的链接是站内相对路径（/articles/xxx、/clusters/xxx），离线打开会指向
+      // file:///articles/...。下载时注入实际访问地址的 <base>，让链接回到真实服务。
+      const html = fs.readFileSync(filePath, 'utf-8');
+      const baseHref = `${req.protocol}://${req.get('host')}/`
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      const withBase = html.includes('<base ')
+        ? html
+        : html.replace(/<head>/i, `<head>\n<base href="${baseHref}">`);
+
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader(
         'Content-Disposition',
         `attachment; filename="${document.filename}"`
       );
-      res.sendFile(filePath);
+      res.send(withBase);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       log.error({ error: message }, '下载主题洞察版本文件失败');
       res.status(500).json({ error: '下载版本文件失败' });
+    }
+  }
+);
+
+/** 删除某个主题洞察版本文件（仅管理员） */
+router.delete(
+  '/cluster-topics/:slugOrId/documents/:documentId',
+  requireAuth,
+  requireWriteAccess,
+  async (req: any, res: express.Response) => {
+    try {
+      const topic = await resolveTopic(String(req.params.slugOrId));
+      const document = await getTopicDocumentById(Number(req.params.documentId));
+      if (!topic || !document || document.topic_id !== topic.id) {
+        res.status(404).json({ error: '版本文件不存在' });
+        return;
+      }
+
+      fs.rmSync(getTopicDocumentFilePath(document.filename), { force: true });
+      await deleteTopicDocument(document.id);
+      log.info({ topicId: topic.id, documentId: document.id, version: document.version }, '已删除主题洞察版本文件');
+      res.json({ deleted: true, message: `已删除版本 v${formatDocumentVersion(document.version)}` });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.error({ error: message }, '删除主题洞察版本文件失败');
+      res.status(500).json({ error: '删除版本文件失败' });
     }
   }
 );

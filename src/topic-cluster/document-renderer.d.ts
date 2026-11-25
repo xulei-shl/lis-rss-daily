@@ -1,4 +1,4 @@
 export function renderClusterDocumentHtml(
   detail: unknown,
-  meta: { version: number; generatedAtLabel: string }
+  meta: { version: string | number; generatedAtLabel: string }
 ): string;

@@ -26,7 +26,7 @@ import {
   markTopicDirty,
 } from '../src/topic-cluster/repo/topics.js';
 import { runInsightReports } from '../src/topic-cluster/service/insight-runner.js';
-import { generateTopicDocument } from '../src/topic-cluster/service/document-generator.js';
+import { formatDocumentVersion, generateTopicDocument } from '../src/topic-cluster/service/document-generator.js';
 import { rebuildTopicMetrics } from '../src/topic-cluster/service/metrics-builder.js';
 import { runTopicAnalysis } from '../src/topic-cluster/service/analysis-runner.js';
 import { runTopicReviews } from '../src/topic-cluster/service/review-runner.js';
@@ -341,11 +341,11 @@ async function main(): Promise<void> {
 
     // 重建完成后为本主题生成版本文件（契约：生成器内部按内容哈希幂等跳过）。
     try {
-      const document = await generateTopicDocument(topic.id);
-      result.document = document ? `v${document.version}` : '未变化';
+      const document = await generateTopicDocument(topic.id, { source: 'auto' });
+      result.document = document ? `v${formatDocumentVersion(document.version)}` : '未变化';
       console.log(
         document
-          ? `  [版本文件] 已生成 v${document.version}：${document.filename}`
+          ? `  [版本文件] 已生成 v${formatDocumentVersion(document.version)}：${document.filename}`
           : '  [版本文件] 内容未变化，跳过'
       );
     } catch (error) {

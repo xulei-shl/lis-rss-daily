@@ -94,3 +94,33 @@
 .cluster-document-download:hover {
   background: var(--cluster-blue-tint, #f1f5f9);
 }
+
+.cluster-document-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.cluster-document-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--cluster-red, #dc2626);
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--cluster-red, #dc2626);
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.cluster-document-delete:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.cluster-document-delete:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}

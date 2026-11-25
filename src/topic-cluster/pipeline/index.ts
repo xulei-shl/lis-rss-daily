@@ -251,11 +251,14 @@ export async function runClusterPipeline(
     // 完整轮次（分析 → 综述 → 洞察）成功后，为内容有变化的主题各生成一份版本文件。
     // 日节奏的 skipAnalysis 轮次不触发，避免每日重复产出。
     if (!options.skipAnalysis) {
-      await generateTopicDocuments([
-        ...analysis.processedTopicIds,
-        ...review.processedTopicIds,
-        ...insight.topicIds,
-      ]);
+      await generateTopicDocuments(
+        [
+          ...analysis.processedTopicIds,
+          ...review.processedTopicIds,
+          ...insight.topicIds,
+        ],
+        { source: 'auto' }
+      );
     }
 
     const summary: ClusterRunSummary = { setVersion, drift, facets, routing, incubation, consolidation, reclaim, derive, analysis, review, insight };
@@ -345,11 +348,14 @@ export async function runColdStart(
         ? emptyInsightStepResult()
         : await runInsightStep(setVersion, { force: true });
 
-    await generateTopicDocuments([
-      ...analysis.processedTopicIds,
-      ...review.processedTopicIds,
-      ...insight.topicIds,
-    ]);
+    await generateTopicDocuments(
+      [
+        ...analysis.processedTopicIds,
+        ...review.processedTopicIds,
+        ...insight.topicIds,
+      ],
+      { source: 'auto' }
+    );
 
     log.info(
       {
@@ -438,11 +444,14 @@ export async function runScheduledAnalyses(
             force: options.force,
           });
 
-    await generateTopicDocuments([
-      ...analysis.processedTopicIds,
-      ...review.processedTopicIds,
-      ...insight.topicIds,
-    ]);
+    await generateTopicDocuments(
+      [
+        ...analysis.processedTopicIds,
+        ...review.processedTopicIds,
+        ...insight.topicIds,
+      ],
+      { source: 'auto' }
+    );
 
     return {
       result: analysis,

@@ -80,6 +80,14 @@ const DOCUMENT_CSS = `
 .cluster-document a {
   color: var(--cluster-blue, #1a4d7a);
 }
+.cluster-document-topic-link {
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.cluster-document-topic-link:hover {
+  text-decoration: underline;
+}
 @media print {
   .cluster-document { max-width: none; padding: 0; }
   .cluster-document-banner { border-color: #ddd; background: none; }
@@ -137,6 +145,7 @@ export function renderClusterDocumentHtml(detail, meta) {
   <div class="cluster-document-banner">
     <span class="cluster-document-badge">主题洞察版本 v${meta.version}</span>
     <span>导出时间：${escapeHtml(meta.generatedAtLabel)}</span>
+    <a class="cluster-document-topic-link" href="/clusters/${encodeURIComponent(detail.slug)}">在站内查看当前主题 →</a>
   </div>
 
   ${renderHeader(detail)}
@@ -161,6 +170,19 @@ export function renderClusterDocumentHtml(detail, meta) {
     ${trends}
   </section>
 </main>
+<script>
+// 离线打开时也能展开「依据 N 篇文献」清单；逻辑与详情页一致。
+document.addEventListener('click', function (event) {
+  var button = event.target.closest('.cluster-cite-toggle');
+  if (!button) return;
+  var id = button.getAttribute('aria-controls');
+  var drawer = id ? document.getElementById(id) : null;
+  if (!drawer) return;
+  var expanded = button.getAttribute('aria-expanded') === 'true';
+  button.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+  drawer.hidden = expanded;
+});
+</script>
 </body>
 </html>
 `;

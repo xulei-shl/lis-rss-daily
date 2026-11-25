@@ -66,3 +66,7 @@ export async function getTopicDocumentById(
     .where('id', '=', id)
     .executeTakeFirst();
 }
+
+export async function deleteTopicDocument(id: number): Promise<void> {
+  await getDb().deleteFrom('cluster_topic_documents').where('id', '=', id).execute();
+}

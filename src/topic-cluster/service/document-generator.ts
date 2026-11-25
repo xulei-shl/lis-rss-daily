@@ -24,7 +24,11 @@ import { renderClusterDocumentHtml } from '../document-renderer.js';
 
 const log = logger.child({ module: 'topic-cluster/document-generator' });
 
-const DOCUMENTS_DIR = path.join(path.dirname(config.databasePath), 'cluster-documents');
+// 渲染模板版本：模板/样式变化时递增，使旧文件在下次生成时被新版本取代。
+const DOCUMENT_RENDERER_VERSION = 3;
+
+// 必须为绝对路径：写文件与 res.sendFile 都在此基础上定位。
+const DOCUMENTS_DIR = path.resolve(path.dirname(config.databasePath), 'cluster-documents');
 
 export function getTopicDocumentFilePath(filename: string): string {
   return path.join(DOCUMENTS_DIR, path.basename(filename));
@@ -42,9 +46,22 @@ export interface DocumentGenerationSummary {
  *
  * @returns 新生成的文档；内容未变化、主题不存在或分析失败时返回 null。
  */
+export type DocumentGenerationSource = 'auto' | 'manual';
+
+export function formatDocumentVersion(version: number): string {
+  if (version >= 1000) {
+    const major = Math.floor(version / 1000);
+    const minor = version % 1000;
+    return `${major}.${minor}`;
+  }
+  return String(version);
+}
+
 export async function generateTopicDocument(
-  topicId: number
+  topicId: number,
+  options?: { source?: DocumentGenerationSource }
 ): Promise<ClusterTopicDocumentsSelection | null> {
+  const source = options?.source ?? 'manual';
   const detail = await getTopicDetail(String(topicId));
   if (!detail) return null;
   if (detail.analysisStatus === 'missing' || detail.analysisStatus === 'failed') {
@@ -55,15 +72,31 @@ export async function generateTopicDocument(
   const latest = await getLatestTopicDocument(topicId);
   if (latest && latest.content_hash === contentHash) return null;
 
-  const version = (latest?.version ?? 0) + 1;
+  // 版本号：主版本号随「主题自动更新」递增并把次版本归零；
+  // 手动生成只递增次版本号（v1.0 → v1.1 → v1.2；下次自动 → v2.0）。
+  const latestEncoded = latest?.version ?? 0;
+  const isEncoded = latestEncoded >= 1000;
+  const latestMajor = isEncoded ? Math.floor(latestEncoded / 1000) : 0;
+  const latestMinor = isEncoded ? latestEncoded % 1000 : 0;
+  let major: number;
+  let minor: number;
+  if (source === 'auto') {
+    major = (latestMajor || 0) + 1;
+    minor = 0;
+  } else {
+    major = latestMajor || 1;
+    minor = latestMinor + 1;
+  }
+  const version = major * 1000 + minor;
+  const versionLabel = `${major}.${minor}`;
   const createdAt = new Date();
   const generatedAtLabel = createdAt.toLocaleString('zh-CN', {
     timeZone: config.defaultTimezone || 'Asia/Shanghai',
     hour12: false,
   });
-  const filename = buildFilename(detail.slug, version, createdAt);
+  const filename = buildFilename(detail.slug, versionLabel, createdAt);
 
-  const html = renderClusterDocumentHtml(detail, { version, generatedAtLabel });
+  const html = renderClusterDocumentHtml(detail, { version: versionLabel, generatedAtLabel });
   fs.mkdirSync(DOCUMENTS_DIR, { recursive: true });
   fs.writeFileSync(getTopicDocumentFilePath(filename), html, 'utf-8');
 
@@ -92,7 +125,8 @@ export async function generateTopicDocument(
 
 /** 批量生成；单个主题失败不影响其他主题。 */
 export async function generateTopicDocuments(
-  topicIds: Iterable<number>
+  topicIds: Iterable<number>,
+  options?: { source?: DocumentGenerationSource }
 ): Promise<DocumentGenerationSummary> {
   const uniqueIds = [...new Set(topicIds)];
   const summary: DocumentGenerationSummary = {
@@ -104,7 +138,7 @@ export async function generateTopicDocuments(
 
   for (const topicId of uniqueIds) {
     try {
-      const document = await generateTopicDocument(topicId);
+      const document = await generateTopicDocument(topicId, { source: options?.source ?? 'auto' });
       if (document) {
         summary.generated += 1;
         summary.documents.push(document);
@@ -131,6 +165,7 @@ export async function generateTopicDocuments(
 /** 内容哈希只覆盖会进入文件的内容，避免 runLogs / 更新时间造成伪变化。 */
 function computeContentHash(detail: TopicDetail): string {
   const content = {
+    rendererVersion: DOCUMENT_RENDERER_VERSION,
     name: detail.name,
     keywords: detail.keywords,
     status: detail.status,
@@ -152,7 +187,7 @@ function computeContentHash(detail: TopicDetail): string {
   return createHash('sha256').update(JSON.stringify(content)).digest('hex');
 }
 
-function buildFilename(slug: string, version: number, createdAt: Date): string {
+function buildFilename(slug: string, version: string | number, createdAt: Date): string {
   // 文件名使用与页面一致的本地时区，避免用户看到的生成时间与文件名不一致。
   const local = new Intl.DateTimeFormat('sv-SE', {
     timeZone: config.defaultTimezone || 'Asia/Shanghai',
