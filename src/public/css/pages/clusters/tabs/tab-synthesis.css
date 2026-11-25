@@ -11,7 +11,6 @@
   font-size: 1.025rem;
   line-height: 1.85;
   color: var(--text-primary);
-  max-width: 75ch;
   text-wrap: pretty;
   margin-bottom: var(--space-4);
 }
@@ -22,7 +21,6 @@
   border: 1px solid var(--cluster-blue-border);
   border-radius: var(--radius-md, 8px);
   margin-bottom: var(--space-3);
-  max-width: 75ch;
 }
 
 .cluster-editorial-callout .callout-head {
@@ -45,7 +43,6 @@
   font-size: var(--text-xs);
   color: var(--text-secondary);
   line-height: 1.7;
-  max-width: 75ch;
 }
 
 .cluster-history-label {
@@ -99,7 +96,6 @@
   color: var(--text-secondary);
   font-style: italic;
   margin: var(--space-3) 0 var(--space-4) 0;
-  max-width: 75ch;
   border-left: 2px solid var(--border);
   padding-left: 14px;
 }
@@ -300,7 +296,6 @@
   background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
   border-radius: var(--radius-sm, 6px);
   margin-bottom: var(--space-3);
-  max-width: 75ch;
 }
 
 .cluster-insight-topics {
