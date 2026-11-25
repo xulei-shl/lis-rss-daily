@@ -28,7 +28,7 @@ export function renderAngles(detail, _articleIndex) {
   }
 
   const angles = detail.angles
-    .map((angle) => {
+    .map((angle, idx) => {
       const isDivergent = angle.patternType === 'divergent';
       const allSteps = angle.steps || [];
       const backboneCount = allSteps.filter((step) => step.academicRole === 'backbone').length;
@@ -54,7 +54,7 @@ export function renderAngles(detail, _articleIndex) {
       const stepsHtml = allSteps.map((step) => renderStep(step)).join('');
 
       return (
-        '<div class="cluster-angle-dossier">' +
+        '<div class="cluster-angle-dossier" id="cluster-angle-' + (idx + 1) + '" data-toc-target="true" data-toc-panel="evolution">' +
           head +
           narrative +
           '<ol class="cluster-thread">' + stepsHtml + '</ol>' +
@@ -64,7 +64,7 @@ export function renderAngles(detail, _articleIndex) {
     .join('');
 
   return (
-    '<section class="cluster-section">' +
+    '<section class="cluster-section" id="cluster-angles-section">' +
       '<div class="cluster-section-header">' +
         '<h2 class="cluster-section-title">' +
           '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>' +
@@ -147,8 +147,8 @@ export function renderLoose(detail) {
   });
 
   return (
-    '<section class="cluster-section">' +
-      '<details class="cluster-details">' +
+    '<section class="cluster-section" id="cluster-loose-section" data-toc-target="true" data-toc-panel="evolution">' +
+      '<details class="cluster-details" id="cluster-loose-details">' +
         '<summary class="cluster-details-summary">' +
           '<h3 class="cluster-section-title">' +
             '<span class="section-icon" aria-hidden="true">🗂️</span> 零散研究（' + loose.length + ' 篇未归链文献）' +

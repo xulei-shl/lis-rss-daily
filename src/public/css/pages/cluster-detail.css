@@ -9,6 +9,7 @@
 
 /* 2. 详情页通用框架 (Topbar, Header, Tabs Nav, 通用 Section 架构) */
 @import url('./clusters/detail-shell.css');
+@import url('./clusters/toc.css');
 
 /* 3. 业务 Tab 独立样式 (与 js/cluster-detail/tab-*.js 一一对应) */
 @import url('./clusters/tabs/tab-synthesis.css');

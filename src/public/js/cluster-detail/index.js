@@ -9,6 +9,7 @@ import { renderSummary, renderReviews, renderInsights, renderConsensusDualView, 
 import { renderAngles, renderLoose } from './tab-evolution.js';
 import { renderMatrix, renderGaps, renderAdjacent } from './tab-matrix.js';
 import { renderTrend } from './tab-trends.js';
+import { buildSynthesisToc, buildEvolutionToc, wrapWithTocLayout, initTocNavigation } from './toc.js';
 
 const VALID_TABS = ['synthesis', 'evolution', 'matrix', 'trends'];
 const DEFAULT_TAB = 'synthesis';
@@ -63,20 +64,24 @@ function renderPage(root, detail) {
   parts.push('<div class="cluster-tab-panels" id="clusterTabPanels">');
 
   // Tab 1: 综述与洞察
+  const synthesisContent =
+    renderSummary(detail) +
+    renderReviews(detail, articleIndex) +
+    renderInsights(detail) +
+    renderConsensusDualView(detail);
   parts.push(
     '<div class="cluster-tab-panel" id="panel-synthesis" role="tabpanel" aria-labelledby="tab-synthesis" hidden>' +
-      renderSummary(detail) +
-      renderReviews(detail, articleIndex) +
-      renderInsights(detail) +
-      renderConsensusDualView(detail) +
+      wrapWithTocLayout('synthesis', synthesisContent, buildSynthesisToc(detail)) +
     '</div>'
   );
 
   // Tab 2: 研究脉络
+  const evolutionContent =
+    renderAngles(detail, articleIndex) +
+    renderLoose(detail);
   parts.push(
     '<div class="cluster-tab-panel" id="panel-evolution" role="tabpanel" aria-labelledby="tab-evolution" hidden>' +
-      renderAngles(detail, articleIndex) +
-      renderLoose(detail) +
+      wrapWithTocLayout('evolution', evolutionContent, buildEvolutionToc(detail)) +
     '</div>'
   );
 
@@ -103,8 +108,11 @@ function renderPage(root, detail) {
 
   root.innerHTML = parts.filter(Boolean).join('');
 
+  // 初始化章节目录联动与吸顶偏移
+  const tocController = initTocNavigation(root);
+
   // 绑定 Tab 切换与 Hash 路由
-  initTabNavigation(root);
+  initTabNavigation(root, tocController);
 
   // 绑定顶部状态栏日志抽屉唤起
   initRunLogsToggle(root);
@@ -170,7 +178,7 @@ function renderTabBar(tabs) {
   );
 }
 
-function initTabNavigation(root) {
+function initTabNavigation(root, tocController) {
   const tabBar = root.querySelector('.cluster-tab-bar');
   if (!tabBar) return;
 
@@ -201,6 +209,10 @@ function initTabNavigation(root) {
 
     if (updateHash && window.location.hash !== '#' + tabId) {
       history.replaceState(null, '', '#' + tabId);
+    }
+
+    if (tocController && typeof tocController.onTabChange === 'function') {
+      tocController.onTabChange(tabId);
     }
   }
 

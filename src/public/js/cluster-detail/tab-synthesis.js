@@ -42,7 +42,7 @@ export function renderSummary(detail) {
   if (blocks.length === 0) return '';
 
   return (
-    '<section class="cluster-section cluster-summary-dossier">' +
+    '<section class="cluster-section cluster-summary-dossier" id="cluster-summary-dossier" data-toc-target="true" data-toc-panel="synthesis">' +
       '<div class="cluster-section-header">' +
         '<h2 class="cluster-section-title">' +
           '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>' +
@@ -151,7 +151,7 @@ export function renderReviews(detail, articleIndex) {
         : '';
 
       return (
-        '<article class="cluster-review-entry" id="cluster-review-' + (idx + 1) + '">' +
+        '<article class="cluster-review-entry" id="cluster-review-' + (idx + 1) + '" data-toc-target="true" data-toc-panel="synthesis">' +
           '<div class="cluster-review-head">' +
             '<div class="cluster-review-meta">' +
               '<span class="cluster-tag cluster-tag-accent">' + review.memberCount + ' 篇文献支撑</span>' +
@@ -321,6 +321,8 @@ export function bindSynthesisEvents(root) {
       },
       true
     );
+
+    root.addEventListener('cluster:toc-expanded', updateReviewBtnText);
   }
 
   // 2. 主题洞察批量展开/收起
@@ -355,6 +357,8 @@ export function bindSynthesisEvents(root) {
       },
       true
     );
+
+    root.addEventListener('cluster:toc-expanded', updateInsightBtnText);
   }
 }
 
@@ -479,7 +483,7 @@ export function renderInsights(detail) {
         : '';
 
       return (
-        '<article class="cluster-insight-entry" id="cluster-insight-' + (idx + 1) + '">' +
+        '<article class="cluster-insight-entry" id="cluster-insight-' + (idx + 1) + '" data-toc-target="true" data-toc-panel="synthesis">' +
           '<div class="cluster-insight-head">' +
             (report.version
               ? '<div class="cluster-review-meta"><span class="cluster-tag cluster-tag-accent">洞察研判报告 v' + report.version + '</span></div>'
@@ -533,7 +537,7 @@ export function renderConsensusDualView(detail) {
   };
 
   return (
-    '<section class="cluster-section">' +
+    '<section class="cluster-section" id="cluster-consensus-section" data-toc-target="true" data-toc-panel="synthesis">' +
       '<div class="cluster-section-header">' +
         '<h2 class="cluster-section-title">' +
           '<svg class="section-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>' +

@@ -183,7 +183,7 @@
 /* ── 页面内 Tab 导航系统（极简吸顶 Hairline） ── */
 .cluster-tab-nav {
   position: sticky;
-  top: 0;
+  top: var(--cluster-site-header-h, 0px);
   z-index: 20;
   background: var(--bg-primary, #f8f9fa);
   border-bottom: 1px solid var(--border);
@@ -265,6 +265,12 @@
 @keyframes panelFadeIn {
   from { opacity: 0.6; transform: translateY(2px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cluster-tab-panel {
+    animation: none;
+  }
 }
 
 /* ==========================================================================
@@ -349,6 +355,10 @@
 
   .cluster-meta-dot {
     display: none;
+  }
+
+  .cluster-tab-nav {
+    position: static;
   }
 
   .cluster-tab-btn {
