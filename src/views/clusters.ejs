@@ -43,7 +43,17 @@
   </div>
 
   <details class="cluster-history" id="clusterHistory" hidden>
-    <summary class="cluster-history-summary">最近执行记录</summary>
+    <summary class="cluster-history-summary">
+      <span class="cluster-history-summary-main">
+        <svg class="section-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>最近执行记录</span>
+        <span class="cluster-tag cluster-tag-subtle" id="clusterHistoryCount"></span>
+      </span>
+      <span class="cluster-history-hint">
+        <span class="hint-collapsed">展开记录 ↓</span>
+        <span class="hint-expanded">收起记录 ↑</span>
+      </span>
+    </summary>
     <div class="cluster-history-body" id="clusterHistoryBody"></div>
   </details>
 

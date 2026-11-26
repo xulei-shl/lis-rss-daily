@@ -14,6 +14,7 @@
   const backlogAlert = document.getElementById('clusterBacklogAlert');
   const historyPanel = document.getElementById('clusterHistory');
   const historyBody = document.getElementById('clusterHistoryBody');
+  const historyCount = document.getElementById('clusterHistoryCount');
 
   let searchTimer = null;
 
@@ -124,6 +125,12 @@
       return;
     }
     historyPanel.hidden = false;
+    if (historyCount) {
+      const failedCount = runs.filter((r) => r.status === 'failed').length;
+      historyCount.textContent = failedCount > 0
+        ? '最近 ' + runs.length + ' 次 · ' + failedCount + ' 次失败'
+        : '最近 ' + runs.length + ' 次';
+    }
 
     const rows = runs
       .map((run) => {
@@ -146,10 +153,10 @@
           '<tr>' +
             '<td class="tabular-num">' + escapeHtml(time) + '</td>' +
             '<td>' + trigger + '</td>' +
-            '<td class="tabular-num">' + duration + '</td>' +
-            '<td class="tabular-num">' + (run.changedArticles || 0) + '</td>' +
-            '<td class="tabular-num">' + (run.primarySwitches || 0) + '</td>' +
-            '<td class="tabular-num">' + (run.facetPending || 0) + '</td>' +
+            '<td class="tabular-num is-num">' + duration + '</td>' +
+            '<td class="tabular-num is-num">' + (run.changedArticles || 0) + '</td>' +
+            '<td class="tabular-num is-num">' + (run.primarySwitches || 0) + '</td>' +
+            '<td class="tabular-num is-num">' + (run.facetPending || 0) + '</td>' +
             '<td>' + escapeHtml(provenance) + '</td>' +
             '<td>' + status + '</td>' +
           '</tr>'
@@ -160,7 +167,7 @@
     historyBody.innerHTML =
       '<table class="cluster-history-table">' +
         '<thead><tr>' +
-          '<th>时间</th><th>触发</th><th>耗时</th><th>调整</th><th>迁主</th><th>待抽</th><th>再平衡溯源</th><th>状态</th>' +
+          '<th>时间</th><th>触发</th><th class="is-num">耗时</th><th class="is-num">调整</th><th class="is-num">迁主</th><th class="is-num">待抽</th><th>再平衡溯源</th><th>状态</th>' +
         '</tr></thead>' +
         '<tbody>' + rows + '</tbody>' +
       '</table>';
