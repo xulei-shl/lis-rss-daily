@@ -114,14 +114,14 @@
             <span class="cluster-guide-step-num">5</span>
             <div class="cluster-guide-step-body">
               <div class="cluster-guide-step-title">微主题整合</div>
-              <p>样本不足的小主题两两合并：平均连接度达到 0.80 则合并，与正式主题相似度达到 0.82 时被吸收，避免散装主题越积越多。</p>
+              <p>样本不足的小主题两两合并：质心相似度达到 0.80 则合并，与正式主题相似度达到 0.82 时被吸收，避免散装主题越积越多。</p>
             </div>
           </li>
           <li>
             <span class="cluster-guide-step-num">6</span>
             <div class="cluster-guide-step-body">
               <div class="cluster-guide-step-title">回捞</div>
-              <p>新主题建立后，用更高的 0.72 阈值回扫离散池，把当初没归进任何主题、但现在明显相关的文献補挂回来。</p>
+              <p>新主题建立后，用 0.72 阈值扫描全库已归属文献，把被寄养在老主题、但明显属于新主题的文献纯追加挂入（不移动老主题既有链接）。</p>
             </div>
           </li>
           <li>
@@ -135,7 +135,7 @@
             <span class="cluster-guide-step-num">8</span>
             <div class="cluster-guide-step-body">
               <div class="cluster-guide-step-title">派生</div>
-              <p>只对发生变化的主题重建研究脉络、对比矩阵与周期指标（平均相似度、质心漂移率、方法熵），并标记为待重算综述与洞察。</p>
+              <p>只对发生变化的主题重建研究脉络与周期指标（平均相似度、质心漂移率、方法熵），并标记为待重算综述与洞察。</p>
             </div>
           </li>
         </ol>
