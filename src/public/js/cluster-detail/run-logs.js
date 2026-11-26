@@ -27,7 +27,7 @@ export function renderRunLogs(detail) {
     statusText = RUN_STATUS_LABELS[latestRun.status] || latestRun.status;
     const dur = latestRun.durationMs !== null ? formatDuration(latestRun.durationMs) : '—';
     const trig = TRIGGER_LABELS[latestRun.trigger] || latestRun.trigger;
-    const added = latestRun.addedCount > 0 ? `+${latestRun.addedCount} 篇文献` : '无文献新增';
+    const added = latestRun.addedCount > 0 ? `+${latestRun.addedCount} 篇归属` : '无归属新增';
     const revAdded = (latestRun.reviewAddedCount || 0) > 0 ? ` / +${latestRun.reviewAddedCount} 综述` : '';
 
     briefDetails = `最近执行：${formatDateTime(latestRun.startedAt)} · ${trig} · 耗时 ${dur} · ${added}${revAdded}`;
@@ -39,8 +39,8 @@ export function renderRunLogs(detail) {
       const statusLabel = RUN_STATUS_LABELS[run.status] || run.status;
       const statusBadge = '<span class="cluster-run-badge cluster-run-badge-' + run.status + '">' + escapeHtml(statusLabel) + '</span>';
       const rebalanceCell = run.rebalanceExecuted
-        ? '调整 ' + (run.rebalancedArticles || 0) +
-          ((run.rebalanceMigratedIn || 0) > 0 ? ' · 迁入 ' + run.rebalanceMigratedIn : '')
+        ? '全库调整 ' + (run.rebalancedArticles || 0) +
+          ((run.rebalanceMigratedIn || 0) > 0 ? ' · 本主题迁入 ' + run.rebalanceMigratedIn : '')
         : run.analysisExecuted
           ? ((run.sourceRebalanceRuns || 0) > 0
             ? '覆盖 ' + run.sourceRebalanceRuns + ' 轮 / ' + (run.sourceRebalancedArticles || 0) + ' 篇'
@@ -70,7 +70,7 @@ export function renderRunLogs(detail) {
     ? '<div class="cluster-table-responsive">' +
         '<table class="cluster-matrix cluster-run-table">' +
           '<thead>' +
-            '<tr><th>执行时间</th><th>触发源</th><th>新增文献</th><th>新增综述</th><th>再平衡</th><th>状态</th><th>耗时</th></tr>' +
+            '<tr><th>执行时间</th><th>触发源</th><th title="该轮为本主题净新增的归属链接数（含次归属）">新增归属</th><th>新增综述</th><th title="全库调整＝本轮全库归属变化的文献数；本主题迁入＝主归属改判到本主题的文献数">再平衡</th><th>状态</th><th>耗时</th></tr>' +
           '</thead>' +
           '<tbody>' + rows + '</tbody>' +
         '</table>' +

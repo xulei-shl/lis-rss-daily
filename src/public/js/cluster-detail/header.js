@@ -115,20 +115,20 @@ function renderAdjustmentPill(adjustment) {
   if (!touched) {
     return (
       '<span class="cluster-meta-pill cluster-meta-adjust" title="最近一轮再平衡（' +
-        escapeHtml(timeLabel) + '）：本主题成员未被调整">本轮未调整</span>'
+        escapeHtml(timeLabel) + '）：本主题成员未被调整">本轮再平衡未改动本主题</span>'
     );
   }
 
-  const parts = ['新增 ' + added];
-  if (migratedIn > 0) parts.push('迁入 ' + migratedIn);
+  const parts = ['次归属 +' + added];
+  if (migratedIn > 0) parts.push('主归属迁入 ' + migratedIn);
   if (removed > 0) parts.push('淘汰 ' + removed);
 
   return (
     '<span class="cluster-meta-pill cluster-meta-adjust" title="最近一轮再平衡（' +
       escapeHtml(timeLabel) + '）：新增次归属 ' + added +
       ' 篇 / 迁入主归属 ' + migratedIn +
-      ' 篇 / 淘汰链接 ' + removed + ' 篇">' +
-      '本轮调整 ' + escapeHtml(parts.join(' · ')) +
+      ' 篇 / 淘汰链接 ' + removed + ' 篇。次归属＝该文献主归属在其他主题、同时挂到本主题；主归属迁入＝该文献的主归属改判到本主题">' +
+      '本轮再平衡 ' + escapeHtml(parts.join(' · ')) +
     '</span>'
   );
 }

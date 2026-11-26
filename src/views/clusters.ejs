@@ -45,5 +45,139 @@
     <div class="cluster-empty-desc">定时聚类流水线执行后将自动生成主题与多维洞察。</div>
   </div>
 
+  <details class="cluster-guide" id="clusterGuide">
+    <summary class="cluster-guide-summary">
+      <span class="cluster-guide-summary-main">
+        <svg class="section-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span>分析与增量更新：每一步在做什么</span>
+        <span class="cluster-tag cluster-tag-subtle">12 个步骤 · 2 套调度</span>
+      </span>
+      <span class="cluster-guide-hint">
+        <span class="hint-collapsed">展开说明 ↓</span>
+        <span class="hint-expanded">收起说明 ↑</span>
+      </span>
+    </summary>
+
+    <div class="cluster-guide-body">
+      <p class="cluster-guide-lead">
+        主题洞察不是一次性的聚类结果，而是两条调度共同维护的增量系统：每天把新文献挂进已有主题、修补归属与派生指标，每周才调用大模型重写综述与洞察。下面按执行顺序说明每一步在做什么、用什么规则判定；数值为默认配置，可通过环境变量调整。
+      </p>
+
+      <div class="cluster-guide-phase">
+        <div class="cluster-guide-phase-head">
+          <span class="cluster-guide-phase-name">每日增量</span>
+          <span class="cluster-tag cluster-tag-subtle">默认 08:30</span>
+          <span class="cluster-guide-phase-desc">只做切面抽取与归属/派生，不重写综述与洞察</span>
+        </div>
+        <ol class="cluster-guide-steps">
+          <li>
+            <span class="cluster-guide-step-num">1</span>
+            <div class="cluster-guide-step-body">
+              <div class="cluster-guide-step-title">切面抽取</div>
+              <p>把每篇文献的 AI 总结抽成结构化切面（研究问题、方法、研究对象、结论等）。只处理总结不少于 200 字、且还没有当前契约版本切面的文献；每批 50 篇，单轮上限 2000 篇。</p>
+            </div>
+          </li>
+          <li>
+            <span class="cluster-guide-step-num">2</span>
+            <div class="cluster-guide-step-body">
+              <div class="cluster-guide-step-title">质心刷新</div>
+              <p>用每个主题主归属文献的向量均值重算主题质心。先刷新再路由，避免新文献仍被冷启动当天的旧语义中心评判。</p>
+            </div>
+          </li>
+          <li>
+            <span class="cluster-guide-step-num">3</span>
+            <div class="cluster-guide-step-body">
+              <div class="cluster-guide-step-title">增量路由</div>
+              <p>新文献与各主题质心做余弦相似度比对，达到 0.70 才挂入，单篇最多同时属于 2 个主题；未命中的留在离散文献池等待孵化。</p>
+            </div>
+          </li>
+          <li>
+            <span class="cluster-guide-step-num">4</span>
+            <div class="cluster-guide-step-body">
+              <div class="cluster-guide-step-title">新主题孵化</div>
+              <p>离散池内相互相似且规模达标的文献成簇时新建主题（成簇至少 3 篇，池至少 6 篇），再由模型命名并生成关键词。</p>
+            </div>
+          </li>
+          <li>
+            <span class="cluster-guide-step-num">5</span>
+            <div class="cluster-guide-step-body">
+              <div class="cluster-guide-step-title">微主题整合</div>
+              <p>样本不足的小主题两两合并：平均连接度达到 0.80 则合并，与正式主题相似度达到 0.82 时被吸收，避免散装主题越积越多。</p>
+            </div>
+          </li>
+          <li>
+            <span class="cluster-guide-step-num">6</span>
+            <div class="cluster-guide-step-body">
+              <div class="cluster-guide-step-title">回捞</div>
+              <p>新主题建立后，用更高的 0.72 阈值回扫离散池，把当初没归进任何主题、但现在明显相关的文献補挂回来。</p>
+            </div>
+          </li>
+          <li>
+            <span class="cluster-guide-step-num">7</span>
+            <div class="cluster-guide-step-body">
+              <div class="cluster-guide-step-title">周期再平衡</div>
+              <p>用最新质心重新评估全部已归属文献：新增次归属需达到 0.70，既有链接跌破 0.67 才淘汰，主归属改判或次归属替换需领先现状 0.03，用迟滞带抑制来回抖动。</p>
+            </div>
+          </li>
+          <li>
+            <span class="cluster-guide-step-num">8</span>
+            <div class="cluster-guide-step-body">
+              <div class="cluster-guide-step-title">派生</div>
+              <p>只对发生变化的主题重建研究脉络、对比矩阵与周期指标（平均相似度、质心漂移率、方法熵），并标记为待重算综述与洞察。</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+
+      <div class="cluster-guide-phase">
+        <div class="cluster-guide-phase-head">
+          <span class="cluster-guide-phase-name">每周分析</span>
+          <span class="cluster-tag cluster-tag-subtle">默认周一 09:30</span>
+          <span class="cluster-guide-phase-desc">调用旗舰模型，按主题增量重算</span>
+        </div>
+        <ol class="cluster-guide-steps">
+          <li>
+            <span class="cluster-guide-step-num">9</span>
+            <div class="cluster-guide-step-body">
+              <div class="cluster-guide-step-title">多维分析</div>
+              <p>主题文献不少于 6 篇才生成；按研究角度聚类（单主题最多 10 个），方法与研究对象各出现至少 2 次才进对比矩阵，输出共识、分歧、研究空白与趋势。</p>
+            </div>
+          </li>
+          <li>
+            <span class="cluster-guide-step-num">10</span>
+            <div class="cluster-guide-step-body">
+              <div class="cluster-guide-step-title">深度综述</div>
+              <p>主题内再做一次二级聚类（相似度 0.70，每簇至少 2 篇，单主题最多 8 篇综述）。成员小幅变化（Jaccard 不低于 0.5）时续写旧综述，明显变化才新建；每篇综述最多引用 18 篇证据文献。</p>
+            </div>
+          </li>
+          <li>
+            <span class="cluster-guide-step-num">11</span>
+            <div class="cluster-guide-step-body">
+              <div class="cluster-guide-step-title">主题内洞察</div>
+              <p>综述没有积压时才生成，结合综述与脉络给出可执行的研究建议，避免用半套材料产出很快过期的结论。</p>
+            </div>
+          </li>
+          <li>
+            <span class="cluster-guide-step-num">12</span>
+            <div class="cluster-guide-step-body">
+              <div class="cluster-guide-step-title">版本文件</div>
+              <p>内容有变化的主题各生成一份自包含 HTML 快照，可在主题详情页底部下载或按需重新生成。</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+
+      <div class="cluster-guide-legend">
+        <p class="cluster-guide-legend-title">页面上几个数字怎么读</p>
+        <ul>
+          <li><strong>上轮调整 / 迁移主归属</strong>：最近一次成功的再平衡里，全库有多少篇文献的归属链接发生变化、多少篇的主归属被改判。冷启动、全量重建与预检轮次不计入；从未跑过再平衡时这两项不显示。</li>
+          <li><strong>待抽切面</strong>：已有合格总结、但还缺当前版本切面的文献数。超过 50 会变琥珀色并告警，跑一次增量流水线即可补齐。</li>
+          <li><strong>主题页的本轮再平衡</strong>：次归属 +N 表示文献主归属在其他主题、同时挂到本主题；主归属迁入表示该文献的主归属改判到本主题；淘汰表示相似度跌破保留线而解除链接。</li>
+          <li><strong>一篇文献最多挂 2 个主题</strong>，所以各主题篇数相加会大于文献总数；出现在「新增归属」里的文献是已有论文，不是新采集的论文。</li>
+        </ul>
+      </div>
+    </div>
+  </details>
+
   <script src="/js/clusters.js"></script>
   ` }) %>
