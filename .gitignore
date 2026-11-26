@@ -47,6 +47,9 @@ lis-rss-deepsearch/
 # Downloaded paper PDFs
 scripts/paper-pdf-summary/download/
 
+# LIS-RSS -> LIS-WIKI transient PDF staging
+scripts/paper-pdf-summary/pdf_staging/
+
 # CNKI session cache (auto-generated on run)
 scripts/paper-pdf-summary/pdf-download/cnki_session/
 

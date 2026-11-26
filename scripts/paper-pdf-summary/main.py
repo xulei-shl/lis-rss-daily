@@ -36,6 +36,7 @@ from utils.database import (
 from utils.pdf_downloader import load_config, create_download_directory, download_pdf
 from utils.pdf_validator import validate_and_cleanup, get_pdf_info
 from utils.pdf_summarizer import summarize_pdf
+from utils.pdf_archive import finalize_pdf
 from utils.summary_uploader import upload_all as parallel_upload, load_env, get_env_bool
 from utils.summary_error import contains_summary_error
 from utils.logger import DailyLogger
@@ -116,7 +117,11 @@ def process_direct_article(title: str, article_id: Optional[int], config: Dict, 
     if stop_after_summary:
         return process_article_summary_only(article, config, daily_dir, skip_wechat)
 
-    result = process_article(article, config, daily_dir, logger, skip_lis_rss=skip_lis_rss, skip_wechat=skip_wechat)
+    result = process_article(
+        article, config, daily_dir, logger,
+        skip_lis_rss=skip_lis_rss, skip_wechat=skip_wechat,
+        archive_source="manual"
+    )
 
     if result['success']:
         print(f"\n[进度] 成功: 1, 失败: 0")
@@ -227,6 +232,7 @@ def process_article_summary_only(article: Dict, config: Dict, daily_dir: Path, s
         print(f"[失败] {reason}")
         print(f"[删除] 删除无效MD文件: {md_path}")
         Path(md_path).unlink(missing_ok=True)
+        Path(pdf_path).unlink(missing_ok=True)
         result['stages']['pdf_summary'] = 'failed'
         result['reason'] = reason
         return result
@@ -234,6 +240,9 @@ def process_article_summary_only(article: Dict, config: Dict, daily_dir: Path, s
     result['stages']['pdf_summary'] = 'success'
     result['md_path'] = str(md_path)
     print(f"[成功] MD文件已生成: {md_path}")
+
+    # 直接指定文章属于手动/API 路径，不进入 LIS-WIKI 暂存区，摘要成功后立即清理 PDF
+    finalize_pdf(pdf_path, article_id, daily_dir.name, "manual", config)
 
     result['md_content'] = md_content
     result['success'] = True
@@ -367,7 +376,7 @@ def notify_main_app_pdf_summary(
         return False
 
 
-def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyLogger, skip_lis_rss: bool = False, skip_wechat: bool = False) -> Dict:
+def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyLogger, skip_lis_rss: bool = False, skip_wechat: bool = False, archive_source: str = "daily") -> Dict:
     """
     处理单篇文章
     
@@ -383,6 +392,10 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
         config: 配置字典
         daily_dir: 当日工作目录
         logger: 日志记录器
+        skip_lis_rss: 是否跳过LIS-RSS数据库更新
+        skip_wechat: 是否跳过统一推送
+        archive_source: "daily" 表示每日 cron，PDF 在 LIS-RSS 数据库提交成功后
+                        移入 pdf_staging/daily/；"manual" 表示手动/API，摘要成功后立即删除
         
     Returns:
         处理结果字典
@@ -465,15 +478,21 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
         print(f"[失败] {reason}")
         print(f"[删除] 删除无效MD文件: {md_path}")
         Path(md_path).unlink(missing_ok=True)
+        Path(pdf_path).unlink(missing_ok=True)
         logger.log_failure(article, reason)
         result['stages']['pdf_summary'] = 'failed'
         result['reason'] = reason
         return result
-    
+
     result['stages']['pdf_summary'] = 'success'
     result['md_path'] = md_path
     print(f"[成功] MD文件已生成: {md_path}")
-    
+
+    # 手动/API 路径不进入 LIS-WIKI 暂存区，摘要成功后立即清理 PDF。
+    # 每日 cron 则等 LIS-RSS 数据库提交成功后再归档，避免把未入库的文献带进 wiki。
+    if archive_source != "daily":
+        finalize_pdf(pdf_path, article_id, daily_dir.name, archive_source, config)
+
     # ===== 步骤4: 并行上传 =====
     print_section("步骤4: 并行上传到三个子系统")
 
@@ -498,7 +517,19 @@ def process_article(article: Dict, config: Dict, daily_dir: Path, logger: DailyL
         logger.log_failure(article, reason)
         result['stages']['upload'] = {'error': str(e)}
         result['reason'] = reason
+        if archive_source == "daily":
+            # 数据库未提交成功，删除工作 PDF，避免 LIS-RSS 侧持续堆积
+            Path(pdf_path).unlink(missing_ok=True)
         return result
+
+    # 每日 cron：只有 LIS-RSS 数据库提交成功（ai_summary 已落库）后才归档 PDF，
+    # 供 scripts/lis-wiki/sync_to_wiki.py 在稍后的定时任务中搬入 LIS-WIKI。
+    if archive_source == "daily":
+        if upload_results.get('lis_rss'):
+            finalize_pdf(pdf_path, article_id, daily_dir.name, "daily", config)
+        else:
+            print("[清理] LIS-RSS 数据库提交未成功，删除 PDF 以避免 LIS-RSS 侧堆积")
+            Path(pdf_path).unlink(missing_ok=True)
 
     if skip_wechat:
         result['stages']['notify'] = 'skipped'
@@ -644,7 +675,7 @@ def main():
         print(f"# 处理第 {attempt_count + 1} 次 (成功: {success_count}, 失败: {failure_count})")
         print('#'*60)
         
-        result = process_article(article, config, daily_dir, logger)
+        result = process_article(article, config, daily_dir, logger, archive_source="daily")
         
         attempt_count += 1
         

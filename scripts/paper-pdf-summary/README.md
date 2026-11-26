@@ -206,8 +206,21 @@ pdf_download:
 ```yaml
 pdf_summary:
   script: "pdf-summary/hiagent_upload.py"
-  delete_pdf: true            # 总结后是否删除原 PDF
+  # 必须为 false：每日 cron 的 PDF 需要暂存后同步到 LIS-WIKI。
+  # 手动/API 路径仍会在摘要成功后立即删除 PDF。
+  delete_pdf: false
 ```
+
+#### PDF 暂存配置
+```yaml
+storage:
+  archive_enabled: true       # 是否启用每日 PDF 暂存
+  archive_root: "pdf_staging" # 暂存根目录，daily/<YYYY-MM-DD>/<article_id>.pdf
+```
+
+> 每日 cron 仅在 LIS-RSS 数据库提交成功后，把 PDF 移入 `pdf_staging/daily/<YYYY-MM-DD>/`；
+> 随后由 `scripts/lis-wiki/sync_to_wiki.py` 复制到 LIS-WIKI 并在数据库提交成功后删除暂存文件。
+> 手动/API 总结不会进入该暂存区。
 
 #### 上传配置
 ```yaml

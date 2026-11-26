@@ -622,16 +622,20 @@ summary_upload:
 storage:
   download_root: "download"   # PDF/MD 工作目录（按 YYYY-MM-DD 分子目录）
   logs_root: "logs"           # 任务结果落盘于 logs/tasks/<task_id>.json
+  archive_enabled: true       # 每日 cron 的 PDF 暂存开关
+  archive_root: "pdf_staging" # 暂存根目录，daily/<YYYY-MM-DD>/<article_id>.pdf
 pdf_download:
   priority_scripts: [ ... ]   # 下载脚本优先级
   match_threshold: 0          # PDF 文件名匹配阈值（0 = 完全匹配）
 pdf_summary:
   script: "pdf-summary/hiagent_upload.py"
-  delete_pdf: true            # 摘要生成后是否删除 PDF
+  delete_pdf: false           # 必须为 false，PDF 由 main.py 在入库后归档
 ```
 
-> `delete_pdf: true` 意味着**只有摘要生成成功时** PDF 才被保留/清理；流水线失败的 PDF 处理由
-> `pdf_validator` 的 `delete_on_mismatch=True` 负责（校验不通过即删）。
+> `delete_pdf: false` 意味着摘要脚本不会删除 PDF。每日 cron 在 LIS-RSS 数据库提交成功后，
+> 把 PDF 移入 `pdf_staging/daily/<YYYY-MM-DD>/`，再由 `scripts/lis-wiki/sync_to_wiki.py`
+> 复制到 LIS-WIKI 并删除暂存文件；手动/API 路径仍会在摘要成功后立即删除 PDF。
+> 流水线失败的 PDF 处理由 `pdf_validator` 的 `delete_on_mismatch=True` 负责（校验不通过即删）。
 
 ---
 
@@ -778,7 +782,7 @@ if (result.success) {
 
 1. **耗时差异**: `/process` 通常 1-5 分钟；`/upload-text` 通常秒级
 2. **幂等性**: 相同标题（忽略大小写/首尾空白）的重复 `/process` 在途请求会去重，复用同一 `task_id`（响应头 `X-Deduplicated: true`）；任务终结后重复提交会重新执行；`/upload-text` 重复调用会重复分发
-3. **文件清理**: `/process` 生成的 PDF 在摘要成功后按 `pdf_summary.delete_pdf`（当前 `true`）删除，校验不通过的 PDF 由校验器即时删除；摘要 MD 按 `summary_upload.hiagent_rag.delete_md`（当前 `false`，即保留）处理；`/upload-text` 自动创建临时文件，分发后立即删除。任务结果 JSON 按 24 小时 TTL 清理
+3. **文件清理**: `/process` 属于手动/API 路径，PDF 在摘要成功后立即删除（`pdf_summary.delete_pdf` 为 `false`，由 `finalize_pdf(..., "manual", ...)` 清理）；每日 cron 的 PDF 在 LIS-RSS 数据库提交成功后移入 `pdf_staging/daily/`，再由 LIS-WIKI 同步脚本搬走。校验不通过的 PDF 由校验器即时删除；摘要 MD 按 `summary_upload.hiagent_rag.delete_md`（当前 `false`，即保留）处理；`/upload-text` 自动创建临时文件，分发后立即删除。任务结果 JSON 按 24 小时 TTL 清理
 4. **队列**: `/process` 排队串行处理，深度见 `/health` 的 `queue_size`；`/upload-text` 不排队
 5. **PDF 可得性**: 依赖知社科/万方/CNKI 可访问性，库外文献无法获取
 6. **结果保留**: 内存 5 分钟 / 落盘 24 小时（跨重启可查）；轮询超时**不等于**任务失败，服务端可能仍在跑，可用同一 `task_id` 复查

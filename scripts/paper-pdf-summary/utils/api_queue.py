@@ -11,6 +11,7 @@ from utils.database import get_connection
 from utils.pdf_downloader import load_config, create_download_directory, download_pdf
 from utils.pdf_validator import validate_and_cleanup
 from utils.pdf_summarizer import summarize_pdf
+from utils.pdf_archive import finalize_pdf
 from utils.summary_uploader import upload_all as parallel_upload, get_env_bool
 from utils.summary_error import contains_summary_error
 from utils.logger import DailyLogger
@@ -404,6 +405,7 @@ class QueueManager:
             print(f"[失败] {reason}")
             print(f"[删除] 删除无效MD文件: {md_path}")
             Path(md_path).unlink(missing_ok=True)
+            Path(pdf_path).unlink(missing_ok=True)
             result["stages"]["pdf_summary"] = "failed"
             result["error_code"] = ERR_SUMMARY_FAILED
             result["reason"] = reason
@@ -412,6 +414,9 @@ class QueueManager:
         result["stages"]["pdf_summary"] = "success"
         result["md_path"] = str(md_path)
         result["md_content"] = md_content
+
+        # API/手动任务不进入 LIS-WIKI 同步范围，摘要成功后立即清理 PDF
+        await asyncio.to_thread(finalize_pdf, pdf_path, article_id, today, "manual", config)
 
         # 推送是独立副作用：无论成功、失败还是全部跳过，都不改变上面的 success 判定
         self._set_stage(task_id, "upload")

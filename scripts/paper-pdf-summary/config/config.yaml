@@ -27,6 +27,10 @@ storage:
   download_root: "download"
   # 每日日志文件保存根目录
   logs_root: "logs"
+  # 每日 cron 成功文献的 PDF 暂存区（供 scripts/lis-wiki/sync_to_wiki.py 消费）
+  # 仅 daily/ 子目录会进入 LIS-WIKI；manual/API 总结的 PDF 不会被暂存
+  archive_enabled: true
+  archive_root: "pdf_staging"
 
 # PDF下载配置
 pdf_download:
@@ -49,8 +53,10 @@ data_sources:
 pdf_summary:
   # PDF总结脚本路径
   script: "pdf-summary/hiagent_upload.py"
-  # 上传后是否删除本地PDF文件
-  delete_pdf: true
+  # 上传后是否删除本地PDF文件。
+  # 必须为 false：每日 cron 的 PDF 需要由 main.py 在 LIS-RSS 数据库提交成功后
+  # 移入 pdf_staging/daily/，再由 LIS-WIKI 同步脚本搬走；手动/API 路径仍会立即删除。
+  delete_pdf: false
 
 # 总结上传配置（并行执行）
 summary_upload:
