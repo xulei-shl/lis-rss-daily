@@ -49,6 +49,13 @@ export const CLUSTER_CONFIG = Object.freeze({
   minPoolSize: appConfig.clusterMinPoolSize,
   minClusterSize: appConfig.clusterMinClusterSize,
   maxTopicsPerArticle: appConfig.clusterMaxTopicsPerArticle,
+
+  /** 周期归属再平衡的迟滞带宽度（既有链接保留线 = simThreshold - margin） */
+  rebalanceMargin: appConfig.clusterRebalanceMargin,
+  /** 每日切面抽取总量上限（分批拉满） */
+  facetMaxPerRun: appConfig.clusterFacetMaxPerRun,
+  /** 切面积压告警阈值 */
+  facetBacklogAlert: appConfig.clusterFacetBacklogAlert,
   minTrendSamples: appConfig.clusterMinTrendSamples,
   dormantDays: appConfig.clusterDormantDays,
   llmConcurrency: appConfig.clusterLlmConcurrency,

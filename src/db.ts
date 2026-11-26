@@ -565,6 +565,24 @@ export interface ClusterRunLogsTable {
   reviewed_topics: Generated<number>;
   new_reviews: Generated<number>;
   insight_reports: Generated<number>;
+  /** 本轮归属再平衡中链接集合/主归属发生变化的文章数 */
+  rebalanced_articles: Generated<number>;
+  /** 本轮再平衡中主归属迁移的文章数 */
+  primary_switches: Generated<number>;
+  /** 本轮结束时仍待抽取切面的文章数 */
+  facet_pending: Generated<number>;
+  /** JSON：{"<topic_id>": { added, removed, migratedIn }}，只存被再平衡改动的主题 */
+  rebalance_deltas: string | null;
+  /** 本轮是否执行了归属再平衡 */
+  rebalance_executed: Generated<number>;
+  /** 本轮是否执行了周分析（两阶段分析/综述/洞察） */
+  analysis_executed: Generated<number>;
+  /** 周分析覆盖的再平衡轮次数 */
+  source_rebalance_runs: Generated<number>;
+  /** 周分析覆盖的再平衡调整文章数合计 */
+  source_rebalanced_articles: Generated<number>;
+  /** 覆盖范围内最近一次再平衡的完成时间 */
+  source_last_rebalance_at: string | null;
   /** JSON：{"<topic_id>": 该轮新增链接数}，只存增量 > 0 的主题 */
   topic_deltas: string | null;
   /** JSON：{"<topic_id>": 该轮新增/重写综述数} */

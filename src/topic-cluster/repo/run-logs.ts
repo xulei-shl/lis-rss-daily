@@ -15,6 +15,19 @@ const log = logger.child({ module: 'topic-cluster/run-logs' });
 export type ClusterRunTrigger = 'cron' | 'manual' | 'cold_start' | 'rebuild';
 export type ClusterRunStatus = 'running' | 'completed' | 'failed';
 
+/** 某一主题在一轮再平衡中的增量 */
+export interface TopicRebalanceDelta {
+  /** 新增的归属链接数（含次归属） */
+  added: number;
+  /** 被淘汰的归属链接数 */
+  removed: number;
+  /** 主归属从其他主题迁入的文章数 */
+  migratedIn: number;
+}
+
+/** topic_id → 该轮再平衡增量（未出现的主题表示未改动） */
+export type TopicRebalanceDeltas = Record<string, TopicRebalanceDelta>;
+
 /** 一轮执行的整体计数（所有主题合计） */
 export interface ClusterRunCounters {
   facetSucceeded: number;
@@ -26,6 +39,30 @@ export interface ClusterRunCounters {
   reviewedTopics: number;
   newReviews: number;
   insightReports: number;
+  /** 本轮再平衡中归属变化的文章数 */
+  rebalancedArticles: number;
+  /** 本轮再平衡中迁移主归属的文章数 */
+  primarySwitches: number;
+  /** 本轮结束时待抽取切面的积压篇数 */
+  facetPending: number;
+  /** 本轮再平衡按主题的增量（未改动的主题不出现） */
+  rebalanceDeltas?: TopicRebalanceDeltas;
+  /** 本轮是否执行了归属再平衡 */
+  rebalanceExecuted?: boolean;
+  /** 本轮是否执行了周分析（两阶段分析/综述/洞察） */
+  analysisExecuted?: boolean;
+  /** 周分析溯源：本轮洞察覆盖的再平衡轮次与调整规模 */
+  sourceRebalance?: RebalanceProvenance;
+}
+
+/** 周分析覆盖的再平衡轮次汇总 */
+export interface RebalanceProvenance {
+  /** 覆盖的再平衡轮次数 */
+  runs: number;
+  /** 覆盖的再平衡调整文章数合计 */
+  articles: number;
+  /** 覆盖范围内最近一次再平衡完成时间 */
+  lastAt: string | null;
 }
 
 /** topic_id → 该轮新增链接数 */
@@ -48,6 +85,13 @@ export interface ClusterRunLog {
   reviewedTopics: number;
   newReviews: number;
   insightReports: number;
+  rebalancedArticles: number;
+  primarySwitches: number;
+  facetPending: number;
+  rebalanceDeltas: TopicRebalanceDeltas;
+  rebalanceExecuted: boolean;
+  analysisExecuted: boolean;
+  sourceRebalance: RebalanceProvenance;
   topicDeltas: TopicDeltas;
   reviewDeltas: TopicDeltas;
   errorMessage: string | null;
@@ -101,6 +145,18 @@ export async function finishClusterRun(runId: number, input: FinishClusterRunInp
       reviewed_topics: counters?.reviewedTopics ?? 0,
       new_reviews: counters?.newReviews ?? 0,
       insight_reports: counters?.insightReports ?? 0,
+      rebalanced_articles: counters?.rebalancedArticles ?? 0,
+      primary_switches: counters?.primarySwitches ?? 0,
+      facet_pending: counters?.facetPending ?? 0,
+      rebalance_deltas:
+        input.counters?.rebalanceDeltas && Object.keys(input.counters.rebalanceDeltas).length > 0
+          ? JSON.stringify(input.counters.rebalanceDeltas)
+          : null,
+      rebalance_executed: counters?.rebalanceExecuted ? 1 : 0,
+      analysis_executed: counters?.analysisExecuted ? 1 : 0,
+      source_rebalance_runs: counters?.sourceRebalance?.runs ?? 0,
+      source_rebalanced_articles: counters?.sourceRebalance?.articles ?? 0,
+      source_last_rebalance_at: counters?.sourceRebalance?.lastAt ?? null,
       topic_deltas:
         input.topicDeltas && Object.keys(input.topicDeltas).length > 0
           ? JSON.stringify(input.topicDeltas)
@@ -140,6 +196,90 @@ export function diffTopicLinkCounts(
     if (added > 0) deltas[String(topicId)] = added;
   }
   return deltas;
+}
+
+/**
+ * 最近一轮执行过归属再平衡的流水线（日增量 / 手动）。
+ * 冷启动与重建不跑再平衡，因此排除，避免页面显示一轮 0 调整的记录。
+ */
+export async function getLatestRebalanceRun(input: {
+  userId: number;
+  setVersion: number;
+}): Promise<ClusterRunLog | null> {
+  const row = await getDb()
+    .selectFrom('cluster_run_logs')
+    .selectAll()
+    .where('user_id', '=', input.userId)
+    .where('set_version', '=', input.setVersion)
+    .where('status', '=', 'completed')
+    .where('trigger', 'in', ['cron', 'manual'])
+    .orderBy('id', 'desc')
+    .limit(1)
+    .executeTakeFirst();
+  return row ? toRunLog(row) : null;
+}
+
+/**
+ * 汇总「上一次周分析之后」所有再平衡轮次，供周分析执行记录标注溯源。
+ * 若从未跑过周分析，则汇总全部再平衡轮次。
+ */
+export async function summarizeRebalanceSinceLastAnalysis(input: {
+  userId: number;
+  setVersion: number;
+}): Promise<RebalanceProvenance> {
+  const db = getDb();
+  const lastAnalysis = await db
+    .selectFrom('cluster_run_logs')
+    .select('id')
+    .where('user_id', '=', input.userId)
+    .where('set_version', '=', input.setVersion)
+    .where('analysis_executed', '=', 1)
+    .where('status', '=', 'completed')
+    .orderBy('id', 'desc')
+    .limit(1)
+    .executeTakeFirst();
+
+  let query = db
+    .selectFrom('cluster_run_logs')
+    .select((eb) => [
+      eb.fn.count('id').as('runs'),
+      eb.fn.sum('rebalanced_articles').as('articles'),
+      eb.fn.max('finished_at').as('lastAt'),
+    ])
+    .where('user_id', '=', input.userId)
+    .where('set_version', '=', input.setVersion)
+    .where('rebalance_executed', '=', 1)
+    .where('status', '=', 'completed');
+
+  if (lastAnalysis) {
+    query = query.where('id', '>', lastAnalysis.id);
+  }
+
+  const row = await query.executeTakeFirst();
+  return {
+    runs: Number(row?.runs ?? 0),
+    articles: Number(row?.articles ?? 0),
+    lastAt: (row?.lastAt as string | null) ?? null,
+  };
+}
+
+/** 页面用：某版本最近几轮流水线执行（含失败轮次），最新的在前 */
+export async function listRecentRuns(input: {
+  userId: number;
+  setVersion: number;
+  limit?: number;
+}): Promise<ClusterRunLog[]> {
+  const limit = Math.min(Math.max(input.limit ?? 8, 1), 30);
+  const rows = await getDb()
+    .selectFrom('cluster_run_logs')
+    .selectAll()
+    .where('user_id', '=', input.userId)
+    .where('set_version', '=', input.setVersion)
+    .where('status', '!=', 'running')
+    .orderBy('id', 'desc')
+    .limit(limit)
+    .execute();
+  return rows.map(toRunLog);
 }
 
 export interface ListTopicRunLogsInput {
@@ -192,6 +332,15 @@ function toRunLog(row: {
   reviewed_topics: number;
   new_reviews: number;
   insight_reports: number;
+  rebalanced_articles: number;
+  primary_switches: number;
+  facet_pending: number;
+  rebalance_deltas: string | null;
+  rebalance_executed: number;
+  analysis_executed: number;
+  source_rebalance_runs: number;
+  source_rebalanced_articles: number;
+  source_last_rebalance_at: string | null;
   topic_deltas: string | null;
   review_deltas: string | null;
   error_message: string | null;
@@ -213,10 +362,42 @@ function toRunLog(row: {
     reviewedTopics: row.reviewed_topics,
     newReviews: row.new_reviews,
     insightReports: row.insight_reports,
+    rebalancedArticles: row.rebalanced_articles,
+    primarySwitches: row.primary_switches,
+    facetPending: row.facet_pending,
+    rebalanceDeltas: parseRebalanceDeltas(row.rebalance_deltas),
+    rebalanceExecuted: row.rebalance_executed === 1,
+    analysisExecuted: row.analysis_executed === 1,
+    sourceRebalance: {
+      runs: row.source_rebalance_runs ?? 0,
+      articles: row.source_rebalanced_articles ?? 0,
+      lastAt: row.source_last_rebalance_at ?? null,
+    },
     topicDeltas: parseTopicDeltas(row.topic_deltas),
     reviewDeltas: parseTopicDeltas(row.review_deltas),
     errorMessage: row.error_message,
   };
+}
+
+function parseRebalanceDeltas(raw: string | null): TopicRebalanceDeltas {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const deltas: TopicRebalanceDeltas = {};
+    for (const [topicId, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== 'object') continue;
+      const item = value as Record<string, unknown>;
+      deltas[topicId] = {
+        added: Number(item.added ?? 0) || 0,
+        removed: Number(item.removed ?? 0) || 0,
+        migratedIn: Number(item.migratedIn ?? 0) || 0,
+      };
+    }
+    return deltas;
+  } catch {
+    log.warn('cluster_run_logs.rebalance_deltas 解析失败，按空增量处理');
+    return {};
+  }
 }
 
 function parseTopicDeltas(raw: string | null): TopicDeltas {

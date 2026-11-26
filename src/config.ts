@@ -147,6 +147,12 @@ export interface Config {
   clusterMinPoolSize: number;
   clusterMinClusterSize: number;
   clusterMaxTopicsPerArticle: number;
+  /** 周期归属再平衡：迟滞带宽度（0 表示关闭迟滞） */
+  clusterRebalanceMargin: number;
+  /** 每日切面抽取的总量上限（分批拉满，避免积压） */
+  clusterFacetMaxPerRun: number;
+  /** 切面积压告警阈值：待抽篇数超过该值时页面提示并写告警日志 */
+  clusterFacetBacklogAlert: number;
   clusterMinTrendSamples: number;
   clusterDormantDays: number;
   clusterLlmConcurrency: number;
@@ -316,6 +322,13 @@ function getConfig(): Config {
     clusterMinPoolSize: intEnv(process.env.CLUSTER_MIN_POOL_SIZE, 6, 1),
     clusterMinClusterSize: intEnv(process.env.CLUSTER_MIN_CLUSTER_SIZE, 3, 2),
     clusterMaxTopicsPerArticle: intEnv(process.env.CLUSTER_MAX_TOPICS_PER_ARTICLE, 2, 1),
+    // 再平衡迟滞带：0.03 意味着“挑战者要领先当前主归属 3 个百分点才迁主归属”，
+    // 既有链接在 θ_route - 0.03 以上保留，避免阈值附近来回抖动。
+    clusterRebalanceMargin: floatEnv(process.env.CLUSTER_REBALANCE_MARGIN, 0.03, 0),
+    // 每日切面上限：按批拉满，单日新增超过此前默认 50 篇也不会积压。
+    clusterFacetMaxPerRun: intEnv(process.env.CLUSTER_FACET_MAX_PER_RUN, 2000, 1),
+    // 积压告警阈值：单日新增远超处理能力时，页面与日志都要能看见。
+    clusterFacetBacklogAlert: intEnv(process.env.CLUSTER_FACET_BACKLOG_ALERT, 50, 1),
     clusterMinTrendSamples: intEnv(process.env.CLUSTER_MIN_TREND_SAMPLES, 6, 2),
     clusterDormantDays: intEnv(process.env.CLUSTER_DORMANT_DAYS, 60, 1),
     clusterLlmConcurrency: intEnv(process.env.CLUSTER_LLM_CONCURRENCY, 2, 1),

@@ -64,6 +64,51 @@ systemctl show lis-rss -p Restart   # 期望 Restart=on-failure
   - 「Telegram Chats」新增 / 删除 chat、修改 `role` / 启用状态 → 立即重建路由；只改推送开关（如 `telegram_new_articles`）不会重建长轮询，发送时直接读库。
   - 该热加载只覆盖主应用内的 bot；`paper-pdf-summary-telegram` 是独立服务，改它自己的 `.env` 仍需重启该服务。
 
+### 主题聚类动态更新与再平衡（2026-11-26）
+
+- **调度节奏**：日增量 `CLUSTER_SCHEDULE`（默认每天 08:30）执行切面抽取 → 路由 → 游离池孵化 → 微主题整合 → 定向回捞 → **归属再平衡** → 脉络与指标；周分析 `CLUSTER_ANALYSIS_SCHEDULE`（默认周一 09:30）只对脏主题跑两阶段分析/综述/洞察。
+- **新增环境变量**（不填即用默认值；写入 `.env` 后需重启 `lis-rss` 生效）：
+
+```env
+# 再平衡迟滞带：既有链接保留线 = CLUSTER_SIM_THRESHOLD - margin；迁移主归属/替换次归属需领先 margin
+CLUSTER_REBALANCE_MARGIN=0.03
+# 每日切面抽取总量上限（分批拉满，避免单日新增超过 50 篇时积压）
+CLUSTER_FACET_MAX_PER_RUN=2000
+# 待抽切面积压告警阈值（超过即在 /clusters 顶部提示并写 warn 日志）
+CLUSTER_FACET_BACKLOG_ALERT=50
+```
+
+- **数据库迁移**：`056`（再平衡/切面积压计数）、`057`（按主题再平衡增量）、`058`（阶段标记与周分析溯源）。升级代码后**先迁移、再重启**；只有主应用代码变了，Chroma/DeepSearch/Paper PDF 无需重启：
+
+```bash
+cd /opt/lis-rss-daily
+pnpm run db:migrate          # 自动备份 data/rss-tracker.backup-<时间戳>.db
+systemctl restart lis-rss
+# 校验 3 个关键列均已存在（期望输出 3）
+sqlite3 data/rss-tracker.db "select count(*) from pragma_table_info('cluster_run_logs') where name in ('rebalanced_articles','rebalance_deltas','source_rebalance_runs');"
+```
+
+- **手动触发归属再平衡**（零 Token、零 LLM 调用，可不等每日调度）：
+
+```bash
+pnpm run cluster:rebalance -- --dry-run   # 预检：用实时质心估算，不写库、不写日志
+pnpm run cluster:rebalance -- --yes       # 执行：改归属 + 重建受影响主题脉络/指标 + 写 manual 执行日志
+pnpm run cluster:rebalance -- --yes --margin 0.05   # 本次临时覆盖迟滞带
+pnpm run cluster:rebalance -- --yes --no-derive      # 只改归属，派生留给下一轮流水线
+```
+
+- **页面验收点**：
+  - `/clusters` 顶部统计条：`上轮调整 / 迁移主归属 / 待抽切面 / 下次聚类更新`；下方可折叠「最近执行记录」（含再平衡溯源列：周分析显示「覆盖 N 轮 / M 篇」）。
+  - 待抽切面超过 `CLUSTER_FACET_BACKLOG_ALERT` 时，统计条下方出现琥珀色积压告警。
+  - 主题详情页头部显示「本轮调整 新增 N · 迁入 M」或「本轮未调整」；执行记录表新增「再平衡」列。
+- **首次升级注意**：首轮日增量会给历史文章补上合法的第二归属（2026-11-26 实测约 620 篇）并把相关主题标脏；下一个周一 09:30 的周分析会重算这些主题的综述与洞察，是 Token 成本最高的一轮，建议挑低峰执行，或先 `--dry-run` 评估再决定是否立即手动执行。
+- **排查命令**：
+
+```bash
+sqlite3 -header -column data/rss-tracker.db "select id,trigger,status,rebalance_executed,analysis_executed,rebalanced_articles,source_rebalance_runs,source_rebalanced_articles from cluster_run_logs order by id desc limit 5;"
+journalctl -u lis-rss --since '-10 min' --no-pager | grep -E '再平衡|积压|切面'
+```
+
 ### Chroma/向量库恢复（主库完整、向量库不全/对不上）
 
 1. **判定**：`sqlite3 data/rss-tracker.db "SELECT count(*) FROM articles;"`；`curl http://127.0.0.1:8000/api/v2/heartbeat`；检查 `GET /api/v2/.../collections` 或 `GET /api/articles/vector-check`（需登录）。`embeddings=0`/collection 空/维度或内容不可信时考虑重建。
@@ -95,6 +140,10 @@ journalctl -u lis-rss --since '-10 min' --no-pager | grep -c 'statusCode":409'  
 systemctl --failed --no-pager
 crontab -l | grep paper-pdf-summary
 ls -l /etc/logrotate.d/paper-pdf-summary
+
+# 主题聚类动态更新能力（只读预检，不写库）
+sqlite3 data/rss-tracker.db "select count(*) from pragma_table_info('cluster_run_logs') where name='rebalance_deltas';"   # 期望 1
+pnpm run cluster:rebalance -- --dry-run | tail -12
 ```
 
 ---
@@ -430,6 +479,8 @@ REJECTED_CLEANUP_ENABLED=true
 # ============ CLI API 密钥（用于每日总结 CLI）=============
 CLI_API_KEY=your-cli-api-key-here
 ```
+
+> 主题聚类相关配置（`CLUSTER_*`，含本轮的 `CLUSTER_REBALANCE_MARGIN`、`CLUSTER_FACET_MAX_PER_RUN`、`CLUSTER_FACET_BACKLOG_ALERT`）不在上述最小模板中，不填即用默认值；完整说明见「主题聚类动态更新与再平衡（2026-11-26）」。
 
 ### 9. 创建必要目录
 

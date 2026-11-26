@@ -1190,6 +1190,45 @@ CREATE INDEX IF NOT EXISTS idx_email_fetch_logs_created_at ON email_fetch_logs(c
 	    continue;
 	  }
 
+	  // ============================================================
+	  // 056: 执行日志补充再平衡与切面积压计数
+	  // ============================================================
+	  if (file === '056_add_cluster_rebalance_counters.sql') {
+	    if (hasColumn(db, 'cluster_run_logs', 'rebalanced_articles')) {
+	      console.log('      → Skipped (rebalance counters already present)');
+	    } else {
+	      db.exec(fs.readFileSync(fullPath, 'utf-8'));
+	      console.log('      → Added rebalance counters to cluster_run_logs');
+	    }
+	    continue;
+	  }
+
+	  // ============================================================
+	  // 057: 执行日志记录按主题的再平衡增量
+	  // ============================================================
+	  if (file === '057_add_cluster_rebalance_deltas.sql') {
+	    if (hasColumn(db, 'cluster_run_logs', 'rebalance_deltas')) {
+	      console.log('      → Skipped (rebalance_deltas already present)');
+	    } else {
+	      db.exec(fs.readFileSync(fullPath, 'utf-8'));
+	      console.log('      → Added rebalance_deltas to cluster_run_logs');
+	    }
+	    continue;
+	  }
+
+	  // ============================================================
+	  // 058: 执行日志补充阶段标记与周分析的再平衡溯源
+	  // ============================================================
+	  if (file === '058_add_run_log_stage_provenance.sql') {
+	    if (hasColumn(db, 'cluster_run_logs', 'rebalance_executed')) {
+	      console.log('      → Skipped (stage flags already present)');
+	    } else {
+	      db.exec(fs.readFileSync(fullPath, 'utf-8'));
+	      console.log('      → Added stage flags and rebalance provenance');
+	    }
+	    continue;
+	  }
+
 	  // 其他迁移脚本已包含在 001_init.sql 中
 	  console.log('      → Skipped (included in 001_init.sql)');
     }

@@ -47,6 +47,7 @@ export function renderHeader(detail) {
 
   const statusNotice = renderStatusNotice(detail);
   const hasFooter = Boolean(keywords || statusNotice);
+  const adjustPill = renderAdjustmentPill(detail.adjustment);
 
   return (
     '<div class="cluster-detail-header">' +
@@ -84,6 +85,9 @@ export function renderHeader(detail) {
         '<span class="cluster-meta-pill cluster-meta-time" title="分析最近更新时间">' +
           '更新于 ' + escapeHtml(formatDateTime(detail.updatedAt)) +
         '</span>' +
+        (adjustPill
+          ? '<span class="cluster-meta-dot" aria-hidden="true">·</span>' + adjustPill
+          : '') +
       '</div>' +
 
       (hasFooter
@@ -93,6 +97,39 @@ export function renderHeader(detail) {
           '</div>'
         : '') +
     '</div>'
+  );
+}
+
+/**
+ * 最近一轮再平衡对本主题的调整：新增次归属 / 迁入主归属 / 淘汰链接。
+ * 本轮未被改动时也明确告知，避免用户误以为“数据没动”是加载失败。
+ */
+function renderAdjustmentPill(adjustment) {
+  if (!adjustment) return '';
+  const added = adjustment.added || 0;
+  const migratedIn = adjustment.migratedIn || 0;
+  const removed = adjustment.removed || 0;
+  const timeLabel = formatDateTime(adjustment.at);
+  const touched = added + migratedIn + removed > 0;
+
+  if (!touched) {
+    return (
+      '<span class="cluster-meta-pill cluster-meta-adjust" title="最近一轮再平衡（' +
+        escapeHtml(timeLabel) + '）：本主题成员未被调整">本轮未调整</span>'
+    );
+  }
+
+  const parts = ['新增 ' + added];
+  if (migratedIn > 0) parts.push('迁入 ' + migratedIn);
+  if (removed > 0) parts.push('淘汰 ' + removed);
+
+  return (
+    '<span class="cluster-meta-pill cluster-meta-adjust" title="最近一轮再平衡（' +
+      escapeHtml(timeLabel) + '）：新增次归属 ' + added +
+      ' 篇 / 迁入主归属 ' + migratedIn +
+      ' 篇 / 淘汰链接 ' + removed + ' 篇">' +
+      '本轮调整 ' + escapeHtml(parts.join(' · ')) +
+    '</span>'
   );
 }
 

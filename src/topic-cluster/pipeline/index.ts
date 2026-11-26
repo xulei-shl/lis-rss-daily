@@ -28,6 +28,7 @@ import {
   type ConfigDrift,
 } from '../repo/sets.js';
 import { buildFacetsForArticles } from '../service/facet-builder.js';
+import { refreshCentroidsForVersion } from '../service/centroid.js';
 import { countFacetSourceArticles, listFacetSourceArticles } from '../source.js';
 import { runPendingAnalyses, type AnalysisStepResult } from './analyze.js';
 import { runPendingReviews, type ReviewStepResult } from './review.js';
@@ -35,6 +36,7 @@ import { runInsightStep, type InsightStepResult } from './insight.js';
 import { countReviewsByTopic } from '../repo/reviews.js';
 import { runDeriveForDirtyTopics, type DeriveResult } from './derive.js';
 import { runIncubation, type IncubationResult } from './incubate.js';
+import { runAssignmentRebalance, type RebalanceResult } from './rebalance.js';
 import { runReclaim, type ReclaimResult } from './reclaim.js';
 import { runIncrementalRouting, type RouteResult } from './route.js';
 import { generateTopicDocuments } from '../service/document-generator.js';
@@ -43,6 +45,7 @@ import {
   countLinksByTopic,
   diffTopicLinkCounts,
   finishClusterRun,
+  summarizeRebalanceSinceLastAnalysis,
   type ClusterRunCounters,
   type ClusterRunTrigger,
   type FinishClusterRunInput,
@@ -55,6 +58,8 @@ export interface FacetStepSummary {
   succeeded: number;
   failed: number;
   skippedExisting: number;
+  /** 本轮结束后仍待抽取的篇数（>0 说明已达单轮上限或持续失败） */
+  remaining: number;
 }
 
 export interface ClusterRunSummary {
@@ -65,6 +70,7 @@ export interface ClusterRunSummary {
   incubation: IncubationResult;
   consolidation: ConsolidationResult;
   reclaim: ReclaimResult;
+  rebalance: RebalanceResult;
   derive: DeriveResult;
   analysis: AnalysisStepResult;
   review: ReviewStepResult;
@@ -84,6 +90,8 @@ export interface RunPipelineOptions {
   forceAnalysis?: boolean;
   /** 跳过定向回捞（仅调试用） */
   skipReclaim?: boolean;
+  /** 跳过归属再平衡（仅调试/全量重建时使用） */
+  skipRebalance?: boolean;
   /** 在回捞之后立刻重算派生数据与（冷启动场景下可传 false，由调用方自己分轮） */
   skipAnalysis?: boolean;
   /** 执行日志的触发来源（默认 cron） */
@@ -174,15 +182,40 @@ export async function runFacetBackfill(
   };
 }
 
-/** 步骤 ①：每日增量（在整条流水线内的调用形式） */
-async function runFacetStep(limit: number): Promise<FacetStepSummary> {
-  const result = await runFacetBackfill({ limit });
-  return {
-    requested: result.requested,
-    succeeded: result.succeeded,
-    failed: result.failed,
-    skippedExisting: result.skippedExisting,
+/**
+ * 步骤 ①：每日增量（在整条流水线内的调用形式）。
+ *
+ * 分批拉满到 `maxArticles`，保证「本周期所有新增摘要文献」都被纳入；
+ * 达到上限或本批全部失败（避免同一批持续重试烧 Token）时停止，
+ * 并在 `remaining` 中报告积压。
+ */
+async function runFacetStep(limit: number, maxArticles: number = limit): Promise<FacetStepSummary> {
+  const summary: FacetStepSummary = {
+    requested: 0,
+    succeeded: 0,
+    failed: 0,
+    skippedExisting: 0,
+    remaining: 0,
   };
+
+  let processed = 0;
+  const budget = Math.max(limit, maxArticles);
+  while (processed < budget) {
+    const batchSize = Math.min(limit, budget - processed);
+    const batch = await runFacetBackfill({ limit: batchSize });
+    summary.requested += batch.requested;
+    summary.succeeded += batch.succeeded;
+    summary.failed += batch.failed;
+    summary.skippedExisting += batch.skippedExisting;
+    summary.remaining = batch.remaining;
+    processed += batch.requested;
+
+    if (batch.remaining === 0) break;
+    // 整批失败：同一批文章会再次被选中，继续循环只会重复烧 Token。
+    if (batch.requested === 0 || batch.succeeded === 0) break;
+  }
+
+  return summary;
 }
 
 /** 每日增量：一轮完整的六步 */
@@ -197,7 +230,20 @@ export async function runClusterPipeline(
     // 周期新增计数只在每日轮次重置（冷启动会另开一轮，届时重新累计）
     await resetPeriodAddedCount(setVersion);
 
-    const facets = await runFacetStep(options.facetLimit ?? 50);
+    const facets = await runFacetStep(
+      options.facetLimit ?? 50,
+      options.facetLimit ?? CLUSTER_CONFIG.facetMaxPerRun
+    );
+
+    if (facets.remaining > CLUSTER_CONFIG.facetBacklogAlert) {
+      log.warn(
+        { remaining: facets.remaining, threshold: CLUSTER_CONFIG.facetBacklogAlert },
+        '切面抽取积压超过告警阈值：请检查新增文献量或调高单轮上限'
+      );
+    }
+
+    // 质心按当前成员重算后再路由：否则新增文献永远被冷启动那天的语义中心评判。
+    const centroids = await refreshCentroidsForVersion(setVersion);
     const routing = await runIncrementalRouting({ userId: CLUSTER_CONFIG.userId, setVersion });
     const incubation = await runIncubation({ userId: CLUSTER_CONFIG.userId, setVersion });
 
@@ -222,6 +268,11 @@ export async function runClusterPipeline(
             (topicId) => consolidation.removedTopicIds.indexOf(topicId) === -1
           ),
         });
+
+    // 周期再平衡：重新评估已归属文章的归属，修补「处理过就是死结果」的缺口。
+    const rebalance = options.skipRebalance
+      ? emptyRebalanceResult()
+      : await runAssignmentRebalance({ userId: CLUSTER_CONFIG.userId, setVersion });
 
     const derive = await runDeriveForDirtyTopics(setVersion);
 
@@ -261,7 +312,7 @@ export async function runClusterPipeline(
       );
     }
 
-    const summary: ClusterRunSummary = { setVersion, drift, facets, routing, incubation, consolidation, reclaim, derive, analysis, review, insight };
+    const summary: ClusterRunSummary = { setVersion, drift, facets, routing, incubation, consolidation, reclaim, rebalance, derive, analysis, review, insight };
 
     log.info(
       {
@@ -271,6 +322,9 @@ export async function runClusterPipeline(
         routed: routing.routedArticles,
         newTopics: incubation.createdTopicIds.length,
         reclaimed: reclaim.reclaimedLinks,
+        rebalanced: rebalance.changedArticles,
+        centroidRefreshed: centroids.refreshed,
+        facetPending: facets.remaining,
         analyses: analysis.ok,
         failedAnalyses: analysis.failed,
         reviews: review.created + review.updated,
@@ -291,6 +345,12 @@ export async function runClusterPipeline(
         reviewedTopics: review.ok + review.partial,
         newReviews: review.created,
         insightReports: insight.created,
+        rebalancedArticles: rebalance.changedArticles,
+        primarySwitches: rebalance.primarySwitches,
+        facetPending: facets.remaining,
+        rebalanceDeltas: rebalance.topicDeltas,
+        rebalanceExecuted: !options.skipRebalance,
+        analysisExecuted: !options.skipAnalysis,
       },
     };
   });
@@ -379,6 +439,7 @@ export async function runColdStart(
         incubation,
         consolidation,
         reclaim: emptyReclaimResult(),
+        rebalance: emptyRebalanceResult(),
         derive,
         analysis,
         review,
@@ -394,6 +455,11 @@ export async function runColdStart(
         reviewedTopics: review.ok + review.partial,
         newReviews: review.created,
         insightReports: insight.created,
+        rebalancedArticles: 0,
+        primarySwitches: 0,
+        facetPending: facets.remaining,
+        rebalanceExecuted: false,
+        analysisExecuted: !options.skipAnalysis,
       },
     };
   });
@@ -426,6 +492,12 @@ export async function runScheduledAnalyses(
   const { setVersion } = await ensureActiveSet();
 
   return runWithLog('cron', setVersion, async () => {
+    // 先算溯源：本轮洞察覆盖了「上一次周分析之后」多少轮再平衡、多少篇文章的调整。
+    const sourceRebalance = await summarizeRebalanceSinceLastAnalysis({
+      userId: CLUSTER_CONFIG.userId,
+      setVersion,
+    });
+
     const analysis = await runPendingAnalyses(setVersion, {
       limit: options.limit ?? 200,
       force: options.force,
@@ -465,6 +537,12 @@ export async function runScheduledAnalyses(
         reviewedTopics: review.ok + review.partial,
         newReviews: review.created,
         insightReports: insight.created,
+        rebalancedArticles: 0,
+        primarySwitches: 0,
+        facetPending: 0,
+        rebalanceExecuted: false,
+        analysisExecuted: true,
+        sourceRebalance,
       },
     };
   });
@@ -558,6 +636,21 @@ function errorMessage(error: unknown): string {
 
 function emptyReclaimResult(): ReclaimResult {
   return { scannedArticles: 0, reclaimedLinks: 0, reclaimedArticles: 0, dirtyTopicIds: [] };
+}
+
+function emptyRebalanceResult(): RebalanceResult {
+  return {
+    scannedArticles: 0,
+    changedArticles: 0,
+    addedLinks: 0,
+    removedLinks: 0,
+    primarySwitches: 0,
+    deferredCandidates: 0,
+    skippedMissingFacet: 0,
+    affectedTopicIds: [],
+    topicDeltas: {},
+    skippedReason: '未执行',
+  };
 }
 
 function emptyAnalysisStepResult(): AnalysisStepResult {

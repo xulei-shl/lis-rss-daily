@@ -11,6 +11,9 @@
   const countEl = document.getElementById('clusterCount');
   const searchInput = document.getElementById('clusterSearch');
   const sortSelect = document.getElementById('clusterSort');
+  const backlogAlert = document.getElementById('clusterBacklogAlert');
+  const historyPanel = document.getElementById('clusterHistory');
+  const historyBody = document.getElementById('clusterHistoryBody');
 
   let searchTimer = null;
 
@@ -51,10 +54,38 @@
     if (data.analysisFailedCount > 0) {
       stats.push({ value: data.analysisFailedCount, label: '待重算', warn: true });
     }
+    if (data.lastRebalance) {
+      const rb = data.lastRebalance;
+      const hint = '最近一轮归属再平衡'
+        + (rb.at ? '（' + new Date(rb.at).toLocaleString('zh-CN', { hour12: false }) + '）' : '');
+      stats.push({ value: rb.changedArticles, label: '上轮调整', title: hint + '：归属链接或主归属发生变化的文章数' });
+      stats.push({ value: rb.primarySwitches, label: '迁移主归属', title: hint + '：主归属迁移到另一个主题的文章数' });
+    }
+    stats.push({
+      value: Number(data.pendingFacetCount || 0),
+      label: '待抽切面',
+      title: '当前仍有全文总结但未抽取切面的文章数（实时）',
+      warn: Number(data.pendingFacetCount || 0) > Number(data.facetBacklogThreshold || 0)
+    });
+    if (data.nextUpdateLabel) {
+      const kindLabel = data.nextUpdateKind === 'analysis' ? '下次洞察更新' : '下次聚类更新';
+      stats.push({
+        value: data.nextUpdateLabel,
+        label: kindLabel,
+        title: '日更聚类与周度洞察综述中最近的一次定时运行'
+      });
+    }
+    renderBacklogAlert(data);
+    renderRunHistory(data.runHistory || []);
+
     overviewBar.innerHTML = stats
       .map(
         (stat) =>
-          '<div class="cluster-metric-item' + (stat.warn ? ' is-warn' : '') + '">' +
+          '<div class="cluster-metric-item' +
+          (stat.warn ? ' is-warn' : '') +
+          '"' +
+          (stat.title ? ' title="' + escapeHtml(stat.title) + '"' : '') +
+          '>' +
           '<span class="cluster-metric-value tabular-num">' +
           escapeHtml(String(stat.value)) +
           '</span>' +
@@ -63,6 +94,76 @@
           '</span></div>'
       )
       .join('<span class="cluster-metric-divider" aria-hidden="true">/</span>');
+  }
+
+  function renderBacklogAlert(data) {
+    if (!backlogAlert) return;
+    const pending = Number(data.pendingFacetCount || 0);
+    const threshold = Number(data.facetBacklogThreshold || 0);
+    if (pending > threshold) {
+      backlogAlert.hidden = false;
+      backlogAlert.textContent =
+        '⚠ 切面抽取积压 ' + pending + ' 篇（告警阈值 ' + threshold + ' 篇），新的主题与洞察可能延迟纳入这批文献。';
+    } else {
+      backlogAlert.hidden = true;
+      backlogAlert.textContent = '';
+    }
+  }
+
+  const TRIGGER_LABELS = {
+    cron: '定时',
+    manual: '手动',
+    cold_start: '冷启动',
+    rebuild: '重建'
+  };
+
+  function renderRunHistory(runs) {
+    if (!historyPanel || !historyBody) return;
+    if (runs.length === 0) {
+      historyPanel.hidden = true;
+      return;
+    }
+    historyPanel.hidden = false;
+
+    const rows = runs
+      .map((run) => {
+        const time = run.at
+          ? new Date(run.at).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+          : '—';
+        const duration = run.durationMs ? Math.round(run.durationMs / 1000) + 's' : '—';
+        const trigger = run.trigger === 'cron'
+          ? (run.analysisExecuted ? '周分析' : '日增量')
+          : (TRIGGER_LABELS[run.trigger] || escapeHtml(run.trigger));
+        const provenance = run.analysisExecuted
+          ? (run.sourceRebalanceRuns > 0
+            ? '覆盖 ' + run.sourceRebalanceRuns + ' 轮 / ' + (run.sourceRebalancedArticles || 0) + ' 篇'
+            : '无再平衡')
+          : '—';
+        const status = run.status === 'failed'
+          ? '<span class="cluster-history-failed">失败</span>'
+          : '<span class="cluster-history-ok">完成</span>';
+        return (
+          '<tr>' +
+            '<td class="tabular-num">' + escapeHtml(time) + '</td>' +
+            '<td>' + trigger + '</td>' +
+            '<td class="tabular-num">' + duration + '</td>' +
+            '<td class="tabular-num">' + (run.changedArticles || 0) + '</td>' +
+            '<td class="tabular-num">' + (run.primarySwitches || 0) + '</td>' +
+            '<td class="tabular-num">' + (run.facetPending || 0) + '</td>' +
+            '<td>' + escapeHtml(provenance) + '</td>' +
+            '<td>' + status + '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+
+    historyBody.innerHTML =
+      '<table class="cluster-history-table">' +
+        '<thead><tr>' +
+          '<th>时间</th><th>触发</th><th>耗时</th><th>调整</th><th>迁主</th><th>待抽</th><th>再平衡溯源</th><th>状态</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>';
   }
 
   async function loadTopics() {

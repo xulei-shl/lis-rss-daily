@@ -19,6 +19,8 @@ export interface AssignInput {
   candidates: ScoredTopic[];
   assignMethod: AssignMethod;
   maxTopics: number;
+  /** 主归属迟滞：该主题领先不足 margin 时仍保持第一位 */
+  preferredPrimary?: { topicId: number; margin: number };
 }
 
 export interface AssignResult {
@@ -36,6 +38,18 @@ export async function getLinksForArticle(
     .selectAll()
     .where('article_id', '=', articleId)
     .where('set_version', '=', setVersion)
+    .execute();
+}
+
+/** 某版本下全部归属链接（周期再平衡的全量扫描入口） */
+export async function listAllLinksForVersion(
+  setVersion: number
+): Promise<ArticleTopicLinksSelection[]> {
+  return getDb()
+    .selectFrom('article_topic_links')
+    .selectAll()
+    .where('set_version', '=', setVersion)
+    .orderBy('article_id', 'asc')
     .execute();
 }
 
@@ -100,7 +114,12 @@ export async function assignArticleToTopic(input: AssignInput): Promise<AssignRe
     similarity: row.similarity,
   }));
 
-  const plan = planLinks(existing, input.candidates, input.maxTopics);
+  const plan = planLinks(
+    existing,
+    input.candidates,
+    input.maxTopics,
+    input.preferredPrimary
+  );
   const affected = new Set<number>(plan.removals);
   for (const link of plan.links) affected.add(link.topicId);
 

@@ -84,7 +84,8 @@ export function scoreTopics(
 export function planLinks(
   existing: ExistingLink[],
   candidates: ScoredTopic[],
-  maxTopics: number
+  maxTopics: number,
+  preferredPrimary?: { topicId: number; margin: number }
 ): LinkPlan {
   const merged = new Map<number, number>();
   for (const link of existing) merged.set(link.topicId, link.similarity);
@@ -96,6 +97,15 @@ export function planLinks(
     .map(([topicId, similarity]) => ({ topicId, similarity }))
     .sort((a, b) => b.similarity - a.similarity || a.topicId - b.topicId)
     .slice(0, maxTopics);
+
+  // 主归属迟滞：领先幅度不足 margin 时不翻转，避免周与周之间来回抖动。
+  if (preferredPrimary) {
+    const index = ordered.findIndex((item) => item.topicId === preferredPrimary.topicId);
+    if (index > 0 && ordered[0].similarity < ordered[index].similarity + preferredPrimary.margin) {
+      const [preferred] = ordered.splice(index, 1);
+      ordered.unshift(preferred);
+    }
+  }
 
   const keptIds = new Set(ordered.map((item) => item.topicId));
 
@@ -115,6 +125,138 @@ export function planLinks(
     removals,
     primaryTopicId: links.length > 0 ? links[0].topicId : null,
   };
+}
+
+export interface RebalanceExistingLink extends ExistingLink {
+  /** 是否为当前主归属 */
+  isPrimary: boolean;
+}
+
+export interface RebalanceOptions {
+  maxTopics: number;
+  /** 归入阈值：新主题必须达到才会被追加 */
+  simThreshold: number;
+  /** 迟滞带：既有链接在 `simThreshold - margin` 以上就保留；主归属迁移需领先 margin */
+  margin: number;
+  /** 只允许这些主题接受新归属（未提供的主题仅参与保留判断） */
+  newLinkTopicIds?: ReadonlySet<number>;
+}
+
+export interface RebalanceDecisions {
+  /** 最终应存在的链接（相似度为本次重算值） */
+  links: ScoredTopic[];
+  added: number;
+  removed: number;
+  movedPrimary: boolean;
+  /** 更强的挑战者被迟滞带抑制（下轮再评估） */
+  deferred: boolean;
+}
+
+/**
+ * 已归属文章的周期再平衡决策（纯函数，无 IO，迟滞微调）。
+ *
+ * 与 `planLinks` 的区别：这里从**全量相似度**出发重新判断归属，而不是只看游离池。
+ * 规则：
+ *   1. 既有链接在 `simThreshold - margin` 之上就保留（迟滞带，避免阈值附近抖动）；
+ *   2. 低于保留线的既有链接被淘汰（文章回到游离池，等待重新孵化/归队）；
+ *   3. 新增归属必须达到 `simThreshold`；
+ *   4. 主归属迁移必须领先既有主归属 `margin`；未达标时暂缓（deferred），本轮不新增该挑战者。
+ */
+export function planRebalance(
+  existing: RebalanceExistingLink[],
+  scores: ScoredTopic[],
+  options: RebalanceOptions
+): RebalanceDecisions {
+  const keepFloor = options.simThreshold - options.margin;
+  const scoreByTopic = new Map(scores.map((item) => [item.topicId, item.similarity]));
+
+  const currentPrimary =
+    existing.find((link) => link.isPrimary) ??
+    [...existing].sort((a, b) => b.similarity - a.similarity || a.topicId - b.topicId)[0];
+  const currentPrimaryScore = currentPrimary
+    ? scoreByTopic.get(currentPrimary.topicId)
+    : undefined;
+  const currentPrimaryKept =
+    currentPrimary !== undefined &&
+    currentPrimaryScore !== undefined &&
+    currentPrimaryScore >= keepFloor;
+
+  // 达标候选（新归属的唯一来源）
+  const passing = scores
+    .filter((item) => item.similarity >= options.simThreshold)
+    .filter(
+      (item) =>
+        options.newLinkTopicIds === undefined || options.newLinkTopicIds.has(item.topicId)
+    )
+    .sort((a, b) => b.similarity - a.similarity || a.topicId - b.topicId);
+
+  const existingIds = new Set(existing.map((link) => link.topicId));
+  let deferred = false;
+  const admitted: ScoredTopic[] = [];
+  for (const candidate of passing) {
+    const wouldTakeOverPrimary =
+      currentPrimaryKept &&
+      currentPrimary !== undefined &&
+      candidate.topicId !== currentPrimary.topicId &&
+      currentPrimaryScore !== undefined &&
+      candidate.similarity > currentPrimaryScore;
+    if (
+      wouldTakeOverPrimary &&
+      candidate.similarity < (currentPrimaryScore as number) + options.margin
+    ) {
+      // 迟滞只拦“勉强超过当前主归属”的挑战者；落后于主归属的正常次归属照常加入。
+      deferred = true;
+      continue;
+    }
+    admitted.push(candidate);
+  }
+
+  // 保留线以上的既有链接即使已不达归入阈值，也先留在候选池里（迟滞带）
+  const pool = new Map<number, number>(admitted.map((item) => [item.topicId, item.similarity]));
+  for (const link of existing) {
+    const score = scoreByTopic.get(link.topicId);
+    if (score !== undefined && score >= keepFloor) {
+      const previous = pool.get(link.topicId);
+      if (previous === undefined || score > previous) pool.set(link.topicId, score);
+    }
+  }
+
+  const maxTopics = Math.max(1, options.maxTopics);
+  const links = [...pool.entries()]
+    .map(([topicId, similarity]) => ({ topicId, similarity }))
+    .sort((a, b) => b.similarity - a.similarity || a.topicId - b.topicId)
+    .slice(0, maxTopics);
+
+  // 次归属同样适用迟滞：名额被新主题挤占时，如果新主题领先不足 margin，
+  // 优先保留既有次归属（避免 0.71 / 0.72 两篇争夺同一个名额而周周互换）。
+  for (const link of existing) {
+    if (links.some((item) => item.topicId === link.topicId)) continue;
+    const score = scoreByTopic.get(link.topicId);
+    if (score === undefined || score < keepFloor) continue;
+    const challengerIndex = links.findIndex(
+      (item) =>
+        !existingIds.has(item.topicId) && item.similarity < score + options.margin
+    );
+    if (challengerIndex >= 0) {
+      links[challengerIndex] = { topicId: link.topicId, similarity: score };
+      deferred = true;
+    }
+  }
+  links.sort((a, b) => b.similarity - a.similarity || a.topicId - b.topicId);
+
+  const keptIds = new Set(links.map((link) => link.topicId));
+  const added = links.filter((link) => !existingIds.has(link.topicId)).length;
+  const removed = existing.filter((link) => !keptIds.has(link.topicId)).length;
+  // 主归属迁移同样需要迟滞：只有新首选领先既有主归属 margin 才算真正迁移。
+  const movedPrimary =
+    currentPrimaryKept &&
+    currentPrimary !== undefined &&
+    currentPrimaryScore !== undefined &&
+    links.length > 0 &&
+    links[0].topicId !== currentPrimary.topicId &&
+    links[0].similarity >= currentPrimaryScore + options.margin;
+
+  return { links, added, removed, movedPrimary, deferred };
 }
 
 /** 回捞打分结果（命中主题的文章） */

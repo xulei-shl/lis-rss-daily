@@ -38,6 +38,14 @@ export function renderRunLogs(detail) {
       const failed = run.status === 'failed';
       const statusLabel = RUN_STATUS_LABELS[run.status] || run.status;
       const statusBadge = '<span class="cluster-run-badge cluster-run-badge-' + run.status + '">' + escapeHtml(statusLabel) + '</span>';
+      const rebalanceCell = run.rebalanceExecuted
+        ? '调整 ' + (run.rebalancedArticles || 0) +
+          ((run.rebalanceMigratedIn || 0) > 0 ? ' · 迁入 ' + run.rebalanceMigratedIn : '')
+        : run.analysisExecuted
+          ? ((run.sourceRebalanceRuns || 0) > 0
+            ? '覆盖 ' + run.sourceRebalanceRuns + ' 轮 / ' + (run.sourceRebalancedArticles || 0) + ' 篇'
+            : '无再平衡')
+          : '—';
 
       return (
         '<tr>' +
@@ -45,6 +53,7 @@ export function renderRunLogs(detail) {
           '<td><span class="cluster-tag">' + escapeHtml(TRIGGER_LABELS[run.trigger] || run.trigger) + '</span></td>' +
           '<td class="tabular-num">' + (run.addedCount > 0 ? '<strong>+' + run.addedCount + '</strong>' : '0') + '</td>' +
           '<td class="tabular-num">' + ((run.reviewAddedCount || 0) > 0 ? '+' + run.reviewAddedCount : '0') + '</td>' +
+          '<td class="tabular-num">' + escapeHtml(rebalanceCell) + '</td>' +
           '<td>' +
             statusBadge +
             (failed && run.errorMessage
@@ -61,7 +70,7 @@ export function renderRunLogs(detail) {
     ? '<div class="cluster-table-responsive">' +
         '<table class="cluster-matrix cluster-run-table">' +
           '<thead>' +
-            '<tr><th>执行时间</th><th>触发源</th><th>新增文献</th><th>新增综述</th><th>状态</th><th>耗时</th></tr>' +
+            '<tr><th>执行时间</th><th>触发源</th><th>新增文献</th><th>新增综述</th><th>再平衡</th><th>状态</th><th>耗时</th></tr>' +
           '</thead>' +
           '<tbody>' + rows + '</tbody>' +
         '</table>' +

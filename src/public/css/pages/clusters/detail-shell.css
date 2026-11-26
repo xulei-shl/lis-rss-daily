@@ -120,6 +120,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.cluster-meta-adjust {
+  color: var(--cluster-amber);
+  font-variant-numeric: tabular-nums;
+}
+
 .cluster-header-footer {
   display: flex;
   align-items: center;

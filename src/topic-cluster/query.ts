@@ -24,7 +24,7 @@ import type { MatrixResult } from './service/matrix.js';
 import { listTopicMetrics, type MetricRow } from './repo/metrics.js';
 import { listThreads, listThreadArticles } from './repo/threads.js';
 import { getActiveSet } from './repo/sets.js';
-import { listTopicRunLogs } from './repo/run-logs.js';
+import { getLatestRebalanceRun, listRecentRuns, listTopicRunLogs } from './repo/run-logs.js';
 import { getTopicById, getTopicBySlug, listTopicsByVersion } from './repo/topics.js';
 import {
   findTopicIdBySlugAnyVersion,
@@ -37,7 +37,10 @@ import { parseFacetFields, type DatePrecision, type FacetFields } from './domain
 import { deriveAngleLabel } from './domain/chaining.js';
 import { normalizeMethodKeys, normalizeObjectKeys } from './domain/vocab.js';
 import { CLUSTER_CONFIG } from './config.js';
+import { computeNextCronRun, formatRunTimeLabel } from './next-run.js';
+import { countFacetSourceArticles } from './source.js';
 import { getArticleBriefs } from './source.js';
+import { config as appConfig } from '../config.js';
 import { listPublishedInsightReports } from './repo/insights.js';
 import { listTopicDocuments } from './repo/documents.js';
 import { listReviewsByTopic } from './repo/reviews.js';
@@ -203,6 +206,17 @@ export interface TopicRunLog {
   reviewAddedCount: number;
   /** 本轮生成的主题内洞察报告数（全局） */
   insightReports: number;
+  /** 本轮再平衡调整的文章数（仅 rebalanceExecuted 轮次有值） */
+  rebalancedArticles: number;
+  /** 本轮再平衡中本主题的主归属迁入数 */
+  rebalanceMigratedIn: number;
+  /** 本轮是否执行了归属再平衡 */
+  rebalanceExecuted: boolean;
+  /** 本轮是否执行了周分析 */
+  analysisExecuted: boolean;
+  /** 周分析溯源：覆盖的再平衡轮次与调整规模 */
+  sourceRebalanceRuns: number;
+  sourceRebalancedArticles: number;
   errorMessage: string | null;
 }
 
@@ -294,6 +308,14 @@ export interface TopicDetail {
   metrics: MetricRow[];
   /** 该主题最近若干轮的执行日志（最近的在前） */
   runLogs: TopicRunLog[];
+  /** 最近一轮再平衡对本主题的调整；null = 尚无执行过再平衡的轮次 */
+  adjustment: {
+    at: string | null;
+    trigger: string;
+    added: number;
+    removed: number;
+    migratedIn: number;
+  } | null;
   /** 同一版本下的邻近主题（用于「主题间关系」展示） */
   adjacent: Array<{ id: number; slug: string; name: string; sharedMethod: boolean; sharedObject: boolean }>;
   /** 主题内语义子簇的深度综述 */
@@ -479,6 +501,21 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
         url: brief?.url ?? null,
       };
     }),
+    adjustment: (() => {
+      // 只认「真的执行过再平衡」的轮次；周分析轮次不再掩盖上一轮的调整结果。
+      const run = runLogs.find(
+        (item) => item.status === 'completed' && item.rebalanceExecuted
+      );
+      if (!run) return null;
+      const delta = run.rebalanceDeltas[String(topic.id)];
+      return {
+        at: run.finishedAt ?? run.startedAt,
+        trigger: run.trigger,
+        added: delta?.added ?? 0,
+        removed: delta?.removed ?? 0,
+        migratedIn: delta?.migratedIn ?? 0,
+      };
+    })(),
     runLogs: runLogs.map((run) => ({
       id: run.id,
       trigger: run.trigger,
@@ -489,6 +526,12 @@ export async function getTopicDetail(slugOrId: string): Promise<TopicDetail | nu
       addedCount: run.topicDeltas[String(topic.id)] ?? 0,
       reviewAddedCount: run.reviewDeltas[String(topic.id)] ?? 0,
       insightReports: run.insightReports,
+      rebalancedArticles: run.rebalancedArticles,
+      rebalanceMigratedIn: run.rebalanceDeltas[String(topic.id)]?.migratedIn ?? 0,
+      rebalanceExecuted: run.rebalanceExecuted,
+      analysisExecuted: run.analysisExecuted,
+      sourceRebalanceRuns: run.sourceRebalance.runs,
+      sourceRebalancedArticles: run.sourceRebalance.articles,
       errorMessage: run.errorMessage,
     })),
     adjacent: await findAdjacentTopics(topic.id, topic.set_version, members),
@@ -541,6 +584,69 @@ export interface ClusterOverview {
   rising: Array<{ id: number; slug: string; name: string; direction: Trend }>;
   cooling: Array<{ id: number; slug: string; name: string; direction: Trend }>;
   recentTopics: Array<{ id: number; slug: string; name: string; createdAt: string | null }>;
+  /** 下一次定时流水线的触发时间（ISO）与本地展示文案 */
+  nextUpdateAt: string | null;
+  nextUpdateLabel: string | null;
+  /** 下一次运行的是日更聚类（cluster）还是周度洞察综述（analysis） */
+  nextUpdateKind: 'cluster' | 'analysis' | null;
+  /** 最近一轮归属再平衡的统计（页面展示动态调整规模） */
+  lastRebalance: {
+    at: string | null;
+    changedArticles: number;
+    primarySwitches: number;
+    facetPending: number;
+  } | null;
+  /** 最近几轮流水线执行（页面“执行历史”面板） */
+  runHistory: Array<{
+    id: number;
+    trigger: string;
+    status: string;
+    at: string | null;
+    durationMs: number | null;
+    changedArticles: number;
+    primarySwitches: number;
+    facetPending: number;
+    /** 该轮是否执行了再平衡 / 周分析 */
+    rebalanceExecuted: boolean;
+    analysisExecuted: boolean;
+    /** 周分析溯源：覆盖的再平衡轮次与调整规模 */
+    sourceRebalanceRuns: number;
+    sourceRebalancedArticles: number;
+    sourceLastRebalanceAt: string | null;
+    errorMessage: string | null;
+  }>;
+  /** 当前待抽取切面的篇数（实时） */
+  pendingFacetCount: number;
+  /** 积压告警阈值 */
+  facetBacklogThreshold: number;
+}
+
+/**
+ * 计算下一次定时更新的时间：取日更聚类与周度洞察综述中更早的一个。
+ * 调度器停用时返回 null。
+ */
+function resolveNextUpdate(): Pick<
+  ClusterOverview,
+  'nextUpdateAt' | 'nextUpdateLabel' | 'nextUpdateKind'
+> {
+  const empty = { nextUpdateAt: null, nextUpdateLabel: null, nextUpdateKind: null };
+  if (!CLUSTER_CONFIG.enabled) return empty;
+
+  const timezone = appConfig.defaultTimezone || 'Asia/Shanghai';
+  const candidates = [
+    { kind: 'cluster' as const, at: computeNextCronRun(CLUSTER_CONFIG.schedule, timezone) },
+    { kind: 'analysis' as const, at: computeNextCronRun(CLUSTER_CONFIG.analysisSchedule, timezone) },
+  ]
+    .filter((item): item is { kind: 'cluster' | 'analysis'; at: Date } => item.at !== null)
+    .sort((a, b) => a.at.getTime() - b.at.getTime());
+
+  const next = candidates[0];
+  if (!next) return empty;
+  return {
+    nextUpdateAt: next.at.toISOString(),
+    nextUpdateLabel: formatRunTimeLabel(next.at, timezone),
+    nextUpdateKind: next.kind,
+  };
 }
 
 /** 全库概览（页面顶部统计条） */
@@ -559,6 +665,11 @@ export async function getClusterOverview(): Promise<ClusterOverview> {
     rising: [],
     cooling: [],
     recentTopics: [],
+    ...resolveNextUpdate(),
+    lastRebalance: null,
+    runHistory: [],
+    pendingFacetCount: 0,
+    facetBacklogThreshold: CLUSTER_CONFIG.facetBacklogAlert,
   };
   if (!active) return overview;
 
@@ -598,6 +709,43 @@ export async function getClusterOverview(): Promise<ClusterOverview> {
     .executeTakeFirst();
   overview.facetCount = Number(facetRow?.count ?? 0);
   overview.poolCount = Math.max(overview.facetCount - overview.linkedArticleCount, 0);
+
+  overview.pendingFacetCount = await countFacetSourceArticles(CLUSTER_CONFIG.userId);
+  overview.facetBacklogThreshold = CLUSTER_CONFIG.facetBacklogAlert;
+
+  overview.runHistory = (await listRecentRuns({
+    userId: CLUSTER_CONFIG.userId,
+    setVersion: active.version,
+    limit: 8,
+  })).map((run) => ({
+    id: run.id,
+    trigger: run.trigger,
+    status: run.status,
+    at: run.finishedAt ?? run.startedAt,
+    durationMs: run.durationMs,
+    changedArticles: run.rebalancedArticles,
+    primarySwitches: run.primarySwitches,
+    facetPending: run.facetPending,
+    rebalanceExecuted: run.rebalanceExecuted,
+    analysisExecuted: run.analysisExecuted,
+    sourceRebalanceRuns: run.sourceRebalance.runs,
+    sourceRebalancedArticles: run.sourceRebalance.articles,
+    sourceLastRebalanceAt: run.sourceRebalance.lastAt,
+    errorMessage: run.errorMessage,
+  }));
+
+  const lastRebalanceRun = await getLatestRebalanceRun({
+    userId: CLUSTER_CONFIG.userId,
+    setVersion: active.version,
+  });
+  if (lastRebalanceRun) {
+    overview.lastRebalance = {
+      at: lastRebalanceRun.finishedAt ?? lastRebalanceRun.startedAt,
+      changedArticles: lastRebalanceRun.rebalancedArticles,
+      primarySwitches: lastRebalanceRun.primarySwitches,
+      facetPending: lastRebalanceRun.facetPending,
+    };
+  }
 
   const statusRows = await getDb()
     .selectFrom('cluster_topic_analysis as a')
