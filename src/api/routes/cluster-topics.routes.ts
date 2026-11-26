@@ -1,11 +1,11 @@
 /**
  * 主题聚类只读 API。
  *
- * 面向所有已登录角色（admin / user / guest）开放：本模块的数据是**共享的学术洞察**，
+ * 面向所有用户开放（包括未登录访客）：本模块的数据是**共享的学术洞察**，
  * 不属于任何单个用户，因此统一读取 `CLUSTER_USER_ID`（默认 1）名下的数据，
  * 与洞察报告的口径一致。
  *
- * 除「手动生成版本文件」外均为读接口，**不触发任何 LLM 调用**——多维分析由每日
+ * 除「手动生成/删除版本文件」外均为读接口，**不触发任何 LLM 调用**——多维分析由每日
  * 流水线预计算并落库；版本文件只是对当前已落库内容的静态渲染。
  */
 
@@ -37,7 +37,7 @@ function asSort(value: unknown): TopicSort {
 }
 
 /** 主题列表 / 检索 */
-router.get('/cluster-topics', requireAuth, async (req: any, res: express.Response) => {
+router.get('/cluster-topics', async (req: any, res: express.Response) => {
   try {
     const result = await listTopicCards({
       search: typeof req.query.q === 'string' ? req.query.q : undefined,
@@ -54,7 +54,7 @@ router.get('/cluster-topics', requireAuth, async (req: any, res: express.Respons
 });
 
 /** 全库概览（页面统计条） */
-router.get('/cluster-topics/overview', requireAuth, async (_req: express.Request, res: express.Response) => {
+router.get('/cluster-topics/overview', async (_req: express.Request, res: express.Response) => {
   try {
     res.json(await getClusterOverview());
   } catch (error) {
@@ -65,7 +65,7 @@ router.get('/cluster-topics/overview', requireAuth, async (_req: express.Request
 });
 
 /** 主题详情（slug 或数字 id） */
-router.get('/cluster-topics/:slugOrId', requireAuth, async (req: any, res: express.Response) => {
+router.get('/cluster-topics/:slugOrId', async (req: any, res: express.Response) => {
   try {
     const detail = await getTopicDetail(String(req.params.slugOrId));
     if (!detail) {
@@ -121,7 +121,6 @@ router.post(
 /** 下载某个主题洞察版本文件（HTML 快照） */
 router.get(
   '/cluster-topics/:slugOrId/documents/:documentId/download',
-  requireAuth,
   async (req: any, res: express.Response) => {
     try {
       const topic = await resolveTopic(String(req.params.slugOrId));

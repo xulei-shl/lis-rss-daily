@@ -176,10 +176,10 @@ export function createApp(): express.Express {
     });
   });
 
-  // Home page - Daily summary
+  // Home page - Daily summary (unauthenticated users default to public topic clusters)
   app.get('/', optionalAuth, (req: any, res: Response) => {
     if (!req.userId) {
-      return res.redirect('/login');
+      return res.redirect('/clusters');
     }
     res.render('index', {
       pageTitle: '每日摘要 - LIS-RSS Literature Tracker',
@@ -210,11 +210,14 @@ export function createApp(): express.Express {
     });
   });
 
-  // Search page
+  // Search page (requires login)
   app.get('/search', optionalAuth, (req: any, res: Response) => {
+    if (!req.userId) {
+      return res.redirect('/login');
+    }
     res.render('search', {
       pageTitle: '语义搜索 - LIS-RSS Literature Tracker',
-      user: req.user || null,
+      user: req.user,
       guestSummaryEnabled: config.searchAiSummaryGuestEnabled,
     });
   });
@@ -241,24 +244,18 @@ export function createApp(): express.Express {
     });
   });
 
-  // Topic cluster pages（对所有已登录角色开放：admin / user / guest）
+  // Topic cluster pages（对所有用户开放，包括未登录访客）
   app.get('/clusters', optionalAuth, (req: any, res: Response) => {
-    if (!req.userId) {
-      return res.redirect('/login');
-    }
     res.render('clusters', {
       pageTitle: '主题洞察 - LIS-RSS Literature Tracker',
-      user: req.user,
+      user: req.user || null,
     });
   });
 
   app.get('/clusters/:slug', optionalAuth, (req: any, res: Response) => {
-    if (!req.userId) {
-      return res.redirect('/login');
-    }
     res.render('cluster-detail', {
       pageTitle: '主题详情 - LIS-RSS Literature Tracker',
-      user: req.user,
+      user: req.user || null,
     });
   });
 
