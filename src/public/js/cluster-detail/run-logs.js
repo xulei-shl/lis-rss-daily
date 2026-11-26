@@ -97,7 +97,7 @@ export function renderRunLogs(detail) {
       '<summary class="cluster-run-summary" aria-label="查看流水线运行日志">' +
         '<div class="cluster-run-summary-left">' +
           '<span class="cluster-status-dot cluster-status-dot-' + statusCls + '" aria-hidden="true"></span>' +
-          '<span class="cluster-run-title">流水线状态：<strong>' + escapeHtml(statusText) + '</strong></span>' +
+          '<span class="cluster-run-title">运行状态：<strong>' + escapeHtml(statusText) + '</strong></span>' +
           '<span class="cluster-run-meta-desc">' + escapeHtml(briefDetails) + '</span>' +
         '</div>' +
         '<div class="cluster-run-summary-right">' +

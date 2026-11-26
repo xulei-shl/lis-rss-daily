@@ -165,7 +165,7 @@ export function renderInlineNoticeChip({ tone, shortText, fullText, extraClass =
   const iconSvg = ANALYSIS_NOTICE_ICONS[tone] || ANALYSIS_NOTICE_ICONS.info;
   const cls = 'cluster-ambient-notice cluster-inline-notice cluster-notice-' + tone + (extraClass ? ' ' + extraClass : '');
   const idAttr = id ? 'id="' + id + '" ' : '';
-  const tip = fullText + '（点击查看底部「流水线状态」完整说明）';
+  const tip = fullText + '（点击查看底部「运行状态」完整说明）';
 
   return (
     '<button type="button" class="' + cls + '" ' + idAttr +

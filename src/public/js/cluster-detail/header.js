@@ -60,9 +60,9 @@ export function renderHeader(detail) {
           '<span class="cluster-breadcrumb-separator" aria-hidden="true">/</span>' +
           '<span class="cluster-breadcrumb-current">' + escapeHtml(detail.name) + '</span>' +
         '</nav>' +
-        '<button type="button" class="cluster-pipeline-badge" id="btnToggleRunLogs" title="点击查看流水线执行记录">' +
+        '<button type="button" class="cluster-pipeline-badge" id="btnToggleRunLogs" title="点击查看运行记录">' +
           '<span class="cluster-status-dot cluster-status-dot-' + runStatusCls + '" aria-hidden="true"></span>' +
-          '<span>流水线' + escapeHtml(runStatusText) + '</span>' +
+          '<span>运行状态' + escapeHtml(runStatusText) + '</span>' +
           '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>' +
         '</button>' +
       '</div>' +
