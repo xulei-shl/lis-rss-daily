@@ -17,14 +17,16 @@
 
 - LIS-RSS 每天早上定时下载**当日 3 篇**文献的 PDF，并回写 `ai_summary` 字段；元数据存于其自有 `articles.db`，PDF 存于其 PDF 目录。
 - 同时，LIS-RSS 库内已积累一批**`ai_summary` 有值但尚未下载 PDF 的历史文献**（后续会有独立脚本补充下载 PDF）。
+- 同步范围由 `scripts/lis-wiki/journals_list.yaml` 白名单定义：白名单期刊文章不论
+  `ai_summary` 是否有值都同步；非白名单文章仅在 `ai_summary` 非空时同步。
 - LIS-WIKI 与 LIS-RSS 部署在**同一台服务器**上；采用**上游主动推送模式**写入 `lis_wiki.db.article_tasks`，供 wiki 每 5 天的流水线消费。
 
 ### 1.2 本次范围
 
 在 LIS-RSS 项目中**新增一个同步脚本**，同时支持两种运行模式：
 
-1. **每日增量同步模式（默认）**：选取当日已下载且 `ai_summary` 已就绪的 3 篇文献，复制 PDF 至 5 天周期目录并 UPSERT 元数据；
-2. **历史全量补录模式（`--backfill-history`）**：全量扫描 `articles.db` 中所有 `ai_summary` 非空的历史文献，以 **`articles.id`（转为字符串写入 `article_tasks.article_id`）唯一去重**，同步全部元数据；对暂无 PDF 的历史文献以 `status = 'awaiting_pdf'` 入库（不阻塞等待 PDF），对已有本地 PDF 的文献一并复制并标记 `status = 'pending'`；
+1. **每日增量同步模式（默认）**：处理当日暂存 PDF 中符合同步集合的文献，复制 PDF 至 5 天周期目录并 UPSERT 元数据；
+2. **历史全量补录模式（`--backfill-history`）**：扫描**白名单期刊文章 ∪ 非白名单但有 `ai_summary` 的文章**，以 **`articles.id`（转为字符串写入 `article_tasks.article_id`）唯一去重**，同步全部元数据；对暂无 PDF 的历史文献以 `status = 'awaiting_pdf'` 入库（不阻塞等待 PDF），对已有本地 PDF 的文献一并复制并标记 `status = 'pending'`；
 3. **预留独立 PDF 补下载脚本接口契约**：供后续独立下载脚本补齐历史 PDF 后更新 `pdf_filename`、`source_sha256` 并推进状态为 `'pending'`。
 
 ### 1.3 非目标（明确不做）
@@ -46,7 +48,7 @@
                        ──▶ ② 算 source_sha256 + ai_summary_sha256
                        ──▶ ③ UPSERT (status='pending') → article_tasks
 
-[LIS-RSS 历史全量补录] ──▶ 查 articles WHERE ai_summary 非空
+[LIS-RSS 历史全量补录] ──▶ 查 articles WHERE 白名单命中 OR ai_summary 非空
                        ──▶ 按 articles.id 去重分批 UPSERT:
                            - 无 PDF: pdf_filename=NULL, source_sha256=NULL, status='awaiting_pdf'
                            - 有 PDF: 复制 PDF, status='pending'
@@ -117,13 +119,20 @@ target_dir   = Path(WIKI_PDF_ROOT) / folder_name
 
 - **每日模式**：`python sync_to_wiki.py --date 2026-11-25`（默认当日）。
 - **历史全量补录模式**：`python sync_to_wiki.py --backfill-history [--batch-size 200]`。
-  - 扫描 `articles.db` 中全部 `ai_summary IS NOT NULL AND TRIM(ai_summary) != ''` 的记录（不限制时间、不要求 PDF 存在）。
+  - 扫描同步集合：白名单期刊文章（不论 `ai_summary`）∪ 非白名单但有 `ai_summary` 的文章（不限制时间、不要求 PDF 存在）。
   - 若上游本地恰好已有 PDF 文件则顺便复制并按 `'pending'` 入库；若无 PDF 则仅同步元数据并以 `'awaiting_pdf'` 入库。
 
 ### FR-2 待同步集合的确定
 
-1. **每日模式**：优先由下载任务直接传入当日成功的 `article_id` 列表；备选按 `last_sync_at` 水位线查询 `updated_at > last_sync_at AND ai_summary IS NOT NULL AND TRIM(ai_summary) != ''`（默认上限 `SYNC_BATCH_SIZE = 3`）。
-2. **历史全量补录模式**：按 `id ASC` 分页游标扫描 `articles` 表中全部 `ai_summary IS NOT NULL AND TRIM(ai_summary) != ''` 的记录（与每日模式共用同一个 UPSERT 与去重逻辑）。
+同步集合按 `article_id` 取并集，天然不会重复：
+
+```text
+白名单命中（rss_sources.name 或 journals.name 在 journals_list.yaml 中）
+OR (ai_summary IS NOT NULL AND TRIM(ai_summary) != '')
+```
+
+1. **每日模式**：扫描当日 `pdf_staging/daily/<date>/` 的 PDF，只处理命中同步集合的文章；`SYNC_BATCH_SIZE` 只对命中集合的候选计数。白名单文章有 PDF 时即使 `ai_summary` 为空也同步；非白名单且无摘要的 PDF 跳过并保留源文件。
+2. **历史全量补录模式**：按 `id ASC` 分页游标扫描同步集合（与每日模式共用同一个 UPSERT 与去重逻辑）。
 
 ### FR-3 PDF 复制与哈希计算
 
@@ -131,7 +140,7 @@ target_dir   = Path(WIKI_PDF_ROOT) / folder_name
 - 若源 PDF 不存在：
   - **每日模式**：记录 `error` 日志并隔离跳过该篇（每日任务必须带 PDF）；
   - **历史全量补录模式**：允许无 PDF，`pdf_filename = None`、`source_sha256 = None`、`target_status = 'awaiting_pdf'`，继续入库元数据。
-- 对 `ai_summary` 原文计算 UTF-8 SHA-256 十六进制字符串 `ai_summary_sha256`。
+- 对非空 `ai_summary` 原文计算 UTF-8 SHA-256 十六进制字符串 `ai_summary_sha256`；`ai_summary` 为空时写 `NULL`。
 
 ### FR-4 元数据写入 `lis_wiki.db`
 
@@ -142,8 +151,8 @@ target_dir   = Path(WIKI_PDF_ROOT) / folder_name
 | `article_id` | `str(articles.id).strip()` | **主键，严格用上游 ID 去重** |
 | `title` | `articles.title` | `NOT NULL`，为空则跳过该篇并记错 |
 | `url` | `articles.url` | 可为 `NULL` |
-| `ai_summary` | `articles.ai_summary` | **写入完整原文**，不截断 |
-| `ai_summary_sha256` | FR-3 计算的摘要 SHA-256 | 配合 wiki 四段式缓存校验 |
+| `ai_summary` | `articles.ai_summary` | **写入完整原文**，不截断；白名单文章可为 `NULL` |
+| `ai_summary_sha256` | 非空摘要的 SHA-256 | `ai_summary` 为空时为 `NULL`，配合 wiki 四段式缓存校验 |
 | `pdf_filename` | `<folder_name>/<safe_id>.pdf` 或 `NULL` | 历史无 PDF 时为 `NULL` |
 | `source_sha256` | PDF SHA-256 或 `NULL` | 历史无 PDF 时为 `NULL` |
 | `published_date` | `articles.published_at` / 发布日 | 可选，供 Web 溯源排序与展示 |
@@ -199,7 +208,7 @@ ON CONFLICT(article_id) DO UPDATE SET
 
 ### FR-7 异常处理与故障隔离
 
-- 单篇异常（`title` 或 `ai_summary` 为空、每日模式下 PDF 缺失、IO 异常）仅记录 `error` 并跳过该篇，不阻断同批其他记录；
+- 单篇异常（`title` 为空、每日模式下 PDF 缺失、IO 异常）仅记录 `error` 并跳过该篇，不阻断同批其他记录；
 - 禁止删除 wiki 侧任何文件或数据库记录。
 
 ### FR-8 日志与可观测性
@@ -212,6 +221,7 @@ ON CONFLICT(article_id) DO UPDATE SET
 ```env
 WIKI_DB_PATH=/path/to/lis-wiki/data/lis_wiki.db
 WIKI_PDF_ROOT=/path/to/lis-wiki/data/pdfs   # 必须与 wiki 的 SOURCE_PDF_DIR 一致
+JOURNALS_LIST_PATH=/path/to/lis-rss-daily/scripts/lis-wiki/journals_list.yaml
 SYNC_ANCHOR_DATE=1970-01-01                 # 5天周期锚点
 SYNC_BATCH_SIZE=3                           # 每日同步上限
 BACKFILL_BATCH_SIZE=200                     # 历史全量同步单事务批大小
@@ -230,8 +240,8 @@ def sync_articles(articles: Iterable[ArticleRow], *, allow_missing_pdf: bool, fo
     for row in articles:
         try:
             aid = str(row.id).strip()
-            if not aid or not row.title or not row.ai_summary or not row.ai_summary.strip():
-                raise ValueError("id/title/ai_summary 为空")
+            if not aid or not row.title or not row.title.strip():
+                raise ValueError("id/title 为空")
 
             src_pdf = find_local_pdf(aid)
             if src_pdf is not None:
@@ -247,12 +257,13 @@ def sync_articles(articles: Iterable[ArticleRow], *, allow_missing_pdf: bool, fo
             else:
                 raise FileNotFoundError(f"每日同步缺少 PDF: {aid}")
 
+            summary = row.ai_summary if row.ai_summary and row.ai_summary.strip() else None
             staged.append({
                 "article_id": aid,                   # 严格用上游 articles.id 去重
                 "title": row.title,
                 "url": row.url,
-                "ai_summary": row.ai_summary,
-                "ai_summary_sha256": sha256_text(row.ai_summary),
+                "ai_summary": summary,
+                "ai_summary_sha256": sha256_text(summary) if summary else None,
                 "pdf_filename": rel,
                 "source_sha256": sha,
                 "published_date": row.published_date,
@@ -287,15 +298,17 @@ def sync_articles(articles: Iterable[ArticleRow], *, allow_missing_pdf: bool, fo
 | 编号 | 场景 | 预期结果 |
 | --- | --- | --- |
 | AC-1 | 正常日同步 3 篇 | PDF 落入正确周期文件夹；`article_tasks` 新增 3 条 `status='pending'` 记录，`article_id` 为上游 `articles.id` |
-| AC-2 | 历史全量补录（无 PDF） | 库内全部 `ai_summary` 非空历史文献一次性分批写入 `article_tasks`，`pdf_filename`/`source_sha256` 为 `NULL`，`status='awaiting_pdf'` |
+| AC-2 | 历史全量补录（无 PDF） | 同步集合（白名单文章 ∪ 非白名单有摘要文章）分批写入 `article_tasks`，`pdf_filename`/`source_sha256` 为 `NULL`，`status='awaiting_pdf'` |
 | AC-3 | 重复执行每日同步或历史补录 | 按 `article_id`（`articles.id`）严格去重，无变化记录跳过 DB 更新、不产生重复行或重复文件 |
 | AC-4 | 上游仅更新 `ai_summary` | `ai_summary`、`ai_summary_sha256`、`updated_at` 更新；既有 `status`、`raw_extracted_json`、`parsed_md_path` 保持不变 |
 | AC-5 | 上游更新已有文章 PDF | `source_sha256`（及可能变化的 `pdf_filename`）、`updated_at` 更新；既有 `parsed`/`extracted`/`merged` 流水线字段不被覆盖 |
 | AC-6 | 独立脚本后续为历史记录补下载 PDF | 原 `status='awaiting_pdf'` 记录写入 `pdf_filename`、`source_sha256` 后自动推进为 `status='pending'` |
 | AC-7 | 补下载完成后再次重跑历史补录（无 PDF） | `COALESCE` 保护生效，**不会抹除**已下载的 `pdf_filename`、`source_sha256` 与已有 `status` |
-| AC-8 | 其中 1 篇 `ai_summary` 为空 | 该篇跳过并记错，同批其余记录正常同步 |
+| AC-8 | 白名单文章 `ai_summary` 为空 | 仍正常迁移：有 PDF 记 `pending`，无 PDF 记 `awaiting_pdf`；`ai_summary`/`ai_summary_sha256` 写 `NULL` |
 | AC-9 | 与 wiki 流水线并发读写 | 无 `database is locked` 异常，wiki 正常跳过 `awaiting_pdf` 并只消费 `pending` |
 | AC-10 | 手动补数 `--date` | 文件落入指定日期对应周期文件夹，数据正确 |
+| AC-11 | 文章同时命中白名单和有摘要 | 只产生一条 `article_tasks` 记录，不重复计数、不重复复制 PDF |
+| AC-12 | 非白名单且 `ai_summary` 为空 | 不迁移；每日暂存 PDF 保留，计入 `out_of_scope` |
 
 ---
 
@@ -304,6 +317,7 @@ def sync_articles(articles: Iterable[ArticleRow], *, allow_missing_pdf: bool, fo
 - **跨库契约变更风险**：`article_tasks` 是唯一交界表，两项目修改该表元数据列定义或命名时需同步更新 `docs/设计方案/数据库设计.md` 与本文档。
 - **`articles.id` 格式一致性**：上游读取 `articles.id` 转为字符串时须确保每日任务、历史补录、独立补下载三处转换规则完全一致（如统一 `str(int_id)`），否则会破坏去重。
 - **周期边界漂移**：若锚点日期变更，历史文件夹命名规则失效；锚点一经上线不得修改。
+- **白名单匹配风险**：白名单按 `rss_sources.name` / `journals.name` 精确匹配，不用子串匹配；名单变更只影响后续迁移，不会删除 wiki 已有记录。`email` / `web` / `keyword` 来源且没有 `rss_source_id`、`journal_id` 的文章只能通过“`ai_summary` 非空”规则纳入。
 - **历史补下载磁盘占用**：补齐全量历史 PDF 前需预先评估磁盘空间。
 
 ---
@@ -317,3 +331,4 @@ def sync_articles(articles: Iterable[ArticleRow], *, allow_missing_pdf: bool, fo
 | 3 | 周期锚点日期 | ⏳ 上游待确认 | 5 天周期锚点取 `1970-01-01` 还是上线日；历史补下载 PDF 存放周期目录还是 `history/` 子目录 |
 | 4 | 上游 `articles` 实际列名 | ⏳ 上游待确认 | 需由 LIS-RSS 仓库对照 `articles` 表确认标题、URL、发表日期、期刊/源名称、更新时间字段名 |
 | 5 | 调度集成方式 | ⏳ 上游待确认 | 每日模式采用"下载任务直接调用"还是"独立定时任务" |
+| 6 | 同步范围 | ✅ 已确认 | 白名单 `scripts/lis-wiki/journals_list.yaml` 文章不论 `ai_summary` 均同步；非白名单文章仅在 `ai_summary` 非空时同步；按 `article_id` 并集去重 |

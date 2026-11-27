@@ -58,7 +58,8 @@ CREATE TABLE articles (
     title TEXT NOT NULL,
     url TEXT NOT NULL UNIQUE,
     ai_summary TEXT,
-    published_at DATETIME
+    published_at DATETIME,
+    filter_status TEXT DEFAULT 'pending'
 );
 """
 
@@ -71,6 +72,8 @@ class SyncTestBase(unittest.TestCase):
         self.wiki_db = self.tmp / "wiki.db"
         self.pdf_root = self.tmp / "pdfs"
         self.staging_root = self.tmp / "staging"
+        self.journals_yaml = self.tmp / "journals_list.yaml"
+        self.journals_yaml.write_text("- 测试期刊\n", encoding="utf-8")
         self._init_rss()
         self._init_wiki()
 
@@ -95,6 +98,8 @@ class SyncTestBase(unittest.TestCase):
             wiki_db=self.wiki_db,
             pdf_root=self.pdf_root,
             staging_root=self.staging_root,
+            journals_list=self.journals_yaml,
+            journal_names=("测试期刊",),
             anchor_date=date(1970, 1, 1),
             daily_limit=3,
             backfill_batch_size=200,
@@ -107,6 +112,12 @@ class SyncTestBase(unittest.TestCase):
     def add_source(self, source_id=1, name="测试期刊"):
         conn = sqlite3.connect(self.rss_db)
         conn.execute("INSERT INTO rss_sources (id, name) VALUES (?, ?)", (source_id, name))
+        conn.commit()
+        conn.close()
+
+    def add_journal(self, journal_id=1, name="测试期刊"):
+        conn = sqlite3.connect(self.rss_db)
+        conn.execute("INSERT INTO journals (id, name) VALUES (?, ?)", (journal_id, name))
         conn.commit()
         conn.close()
 
@@ -165,9 +176,19 @@ class SyncTestBase(unittest.TestCase):
 
     def wiki_exec(self, sql, params=()):
         conn = sqlite3.connect(self.wiki_db)
-        conn.execute(sql, params)
-        conn.commit()
-        conn.close()
+        try:
+            conn.execute(sql, params)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def rss_exec(self, sql, params=()):
+        conn = sqlite3.connect(self.rss_db)
+        try:
+            conn.execute(sql, params)
+            conn.commit()
+        finally:
+            conn.close()
 
 
 class HelperTests(unittest.TestCase):
@@ -201,8 +222,11 @@ class HelperTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             cfg = sync.SyncConfig.from_env()
         self.assertEqual(cfg.rss_db, sync.PROJECT_ROOT / "data" / "rss-tracker.db")
-        self.assertEqual(cfg.wiki_db, Path("/opt/lis-wiki/data/lis_wiki.db"))
-        self.assertEqual(cfg.pdf_root, Path("/opt/lis-wiki/data/pdfs"))
+        self.assertEqual(cfg.wiki_db, Path("/opt/lis-wiki/data/lis_wiki.db").resolve())
+        self.assertEqual(cfg.pdf_root, Path("/opt/lis-wiki/data/pdfs").resolve())
+        self.assertEqual(cfg.journals_list, sync.DEFAULT_JOURNALS_LIST)
+        self.assertEqual(cfg.journals_list.name, "journals_list.yaml")
+        self.assertIn("中国图书馆学报", cfg.journal_names)
         self.assertEqual(cfg.anchor_date, date(1970, 1, 1))
         self.assertEqual(cfg.daily_limit, 3)
         self.assertEqual(cfg.backfill_batch_size, 200)
@@ -213,6 +237,44 @@ class HelperTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"SYNC_ANCHOR_DATE": "bad"}, clear=True):
             with self.assertRaises(ValueError):
                 sync.SyncConfig.from_env()
+
+    def test_config_journals_list_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "custom.yaml"
+            path.write_text("- 自定义期刊\n", encoding="utf-8")
+            with mock.patch.dict(
+                os.environ, {"JOURNALS_LIST_PATH": str(path)}, clear=True
+            ):
+                cfg = sync.SyncConfig.from_env()
+        self.assertEqual(cfg.journals_list, path.resolve())
+        self.assertEqual(cfg.journal_names, ("自定义期刊",))
+
+    def test_load_journal_whitelist_trims_and_dedupes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "journals.yaml"
+            path.write_text(
+                "- 图书馆论坛\n- ' 图书馆论坛 '\n- 图书馆杂志\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                sync.load_journal_whitelist(path), ["图书馆论坛", "图书馆杂志"]
+            )
+
+    def test_load_journal_whitelist_rejects_missing_empty_and_non_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "missing.yaml"
+            with self.assertRaises(ValueError):
+                sync.load_journal_whitelist(missing)
+
+            empty = Path(tmp) / "empty.yaml"
+            empty.write_text("[]\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                sync.load_journal_whitelist(empty)
+
+            not_list = Path(tmp) / "dict.yaml"
+            not_list.write_text("journals: [图书馆论坛]\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                sync.load_journal_whitelist(not_list)
 
     def test_load_env_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -234,6 +296,36 @@ class HelperTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"FOO": "existing"}, clear=True):
                 sync.load_env_file(env_file)
                 self.assertEqual(os.environ["FOO"], "existing")
+
+
+class JournalScopeTests(SyncTestBase):
+    def test_resolve_scope_matches_rss_and_journal(self):
+        self.add_source(1, "测试期刊")
+        self.add_source(2, "其他期刊")
+        self.add_journal(1, "测试期刊")
+        self.add_journal(2, "其他期刊")
+        conn = sync.connect_upstream(self.rss_db)
+        try:
+            scope = sync.resolve_journal_scope(conn, ["测试期刊"])
+        finally:
+            conn.close()
+        self.assertEqual(scope.rss_source_ids, (1,))
+        self.assertEqual(scope.journal_ids, (1,))
+
+    def test_resolve_scope_no_match(self):
+        conn = sync.connect_upstream(self.rss_db)
+        try:
+            with self.assertRaises(ValueError):
+                sync.resolve_journal_scope(conn, ["不存在的期刊"])
+        finally:
+            conn.close()
+
+    def test_scope_contains(self):
+        scope = sync.JournalScope(rss_source_ids=(1,), journal_ids=(2,))
+        self.assertTrue(scope.contains({"rss_source_id": 1, "journal_id": None}))
+        self.assertTrue(scope.contains({"rss_source_id": None, "journal_id": 2}))
+        self.assertFalse(scope.contains({"rss_source_id": 9, "journal_id": 8}))
+        self.assertFalse(scope.contains({"rss_source_id": None, "journal_id": None}))
 
 
 class AtomicCopyTests(unittest.TestCase):
@@ -319,6 +411,18 @@ class UpsertTests(SyncTestBase):
         self.assertEqual(row["status"], "awaiting_pdf")
         self.assertIsNone(row["pdf_filename"])
         self.assertIsNone(row["source_sha256"])
+
+    def test_insert_null_summary(self):
+        conn = sync.connect_wiki(self.wiki_db)
+        with conn:
+            sync.upsert_article(
+                conn, self.item(ai_summary=None, ai_summary_sha256=None)
+            )
+        conn.close()
+        row = self.wiki_row("1")
+        self.assertIsNone(row["ai_summary"])
+        self.assertIsNone(row["ai_summary_sha256"])
+        self.assertEqual(row["status"], "pending")
 
     def test_promotes_awaiting_pdf_to_pending(self):
         conn = sync.connect_wiki(self.wiki_db)
@@ -447,6 +551,22 @@ class UpsertTests(SyncTestBase):
         }
         self.assertTrue(sync.is_changed(awaiting, self.item()))
 
+    def test_is_changed_null_summary_noop(self):
+        conn = sync.connect_wiki(self.wiki_db)
+        with conn:
+            sync.upsert_article(
+                conn, self.item(ai_summary=None, ai_summary_sha256=None)
+            )
+        existing = sync.fetch_existing(conn, ["1"])["1"]
+        conn.close()
+        self.assertFalse(
+            sync.is_changed(
+                existing, self.item(ai_summary=None, ai_summary_sha256=None)
+            )
+        )
+        # 上游后来补上摘要时，应触发更新。
+        self.assertTrue(sync.is_changed(existing, self.item()))
+
 
 class StagingIndexTests(SyncTestBase):
     def test_index_prefers_latest_daily_and_excludes_manual(self):
@@ -527,11 +647,35 @@ class DailySyncTests(SyncTestBase):
         self.assertTrue(source.exists())
         self.assertIsNotNone(self.wiki_row("101"))
 
-    def test_daily_sync_missing_summary_keeps_source(self):
+    def test_daily_sync_missing_summary_still_syncs(self):
         self.add_article(101, summary="   ")
         source = self.write_pdf("daily/2026-11-26/101.pdf")
         stats = sync.sync_daily(self.cfg, date(2026, 11, 26))
-        self.assertEqual(stats["failed"], 1)
+        self.assertEqual(stats["pending"], 1)
+        self.assertEqual(stats["failed"], 0)
+        self.assertFalse(source.exists())
+        row = self.wiki_row("101")
+        self.assertEqual(row["status"], "pending")
+        self.assertIsNone(row["ai_summary"])
+        self.assertIsNone(row["ai_summary_sha256"])
+
+    def test_daily_sync_non_whitelist_summary_still_syncs(self):
+        self.add_source(2, "其他期刊")
+        self.add_article(101, summary="外部摘要", rss_source_id=2)
+        source = self.write_pdf("daily/2026-11-26/101.pdf")
+        stats = sync.sync_daily(self.cfg, date(2026, 11, 26))
+        self.assertEqual(stats["pending"], 1)
+        self.assertEqual(stats["out_of_scope"], 0)
+        self.assertFalse(source.exists())
+        self.assertEqual(self.wiki_row("101")["ai_summary"], "外部摘要")
+
+    def test_daily_sync_non_whitelist_without_summary_keeps_source(self):
+        self.add_source(2, "其他期刊")
+        self.add_article(101, summary="", rss_source_id=2)
+        source = self.write_pdf("daily/2026-11-26/101.pdf")
+        stats = sync.sync_daily(self.cfg, date(2026, 11, 26))
+        self.assertEqual(stats["out_of_scope"], 1)
+        self.assertEqual(stats["pending"], 0)
         self.assertIsNone(self.wiki_row("101"))
         self.assertTrue(source.exists())
 
@@ -565,6 +709,24 @@ class DailySyncTests(SyncTestBase):
         self.assertEqual(stats["pending"], 3)
         self.assertEqual(len(self.wiki_rows()), 3)
         self.assertTrue((self.staging_root / "daily" / "2026-11-26" / "4.pdf").exists())
+
+    def test_daily_limit_counts_only_sync_candidates(self):
+        self.add_source(2, "其他期刊")
+        for article_id in (1, 2):
+            self.add_article(article_id, summary="", rss_source_id=2)
+            self.write_pdf(f"daily/2026-11-26/{article_id}.pdf")
+        for article_id in (3, 4, 5):
+            self.add_article(article_id, summary="")
+            self.write_pdf(f"daily/2026-11-26/{article_id}.pdf")
+
+        stats = sync.sync_daily(self.cfg, date(2026, 11, 26))
+
+        self.assertEqual(stats["scanned"], 5)
+        self.assertEqual(stats["out_of_scope"], 2)
+        self.assertEqual(stats["pending"], 3)
+        self.assertEqual({row["article_id"] for row in self.wiki_rows()}, {"3", "4", "5"})
+        self.assertTrue((self.staging_root / "daily" / "2026-11-26" / "1.pdf").exists())
+        self.assertTrue((self.staging_root / "daily" / "2026-11-26" / "2.pdf").exists())
 
     def test_daily_sync_ids(self):
         self.add_article(1)
@@ -631,13 +793,93 @@ class BackfillTests(SyncTestBase):
         self.assertEqual(row["status"], "awaiting_pdf")
         self.assertIsNone(row["pdf_filename"])
 
-    def test_backfill_filters_empty_summary(self):
+    def test_backfill_includes_whitelisted_empty_summary(self):
         self.add_article(1, title="有摘要")
         self.add_article(2, title="空摘要", summary="")
         self.add_article(3, title="空白摘要", summary="   ")
         stats = sync.sync_backfill(self.cfg)
+        self.assertEqual(stats["scanned"], 3)
+        self.assertEqual(stats["awaiting_pdf"], 3)
+        rows = self.wiki_rows()
+        self.assertEqual(len(rows), 3)
+        by_id = {row["article_id"]: row for row in rows}
+        self.assertEqual(by_id["1"]["ai_summary"], "这是摘要")
+        self.assertIsNone(by_id["2"]["ai_summary"])
+        self.assertIsNone(by_id["3"]["ai_summary"])
+        self.assertIsNone(by_id["2"]["ai_summary_sha256"])
+        self.assertIsNone(by_id["3"]["ai_summary_sha256"])
+
+    def test_backfill_includes_non_whitelist_summary(self):
+        self.add_source(2, "其他期刊")
+        self.add_article(1, summary="外部摘要", rss_source_id=2)
+        stats = sync.sync_backfill(self.cfg)
         self.assertEqual(stats["scanned"], 1)
+        self.assertEqual(stats["awaiting_pdf"], 1)
+        row = self.wiki_row("1")
+        self.assertEqual(row["ai_summary"], "外部摘要")
+        self.assertEqual(row["source_name"], "其他期刊")
+
+    def test_backfill_excludes_non_whitelist_without_summary(self):
+        self.add_source(2, "其他期刊")
+        self.add_article(1, summary="", rss_source_id=2)
+        stats = sync.sync_backfill(self.cfg)
+        self.assertEqual(stats["scanned"], 0)
+        self.assertEqual(stats["awaiting_pdf"], 0)
+        self.assertIsNone(self.wiki_row("1"))
+
+    def test_backfill_includes_null_source_summary(self):
+        # 没有 rss_source_id / journal_id 的 email/web/keyword 文章，靠摘要纳入。
+        self.add_article(1, summary="邮件摘要", rss_source_id=None, journal_id=None)
+        stats = sync.sync_backfill(self.cfg)
+        self.assertEqual(stats["scanned"], 1)
+        self.assertEqual(stats["awaiting_pdf"], 1)
+        self.assertEqual(self.wiki_row("1")["ai_summary"], "邮件摘要")
+
+    def test_backfill_excludes_null_source_without_summary(self):
+        self.add_article(1, summary="", rss_source_id=None, journal_id=None)
+        stats = sync.sync_backfill(self.cfg)
+        self.assertEqual(stats["scanned"], 0)
+        self.assertIsNone(self.wiki_row("1"))
+
+    def test_backfill_matches_journal_id(self):
+        self.add_journal(1, "测试期刊")
+        self.add_article(
+            1, summary="", rss_source_id=None, journal_id=1
+        )
+        stats = sync.sync_backfill(self.cfg)
+        self.assertEqual(stats["scanned"], 1)
+        self.assertEqual(stats["awaiting_pdf"], 1)
+        self.assertEqual(self.wiki_row("1")["source_name"], "测试期刊")
+
+    def test_backfill_whitelist_ignores_filter_status(self):
+        self.add_article(1, summary="")
+        self.rss_exec("UPDATE articles SET filter_status = 'rejected' WHERE id = 1")
+        stats = sync.sync_backfill(self.cfg)
+        self.assertEqual(stats["scanned"], 1)
+        self.assertEqual(stats["awaiting_pdf"], 1)
+        self.assertIsNotNone(self.wiki_row("1"))
+
+    def test_backfill_union_no_duplicate(self):
+        # 同时命中白名单和“有摘要”时，只应产生一条记录。
+        self.add_article(1, summary="摘要")
+        stats = sync.sync_backfill(self.cfg)
+        self.assertEqual(stats["scanned"], 1)
+        self.assertEqual(stats["awaiting_pdf"], 1)
         self.assertEqual(len(self.wiki_rows()), 1)
+
+    def test_backfill_summary_filled_later_updates(self):
+        self.add_article(1, summary="")
+        sync.sync_backfill(self.cfg)
+        row = self.wiki_row("1")
+        self.assertEqual(row["status"], "awaiting_pdf")
+        self.assertIsNone(row["ai_summary"])
+
+        self.rss_exec("UPDATE articles SET ai_summary = '后补摘要' WHERE id = 1")
+        sync.sync_backfill(self.cfg)
+        row = self.wiki_row("1")
+        self.assertEqual(row["status"], "awaiting_pdf")
+        self.assertEqual(row["ai_summary"], "后补摘要")
+        self.assertEqual(row["ai_summary_sha256"], sync.sha256_text("后补摘要"))
 
     def test_backfill_preserves_parsed_and_updates_pdf(self):
         self.wiki_exec(

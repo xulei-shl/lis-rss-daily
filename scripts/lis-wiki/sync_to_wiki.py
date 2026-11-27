@@ -5,8 +5,13 @@ LIS-RSS -> LIS-WIKI 文献增量同步脚本
 职责：
 1. 每日增量：读取 paper-pdf-summary 的 pdf_staging/daily/<YYYY-MM-DD>/<article_id>.pdf，
    复制到 LIS-WIKI 的 5 天周期目录，写入 article_tasks，成功后删除暂存文件。
-2. 历史补录：扫描上游 articles 中所有 ai_summary 非空的文献，有 PDF 的按 pending 入库，
-   没有 PDF 的按 awaiting_pdf 入库；不会覆盖 wiki 流水线状态或缓存列。
+2. 历史补录：扫描“期刊白名单文章 ∪ 非白名单但有 ai_summary 的文章”，有 PDF 的按
+   pending 入库，没有 PDF 的按 awaiting_pdf 入库；白名单文章不要求 ai_summary。
+   不会覆盖 wiki 流水线状态或缓存列。
+
+同步集合（两集合取并集，按 article_id 天然去重）：
+- A：命中 scripts/lis-wiki/journals_list.yaml 的文章，不论 ai_summary 是否有值；
+- B：不在白名单，但 ai_summary 非空的文章。
 
 设计约束见 docs/lis-wiki-脚本/LIS-RSS同步脚本需求.md。
 本脚本只写 lis_wiki.db 的 article_tasks 表，不写 sync_jobs / concepts 等其它表。
@@ -29,8 +34,11 @@ from datetime import date, datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
+import yaml
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENV_FILE = Path(__file__).resolve().parent / ".env"
+DEFAULT_JOURNALS_LIST = Path(__file__).resolve().parent / "journals_list.yaml"
 
 # 与 paper-pdf-summary 共用 safe_article_id，保证暂存文件名与同步脚本一致
 _PAPER_SUMMARY_DIR = PROJECT_ROOT / "scripts" / "paper-pdf-summary"
@@ -48,6 +56,8 @@ SELECT
     a.url,
     a.ai_summary,
     a.published_at,
+    a.rss_source_id,
+    a.journal_id,
     COALESCE(s.name, j.name) AS source_name
 FROM articles AS a
 LEFT JOIN rss_sources AS s ON s.id = a.rss_source_id
@@ -89,6 +99,8 @@ class SyncConfig:
     wiki_db: Path
     pdf_root: Path
     staging_root: Path
+    journals_list: Path
+    journal_names: Tuple[str, ...]
     anchor_date: date
     daily_limit: int
     backfill_batch_size: int
@@ -109,6 +121,8 @@ class SyncConfig:
 
         daily_limit = _int_env("SYNC_BATCH_SIZE", 3)
         backfill_batch = _int_env("BACKFILL_BATCH_SIZE", 200)
+        journals_list = path_env("JOURNALS_LIST_PATH", DEFAULT_JOURNALS_LIST)
+        journal_names = tuple(load_journal_whitelist(journals_list))
 
         return cls(
             rss_db=path_env("LIS_RSS_DB_PATH", PROJECT_ROOT / "data" / "rss-tracker.db"),
@@ -118,6 +132,8 @@ class SyncConfig:
                 "SYNC_STAGING_ROOT",
                 PROJECT_ROOT / "scripts" / "paper-pdf-summary" / "pdf_staging",
             ),
+            journals_list=journals_list,
+            journal_names=journal_names,
             anchor_date=anchor,
             daily_limit=max(1, daily_limit),
             backfill_batch_size=max(1, backfill_batch),
@@ -141,6 +157,116 @@ def _int_env(name: str, default: int) -> int:
         return int(raw)
     except ValueError as exc:
         raise ValueError(f"{name} 必须是整数: {raw}") from exc
+
+
+def load_journal_whitelist(path: Path) -> List[str]:
+    """加载并校验期刊白名单；缺失、格式错误或空列表都视为配置错误。"""
+    if not path.is_file():
+        raise ValueError(f"期刊白名单不存在: {path}")
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
+        raise ValueError(f"期刊白名单读取失败: {path}: {exc}") from exc
+    if not isinstance(data, list):
+        raise ValueError(f"期刊白名单必须是 YAML 列表: {path}")
+
+    names: List[str] = []
+    for item in data:
+        name = str(item).strip()
+        if name and name not in names:
+            names.append(name)
+    if not names:
+        raise ValueError(f"期刊白名单为空: {path}")
+    return names
+
+
+@dataclass(frozen=True)
+class JournalScope:
+    """白名单命中 rss_sources / journals 后得到的文章归属范围。"""
+
+    rss_source_ids: Tuple[int, ...]
+    journal_ids: Tuple[int, ...]
+
+    def contains(self, row: sqlite3.Row) -> bool:
+        rss_source_id = row["rss_source_id"]
+        journal_id = row["journal_id"]
+        return (
+            rss_source_id is not None and rss_source_id in self.rss_source_ids
+        ) or (
+            journal_id is not None and journal_id in self.journal_ids
+        )
+
+    def sql(self, alias: str = "a") -> Tuple[str, List[object]]:
+        conditions: List[str] = []
+        params: List[object] = []
+        if self.rss_source_ids:
+            placeholders = ",".join("?" for _ in self.rss_source_ids)
+            conditions.append(f"{alias}.rss_source_id IN ({placeholders})")
+            params.extend(self.rss_source_ids)
+        if self.journal_ids:
+            placeholders = ",".join("?" for _ in self.journal_ids)
+            conditions.append(f"{alias}.journal_id IN ({placeholders})")
+            params.extend(self.journal_ids)
+        if not conditions:
+            raise ValueError("期刊白名单未匹配任何来源")
+        return "(" + " OR ".join(conditions) + ")", params
+
+
+def resolve_journal_scope(
+    conn: sqlite3.Connection, journal_names: Sequence[str]
+) -> JournalScope:
+    """把期刊名解析为 rss_sources / journals 的 ID 集合。"""
+    if not journal_names:
+        raise ValueError("期刊白名单为空")
+    placeholders = ",".join("?" for _ in journal_names)
+    name_params = list(journal_names)
+
+    rss_rows = conn.execute(
+        f"SELECT id, name FROM rss_sources WHERE TRIM(name) IN ({placeholders})",
+        name_params,
+    ).fetchall()
+    journal_rows = conn.execute(
+        f"SELECT id, name FROM journals WHERE TRIM(name) IN ({placeholders})",
+        name_params,
+    ).fetchall()
+
+    rss_source_ids = tuple(row["id"] for row in rss_rows)
+    journal_ids = tuple(row["id"] for row in journal_rows)
+    if not rss_source_ids and not journal_ids:
+        raise ValueError(
+            "期刊白名单未匹配任何 rss_sources/journals: "
+            + ", ".join(journal_names)
+        )
+
+    matched_names = {str(row["name"]).strip() for row in rss_rows + journal_rows}
+    unmatched_names = [name for name in journal_names if name not in matched_names]
+    if unmatched_names:
+        log.warning("期刊白名单中以下名称未匹配任何来源: %s", ", ".join(unmatched_names))
+
+    return JournalScope(rss_source_ids=rss_source_ids, journal_ids=journal_ids)
+
+
+def normalized_summary(row: sqlite3.Row) -> Optional[str]:
+    """返回非空 ai_summary；NULL 或纯空白统一视为无摘要。"""
+    raw = row["ai_summary"]
+    if raw is None:
+        return None
+    text = str(raw)
+    return text if text.strip() else None
+
+
+def is_sync_candidate(row: sqlite3.Row, scope: JournalScope) -> bool:
+    """同步集合：白名单文章 ∪ 非白名单但有 ai_summary 的文章。"""
+    return normalized_summary(row) is not None or scope.contains(row)
+
+
+def sync_condition(scope: JournalScope, alias: str = "a") -> Tuple[str, List[object]]:
+    """构造同步集合的 SQL 条件：有摘要 OR 命中白名单。"""
+    scope_sql, params = scope.sql(alias)
+    summary_sql = (
+        f"({alias}.ai_summary IS NOT NULL AND TRIM({alias}.ai_summary) != '')"
+    )
+    return f"({summary_sql} OR {scope_sql})", params
 
 
 def load_env_file(path: Path) -> None:
@@ -271,16 +397,20 @@ def fetch_article(conn: sqlite3.Connection, article_id: object) -> Optional[sqli
 
 
 def fetch_backfill_batch(
-    conn: sqlite3.Connection, after_id: object, limit: int
+    conn: sqlite3.Connection,
+    after_id: object,
+    limit: int,
+    scope: JournalScope,
 ) -> List[sqlite3.Row]:
-    sql = ARTICLE_SELECT + """
-        WHERE a.ai_summary IS NOT NULL
-          AND TRIM(a.ai_summary) != ''
+    condition, condition_params = sync_condition(scope)
+    sql = ARTICLE_SELECT + f"""
+        WHERE {condition}
           AND a.id > ?
         ORDER BY a.id ASC
         LIMIT ?
     """
-    return conn.execute(sql, (_coerce_id(after_id), limit)).fetchall()
+    params = [*condition_params, _coerce_id(after_id), limit]
+    return conn.execute(sql, params).fetchall()
 
 
 def _coerce_id(value: object) -> object:
@@ -314,14 +444,11 @@ def build_item(
     article_id = str(row["id"]).strip()
     title_raw = row["title"]
     title = "" if title_raw is None else str(title_raw)
-    summary_raw = row["ai_summary"]
+    summary = normalized_summary(row)
     if not article_id:
         raise ValueError("articles.id 为空")
     if not title.strip():
         raise ValueError("articles.title 为空")
-    if summary_raw is None or not str(summary_raw).strip():
-        raise ValueError("articles.ai_summary 为空")
-    summary = str(summary_raw)
 
     source_name = row["source_name"]
     if source_name is not None and not str(source_name).strip():
@@ -351,7 +478,7 @@ def build_item(
         "title": title,
         "url": row["url"],
         "ai_summary": summary,
-        "ai_summary_sha256": sha256_text(summary),
+        "ai_summary_sha256": sha256_text(summary) if summary is not None else None,
         "pdf_filename": relative,
         "source_sha256": source_sha,
         "published_date": local_date(row["published_at"]),
@@ -457,6 +584,7 @@ def _new_stats() -> Dict[str, int]:
         "scanned": 0,
         "pending": 0,
         "awaiting_pdf": 0,
+        "out_of_scope": 0,
         "skipped": 0,
         "failed": 0,
     }
@@ -466,11 +594,13 @@ def _log_stats(mode: str, stats: Dict[str, int], elapsed: float, **extra: object
     fields = " ".join(f"{key}={value}" for key, value in extra.items())
     prefix = f"mode={mode} {fields}".rstrip()
     log.info(
-        "%s scanned=%d pending=%d awaiting_pdf=%d skipped=%d failed=%d elapsed=%.2fs",
+        "%s scanned=%d pending=%d awaiting_pdf=%d out_of_scope=%d "
+        "skipped=%d failed=%d elapsed=%.2fs",
         prefix,
         stats["scanned"],
         stats["pending"],
         stats["awaiting_pdf"],
+        stats["out_of_scope"],
         stats["skipped"],
         stats["failed"],
         elapsed,
@@ -497,9 +627,7 @@ def sync_daily(
             if str(article_id).strip()
         ]
     elif staging_dir.is_dir():
-        candidates = sorted(staging_dir.glob("*.pdf"), key=lambda path: path.name)[
-            : cfg.daily_limit
-        ]
+        candidates = sorted(staging_dir.glob("*.pdf"), key=lambda path: path.name)
     else:
         candidates = []
 
@@ -511,7 +639,20 @@ def sync_daily(
     rss = connect_upstream(cfg.rss_db)
     wiki = connect_wiki(cfg.wiki_db, readonly=dry_run)
     try:
+        scope = resolve_journal_scope(rss, cfg.journal_names)
+        log.info(
+            "每日同步期刊白名单=%d rss_sources=%d journals=%d",
+            len(cfg.journal_names),
+            len(scope.rss_source_ids),
+            len(scope.journal_ids),
+        )
+
+        in_scope_seen = 0
         for pdf_path in candidates:
+            # --ids 是显式指定，不受每日上限限制；自动发现时只对同步集合计数。
+            if ids is None and in_scope_seen >= cfg.daily_limit:
+                break
+
             stats["scanned"] += 1
             try:
                 if not pdf_path.is_file():
@@ -528,6 +669,15 @@ def sync_daily(
                         f"{safe_article_id(article_id)!r} 不一致"
                     )
 
+                if not is_sync_candidate(row, scope):
+                    stats["out_of_scope"] += 1
+                    log.info(
+                        "跳过同步集合外文章 article_id=%s（非白名单且无 ai_summary）",
+                        article_id,
+                    )
+                    continue
+
+                in_scope_seen += 1
                 folder = period_folder(sync_date, cfg.anchor_date)
                 item = build_item(
                     cfg,
@@ -579,7 +729,7 @@ def sync_backfill(
     dry_run: bool = False,
     keep_source: bool = False,
 ) -> Dict[str, int]:
-    """历史全量补录：扫描所有 ai_summary 非空的文献，允许无 PDF。"""
+    """历史全量补录：白名单文章 ∪ 非白名单有摘要文章，允许无 PDF。"""
     stats = _new_stats()
     started = time.monotonic()
     index = build_staging_index(cfg.staging_root)
@@ -589,8 +739,17 @@ def sync_backfill(
     wiki = connect_wiki(cfg.wiki_db, readonly=dry_run)
     cursor: object = 0
     try:
+        scope = resolve_journal_scope(rss, cfg.journal_names)
+        log.info(
+            "历史补录期刊白名单=%d rss_sources=%d journals=%d",
+            len(cfg.journal_names),
+            len(scope.rss_source_ids),
+            len(scope.journal_ids),
+        )
         while True:
-            rows = fetch_backfill_batch(rss, cursor, cfg.backfill_batch_size)
+            rows = fetch_backfill_batch(
+                rss, cursor, cfg.backfill_batch_size, scope
+            )
             if not rows:
                 break
             cursor = rows[-1]["id"]
@@ -717,7 +876,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--backfill-history",
         action="store_true",
-        help="历史全量补录（所有 ai_summary 非空文献，允许无 PDF）",
+        help="历史全量补录（白名单文章 ∪ 非白名单有摘要文章，允许无 PDF）",
     )
     parser.add_argument("--dry-run", action="store_true", help="只检查，不写文件/数据库")
     parser.add_argument(
@@ -757,6 +916,10 @@ def validate_config(cfg: SyncConfig) -> None:
         raise SystemExit(f"上游数据库不存在: {cfg.rss_db}")
     if not cfg.wiki_db.is_file():
         raise SystemExit(f"LIS-WIKI 数据库不存在: {cfg.wiki_db}")
+    if not cfg.journals_list.is_file():
+        raise SystemExit(f"期刊白名单不存在: {cfg.journals_list}")
+    if not cfg.journal_names:
+        raise SystemExit(f"期刊白名单为空: {cfg.journals_list}")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -787,23 +950,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         log.error("%s", exc)
         return 2
 
-    if args.backfill_history:
-        stats = sync_backfill(
-            cfg, dry_run=args.dry_run, keep_source=args.keep_source
-        )
-    else:
-        try:
-            sync_date = date.fromisoformat(args.date) if args.date else date.today()
-        except ValueError:
-            log.error("--date 格式非法（应为 YYYY-MM-DD）: %s", args.date)
-            return 2
-        stats = sync_daily(
-            cfg,
-            sync_date,
-            ids=args.ids,
-            dry_run=args.dry_run,
-            keep_source=args.keep_source,
-        )
+    try:
+        if args.backfill_history:
+            stats = sync_backfill(
+                cfg, dry_run=args.dry_run, keep_source=args.keep_source
+            )
+        else:
+            try:
+                sync_date = date.fromisoformat(args.date) if args.date else date.today()
+            except ValueError:
+                log.error("--date 格式非法（应为 YYYY-MM-DD）: %s", args.date)
+                return 2
+            stats = sync_daily(
+                cfg,
+                sync_date,
+                ids=args.ids,
+                dry_run=args.dry_run,
+                keep_source=args.keep_source,
+            )
+    except ValueError as exc:
+        log.error("同步范围解析失败: %s", exc)
+        return 2
 
     return 1 if stats["failed"] else 0
 
