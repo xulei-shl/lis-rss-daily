@@ -5,9 +5,10 @@
 
 同步集合按 `article_id` 取并集，天然不会重复：
 
-- **白名单期刊文章**：命中 `scripts/lis-wiki/journals_list.yaml`，不论
+- **无条件白名单期刊文章**：命中 `scripts/lis-wiki/journals_list.yaml`，不论
   `ai_summary` 是否有值；
-- **非白名单文章**：只有 `ai_summary` 非空时才同步。
+- **摘要白名单期刊文章**：命中 `scripts/lis-wiki/journals_summary_list.yaml`，
+  **且** `ai_summary` 非空时才同步。
 
 设计契约见 `docs/lis-wiki-脚本/LIS-RSS同步脚本需求.md`。本脚本只写
 `article_tasks`，不写 `sync_jobs`、`concepts` 等其它表。
@@ -25,10 +26,12 @@ paper-pdf-summary/pdf_staging/
   在摘要成功后由 `paper-pdf-summary` 直接删除，不会写入暂存区。
 - 每日 cron 只有在 LIS-RSS 数据库提交成功（`ai_summary` 已落库）后，才把 PDF
   移入 `pdf_staging/daily/<YYYY-MM-DD>/<article_id>.pdf`。
-- 期刊白名单从 `scripts/lis-wiki/journals_list.yaml` 加载；白名单文章即使没有
-  `ai_summary` 也会同步。非白名单文章只有在 `ai_summary` 非空时才同步。
-- 每日同步仍以暂存 PDF 为驱动；如果某篇 PDF 既不在白名单又没有摘要，会跳过并
-  保留源文件，计入 `out_of_scope`，不会误删。
+- 期刊白名单分为两份：无条件白名单 `scripts/lis-wiki/journals_list.yaml`（命中即同步，
+  不论 `ai_summary`）；摘要白名单 `scripts/lis-wiki/journals_summary_list.yaml`
+  （命中且 `ai_summary` 非空才同步）。
+- 每日同步仍以暂存 PDF 为驱动；如果某篇 PDF 既不在无条件白名单，又不满足
+  「摘要白名单 + `ai_summary` 非空」，会跳过并保留源文件，计入 `out_of_scope`，
+  不会误删。
 - 同步脚本按 `str(articles.id).strip()` 作为 `article_tasks.article_id`，不截断、
   不改写前导字符。
 - PDF 先复制到 wiki 目标目录的临时文件，校验大小和 SHA-256 后 `os.replace`
@@ -66,7 +69,8 @@ cp .env.example .env
 | `WIKI_DB_PATH` | 下游 `lis_wiki.db` |
 | `WIKI_PDF_ROOT` | 必须与 LIS-WIKI 的 `SOURCE_PDF_DIR` 一致 |
 | `SYNC_STAGING_ROOT` | 默认 `scripts/paper-pdf-summary/pdf_staging` |
-| `JOURNALS_LIST_PATH` | 期刊白名单，默认 `scripts/lis-wiki/journals_list.yaml` |
+| `JOURNALS_LIST_PATH` | 无条件白名单，默认 `scripts/lis-wiki/journals_list.yaml` |
+| `SUMMARY_JOURNALS_LIST_PATH` | 摘要白名单，默认 `scripts/lis-wiki/journals_summary_list.yaml` |
 | `SYNC_ANCHOR_DATE` | 5 天周期锚点，上线后不要修改 |
 | `SYNC_BATCH_SIZE` | 每日同步上限，默认 3 |
 | `BACKFILL_BATCH_SIZE` | 历史补录单批条数，默认 200 |
@@ -83,8 +87,9 @@ cp .env.example .env
 ```
 
 只扫描当天的 `pdf_staging/daily/<今天>/`，按文件名顺序处理，最多
-`SYNC_BATCH_SIZE` 个命中同步集合的 PDF。白名单文章有 PDF 时会正常入库，
-即使 `ai_summary` 为空；既不在白名单又没有摘要的 PDF 会跳过并保留源文件。
+`SYNC_BATCH_SIZE` 个命中同步集合的 PDF。无条件白名单文章有 PDF 时会正常入库，
+即使 `ai_summary` 为空；摘要白名单文章需 `ai_summary` 非空才入库；
+不满足任一条件的 PDF 会跳过并保留源文件。
 
 手动补某一天：
 
@@ -107,10 +112,11 @@ cp .env.example .env
 /opt/lis-rss-daily/lis-rss/bin/python sync_to_wiki.py --backfill-history
 ```
 
-扫描同步集合（白名单文章 ∪ 非白名单有摘要文章）：
+扫描同步集合（无条件白名单 ∪（摘要白名单 ∩ 有摘要））：
 
-- 白名单文章：不论 `ai_summary` 是否有值都纳入；
-- 非白名单文章：只有 `ai_summary` 非空才纳入；
+- 无条件白名单文章：不论 `ai_summary` 是否有值都纳入；
+- 摘要白名单文章：只有 `ai_summary` 非空才纳入；
+- 两份名单都不命中、或命中摘要白名单但无摘要的文章：不纳入；
 - 有暂存 PDF：复制并按 `status='pending'` 入库；
 - 无 PDF：`pdf_filename=NULL`、`source_sha256=NULL`、`status='awaiting_pdf'`。
 
@@ -150,7 +156,7 @@ cp .env.example .env
 UPSERT 严格使用需求文档的 `COALESCE` + `CASE`：
 
 - `pdf_filename`、`source_sha256` 为空时不会擦除已有 PDF 信息；
-- `ai_summary` 允许为 `NULL`；白名单文章没有摘要时按 `NULL` 写入，`ai_summary_sha256` 也为 `NULL`；
+- `ai_summary` 允许为 `NULL`；无条件白名单文章没有摘要时按 `NULL` 写入，`ai_summary_sha256` 也为 `NULL`；
 - 仅当原状态为 `awaiting_pdf` 且本次补齐 PDF 时，才自动推进为 `pending`；
 - 绝不覆盖 `parsed`、`extracted`、`merged`、`failed` 状态；
 - 绝不写 `parser_version`、`parsed_md_path`、`raw_extracted_json` 等流水线缓存列；

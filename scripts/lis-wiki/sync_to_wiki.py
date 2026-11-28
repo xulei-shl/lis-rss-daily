@@ -5,13 +5,14 @@ LIS-RSS -> LIS-WIKI 文献增量同步脚本
 职责：
 1. 每日增量：读取 paper-pdf-summary 的 pdf_staging/daily/<YYYY-MM-DD>/<article_id>.pdf，
    复制到 LIS-WIKI 的 5 天周期目录，写入 article_tasks，成功后删除暂存文件。
-2. 历史补录：扫描“期刊白名单文章 ∪ 非白名单但有 ai_summary 的文章”，有 PDF 的按
-   pending 入库，没有 PDF 的按 awaiting_pdf 入库；白名单文章不要求 ai_summary。
-   不会覆盖 wiki 流水线状态或缓存列。
+2. 历史补录：扫描同步集合，有 PDF 的按 pending 入库，没有 PDF 的按
+   awaiting_pdf 入库。不会覆盖 wiki 流水线状态或缓存列。
 
 同步集合（两集合取并集，按 article_id 天然去重）：
-- A：命中 scripts/lis-wiki/journals_list.yaml 的文章，不论 ai_summary 是否有值；
-- B：不在白名单，但 ai_summary 非空的文章。
+- A：命中 scripts/lis-wiki/journals_list.yaml（无条件白名单）的文章，
+  不论 ai_summary 是否有值；
+- B：命中 scripts/lis-wiki/journals_summary_list.yaml（摘要白名单），
+  且 ai_summary 非空的文章。
 
 设计约束见 docs/lis-wiki-脚本/LIS-RSS同步脚本需求.md。
 本脚本只写 lis_wiki.db 的 article_tasks 表，不写 sync_jobs / concepts 等其它表。
@@ -39,6 +40,9 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENV_FILE = Path(__file__).resolve().parent / ".env"
 DEFAULT_JOURNALS_LIST = Path(__file__).resolve().parent / "journals_list.yaml"
+DEFAULT_SUMMARY_JOURNALS_LIST = (
+    Path(__file__).resolve().parent / "journals_summary_list.yaml"
+)
 
 # 与 paper-pdf-summary 共用 safe_article_id，保证暂存文件名与同步脚本一致
 _PAPER_SUMMARY_DIR = PROJECT_ROOT / "scripts" / "paper-pdf-summary"
@@ -101,6 +105,8 @@ class SyncConfig:
     staging_root: Path
     journals_list: Path
     journal_names: Tuple[str, ...]
+    summary_journals_list: Path
+    summary_journal_names: Tuple[str, ...]
     anchor_date: date
     daily_limit: int
     backfill_batch_size: int
@@ -123,6 +129,10 @@ class SyncConfig:
         backfill_batch = _int_env("BACKFILL_BATCH_SIZE", 200)
         journals_list = path_env("JOURNALS_LIST_PATH", DEFAULT_JOURNALS_LIST)
         journal_names = tuple(load_journal_whitelist(journals_list))
+        summary_journals_list = path_env(
+            "SUMMARY_JOURNALS_LIST_PATH", DEFAULT_SUMMARY_JOURNALS_LIST
+        )
+        summary_journal_names = tuple(load_journal_whitelist(summary_journals_list))
 
         return cls(
             rss_db=path_env("LIS_RSS_DB_PATH", PROJECT_ROOT / "data" / "rss-tracker.db"),
@@ -134,6 +144,8 @@ class SyncConfig:
             ),
             journals_list=journals_list,
             journal_names=journal_names,
+            summary_journals_list=summary_journals_list,
+            summary_journal_names=summary_journal_names,
             anchor_date=anchor,
             daily_limit=max(1, daily_limit),
             backfill_batch_size=max(1, backfill_batch),
@@ -246,6 +258,42 @@ def resolve_journal_scope(
     return JournalScope(rss_source_ids=rss_source_ids, journal_ids=journal_ids)
 
 
+@dataclass(frozen=True)
+class SyncScopes:
+    """同步集合：无条件白名单 ∪（摘要白名单 ∩ ai_summary 非空）。"""
+
+    unconditional: JournalScope
+    summary_gated: JournalScope
+
+    def contains(self, row: sqlite3.Row) -> bool:
+        return self.unconditional.contains(row) or (
+            self.summary_gated.contains(row) and normalized_summary(row) is not None
+        )
+
+    def sql(self, alias: str = "a") -> Tuple[str, List[object]]:
+        a_sql, a_params = self.unconditional.sql(alias)
+        b_sql, b_params = self.summary_gated.sql(alias)
+        summary_sql = (
+            f"({alias}.ai_summary IS NOT NULL AND TRIM({alias}.ai_summary) != '')"
+        )
+        return (
+            f"({a_sql} OR ({b_sql} AND {summary_sql}))",
+            [*a_params, *b_params],
+        )
+
+
+def resolve_sync_scopes(
+    conn: sqlite3.Connection,
+    journal_names: Sequence[str],
+    summary_journal_names: Sequence[str],
+) -> SyncScopes:
+    """分别解析两份白名单，得到同步集合的归属范围。"""
+    return SyncScopes(
+        unconditional=resolve_journal_scope(conn, journal_names),
+        summary_gated=resolve_journal_scope(conn, summary_journal_names),
+    )
+
+
 def normalized_summary(row: sqlite3.Row) -> Optional[str]:
     """返回非空 ai_summary；NULL 或纯空白统一视为无摘要。"""
     raw = row["ai_summary"]
@@ -255,18 +303,14 @@ def normalized_summary(row: sqlite3.Row) -> Optional[str]:
     return text if text.strip() else None
 
 
-def is_sync_candidate(row: sqlite3.Row, scope: JournalScope) -> bool:
-    """同步集合：白名单文章 ∪ 非白名单但有 ai_summary 的文章。"""
-    return normalized_summary(row) is not None or scope.contains(row)
+def is_sync_candidate(row: sqlite3.Row, scopes: SyncScopes) -> bool:
+    """同步集合：无条件白名单 ∪（摘要白名单 ∩ ai_summary 非空）。"""
+    return scopes.contains(row)
 
 
-def sync_condition(scope: JournalScope, alias: str = "a") -> Tuple[str, List[object]]:
-    """构造同步集合的 SQL 条件：有摘要 OR 命中白名单。"""
-    scope_sql, params = scope.sql(alias)
-    summary_sql = (
-        f"({alias}.ai_summary IS NOT NULL AND TRIM({alias}.ai_summary) != '')"
-    )
-    return f"({summary_sql} OR {scope_sql})", params
+def sync_condition(scopes: SyncScopes, alias: str = "a") -> Tuple[str, List[object]]:
+    """构造同步集合的 SQL 条件。"""
+    return scopes.sql(alias)
 
 
 def load_env_file(path: Path) -> None:
@@ -400,9 +444,9 @@ def fetch_backfill_batch(
     conn: sqlite3.Connection,
     after_id: object,
     limit: int,
-    scope: JournalScope,
+    scopes: SyncScopes,
 ) -> List[sqlite3.Row]:
-    condition, condition_params = sync_condition(scope)
+    condition, condition_params = sync_condition(scopes)
     sql = ARTICLE_SELECT + f"""
         WHERE {condition}
           AND a.id > ?
@@ -639,12 +683,18 @@ def sync_daily(
     rss = connect_upstream(cfg.rss_db)
     wiki = connect_wiki(cfg.wiki_db, readonly=dry_run)
     try:
-        scope = resolve_journal_scope(rss, cfg.journal_names)
+        scopes = resolve_sync_scopes(
+            rss, cfg.journal_names, cfg.summary_journal_names
+        )
         log.info(
-            "每日同步期刊白名单=%d rss_sources=%d journals=%d",
+            "每日同步无条件白名单=%d/摘要白名单=%d "
+            "unconditional(rss=%d,journals=%d) summary(rss=%d,journals=%d)",
             len(cfg.journal_names),
-            len(scope.rss_source_ids),
-            len(scope.journal_ids),
+            len(cfg.summary_journal_names),
+            len(scopes.unconditional.rss_source_ids),
+            len(scopes.unconditional.journal_ids),
+            len(scopes.summary_gated.rss_source_ids),
+            len(scopes.summary_gated.journal_ids),
         )
 
         in_scope_seen = 0
@@ -669,10 +719,11 @@ def sync_daily(
                         f"{safe_article_id(article_id)!r} 不一致"
                     )
 
-                if not is_sync_candidate(row, scope):
+                if not is_sync_candidate(row, scopes):
                     stats["out_of_scope"] += 1
                     log.info(
-                        "跳过同步集合外文章 article_id=%s（非白名单且无 ai_summary）",
+                        "跳过同步集合外文章 article_id=%s"
+                        "（既不在无条件白名单，也不满足摘要白名单+ai_summary）",
                         article_id,
                     )
                     continue
@@ -729,7 +780,7 @@ def sync_backfill(
     dry_run: bool = False,
     keep_source: bool = False,
 ) -> Dict[str, int]:
-    """历史全量补录：白名单文章 ∪ 非白名单有摘要文章，允许无 PDF。"""
+    """历史全量补录：无条件白名单 ∪（摘要白名单 ∩ 有摘要），允许无 PDF。"""
     stats = _new_stats()
     started = time.monotonic()
     index = build_staging_index(cfg.staging_root)
@@ -739,16 +790,22 @@ def sync_backfill(
     wiki = connect_wiki(cfg.wiki_db, readonly=dry_run)
     cursor: object = 0
     try:
-        scope = resolve_journal_scope(rss, cfg.journal_names)
+        scopes = resolve_sync_scopes(
+            rss, cfg.journal_names, cfg.summary_journal_names
+        )
         log.info(
-            "历史补录期刊白名单=%d rss_sources=%d journals=%d",
+            "历史补录无条件白名单=%d/摘要白名单=%d "
+            "unconditional(rss=%d,journals=%d) summary(rss=%d,journals=%d)",
             len(cfg.journal_names),
-            len(scope.rss_source_ids),
-            len(scope.journal_ids),
+            len(cfg.summary_journal_names),
+            len(scopes.unconditional.rss_source_ids),
+            len(scopes.unconditional.journal_ids),
+            len(scopes.summary_gated.rss_source_ids),
+            len(scopes.summary_gated.journal_ids),
         )
         while True:
             rows = fetch_backfill_batch(
-                rss, cursor, cfg.backfill_batch_size, scope
+                rss, cursor, cfg.backfill_batch_size, scopes
             )
             if not rows:
                 break
@@ -876,7 +933,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--backfill-history",
         action="store_true",
-        help="历史全量补录（白名单文章 ∪ 非白名单有摘要文章，允许无 PDF）",
+        help="历史全量补录（无条件白名单 ∪（摘要白名单+有摘要），允许无 PDF）",
     )
     parser.add_argument("--dry-run", action="store_true", help="只检查，不写文件/数据库")
     parser.add_argument(
@@ -917,9 +974,13 @@ def validate_config(cfg: SyncConfig) -> None:
     if not cfg.wiki_db.is_file():
         raise SystemExit(f"LIS-WIKI 数据库不存在: {cfg.wiki_db}")
     if not cfg.journals_list.is_file():
-        raise SystemExit(f"期刊白名单不存在: {cfg.journals_list}")
+        raise SystemExit(f"无条件白名单不存在: {cfg.journals_list}")
     if not cfg.journal_names:
-        raise SystemExit(f"期刊白名单为空: {cfg.journals_list}")
+        raise SystemExit(f"无条件白名单为空: {cfg.journals_list}")
+    if not cfg.summary_journals_list.is_file():
+        raise SystemExit(f"摘要白名单不存在: {cfg.summary_journals_list}")
+    if not cfg.summary_journal_names:
+        raise SystemExit(f"摘要白名单为空: {cfg.summary_journals_list}")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
