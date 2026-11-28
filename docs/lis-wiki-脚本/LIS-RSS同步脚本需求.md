@@ -127,11 +127,12 @@ target_dir   = Path(WIKI_PDF_ROOT) / folder_name
 同步集合按 `article_id` 取并集，天然不会重复：
 
 ```text
-白名单命中（rss_sources.name 或 journals.name 在 journals_list.yaml 中）
-OR (ai_summary IS NOT NULL AND TRIM(ai_summary) != '')
+A：命中 journals_list.yaml（无条件白名单），不论 ai_summary 是否有值
+OR
+B：命中 journals_summary_list.yaml（摘要白名单）且 ai_summary 非空
 ```
 
-1. **每日模式**：扫描当日 `pdf_staging/daily/<date>/` 的 PDF，只处理命中同步集合的文章；`SYNC_BATCH_SIZE` 只对命中集合的候选计数。白名单文章有 PDF 时即使 `ai_summary` 为空也同步；非白名单且无摘要的 PDF 跳过并保留源文件。
+1. **每日模式**：默认先补扫 `pdf_staging/daily/` 下所有仍有 PDF 的历史日期目录，再扫描当日目录；每个目录按文件名顺序最多处理 `SYNC_BATCH_SIZE` 个需要写入的 PDF（已同步无变化的文件不占配额）。`--date` 指定日期时只处理该目录。无条件白名单文章有 PDF 时即使 `ai_summary` 为空也同步；不满足 A/B 的 PDF 跳过并保留源文件。
 2. **历史全量补录模式**：按 `id ASC` 分页游标扫描同步集合（与每日模式共用同一个 UPSERT 与去重逻辑）。
 
 ### FR-3 PDF 复制与哈希计算
@@ -223,7 +224,7 @@ WIKI_DB_PATH=/path/to/lis-wiki/data/lis_wiki.db
 WIKI_PDF_ROOT=/path/to/lis-wiki/data/pdfs   # 必须与 wiki 的 SOURCE_PDF_DIR 一致
 JOURNALS_LIST_PATH=/path/to/lis-rss-daily/scripts/lis-wiki/journals_list.yaml
 SYNC_ANCHOR_DATE=1970-01-01                 # 5天周期锚点
-SYNC_BATCH_SIZE=3                           # 每日同步上限
+SYNC_BATCH_SIZE=3                           # 每个 daily 日期目录每轮最多写入篇数
 BACKFILL_BATCH_SIZE=200                     # 历史全量同步单事务批大小
 SYNC_ENABLED=true
 ```

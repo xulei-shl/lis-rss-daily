@@ -838,6 +838,51 @@ class DailySyncTests(SyncTestBase):
         self.assertEqual(stats["scanned"], 0)
         self.assertEqual(stats["failed"], 0)
 
+    def test_catch_up_drains_previous_day_directories(self):
+        self.add_article(1)
+        self.add_article(2)
+        old_source = self.write_pdf("daily/2026-11-20/1.pdf")
+        today_source = self.write_pdf("daily/2026-11-26/2.pdf")
+
+        stats = sync.sync_daily(self.cfg, date(2026, 11, 26), catch_up=True)
+
+        self.assertEqual(stats["pending"], 2)
+        self.assertFalse(old_source.exists())
+        self.assertFalse(today_source.exists())
+        self.assertEqual(self.wiki_row("1")["pdf_filename"], "2026-11-18/1.pdf")
+        self.assertEqual(self.wiki_row("2")["pdf_filename"], "2026-11-23/2.pdf")
+
+    def test_catch_up_applies_limit_per_directory(self):
+        for article_id in (1, 2, 3, 4):
+            self.add_article(article_id)
+            self.write_pdf(f"daily/2026-11-20/{article_id}.pdf")
+        for article_id in (5, 6, 7, 8):
+            self.add_article(article_id)
+            self.write_pdf(f"daily/2026-11-26/{article_id}.pdf")
+
+        stats = sync.sync_daily(self.cfg, date(2026, 11, 26), catch_up=True)
+
+        self.assertEqual(stats["pending"], 6)
+        self.assertEqual(len(self.wiki_rows()), 6)
+        self.assertTrue((self.staging_root / "daily" / "2026-11-20" / "4.pdf").exists())
+        self.assertTrue((self.staging_root / "daily" / "2026-11-26" / "8.pdf").exists())
+
+    def test_daily_limit_ignores_unchanged_already_synced(self):
+        for article_id in (1, 2, 3, 4):
+            self.add_article(article_id)
+            self.write_pdf(f"daily/2026-11-26/{article_id}.pdf")
+        sync.sync_daily(self.cfg, date(2026, 11, 26))
+        # Re-create the three files already in the wiki, keeping the fourth
+        # pending. Unchanged rows must not consume the per-run quota.
+        for article_id in (1, 2, 3):
+            self.write_pdf(f"daily/2026-11-26/{article_id}.pdf")
+
+        stats = sync.sync_daily(self.cfg, date(2026, 11, 26))
+
+        self.assertEqual(stats["skipped"], 3)
+        self.assertEqual(stats["pending"], 1)
+        self.assertIsNotNone(self.wiki_row("4"))
+
 
 class BackfillTests(SyncTestBase):
     def setUp(self):

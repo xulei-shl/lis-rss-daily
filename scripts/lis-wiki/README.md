@@ -72,7 +72,7 @@ cp .env.example .env
 | `JOURNALS_LIST_PATH` | 无条件白名单，默认 `scripts/lis-wiki/journals_list.yaml` |
 | `SUMMARY_JOURNALS_LIST_PATH` | 摘要白名单，默认 `scripts/lis-wiki/journals_summary_list.yaml` |
 | `SYNC_ANCHOR_DATE` | 5 天周期锚点，上线后不要修改 |
-| `SYNC_BATCH_SIZE` | 每日同步上限，默认 3 |
+| `SYNC_BATCH_SIZE` | 每个 daily 日期目录每轮最多写入的篇数，默认 3 |
 | `BACKFILL_BATCH_SIZE` | 历史补录单批条数，默认 200 |
 | `SYNC_DELETE_SOURCE_AFTER_SUCCESS` | 提交成功后删除暂存 PDF，默认 `true` |
 
@@ -86,16 +86,22 @@ cp .env.example .env
 /opt/lis-rss-daily/lis-rss/bin/python sync_to_wiki.py
 ```
 
-只扫描当天的 `pdf_staging/daily/<今天>/`，按文件名顺序处理，最多
-`SYNC_BATCH_SIZE` 个命中同步集合的 PDF。无条件白名单文章有 PDF 时会正常入库，
-即使 `ai_summary` 为空；摘要白名单文章需 `ai_summary` 非空才入库；
-不满足任一条件的 PDF 会跳过并保留源文件。
+不带 `--date` 时（定时任务的默认调用方式）先补扫 `pdf_staging/daily/` 下所有
+仍有 PDF 的历史日期目录，再处理今天；每个日期目录按文件名顺序最多处理
+`SYNC_BATCH_SIZE` 个需要写入的 PDF（已同步无变化的文件不占配额）。这样某天
+超过单次上限、或 12:00 之后才落盘的 PDF 会在后续运行中继续消化，不会永久留在
+当天目录。只处理今天可加 `--no-catch-up`。
+
+无条件白名单文章有 PDF 时会正常入库，即使 `ai_summary` 为空；摘要白名单文章
+需 `ai_summary` 非空才入库；不满足任一条件的 PDF 会跳过并保留源文件。
 
 手动补某一天：
 
 ```bash
 /opt/lis-rss-daily/lis-rss/bin/python sync_to_wiki.py --date 2026-11-26
 ```
+
+`--date` 只处理该日期目录，不会补扫其它日期。
 
 只同步指定 ID（仍从 `--date` 对应的 daily 目录读取）：
 
@@ -126,6 +132,8 @@ cp .env.example .env
 /opt/lis-rss-daily/lis-rss/bin/python sync_to_wiki.py --backfill-history --batch-size 500
 ```
 
+`--backfill-history` 会写 `WIKI_PDF_ROOT/history/`；请避免与 LIS-WIKI 的 `download_history_pdfs.py` 同时运行（两者没有共享锁，重叠时同一目标文件可能被覆盖）。
+
 ### 调试
 
 ```bash
@@ -149,7 +157,7 @@ cp .env.example .env
 0 12 * * * cd /opt/lis-rss-daily/scripts/lis-wiki && /opt/lis-rss-daily/lis-rss/bin/python sync_to_wiki.py >> sync.log 2>&1
 ```
 
-12:00 的重复执行是幂等的：已同步且无变化的记录会跳过，不刷新 `updated_at`。
+12:00 的重复执行是幂等的，并会继续补扫当天以及之前仍未清空的 daily 目录。
 
 ## 状态与字段保护
 

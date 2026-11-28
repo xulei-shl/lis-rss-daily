@@ -651,6 +651,39 @@ def _log_stats(mode: str, stats: Dict[str, int], elapsed: float, **extra: object
     )
 
 
+def _daily_staging_dirs(
+    cfg: SyncConfig, sync_date: date, *, catch_up: bool
+) -> List[Tuple[date, Path]]:
+    """Return (staging date, directory) pairs to scan for this run.
+
+    Without catch-up only `daily/<sync_date>/` is scanned. With catch-up every
+    date directory up to `sync_date` that still contains PDFs is scanned, so a
+    day that produced more than the per-run limit (or whose last PDF arrived
+    after the final cron run) is drained on later runs instead of being lost.
+    """
+    base = cfg.staging_root / "daily"
+    today = base / sync_date.isoformat()
+    if not catch_up:
+        return [(sync_date, today)]
+
+    found: List[Tuple[date, Path]] = []
+    if base.is_dir():
+        for path in sorted(base.iterdir(), key=lambda item: item.name):
+            if not path.is_dir():
+                continue
+            try:
+                day = date.fromisoformat(path.name)
+            except ValueError:
+                continue
+            if day > sync_date:
+                continue
+            if day == sync_date or any(path.glob("*.pdf")):
+                found.append((day, path))
+    if not any(day == sync_date for day, _ in found):
+        found.append((sync_date, today))
+    return found
+
+
 def sync_daily(
     cfg: SyncConfig,
     sync_date: date,
@@ -658,25 +691,21 @@ def sync_daily(
     ids: Optional[Sequence[str]] = None,
     dry_run: bool = False,
     keep_source: bool = False,
+    catch_up: bool = False,
 ) -> Dict[str, int]:
-    """每日增量：只处理指定日期的 daily/ 暂存 PDF。"""
+    """每日增量：处理 daily/ 暂存 PDF；catch_up 时补扫历史未清空目录。"""
     stats = _new_stats()
     started = time.monotonic()
-    staging_dir = cfg.staging_root / "daily" / sync_date.isoformat()
-
     if ids:
-        candidates = [
-            staging_dir / f"{safe_article_id(str(article_id).strip())}.pdf"
-            for article_id in ids
-            if str(article_id).strip()
-        ]
-    elif staging_dir.is_dir():
-        candidates = sorted(staging_dir.glob("*.pdf"), key=lambda path: path.name)
+        staging_dirs = [(sync_date, cfg.staging_root / "daily" / sync_date.isoformat())]
     else:
-        candidates = []
-
-    if not candidates:
-        log.info("daily 暂存目录为空或不存在: %s", staging_dir)
+        staging_dirs = [
+            (day, path)
+            for day, path in _daily_staging_dirs(cfg, sync_date, catch_up=catch_up)
+            if path.is_dir() and any(path.glob("*.pdf"))
+        ]
+    if not staging_dirs:
+        log.info("daily 暂存目录为空或不存在: %s", cfg.staging_root / "daily")
         _log_stats("daily", stats, time.monotonic() - started, date=sync_date.isoformat())
         return stats
 
@@ -697,75 +726,93 @@ def sync_daily(
             len(scopes.summary_gated.journal_ids),
         )
 
-        in_scope_seen = 0
-        for pdf_path in candidates:
-            # --ids 是显式指定，不受每日上限限制；自动发现时只对同步集合计数。
-            if ids is None and in_scope_seen >= cfg.daily_limit:
-                break
+        for staging_date, staging_dir in staging_dirs:
+            if ids:
+                candidates = [
+                    staging_dir / f"{safe_article_id(str(article_id).strip())}.pdf"
+                    for article_id in ids
+                    if str(article_id).strip()
+                ]
+            elif staging_dir.is_dir():
+                candidates = sorted(staging_dir.glob("*.pdf"), key=lambda path: path.name)
+            else:
+                candidates = []
 
-            stats["scanned"] += 1
-            try:
-                if not pdf_path.is_file():
-                    raise FileNotFoundError(f"暂存 PDF 不存在: {pdf_path}")
+            if not candidates:
+                log.info("daily 暂存目录为空或不存在: %s", staging_dir)
+                continue
 
-                row = fetch_article(rss, pdf_path.stem)
-                if row is None:
-                    raise ValueError(f"上游 articles 中不存在 ID={pdf_path.stem}")
+            synced_here = 0
+            for pdf_path in candidates:
+                # --ids 是显式指定，不受每日上限限制；自动发现时只对真正
+                # 需要写入的记录计数，已同步无变化的文件不会挤占配额。
+                if ids is None and synced_here >= cfg.daily_limit:
+                    break
 
-                article_id = str(row["id"]).strip()
-                if safe_article_id(article_id) != pdf_path.stem:
-                    raise ValueError(
-                        f"暂存文件名 {pdf_path.stem!r} 与上游 ID 安全名 "
-                        f"{safe_article_id(article_id)!r} 不一致"
+                stats["scanned"] += 1
+                try:
+                    if not pdf_path.is_file():
+                        raise FileNotFoundError(f"暂存 PDF 不存在: {pdf_path}")
+
+                    row = fetch_article(rss, pdf_path.stem)
+                    if row is None:
+                        raise ValueError(f"上游 articles 中不存在 ID={pdf_path.stem}")
+
+                    article_id = str(row["id"]).strip()
+                    if safe_article_id(article_id) != pdf_path.stem:
+                        raise ValueError(
+                            f"暂存文件名 {pdf_path.stem!r} 与上游 ID 安全名 "
+                            f"{safe_article_id(article_id)!r} 不一致"
+                        )
+
+                    if not is_sync_candidate(row, scopes):
+                        stats["out_of_scope"] += 1
+                        log.info(
+                            "跳过同步集合外文章 article_id=%s"
+                            "（既不在无条件白名单，也不满足摘要白名单+ai_summary）",
+                            article_id,
+                        )
+                        continue
+
+                    folder = period_folder(staging_date, cfg.anchor_date)
+                    item = build_item(
+                        cfg,
+                        row,
+                        pdf_path,
+                        folder,
+                        allow_missing_pdf=False,
+                        dry_run=dry_run,
                     )
+                    existing = fetch_existing(wiki, [article_id]).get(article_id)
+                    changed = is_changed(existing, item)
 
-                if not is_sync_candidate(row, scopes):
-                    stats["out_of_scope"] += 1
-                    log.info(
-                        "跳过同步集合外文章 article_id=%s"
-                        "（既不在无条件白名单，也不满足摘要白名单+ai_summary）",
-                        article_id,
-                    )
-                    continue
+                    if not changed:
+                        stats["skipped"] += 1
+                        log.info("跳过无变化 article_id=%s", article_id)
+                    elif dry_run:
+                        stats["pending"] += 1
+                        synced_here += 1
+                        log.info(
+                            "[dry-run] 将同步 article_id=%s -> %s",
+                            article_id,
+                            item["pdf_filename"],
+                        )
+                    else:
+                        with wiki:
+                            upsert_article(wiki, item)
+                        stats["pending"] += 1
+                        synced_here += 1
+                        log.info(
+                            "已同步 article_id=%s -> %s",
+                            article_id,
+                            item["pdf_filename"],
+                        )
 
-                in_scope_seen += 1
-                folder = period_folder(sync_date, cfg.anchor_date)
-                item = build_item(
-                    cfg,
-                    row,
-                    pdf_path,
-                    folder,
-                    allow_missing_pdf=False,
-                    dry_run=dry_run,
-                )
-                existing = fetch_existing(wiki, [article_id]).get(article_id)
-                changed = is_changed(existing, item)
-
-                if not changed:
-                    stats["skipped"] += 1
-                    log.info("跳过无变化 article_id=%s", article_id)
-                elif dry_run:
-                    stats["pending"] += 1
-                    log.info(
-                        "[dry-run] 将同步 article_id=%s -> %s",
-                        article_id,
-                        item["pdf_filename"],
-                    )
-                else:
-                    with wiki:
-                        upsert_article(wiki, item)
-                    stats["pending"] += 1
-                    log.info(
-                        "已同步 article_id=%s -> %s",
-                        article_id,
-                        item["pdf_filename"],
-                    )
-
-                if not dry_run:
-                    delete_source(pdf_path, keep_source, dry_run)
-            except Exception as exc:
-                stats["failed"] += 1
-                log.error("每日同步失败 file=%s: %s", pdf_path, exc)
+                    if not dry_run:
+                        delete_source(pdf_path, keep_source, dry_run)
+                except Exception as exc:
+                    stats["failed"] += 1
+                    log.error("每日同步失败 file=%s: %s", pdf_path, exc)
     finally:
         rss.close()
         wiki.close()
@@ -927,6 +974,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="每日同步日期 YYYY-MM-DD（默认今天）；也决定 5 天周期目录",
     )
     parser.add_argument(
+        "--no-catch-up",
+        action="store_true",
+        help="只处理 --date 当天目录；默认不带 --date 时会补扫历史未清空的 daily 目录",
+    )
+    parser.add_argument(
         "--ids",
         help="指定上游 articles.id，逗号分隔；只从指定日期的 daily/ 暂存区读取",
     )
@@ -1028,6 +1080,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 ids=args.ids,
                 dry_run=args.dry_run,
                 keep_source=args.keep_source,
+                catch_up=args.date is None and not args.no_catch_up,
             )
     except ValueError as exc:
         log.error("同步范围解析失败: %s", exc)
